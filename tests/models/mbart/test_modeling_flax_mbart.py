@@ -21,7 +21,6 @@ from transformers import MBartConfig, is_flax_available
 from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
 from transformers.utils import cached_property
 
-from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -74,7 +73,7 @@ def prepare_mbart_inputs_dict(
     }
 
 
-class FlaxMBartModelTester(unittest.TestCase):
+class FlaxMBartModelTester:
     def __init__(
         self,
         parent,
@@ -116,7 +115,6 @@ class FlaxMBartModelTester(unittest.TestCase):
         self.bos_token_id = bos_token_id
         self.decoder_start_token_id = decoder_start_token_id
         self.initializer_range = initializer_range
-        super().__init__()
 
     def prepare_config_and_inputs(self):
         input_ids = np.clip(ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size), 3, self.vocab_size)
@@ -187,7 +185,7 @@ class FlaxMBartModelTester(unittest.TestCase):
 
         outputs = model.decode(decoder_input_ids, encoder_outputs)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(np.abs(outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
     def check_use_cache_forward_with_attn_mask(self, model_class_name, config, inputs_dict):
@@ -233,7 +231,7 @@ class FlaxMBartModelTester(unittest.TestCase):
 
         outputs = model.decode(decoder_input_ids, encoder_outputs, decoder_attention_mask=decoder_attention_mask)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(np.abs(outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
@@ -331,7 +329,7 @@ class MBartHeadTests(unittest.TestCase):
 
 
 @require_flax
-class FlaxMBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
+class FlaxMBartModelTest(FlaxModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (
         (
@@ -343,7 +341,6 @@ class FlaxMBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGeneration
         if is_flax_available()
         else ()
     )
-    all_generative_model_classes = (FlaxMBartForConditionalGeneration,) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxMBartModelTester(self)

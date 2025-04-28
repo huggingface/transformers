@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -22,6 +21,7 @@ import numpy
 
 from .utils import (
     ExplicitEnum,
+    check_torch_load_is_safe,
     expand_dims,
     is_numpy_array,
     is_safetensors_available,
@@ -199,8 +199,8 @@ def load_pytorch_checkpoint_in_tf2_model(
         if pt_path.endswith(".safetensors"):
             state_dict = safe_load_file(pt_path)
         else:
-            weights_only_kwarg = {"weights_only": True}
-            state_dict = torch.load(pt_path, map_location="cpu", **weights_only_kwarg)
+            check_torch_load_is_safe()
+            state_dict = torch.load(pt_path, map_location="cpu", weights_only=True)
 
         pt_state_dict.update(state_dict)
 

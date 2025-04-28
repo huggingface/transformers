@@ -788,9 +788,9 @@ class TFViTPooler(keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = keras.layers.Dense(
-            units=config.hidden_size,
+            units=config.pooler_output_size,
             kernel_initializer=get_initializer(config.initializer_range),
-            activation="tanh",
+            activation=config.pooler_act,
             name="dense",
         )
         self.config = config

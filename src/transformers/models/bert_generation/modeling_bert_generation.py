@@ -20,7 +20,6 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
@@ -609,6 +608,8 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, BertGenerationOnlyLMHead):
+            module.bias.data.zero_()
 
 
 BERT_GENERATION_START_DOCSTRING = r"""
@@ -734,6 +735,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,  # NOOP kwargs, for now
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -901,6 +903,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -963,6 +966,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -970,11 +974,12 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
 
         lm_loss = None
         if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            lm_loss = self.loss_function(
+                prediction_scores,
+                labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[1:]

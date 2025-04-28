@@ -145,7 +145,7 @@ def _get_local_attention_mask(attention_mask: np.ndarray, block_len: int) -> jnp
 def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: int) -> Tuple[jnp.ndarray, np.ndarray]:
     """Obtain the "fixed block" global id corresponding to each input token.
 
-    This implementation is a simlified version of the original Flaxformr implementation adopted from:
+    This implementation is a simplified version of the original Flaxformr implementation adopted from:
     https://github.com/google/flaxformer/blob/main/flaxformer/architectures/longt5/long_attention.py.
 
     In our scenario, as we use this strategy only for a decoder, orphan tokens, i.e. those tokens which do not make for
@@ -431,7 +431,7 @@ class FlaxLongT5Attention(nn.Module):
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached
-        states from previous steps. This function is slighly adapted from the official Flax repository:
+        states from previous steps. This function is slightly adapted from the official Flax repository:
         https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
         """
         # detect if we're initializing by absence of existing cache data.
@@ -1731,7 +1731,7 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1816,7 +1816,7 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""
@@ -1872,12 +1872,12 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         encoder_outputs,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
-        past_key_values: dict = None,
+        past_key_values: Optional[dict] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""
@@ -2260,12 +2260,12 @@ class FlaxLongT5ForConditionalGeneration(FlaxLongT5PreTrainedModel):
         encoder_outputs,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
-        past_key_values: dict = None,
+        past_key_values: Optional[dict] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""

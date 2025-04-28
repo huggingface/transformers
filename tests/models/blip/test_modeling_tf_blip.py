@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -179,14 +178,6 @@ class TFBlipVisionModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="BlipVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="BlipVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "Salesforce/blip-vqa-base"
@@ -307,22 +298,11 @@ class TFBlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="BlipTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="BlipTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "Salesforce/blip-vqa-base"
         model = TFBlipTextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
-        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
 
 class TFBlipModelTester:
@@ -429,9 +409,6 @@ class TFBlipModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         model_name = "Salesforce/blip-vqa-base"
         model = TFBlipModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
-        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
     @unittest.skip("Matt: Re-enable this test when we have a proper export function for TF models.")
     def test_saved_model_creation(self):

@@ -75,7 +75,7 @@ class FocalNetEncoderOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -103,7 +103,7 @@ class FocalNetModelOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -133,7 +133,7 @@ class FocalNetMaskedImageModelingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    reconstruction: torch.FloatTensor = None
+    reconstruction: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -162,7 +162,7 @@ class FocalNetImageClassifierOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -358,28 +358,28 @@ class FocalNetModulation(nn.Module):
 
         # pre linear projection
         x = self.projection_in(hidden_state).permute(0, 3, 1, 2).contiguous()
-        q, ctx, self.gates = torch.split(x, (num_channels, num_channels, self.focal_level + 1), 1)
+        q, ctx, gates = torch.split(x, (num_channels, num_channels, self.focal_level + 1), 1)
 
-        # context aggreation
+        # context aggregation
         ctx_all = 0
         for level in range(self.focal_level):
             ctx = self.focal_layers[level](ctx)
-            ctx_all = ctx_all + ctx * self.gates[:, level : level + 1]
+            ctx_all = ctx_all + ctx * gates[:, level : level + 1]
         ctx_global = self.activation(ctx.mean(2, keepdim=True).mean(3, keepdim=True))
-        ctx_all = ctx_all + ctx_global * self.gates[:, self.focal_level :]
+        ctx_all = ctx_all + ctx_global * gates[:, self.focal_level :]
 
         # normalize context
         if self.normalize_modulator:
             ctx_all = ctx_all / (self.focal_level + 1)
 
         # focal modulation
-        self.modulator = self.projection_context(ctx_all)
-        x_out = q * self.modulator
+        modulator = self.projection_context(ctx_all)
+        x_out = q * modulator
         x_out = x_out.permute(0, 2, 3, 1).contiguous()
         if self.use_post_layernorm_in_modulation:
             x_out = self.layernorm(x_out)
 
-        # post linear porjection
+        # post linear projection
         x_out = self.projection_out(x_out)
         x_out = self.projection_dropout(x_out)
         return x_out
@@ -415,7 +415,7 @@ class FocalNetLayer(nn.Module):
         dim (`int`):
             Number of input channels.
         input_resolution (`Tuple[int]`):
-            Input resulotion.
+            Input resolution.
         drop_path (`float`, *optional*, defaults to 0.0):
             Stochastic depth rate.
     """
@@ -486,7 +486,7 @@ class FocalNetStage(nn.Module):
         downsample = FocalNetPatchEmbeddings if (index < self.num_stages - 1) else None
 
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
         drop_path = dpr[sum(config.depths[:index]) : sum(config.depths[: index + 1])]
 
         self.layers = nn.ModuleList(
@@ -621,7 +621,6 @@ class FocalNetEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->FocalNet,swin->focalnet
 class FocalNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -645,6 +644,13 @@ class FocalNetPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, FocalNetEmbeddings):
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
+        elif isinstance(module, FocalNetLayer):
+            if self.config.use_layerscale:
+                module.gamma_1.data.fill_(self.config.layerscale_value)
+                module.gamma_2.data.fill_(self.config.layerscale_value)
 
 
 FOCALNET_START_DOCSTRING = r"""

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,7 +34,7 @@ if is_torch_available():
     import torch
 
 
-class AriaImageProcessingTester(unittest.TestCase):
+class AriaImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -55,7 +54,6 @@ class AriaImageProcessingTester(unittest.TestCase):
         do_convert_rgb=True,
         resample=PILImageResampling.BICUBIC,
     ):
-        super().__init__()
         self.size = size if size is not None else {"longest_edge": max_resolution}
         self.parent = parent
         self.batch_size = batch_size

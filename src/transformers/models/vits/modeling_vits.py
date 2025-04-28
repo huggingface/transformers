@@ -69,8 +69,8 @@ class VitsModelOutput(ModelOutput):
             heads.
     """
 
-    waveform: torch.FloatTensor = None
-    sequence_lengths: torch.FloatTensor = None
+    waveform: Optional[torch.FloatTensor] = None
+    sequence_lengths: Optional[torch.FloatTensor] = None
     spectrogram: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -101,9 +101,9 @@ class VitsTextEncoderOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    prior_means: torch.FloatTensor = None
-    prior_log_variances: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    prior_means: Optional[torch.FloatTensor] = None
+    prior_log_variances: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1406,10 +1406,11 @@ class VitsModel(VitsPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training of VITS is not supported yet.")
 
+        mask_dtype = self.text_encoder.embed_tokens.weight.dtype
         if attention_mask is not None:
-            input_padding_mask = attention_mask.unsqueeze(-1).float()
+            input_padding_mask = attention_mask.unsqueeze(-1).to(mask_dtype)
         else:
-            input_padding_mask = torch.ones_like(input_ids).unsqueeze(-1).float()
+            input_padding_mask = torch.ones_like(input_ids).unsqueeze(-1).to(mask_dtype)
 
         if self.config.num_speakers > 1 and speaker_id is not None:
             if not 0 <= speaker_id < self.config.num_speakers:

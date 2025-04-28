@@ -51,6 +51,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
     replace_return_docstrings,
 )
@@ -259,7 +260,7 @@ class BambaMixer(nn.Module):
             projection_size,
             bias=self.use_bias,
         )
-        # selective projection used to make dt, B and C input dependant
+        # selective projection used to make dt, B and C input dependent
 
         # time step projection (discretization)
         # instantiate once and copy inv_dt in init_weights of PretrainedModel
@@ -579,8 +580,8 @@ class BambaMixer(nn.Module):
             hidden_states = hidden_states.reshape(batch_size, seq_len, -1, self.head_dim).float()
             B = B.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
             C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
-            B = B.repeat(1, 1, self.num_heads // self.n_groups, 1)
-            C = C.repeat(1, 1, self.num_heads // self.n_groups, 1)
+            B = B.repeat_interleave(self.num_heads // self.n_groups, dim=2, output_size=self.num_heads)
+            C = C.repeat_interleave(self.num_heads // self.n_groups, dim=2, output_size=self.num_heads)
             pad_size = (self.chunk_size - seq_len % self.chunk_size) % self.chunk_size
 
             D_residual = self.D[..., None] * pad_tensor_by_size(hidden_states, pad_size)
@@ -818,10 +819,16 @@ class BambaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, (BambaRMSNormGated, BambaRMSNorm)):
+            module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, BambaMixer):
+            module.dt_bias.data.fill_(1.0)
+            module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
+            module.D.data.fill_(1.0)
 
 
 BAMBA_INPUTS_DOCSTRING = r"""
@@ -934,10 +941,11 @@ class BambaModel(BambaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(BAMBA_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[HybridMambaAttentionDynamicCache] = None,
@@ -945,16 +953,14 @@ class BambaModel(BambaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+        **kwargs,  # NOOP kwargs, for now
+    ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1040,8 +1046,6 @@ class BambaModel(BambaPreTrainedModel):
 
         next_cache = None if not use_cache else past_key_values
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -1077,7 +1081,7 @@ class BambaModel(BambaPreTrainedModel):
             ):
                 return None
 
-        dtype, device = input_tensor.dtype, input_tensor.device
+        dtype = input_tensor.dtype
         sequence_length = input_tensor.shape[1]
         target_length = (
             attention_mask.shape[-1]
@@ -1091,7 +1095,6 @@ class BambaModel(BambaPreTrainedModel):
             sequence_length=sequence_length,
             target_length=target_length,
             dtype=dtype,
-            device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
@@ -1099,7 +1102,7 @@ class BambaModel(BambaPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1116,7 +1119,6 @@ class BambaModel(BambaPreTrainedModel):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         **kwargs,
@@ -1136,8 +1138,6 @@ class BambaModel(BambaPreTrainedModel):
                 to account for the 0 padding, the part of the cache that is not filled yet.
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to plcae the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -1149,11 +1149,11 @@ class BambaModel(BambaPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
@@ -1182,11 +1182,12 @@ class BambaModel(BambaPreTrainedModel):
 
 
 class BambaForCausalLM(LlamaForCausalLM):
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(BAMBA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[HybridMambaAttentionDynamicCache] = None,
@@ -1195,22 +1196,22 @@ class BambaForCausalLM(LlamaForCausalLM):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> CausalLMOutputWithPast:
         r"""
-        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            num_logits_to_keep (`int` or `None`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `None`, calculate logits for all
-                `input_ids`. Only last token logits are needed for generation, and calculating them only for that token
-                can save memory, which becomes pretty significant for long sequences.
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
+                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
 
         Returns:
 
@@ -1240,9 +1241,8 @@ class BambaForCausalLM(LlamaForCausalLM):
             use_cache,
             output_attentions,
             output_hidden_states,
-            return_dict,
             cache_position,
-            num_logits_to_keep,
+            logits_to_keep,
             **kwargs,
         )
 
@@ -1257,15 +1257,20 @@ class BambaForCausalLM(LlamaForCausalLM):
         use_cache=True,
         **kwargs,
     ):
-        # Overwitten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
+        # Overwritten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
 
         empty_past_kv = past_key_values is None
 
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        #              (we can't check exception 3 while compiling)
         if not empty_past_kv:
-            if inputs_embeds is not None:  # Exception 1
+            if (
+                inputs_embeds is not None  # Exception 1
+                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
+            ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
@@ -1293,7 +1298,7 @@ class BambaForCausalLM(LlamaForCausalLM):
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
-                "num_logits_to_keep": self.config.num_logits_to_keep,
+                "logits_to_keep": self.config.num_logits_to_keep,
                 "cache_position": cache_position,
             }
         )

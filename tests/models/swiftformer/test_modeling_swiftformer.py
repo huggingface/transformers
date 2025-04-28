@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -147,6 +146,7 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = SwiftFormerModelTester(self)
@@ -288,4 +288,4 @@ class SwiftFormerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor([[-2.1703e00, 2.1107e00, -2.0811e00]]).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)

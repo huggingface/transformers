@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 
 
 import unittest
-from typing import Dict, List, Tuple
 
 from parameterized import parameterized
 
@@ -214,7 +212,6 @@ class Mamba2ModelTester:
 @require_torch
 class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Mamba2Model, Mamba2ForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (Mamba2ForCausalLM,) if is_torch_available() else ()
     has_attentions = False  # Mamba does not support attentions
     fx_compatible = False  # FIXME let's try to support this @molbap
     test_torchscript = False  # FIXME I think this should be doable @molbap @ArthurZucker
@@ -241,6 +238,14 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
 
+    # This test adjusts n_groups to half the original setting and effectively
+    # creates a grouped SSD configuration in the mamba2 layers
+    # See https://github.com/huggingface/transformers/pull/37533/
+    def test_mamba2_slow_vs_fast_forward_grouped(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs[0].n_groups //= 2
+        self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
+
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -250,7 +255,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 if "D" in name:
                     if param.requires_grad:
                         # check if it's a ones like
-                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
 
     @unittest.skip(reason="Mamba 2 weights are not tied")
     def test_tied_weights_keys(self):
@@ -272,10 +277,10 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     if isinstance(tuple_object, Mamba2Cache):  # MODIFIED PART START
                         recursive_check(tuple_object.conv_states, dict_object.conv_states)
                         recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
-                    elif isinstance(tuple_object, (List, Tuple)):  # MODIFIED PART END
+                    elif isinstance(tuple_object, (list, tuple)):  # MODIFIED PART END
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -439,4 +444,4 @@ class Mamba2IntegrationTest(unittest.TestCase):
                 mixer.eval()
                 out_eval = mixer(hidden_states)
 
-                self.assertTrue(torch.allclose(out_train, out_eval, atol=1e-3))
+                torch.testing.assert_close(out_train, out_eval, rtol=1e-3, atol=1e-3)

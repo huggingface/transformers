@@ -33,7 +33,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import add_start_docstrings_to_model_forward, logging
+from ...utils import add_start_docstrings_to_model_forward, can_return_tuple, logging
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralDecoderLayer,
@@ -41,6 +41,8 @@ from ..mistral.modeling_mistral import (
     MistralForSequenceClassification,
     MistralForTokenClassification,
     MistralModel,
+    MistralPreTrainedModel,
+    MistralRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -143,6 +145,26 @@ class Starcoder2DecoderLayer(MistralDecoderLayer):
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
 
 
+class Starcoder2RotaryEmbedding(MistralRotaryEmbedding):
+    pass
+
+
+class Starcoder2PreTrainedModel(MistralPreTrainedModel):
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+
+
 STARCODER2_INPUTS_DOCSTRING = None  # will be automatically redefined
 
 
@@ -155,10 +177,11 @@ class Starcoder2Model(MistralModel):
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.embedding_dropout = config.embedding_dropout
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
@@ -166,16 +189,14 @@ class Starcoder2Model(MistralModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -244,13 +265,12 @@ class Starcoder2Model(MistralModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        output = BaseModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-        return output if return_dict else output.to_tuple()
 
 
 class Starcoder2ForCausalLM(MistralForCausalLM):

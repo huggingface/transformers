@@ -21,7 +21,6 @@ from transformers import MarianConfig, is_flax_available
 from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
 from transformers.utils import cached_property
 
-from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -177,7 +176,7 @@ class FlaxMarianModelTester:
 
         outputs = model.decode(decoder_input_ids, encoder_outputs)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(np.abs(outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
     def check_use_cache_forward_with_attn_mask(self, model_class_name, config, inputs_dict):
@@ -223,15 +222,14 @@ class FlaxMarianModelTester:
 
         outputs = model.decode(decoder_input_ids, encoder_outputs, decoder_attention_mask=decoder_attention_mask)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(np.abs(outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
 @require_flax
-class FlaxMarianModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
+class FlaxMarianModelTest(FlaxModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (FlaxMarianModel, FlaxMarianMTModel) if is_flax_available() else ()
-    all_generative_model_classes = (FlaxMarianMTModel,) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxMarianModelTester(self)

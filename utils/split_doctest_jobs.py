@@ -49,7 +49,7 @@ if __name__ == "__main__":
         "--num_splits",
         type=int,
         default=1,
-        help="the number of splits into which the (flat) list of direcotry/file paths will be split. This has effect only if `only_return_keys` is `True`.",
+        help="the number of splits into which the (flat) list of directory/file paths will be split. This has effect only if `only_return_keys` is `True`.",
     )
     args = parser.parse_args()
 

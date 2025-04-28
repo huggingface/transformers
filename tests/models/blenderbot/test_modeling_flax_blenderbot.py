@@ -20,7 +20,6 @@ import timeout_decorator  # noqa
 from transformers import BlenderbotConfig, is_flax_available
 from transformers.testing_utils import jax_device, require_flax, slow
 
-from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -180,7 +179,7 @@ class FlaxBlenderbotModelTester:
 
         outputs = model.decode(decoder_input_ids, encoder_outputs)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(np.abs(outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
     def check_use_cache_forward_with_attn_mask(self, model_class_name, config, inputs_dict):
@@ -226,7 +225,7 @@ class FlaxBlenderbotModelTester:
 
         outputs = model.decode(decoder_input_ids, encoder_outputs, decoder_attention_mask=decoder_attention_mask)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(np.abs(outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
@@ -309,7 +308,7 @@ class BlenderbotHeadTests(unittest.TestCase):
 
 
 @require_flax
-class FlaxBlenderbotModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
+class FlaxBlenderbotModelTest(FlaxModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (
         (
@@ -319,7 +318,6 @@ class FlaxBlenderbotModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGener
         if is_flax_available()
         else ()
     )
-    all_generative_model_classes = (FlaxBlenderbotForConditionalGeneration,) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxBlenderbotModelTester(self)

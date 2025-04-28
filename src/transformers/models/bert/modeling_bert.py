@@ -848,6 +848,8 @@ class BertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, BertLMPredictionHead):
+            module.bias.data.zero_()
 
 
 @dataclass
@@ -878,8 +880,8 @@ class BertForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_logits: torch.FloatTensor = None
-    seq_relationship_logits: torch.FloatTensor = None
+    prediction_logits: Optional[torch.FloatTensor] = None
+    seq_relationship_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1506,6 +1508,14 @@ class BertForMaskedLM(BertPreTrainedModel):
         input_ids = torch.cat([input_ids, dummy_token], dim=1)
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
+
+    @classmethod
+    def can_generate(cls) -> bool:
+        """
+        Legacy correction: BertForMaskedLM can't call `generate()` from `GenerationMixin`, even though it has a
+        `prepare_inputs_for_generation` method.
+        """
+        return False
 
 
 @add_start_docstrings(

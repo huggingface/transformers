@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -195,9 +194,6 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (
-        (OpenAIGPTLMHeadModel,) if is_torch_available() else ()
-    )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
     pipeline_model_mapping = (
         {
             "feature-extraction": OpenAIGPTModel,

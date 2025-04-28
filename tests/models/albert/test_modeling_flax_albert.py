@@ -36,7 +36,7 @@ if is_flax_available():
     )
 
 
-class FlaxAlbertModelTester(unittest.TestCase):
+class FlaxAlbertModelTester:
     def __init__(
         self,
         parent,
@@ -80,7 +80,6 @@ class FlaxAlbertModelTester(unittest.TestCase):
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.num_choices = num_choices
-        super().__init__()
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)

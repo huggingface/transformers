@@ -19,6 +19,7 @@
 # limitations under the License.
 """PyTorch Mixtral model."""
 
+from functools import partial
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -45,7 +46,9 @@ from ..mistral.modeling_mistral import (
     MistralForSequenceClassification,
     MistralForTokenClassification,
     MistralModel,
+    MistralPreTrainedModel,
     MistralRMSNorm,
+    MistralRotaryEmbedding,
 )
 from .configuration_mixtral import MixtralConfig
 
@@ -206,11 +209,10 @@ class MixtralSparseMoeBlock(nn.Module):
         # this will be used to easily index which expert is going to be sollicitated
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
-        # Loop over all available experts in the model and perform the computation on each expert
-        for expert_idx in range(self.num_experts):
+        expert_hitted = (expert_mask.sum(dim=(-1, -2)) > 0).nonzero(as_tuple=True)[0].tolist()
+        for expert_idx in expert_hitted:
             expert_layer = self.experts[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx])
-
             # Index the correct hidden states and compute the expert hidden state for
             # the current expert. We need to make sure to multiply the output hidden
             # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
@@ -313,6 +315,14 @@ class MixtralDecoderLayer(nn.Module):
         return outputs
 
 
+class MixtralRotaryEmbedding(MistralRotaryEmbedding):
+    pass
+
+
+class MixtralPreTrainedModel(MistralPreTrainedModel):
+    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+
+
 class MixtralModel(MistralModel):
     def __init__(self, config: MixtralConfig):
         super().__init__(config)
@@ -322,7 +332,7 @@ class MixtralModel(MistralModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -331,10 +341,9 @@ class MixtralModel(MistralModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, MoeModelOutputWithPast]:
+    ) -> MoeModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
@@ -343,8 +352,6 @@ class MixtralModel(MistralModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -390,7 +397,7 @@ class MixtralModel(MistralModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    partial(decoder_layer.__call__, **flash_attn_kwargs),
                     hidden_states,
                     causal_mask,
                     position_ids,
@@ -429,14 +436,13 @@ class MixtralModel(MistralModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        output = MoeModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             router_logits=all_router_logits,
         )
-        return output if return_dict else output.to_tuple()
 
 
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
@@ -454,7 +460,7 @@ class MixtralForCausalLM(MistralForCausalLM):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -464,22 +470,22 @@ class MixtralForCausalLM(MistralForCausalLM):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
+    ) -> MoeCausalLMOutputWithPast:
         r"""
-        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
 
         Returns:
 
@@ -508,10 +514,9 @@ class MixtralForCausalLM(MistralForCausalLM):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
+        outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -521,14 +526,14 @@ class MixtralForCausalLM(MistralForCausalLM):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             output_router_logits=output_router_logits,
-            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -537,19 +542,13 @@ class MixtralForCausalLM(MistralForCausalLM):
         aux_loss = None
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
-                outputs.router_logits if return_dict else outputs[-1],
+                outputs.router_logits,
                 self.num_experts,
                 self.num_experts_per_tok,
                 attention_mask,
             )
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            if output_router_logits:
-                output = (aux_loss,) + output
-            return (loss,) + output if loss is not None else output
 
         return MoeCausalLMOutputWithPast(
             loss=loss,
@@ -572,3 +571,13 @@ class MixtralForTokenClassification(MistralForTokenClassification):
 
 class MixtralForQuestionAnswering(MistralForQuestionAnswering):
     pass
+
+
+__all__ = [
+    "MixtralForCausalLM",
+    "MixtralForQuestionAnswering",
+    "MixtralModel",
+    "MixtralPreTrainedModel",
+    "MixtralForSequenceClassification",
+    "MixtralForTokenClassification",
+]

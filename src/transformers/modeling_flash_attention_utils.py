@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Fairseq Authors and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,25 +14,74 @@
 
 import inspect
 import os
-from typing import Optional, Tuple, TypedDict
+from typing import Optional, TypedDict
 
 import torch
 import torch.nn.functional as F
 
-from .utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal, logging
+from .utils import (
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal,
+    is_flash_attn_greater_or_equal_2_10,
+    is_torch_npu_available,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
+flash_attn_func = None
 
 
 if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
     from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.layers.rotary import apply_rotary_emb  # noqa
 
+
+# patch functions in package `flash-attn` when using flash-attention on Ascend NPU.
+if is_torch_npu_available():
+    from torch_npu import npu_rotary_mul as apply_rotary_emb  # noqa
+
+    from .integrations.npu_flash_attention import index_first_axis, pad_input, unpad_input
+    from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
+    from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
+
+
+if flash_attn_func:
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 
-def _get_unpad_data(attention_mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, int]:
+def is_flash_attn_available():
+    """Determine whether flash-attention can be used or not."""
+
+    # if package `flash-attn` is available, flash-attention can be used natively.
+    if is_flash_attn_2_available():
+        return True
+
+    # flash-attention can be used on Ascend NPU without package `flash-attn`
+    if is_torch_npu_available():
+        return True
+
+    return False
+
+
+def flash_attn_supports_top_left_mask():
+    """Determine whether flash-attention uses top-left or down-right mask"""
+
+    if is_flash_attn_2_available():
+        # top-left mask is used in package `flash-attn` with version lower than 2.1.0
+        return not is_flash_attn_greater_or_equal_2_10()
+
+    if is_torch_npu_available():
+        # down-right mask is used on Ascend NPU by default, set env `NPU_FA2_SPARSE_MODE=2` to activate top-left mask.
+        from .integrations.npu_flash_attention import is_npu_fa2_top_left_aligned_causal_mask
+
+        return is_npu_fa2_top_left_aligned_causal_mask()
+
+    return False
+
+
+def _get_unpad_data(attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, int]:
     """
     Retrieves indexing data required to repad unpadded (ragged) tensors.
 
@@ -121,7 +169,7 @@ def _upad_input(
     else:
         # The -q_len: slice assumes left padding.
         attention_mask = attention_mask[:, -query_length:]
-        query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
+        query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q, *_ = unpad_input(query_layer, attention_mask)
 
     return (
         query_layer,
@@ -137,9 +185,9 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids):
     """
     This function returns necessary arguments to call `flash_attn_varlen_func`.
     All three query, key, value states will be flattened.
-    Cummulative lengths of each examples in the batch will be extracted from position_ids.
+    Cumulative lengths of each examples in the batch will be extracted from position_ids.
 
-    NOTE: ideally cummulative lengths should be prepared at the data collator stage
+    NOTE: ideally cumulative lengths should be prepared at the data collator stage
 
     Arguments:
         query (`torch.Tensor`):
@@ -209,7 +257,7 @@ def fa_peft_integration_check(
     if target_dtype is None:
         return query, key, value
 
-    input_dtype = value.dtype
+    input_dtype = query.dtype
     if input_dtype == torch.float32:
         logger.warning_once(
             f"The input hidden states seems to be silently casted in float32, this might be related to"
@@ -232,7 +280,7 @@ def _flash_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
     value_states: torch.Tensor,
-    attention_mask: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
     query_length: int,
     is_causal: bool,
     dropout: float = 0.0,
@@ -241,7 +289,7 @@ def _flash_attention_forward(
     sliding_window: Optional[int] = None,
     use_top_left_mask: bool = False,
     softcap: Optional[float] = None,
-    deterministic: bool = None,
+    deterministic: Optional[bool] = None,
     cu_seq_lens_q: Optional[torch.LongTensor] = None,
     cu_seq_lens_k: Optional[torch.LongTensor] = None,
     max_length_q: Optional[int] = None,
@@ -260,7 +308,7 @@ def _flash_attention_forward(
             Input key states to be passed to Flash Attention API
         value_states (`torch.Tensor`):
             Input value states to be passed to Flash Attention API
-        attention_mask (`torch.Tensor`):
+        attention_mask (`torch.Tensor`, *optional*):
             The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
             position of padding tokens and 1 for the position of non-padding tokens.
         dropout (`float`):
@@ -268,7 +316,7 @@ def _flash_attention_forward(
         softmax_scale (`float`, *optional*):
             The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         use_top_left_mask (`bool`, defaults to `False`):
-            flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference.
+            flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference.
         softcap (`float`, *optional*):
             Softcap for the attention logits, used e.g. in gemma2.
         deterministic (`bool`, *optional*):
@@ -374,9 +422,9 @@ class FlashAttentionKwargs(TypedDict, total=False):
 
     Attributes:
         cu_seq_lens_q (`torch.LongTensor`, *optional*)
-            Gets cumlative sequence length for query state.
+            Gets cumulative sequence length for query state.
         cu_seq_lens_k (`torch.LongTensor`, *optional*)
-            Gets cumlative sequence length for key state.
+            Gets cumulative sequence length for key state.
         max_length_q (`int`, *optional*):
             Maximum sequence length for query state.
         max_length_k (`int`, *optional*):

@@ -67,6 +67,78 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         )
 
     @require_torch
+    def test_small_model_pt_token_text_only(self):
+        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+        text = "What is the capital of France? Assistant:"
+
+        outputs = pipe(text=text)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "input_text": "What is the capital of France? Assistant:",
+                    "generated_text": "What is the capital of France? Assistant: The capital of France is Paris.",
+                }
+            ],
+        )
+
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Write a poem on Hugging Face, the company"},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is the capital of France?"},
+                    ],
+                },
+            ],
+        ]
+        outputs = pipe(text=messages)
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {
+                        "input_text": [
+                            {
+                                "role": "user",
+                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
+                            }
+                        ],
+                        "generated_text": [
+                            {
+                                "role": "user",
+                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
+                            },
+                            {
+                                "role": "assistant",
+                                "content": "Hugging Face, a company of minds\nWith tools and services that make our lives easier\nFrom",
+                            },
+                        ],
+                    }
+                ],
+                [
+                    {
+                        "input_text": [
+                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}
+                        ],
+                        "generated_text": [
+                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]},
+                            {"role": "assistant", "content": "Paris"},
+                        ],
+                    }
+                ],
+            ],
+        )
+
+    @require_torch
     def test_small_model_pt_token(self):
         pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
@@ -124,7 +196,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 ],
             }
         ]
-        outputs = pipe([image_ny, image_chicago], text=messages)
+        outputs = pipe([image_ny, image_chicago], text=messages, return_full_text=True, max_new_tokens=10)
         self.assertEqual(
             outputs,
             [
@@ -134,8 +206,14 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                             "role": "user",
                             "content": [
                                 {"type": "text", "text": "What’s the difference between these two images?"},
-                                {"type": "image"},
-                                {"type": "image"},
+                                {
+                                    "type": "image",
+                                    "image": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                                },
+                                {
+                                    "type": "image",
+                                    "image": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
+                                },
                             ],
                         }
                     ],
@@ -144,13 +222,19 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                             "role": "user",
                             "content": [
                                 {"type": "text", "text": "What’s the difference between these two images?"},
-                                {"type": "image"},
-                                {"type": "image"},
+                                {
+                                    "type": "image",
+                                    "image": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                                },
+                                {
+                                    "type": "image",
+                                    "image": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
+                                },
                             ],
                         },
                         {
                             "role": "assistant",
-                            "content": "The first image shows a statue of the Statue of Liberty in the foreground, while the second image shows",
+                            "content": "The first image shows a statue of Liberty in the",
                         },
                     ],
                 }
@@ -179,7 +263,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 ],
             },
         ]
-        outputs = pipe(text=messages)
+        outputs = pipe(text=messages, max_new_tokens=10)
         self.assertEqual(
             outputs,
             [
@@ -213,7 +297,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                             "content": [
                                 {
                                     "type": "text",
-                                    "text": "There is a dog and a person in the image. The dog is sitting on the sand, and the person is sitting on",
+                                    "text": "There is a dog and a person in the image. The dog is sitting",
                                 }
                             ],
                         },
@@ -238,7 +322,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 ],
             }
         ]
-        outputs = pipe(text=messages, return_full_text=False)
+        outputs = pipe(text=messages, return_full_text=False, max_new_tokens=10)
         self.assertEqual(
             outputs,
             [
@@ -255,7 +339,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                             ],
                         }
                     ],
-                    "generated_text": "In the image, a woman is sitting on the sandy beach, her legs crossed in a relaxed manner",
+                    "generated_text": "In the image, a woman is sitting on the",
                 }
             ],
         )
@@ -263,7 +347,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_model_pt_chat_template_image_url(self):
-        pipe = pipeline("image-text-to-text", model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
+        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
         messages = [
             {
                 "role": "user",
@@ -279,7 +363,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             }
         ]
         outputs = pipe(text=messages, return_full_text=False, max_new_tokens=10)[0]["generated_text"]
-        self.assertEqual(outputs, "The image captures the iconic Statue of Liberty, a")
+        self.assertEqual(outputs, "A statue of liberty in the foreground of a city")
 
     @slow
     @require_torch

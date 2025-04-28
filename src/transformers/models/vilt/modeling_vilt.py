@@ -70,7 +70,7 @@ class ViltForImagesAndTextClassificationOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[List[Tuple[torch.FloatTensor]]] = None
     attentions: Optional[List[Tuple[torch.FloatTensor]]] = None
 
@@ -139,7 +139,7 @@ class ViltEmbeddings(nn.Module):
         x_mask = x_mask.flatten(1)
 
         if max_image_length < 0 or max_image_length is None or not isinstance(max_image_length, int):
-            # suppose aug is 800 x 1333, then, maximum effective res is 800 x 1333 (if one side gets bigger, the other will be constrained and be shrinked)
+            # suppose aug is 800 x 1333, then, maximum effective res is 800 x 1333 (if one side gets bigger, the other will be constrained and be shrunk)
             # (800 // self.patch_size) * (1333 // self.patch_size) is the maximum number of patches that single image can get.
             # if self.patch_size = 32, 25 * 41 = 1025
             # if res is 384 x 640, 12 * 20 = 240
@@ -171,7 +171,7 @@ class ViltEmbeddings(nn.Module):
         select = torch.cat(select, dim=0)
         x = x[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
         x_mask = x_mask[select[:, 0], select[:, 1]].view(batch_size, -1)
-        # `patch_index` should be on the same device as `select` (for torch>=1.13), which is ensured at definition time.
+        # `patch_index` should be on the same device as `select`, which is ensured at definition time.
         patch_index = patch_index[select[:, 0], select[:, 1]].view(batch_size, -1, 2)
         pos_embed = pos_embed[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
 
@@ -322,7 +322,7 @@ class ViltSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 

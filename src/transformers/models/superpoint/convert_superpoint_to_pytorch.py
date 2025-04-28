@@ -144,7 +144,7 @@ def convert_superpoint_checkpoint(checkpoint_url, pytorch_dump_folder_path, save
         model.save_pretrained(pytorch_dump_folder_path)
         preprocessor.save_pretrained(pytorch_dump_folder_path)
 
-        model_name = "superpoint"
+        model_name = "magic-leap-community/superpoint"
         if push_to_hub:
             print(f"Pushing {model_name} to the hub...")
         model.push_to_hub(model_name)

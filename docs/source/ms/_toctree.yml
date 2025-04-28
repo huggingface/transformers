@@ -21,8 +21,6 @@
       title: Sediakan latihan yang diedarkan dengan 🤗 Accelerate
     - local: model_sharing
       title: Kongsi model anda
-    - local: transformers_agents
-      title: Ejen
   title: Tutorials
 - sections:
     - sections:
@@ -95,8 +93,6 @@
       title: Eksport ke ONNX
     - local: torchscript
       title: Eksport ke TorchScript
-    - local: benchmarks
-      title: Penanda aras
     - local: Buku nota dengan contoh
       title: Notebooks with examples
     - local: Sumber komuniti
@@ -181,8 +177,6 @@
   title: Panduan konsep
 - sections:
     - sections:
-        - local: main_classes/agent
-          title: Ejen dan Alat
         - local: model_doc/auto
           title: Kelas Auto
         - local: main_classes/callback

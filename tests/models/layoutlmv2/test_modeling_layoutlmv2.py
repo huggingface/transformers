@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -497,7 +496,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     single_batch_shape = value.shape[0] // batch_size
                     single_row_input[key] = value[:single_batch_shape]
                 elif hasattr(value, "tensor"):
-                    # layoutlmv2uses ImageList intead of pixel values (needs for torchscript)
+                    # layoutlmv2uses ImageList instead of pixel values (needs for torchscript)
                     single_row_input[key] = value.tensor[:single_batch_shape]
 
             with torch.no_grad():
@@ -559,7 +558,7 @@ class LayoutLMv2ModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-0.1087, 0.0727, -0.3075], [0.0799, -0.0427, -0.0751], [-0.0367, 0.0480, -0.1358]], device=torch_device
         )
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-3))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
         # verify the pooled output
         expected_shape = torch.Size((2, model.config.hidden_size))

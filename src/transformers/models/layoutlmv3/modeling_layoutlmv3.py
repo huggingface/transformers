@@ -374,6 +374,10 @@ class LayoutLMv3PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, LayoutLMv3Model):
+            if self.config.visual_embed:
+                module.cls_token.data.zero_()
+                module.pos_embed.data.zero_()
 
 
 class LayoutLMv3SelfAttention(nn.Module):
@@ -444,7 +448,7 @@ class LayoutLMv3SelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        # Use the trick of the CogView paper to stablize training
+        # Use the trick of the CogView paper to stabilize training
         attention_probs = self.cogview_attention(attention_scores)
 
         # This is actually dropping out entire tokens to attend to, which might

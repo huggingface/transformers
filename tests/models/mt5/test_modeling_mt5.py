@@ -27,16 +27,13 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_fx_available
+from transformers.utils.fx import symbolic_trace
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
-if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
 
 if is_torch_available():
     import torch
@@ -540,7 +537,6 @@ class MT5ModelTester:
             "attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
-            "use_cache": False,
         }
         return config, inputs_dict
 
@@ -553,7 +549,6 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (MT5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": MT5Model,
@@ -600,8 +595,8 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         return False
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        if not is_torch_fx_available() or not self.fx_compatible:
-            self.skipTest(reason="torch.fx is not available or not compatible with this model")
+        if not self.fx_compatible:
+            self.skipTest(reason="torch.fx is not compatible with this model")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
@@ -858,7 +853,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
@@ -872,20 +867,6 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model_name = "google/mt5-small"
         model = MT5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    @unittest.skip(reason="Test has a segmentation fault on torch 1.8.0")
-    def test_export_to_onnx(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        model = MT5Model(config_and_inputs[0]).to(torch_device)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            torch.onnx.export(
-                model,
-                (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
-                f"{tmpdirname}/t5_test.onnx",
-                export_params=True,
-                opset_version=9,
-                input_names=["input_ids", "decoder_input_ids"],
-            )
 
     def test_generate_with_head_masking(self):
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
@@ -1082,7 +1063,7 @@ class MT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
@@ -1119,7 +1100,7 @@ class MT5IntegrationTest(unittest.TestCase):
     @slow
     def test_small_integration_test(self):
         """
-        For comparision run:
+        For comparison run:
         >>> import t5  # pip install t5==0.7.1
         >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
 

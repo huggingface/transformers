@@ -18,6 +18,8 @@ Processor class for VideoLlava.
 
 from typing import List, Optional, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessorMixin
@@ -44,7 +46,7 @@ class VideoLlavaProcessor(ProcessorMixin):
             Patch size from the vision tower.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
-            Shoudl be same as in model's config
+            Should be same as in model's config
         image_token (`str`, *optional*, defaults to `"<image>"`):
             Special token used to denote image location.
         video_token (`str`, *optional*, defaults to `"<video>"`):
@@ -85,6 +87,8 @@ class VideoLlavaProcessor(ProcessorMixin):
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
         self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -101,7 +105,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        VideoLlavaImageProcessor's [`~VideoLlavaImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        VideoLlavaImageProcessor's [`~VideoLlavaImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
@@ -165,7 +169,11 @@ class VideoLlavaProcessor(ProcessorMixin):
                 num_frames = 1
 
             if "pixel_values_videos" in encoded_images.keys():
-                one_video = to_numpy_array(encoded_images.get("pixel_values_videos")[0])
+                one_video = encoded_images.get("pixel_values_videos")[0]
+                if isinstance(encoded_images.get("pixel_values_videos")[0], (list, tuple)):
+                    one_video = np.array(one_video)
+                else:
+                    one_video = to_numpy_array(one_video)
                 height, width = get_image_size(one_video[0])
                 num_frames = one_video.shape[0]  # frame dim is always after batch dim
 
@@ -189,14 +197,16 @@ class VideoLlavaProcessor(ProcessorMixin):
 
         text_inputs = self.tokenizer(
             prompt_strings,
-            return_tensors=return_tensors,
+            return_tensors=None,
             padding=padding,
             truncation=truncation,
             max_length=max_length,
         )
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image", "video"])
+
         data.update(text_inputs)
 
-        return BatchFeature(data=data)
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

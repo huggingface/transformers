@@ -322,28 +322,25 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
         "InstructBlipQFormerMultiHeadAttention",
         "InstructBlipQFormerSelfOutput",
     ]
-    _keep_in_fp32_modules = []
 
-    # Copied from transformers.models.blip_2.modeling_blip_2.Blip2PreTrainedModel._init_weights with Blip2->InstructBlip
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_range
-        if isinstance(module, nn.Conv2d) or isinstance(module, nn.Embedding) or isinstance(module, nn.Linear):
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=factor)
-            if hasattr(module, "bias") and module.bias is not None:
+            if module.bias is not None:
                 module.bias.data.zero_()
-
-        if isinstance(module, InstructBlipVisionEmbeddings):
-            if hasattr(self.config, "vision_config") and not isinstance(self.config, InstructBlipVisionConfig):
-                factor = self.config.vision_config.initializer_range
-            nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
-            nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
-
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=factor)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+        elif isinstance(module, InstructBlipVisionEmbeddings):
+            nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
+            nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
+        elif isinstance(module, InstructBlipForConditionalGeneration):
+            module.query_tokens.data.zero_()
 
 
 INSTRUCTBLIP_START_DOCSTRING = r"""
@@ -441,6 +438,9 @@ INSTRUCTBLIP_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
             Whether to interpolate the pre-trained position encodings.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
 """
 
 
@@ -1287,6 +1287,10 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
 class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, GenerationMixin):
     config_class = InstructBlipConfig
     main_input_name = "pixel_values"
+    _supports_cache_class = True
+    _supports_static_cache = True
+    _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
+    _keep_in_fp32_modules = ["query_tokens"]  # TODO @ArthurZucker I don't know why this is required for FP8
 
     def __init__(self, config: InstructBlipConfig):
         super().__init__(config)
@@ -1375,6 +1379,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        use_cache: Optional[bool] = None,
     ) -> Union[Tuple, InstructBlipForConditionalGenerationModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1462,10 +1467,10 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
-        # if the model already has "image_token_index" then the input is expanded to account for image embeds
+        # if the model already has "image_token_id" then the input is expanded to account for image embeds
         # otherwise we expand manually by concatenating
-        if getattr(self.config, "image_token_index", None) is not None:
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+        if getattr(self.config, "image_token_id", None) is not None:
+            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
             inputs_embeds[special_image_mask] = language_model_inputs.flatten()
         else:
             logger.warning_once(
@@ -1485,6 +1490,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                use_cache=use_cache,
             )
             logits = outputs.logits if return_dict else outputs[0]
             loss = None
@@ -1510,6 +1516,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 labels=labels,
+                use_cache=use_cache,
             )
             loss = outputs.loss if return_dict else outputs[0]
             logits = outputs.logits if return_dict else outputs[1]
@@ -1592,8 +1599,8 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
 
         if input_ids is None:
             start_tokens = [self.config.text_config.bos_token_id]
-            if getattr(self.config, "image_token_index", None) is not None:
-                start_tokens = [self.config.image_token_index] * self.config.num_query_tokens + start_tokens
+            if getattr(self.config, "image_token_id", None) is not None:
+                start_tokens = [self.config.image_token_id] * self.config.num_query_tokens + start_tokens
             input_ids = torch.tensor([start_tokens], dtype=torch.long, device=image_embeds.device)
             input_ids = input_ids.repeat(batch_size, 1)
 
@@ -1602,11 +1609,11 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
 
         inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        # if the model already has "image_token_index" then the input is expanded to account for image embeds
+        # if the model already has "image_token_id" then the input is expanded to account for image embeds
         # otherwise we expand manually by concatenating
-        if getattr(self.config, "image_token_index", None) is not None:
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
-            inputs_embeds[special_image_mask] = language_model_inputs.flatten()
+        if getattr(self.config, "image_token_id", None) is not None:
+            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+            inputs_embeds[special_image_mask] = language_model_inputs.flatten().to(inputs_embeds.device)
         else:
             logger.warning_once(
                 "Expanding inputs for image tokens in InstructBLIP should be done in processing. "

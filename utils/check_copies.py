@@ -245,7 +245,7 @@ def _sanity_check_splits(splits_1, splits_2, is_class, filename):
             ["block_without_name", "block_with_name"],
         ]:
             raise ValueError(
-                f"""Class defined in {filename} doesn't have the expected stucture.
+                f"""Class defined in {filename} doesn't have the expected structure.
                 See the docstring of `_sanity_check_splits` in the file `utils/check_copies.py`""",
             )
 
@@ -390,7 +390,7 @@ def split_code_into_blocks(
 
 
 def find_code_in_transformers(
-    object_name: str, base_path: str = None, return_indices: bool = False
+    object_name: str, base_path: Optional[str] = None, return_indices: bool = False
 ) -> Union[str, Tuple[List[str], int, int]]:
     """
     Find and return the source code of an object.
@@ -491,7 +491,7 @@ def replace_code(code: str, replace_pattern: str) -> str:
     return code
 
 
-def find_code_and_splits(object_name: str, base_path: str, buffer: dict = None):
+def find_code_and_splits(object_name: str, base_path: str, buffer: Optional[dict] = None):
     """Find the code of an object (specified by `object_name`) and split it into blocks.
 
     Args:
@@ -638,7 +638,9 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
         diff_index += 1
 
 
-def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = None) -> Optional[List[Tuple[str, int]]]:
+def is_copy_consistent(
+    filename: str, overwrite: bool = False, buffer: Optional[dict] = None
+) -> Optional[List[Tuple[str, int]]]:
     """
     Check if the code commented as a copy in a file matches the original.
 
@@ -652,7 +654,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
 
     Returns:
         `Optional[List[Tuple[str, int]]]`: If `overwrite=False`, returns the list of differences as tuples `(str, int)`
-        with the name of the object having a diff and the line number where theere is the first diff.
+        with the name of the object having a diff and the line number where there is the first diff.
     """
     base_path = TRANSFORMERS_PATH if not filename.startswith("tests") else MODEL_TEST_PATH
 
@@ -831,7 +833,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
     return diffs
 
 
-def check_copies(overwrite: bool = False, file: str = None):
+def check_copies(overwrite: bool = False, file: Optional[str] = None):
     """
     Check every file is copy-consistent with the original. Also check the model list in the main README and other
     READMEs are consistent.
@@ -1022,40 +1024,6 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
 
     return readmes_match, "\n".join((x[1] for x in sorted_index)) + "\n"
-
-
-def _find_text_in_file(filename: str, start_prompt: str, end_prompt: str) -> Tuple[str, int, int, List[str]]:
-    """
-    Find the text in a file between two prompts.
-
-    Args:
-        filename (`str`): The name of the file to look into.
-        start_prompt (`str`): The string to look for that introduces the content looked for.
-        end_prompt (`str`): The string to look for that ends the content looked for.
-
-    Returns:
-        Tuple[str, int, int, List[str]]: The content between the two prompts, the index of the start line in the
-        original file, the index of the end line in the original file and the list of lines of that file.
-    """
-    with open(filename, "r", encoding="utf-8", newline="\n") as f:
-        lines = f.readlines()
-    # Find the start prompt.
-    start_index = 0
-    while not lines[start_index].startswith(start_prompt):
-        start_index += 1
-    start_index += 1
-
-    end_index = start_index
-    while not lines[end_index].startswith(end_prompt):
-        end_index += 1
-    end_index -= 1
-
-    while len(lines[start_index]) <= 1:
-        start_index += 1
-    while len(lines[end_index]) <= 1:
-        end_index -= 1
-    end_index += 1
-    return "".join(lines[start_index:end_index]), start_index, end_index, lines
 
 
 # Map a model name with the name it has in the README for the check_readme check

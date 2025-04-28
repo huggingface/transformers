@@ -28,6 +28,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -74,7 +75,7 @@ class VipLlavaCausalLMOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -84,12 +85,13 @@ class VipLlavaCausalLMOutputWithPast(ModelOutput):
 class VipLlavaMultiModalProjector(nn.Module):
     def __init__(self, config: VipLlavaConfig):
         super().__init__()
+        num_feature_layers = 1 if isinstance(config.vision_feature_layers, int) else len(config.vision_feature_layers)
         self.projector_layernorm = nn.LayerNorm(
-            len(config.vision_feature_layers) * config.vision_config.hidden_size, eps=config.projector_layernorm_eps
+            num_feature_layers * config.vision_config.hidden_size, eps=config.projector_layernorm_eps
         )
 
         self.linear_1 = nn.Linear(
-            len(config.vision_feature_layers) * config.vision_config.hidden_size,
+            num_feature_layers * config.vision_config.hidden_size,
             config.text_config.hidden_size,
             bias=True,
         )
@@ -125,7 +127,6 @@ VIPLLAVA_START_DOCSTRING = r"""
     "The bare VipLlava Model outputting raw hidden-states without any specific head on top.",
     VIPLLAVA_START_DOCSTRING,
 )
-# Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->VipLlava,llava->vipllava
 class VipLlavaPreTrainedModel(PreTrainedModel):
     config_class = VipLlavaConfig
     base_model_prefix = "model"
@@ -135,28 +136,19 @@ class VipLlavaPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
 
     def _init_weights(self, module):
-        # important: this ported version of VipLlava isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/vipllava should serve for that purpose
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
 
 VIPLLAVA_INPUTS_DOCSTRING = r"""
@@ -269,141 +261,65 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         return self.language_model.get_decoder()
 
     # Ignore copy
-    def get_image_features(self, pixel_values: torch.FloatTensor, vision_feature_layers: List[int]):
+    def get_image_features(self, pixel_values: torch.FloatTensor, vision_feature_layers: Union[int, List[int]]):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
                The tensors corresponding to the input images.
-            vision_feature_layers (`List[int]`):
-                The list og indexes of the layers to select the vision feature.
+            vision_feature_layers (`Union[int, List[int]]`):
+                The vision feature layer, or the list of indexes of the layers to select
+                the vision feature.
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
         image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
 
-        # For VIP-llava, the image features are computed this way
-        # We select the features from index 1: for the layers -2, -5, -8, -11 and 6
-        image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layers]
-        image_features = torch.cat(image_features, dim=-1)
+        # If multiple feature layers are provided (which is usually the case)
+        # then the image features are concatenated after the CLS is removed.
+        if isinstance(vision_feature_layers, int):
+            image_features = image_outputs.hidden_states[vision_feature_layers][:, 1:]
+        else:
+            # Usually, we select the features from index 1: the layers -2, -5, -8, -11 and 6
+            image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layers]
+            image_features = torch.cat(image_features, dim=-1)
         image_features = self.multi_modal_projector(image_features)
         return image_features
-
-    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
-        num_images, num_image_patches, embed_dim = image_features.shape
-        batch_size, sequence_length = input_ids.shape
-        left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
-        # 1. Create a mask to know where special image tokens are
-        special_image_token_mask = input_ids == self.config.image_token_index
-        num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
-        # Compute the maximum embed dimension
-        max_embed_dim = (num_special_image_tokens.max() * (num_image_patches - 1)) + sequence_length
-        batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
-
-        # 2. Compute the positions where text should be written
-        # Calculate new positions for text tokens in merged image-text sequence.
-        # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images - 1` text tokens.
-        # `torch.cumsum` computes how each image token shifts subsequent text token positions.
-        # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
-        new_token_positions = torch.cumsum((special_image_token_mask * (num_image_patches - 1) + 1), -1) - 1
-        nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
-        if left_padding:
-            new_token_positions += nb_image_pad[:, None]  # offset for left padding
-        text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
-
-        # 3. Create the full embedding, already padded to the maximum position
-        final_embedding = torch.zeros(
-            batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
-        )
-        final_attention_mask = torch.zeros(
-            batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device
-        )
-        if labels is not None:
-            final_labels = torch.full(
-                (batch_size, max_embed_dim), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
-            )
-        # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
-        # set the corresponding tensors into their correct target device.
-        target_device = inputs_embeds.device
-        batch_indices, non_image_indices, text_to_overwrite = (
-            batch_indices.to(target_device),
-            non_image_indices.to(target_device),
-            text_to_overwrite.to(target_device),
-        )
-        attention_mask = attention_mask.to(target_device)
-
-        # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
-        # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
-        final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
-        final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
-        if labels is not None:
-            final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
-
-        # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
-        image_to_overwrite = torch.full(
-            (batch_size, max_embed_dim), True, dtype=torch.bool, device=inputs_embeds.device
-        )
-        image_to_overwrite[batch_indices, text_to_overwrite] = False
-        if left_padding:
-            image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
-        else:
-            mask = torch.ones_like(image_to_overwrite, dtype=torch.bool).cumsum(-1) - 1
-            padding_mask = mask <= new_token_positions[:, -1:].to(target_device)
-            image_to_overwrite &= padding_mask
-
-        if image_to_overwrite.sum() != image_features.shape[:-1].numel():
-            raise ValueError(
-                f"The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
-                f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
-            )
-
-        final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
-        final_attention_mask |= image_to_overwrite
-        position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
-
-        # 6. Mask out the embedding at padding positions, as we later use the past_key_value value to determine the non-attended tokens.
-        batch_indices, pad_indices = torch.where(input_ids == self.pad_token_id)
-        indices_to_mask = new_token_positions[batch_indices, pad_indices]
-
-        final_embedding[batch_indices, indices_to_mask] = 0
-
-        if labels is None:
-            final_labels = None
-
-        return final_embedding, final_attention_mask, final_labels, position_ids
 
     @add_start_docstrings_to_model_forward(VIPLLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=VipLlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     # Ignore copy
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layers: Optional[List[int]] = None,
+        vision_feature_layers: Optional[Union[int, List[int]]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **lm_kwargs,
     ) -> Union[Tuple, VipLlavaCausalLMOutputWithPast]:
         r"""
-        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
 
 
         Returns:
@@ -458,14 +374,14 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
                 pixel_values=pixel_values, vision_feature_layers=vision_feature_layers
             )
 
-            n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
-            n_image_features = image_features.shape[0] * image_features.shape[1]
-            if n_image_tokens != n_image_features:
+            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+                n_image_tokens = (input_ids == self.config.image_token_id).sum()
+                n_image_features = image_features.shape[0] * image_features.shape[1]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
@@ -479,7 +395,8 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
+            logits_to_keep=logits_to_keep,
+            **lm_kwargs,
         )
 
         logits = outputs[0]
@@ -521,7 +438,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         pixel_values=None,
         attention_mask=None,
         cache_position=None,
-        num_logits_to_keep=None,
+        logits_to_keep=None,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -532,7 +449,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 

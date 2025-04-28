@@ -21,11 +21,11 @@
 Processor class for Qwen2-VL.
 """
 
-from typing import List, Union
+from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, VideoInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 
@@ -33,7 +33,16 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+class Qwen2VLImagesKwargs(ImagesKwargs):
+    min_pixels: Optional[int]
+    max_pixels: Optional[int]
+    patch_size: Optional[int]
+    temporal_patch_size: Optional[int]
+    merge_size: Optional[int]
+
+
 class Qwen2VLProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Qwen2VLImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -57,12 +66,22 @@ class Qwen2VLProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["chat_template"]
-    image_processor_class = "Qwen2VLImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
+        self.video_token_id = (
+            tokenizer.video_token_id
+            if getattr(tokenizer, "video_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.video_token)
+        )
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -130,14 +149,15 @@ class Qwen2VLProcessor(ProcessorMixin):
         if not isinstance(text, list):
             text = [text]
 
+        text = text.copy()  # below lines change text in-place
+
         if image_grid_thw is not None:
             merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):
                 while self.image_token in text[i]:
-                    text[i] = text[i].replace(
-                        self.image_token, "<|placeholder|>" * (image_grid_thw[index].prod() // merge_length), 1
-                    )
+                    num_image_tokens = image_grid_thw[index].prod() // merge_length
+                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
@@ -146,15 +166,15 @@ class Qwen2VLProcessor(ProcessorMixin):
             index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    text[i] = text[i].replace(
-                        self.video_token, "<|placeholder|>" * (video_grid_thw[index].prod() // merge_length), 1
-                    )
+                    num_video_tokens = video_grid_thw[index].prod() // merge_length
+                    text[i] = text[i].replace(self.video_token, "<|placeholder|>" * num_video_tokens, 1)
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.video_token)
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
+        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -170,7 +190,9 @@ class Qwen2VLProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def post_process_image_text_to_text(self, generated_outputs):
+    def post_process_image_text_to_text(
+        self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
+    ):
         """
         Post-process the output of the model to decode the text.
 
@@ -178,12 +200,21 @@ class Qwen2VLProcessor(ProcessorMixin):
             generated_outputs (`torch.Tensor` or `np.ndarray`):
                 The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
                 or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            Clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+                Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
             `List[str]`: The decoded text.
         """
         return self.tokenizer.batch_decode(
-            generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False
+            generated_outputs,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
         )
 
     @property

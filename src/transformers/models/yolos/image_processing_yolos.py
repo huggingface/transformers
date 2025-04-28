@@ -62,6 +62,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -667,7 +668,7 @@ def compute_segments(
     mask_threshold: float = 0.5,
     overlap_mask_area_threshold: float = 0.8,
     label_ids_to_fuse: Optional[Set[int]] = None,
-    target_size: Tuple[int, int] = None,
+    target_size: Optional[Tuple[int, int]] = None,
 ):
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
@@ -720,6 +721,7 @@ def compute_segments(
     return segmentation, segments
 
 
+@requires(backends=("vision",))
 class YolosImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Detr image processor.
@@ -775,13 +777,13 @@ class YolosImageProcessor(BaseImageProcessor):
         self,
         format: Union[str, AnnotationFormat] = AnnotationFormat.COCO_DETECTION,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Union[float, List[float]] = None,
-        image_std: Union[float, List[float]] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         do_convert_annotations: Optional[bool] = None,
         do_pad: bool = True,
         pad_size: Optional[Dict[str, int]] = None,
@@ -862,7 +864,7 @@ class YolosImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         target: Dict,
         format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
@@ -1177,7 +1179,7 @@ class YolosImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
@@ -1274,7 +1276,6 @@ class YolosImageProcessor(BaseImageProcessor):
             )
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
-        max_size = None
         if "max_size" in kwargs:
             logger.warning_once(
                 "The `max_size` argument is deprecated and will be removed in v4.33, use"
@@ -1284,7 +1285,7 @@ class YolosImageProcessor(BaseImageProcessor):
 
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
-        size = get_size_dict(size=size, max_size=max_size, default_to_square=False)
+        size = get_size_dict(size=size, default_to_square=False)
         resample = self.resample if resample is None else resample
         do_rescale = self.do_rescale if do_rescale is None else do_rescale
         rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
@@ -1379,7 +1380,7 @@ class YolosImageProcessor(BaseImageProcessor):
                 for image, target in zip(images, annotations):
                     orig_size = get_image_size(image, input_data_format)
                     resized_image = self.resize(
-                        image, size=size, max_size=max_size, resample=resample, input_data_format=input_data_format
+                        image, size=size, resample=resample, input_data_format=input_data_format
                     )
                     resized_annotation = self.resize_annotation(
                         target, orig_size, get_image_size(resized_image, input_data_format)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +23,6 @@ import pytest
 
 from transformers import HubertConfig, is_torch_available
 from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
-from transformers.utils import is_torch_fx_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -49,8 +47,7 @@ if is_torch_available():
     )
     from transformers.models.hubert.modeling_hubert import _compute_mask_indices
 
-if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
+from transformers.utils.fx import symbolic_trace
 
 
 class HubertModelTester:
@@ -439,8 +436,8 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         # TODO: fix it
         self.skipTest(reason="torch 2.1 breaks torch fx tests for wav2vec2/hubert.")
 
-        if not is_torch_fx_available() or not self.fx_compatible:
-            self.skipTest(reason="torch fx is not available or not compatible with this model")
+        if not self.fx_compatible:
+            self.skipTest(reason="torch fx is not compatible with this model")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
@@ -812,7 +809,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
         expected_logits = torch.tensor([7.6692, 17.7795, 11.1562, 11.8232], dtype=torch.float16, device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
-        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=3e-2))
+        torch.testing.assert_close(predicted_logits, expected_logits, rtol=3e-2, atol=3e-2)
 
     def test_inference_intent_classification(self):
         model = HubertForSequenceClassification.from_pretrained(
@@ -849,9 +846,9 @@ class HubertModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_ids_location.tolist(), expected_labels_location)
 
         # TODO: lower the tolerance after merging the padding fix https://github.com/pytorch/fairseq/pull/3572
-        self.assertTrue(torch.allclose(predicted_logits_action, expected_logits_action, atol=3e-1))
-        self.assertTrue(torch.allclose(predicted_logits_object, expected_logits_object, atol=3e-1))
-        self.assertTrue(torch.allclose(predicted_logits_location, expected_logits_location, atol=3e-1))
+        torch.testing.assert_close(predicted_logits_action, expected_logits_action, rtol=3e-1, atol=3e-1)
+        torch.testing.assert_close(predicted_logits_object, expected_logits_object, rtol=3e-1, atol=3e-1)
+        torch.testing.assert_close(predicted_logits_location, expected_logits_location, rtol=3e-1, atol=3e-1)
 
     def test_inference_speaker_identification(self):
         model = HubertForSequenceClassification.from_pretrained(
@@ -877,7 +874,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
         # TODO: lower the tolerance after merging the padding fix https://github.com/pytorch/fairseq/pull/3572
-        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=10))
+        torch.testing.assert_close(predicted_logits, expected_logits, rtol=10, atol=10)
 
     def test_inference_emotion_recognition(self):
         model = HubertForSequenceClassification.from_pretrained(
@@ -899,7 +896,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
         # TODO: lower the tolerance after merging the padding fix https://github.com/pytorch/fairseq/pull/3572
-        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-1))
+        torch.testing.assert_close(predicted_logits, expected_logits, rtol=1e-1, atol=1e-1)
 
     def test_inference_distilhubert(self):
         model = HubertModel.from_pretrained("ntu-spml/distilhubert").to(torch_device)
@@ -940,8 +937,8 @@ class HubertModelIntegrationTest(unittest.TestCase):
         )
         expected_output_sum = -3776.0730
 
-        self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=5e-3))
-        self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=5e-3))
+        torch.testing.assert_close(outputs[:, :4, :4], expected_outputs_first, rtol=5e-3, atol=5e-3)
+        torch.testing.assert_close(outputs[:, -4:, -4:], expected_outputs_last, rtol=5e-3, atol=5e-3)
         self.assertTrue(abs(outputs.sum() - expected_output_sum) < 0.1)
 
     def test_inference_hubert_25hz(self):
@@ -977,6 +974,6 @@ class HubertModelIntegrationTest(unittest.TestCase):
         )
         expected_output_sum = 1681.7603
 
-        self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=5e-3))
-        self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=5e-3))
+        torch.testing.assert_close(outputs[:, :4, :4], expected_outputs_first, rtol=5e-3, atol=5e-3)
+        torch.testing.assert_close(outputs[:, -4:, -4:], expected_outputs_last, rtol=5e-3, atol=5e-3)
         self.assertTrue(abs(outputs.sum() - expected_output_sum) < 0.1)
