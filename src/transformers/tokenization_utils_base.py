@@ -2779,12 +2779,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             truncation = "longest_first"
 
         # Get padding strategy
-        if padding is False:
-            if max_length is None:
-                padding_strategy = PaddingStrategy.LONGEST
-            else:
-                padding_strategy = PaddingStrategy.MAX_LENGTH
-        else:
+        if padding is not False:
             if padding is True:
                 if verbose:
                     if max_length is not None and (
@@ -2799,6 +2794,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 padding_strategy = PaddingStrategy(padding)
             elif isinstance(padding, PaddingStrategy):
                 padding_strategy = padding
+        else:
+            padding_strategy = PaddingStrategy.DO_NOT_PAD
 
         # Get truncation strategy
         if truncation is not False and truncation is not None:
