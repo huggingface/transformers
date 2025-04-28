@@ -320,19 +320,19 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
                 image = self.normalize(image=image, input_data_format=input_data_format)
 
             # convert to torch tensor and permute
-            f, w, h, r, c = self.extract_flattened_patches(
+            patches, resized_width, resized_height, n_rows, n_columns = self.extract_flattened_patches(
                 image=image,
                 max_patches=max_patches,
                 patch_size=patch_size,
                 input_data_format=input_data_format,
             )
-            flattened_patches.append(f)
-            width.append(w)
-            height.append(h)
-            rows.append(r)
-            cols.append(c)
+            flattened_patches.append(patches)
+            width.append(resized_width)
+            height.append(resized_height)
+            rows.append(n_rows)
+            cols.append(n_columns)
             # create attention mask in numpy
-            attention_masks.append((f.sum(axis=-1) != 0).astype(np.float32))
+            attention_masks.append((patches.sum(axis=-1) != 0).astype(np.float32))
 
         encoded_outputs = BatchFeature(
             data={

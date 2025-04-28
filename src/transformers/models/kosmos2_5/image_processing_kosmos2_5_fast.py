@@ -258,19 +258,19 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
 
             # TODO: we need this to be in batch from
             # convert to torch tensor and permute
-            f, w, h, r, c = self.extract_flattened_patches(
+            patches, resized_width, resized_height, n_rows, n_columns = self.extract_flattened_patches(
                 image=stacked_images,
                 max_patches=max_patches,
                 patch_size=patch_size,
             )
             n_of_stacked_images = stacked_images.size()[0]
-            width.extend([w] * n_of_stacked_images)
-            height.extend([h] * n_of_stacked_images)
-            rows.extend([r] * n_of_stacked_images)
-            cols.extend([c] * n_of_stacked_images)
+            width.extend([resized_width] * n_of_stacked_images)
+            height.extend([resized_height] * n_of_stacked_images)
+            rows.extend([n_rows] * n_of_stacked_images)
+            cols.extend([n_columns] * n_of_stacked_images)
             # create attention mask in numpy
             attention_masks.extend(list((f.sum(axis=-1) != 0).to(dtype=torch.float32)))
-            processed_image_patches_grouped[shape] = list(f)
+            processed_image_patches_grouped[shape] = list(patches)
             for x in processed_image_patches_grouped[shape]:
                 current_index += 1
                 obj_idx_to_new_index_map[id(x)] = current_index
