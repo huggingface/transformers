@@ -1467,10 +1467,9 @@ class ModularFileMapper(ModuleMapper):
                 if len(suffix) > 0 and suffix[0].isupper():
                     cased_model_name = class_name.replace(suffix, "")
                     # If both the old model and new model share the last part of their name, is is detected as a common
-                    # suffix, but it should not be the case -> remove it
-                    common_model_name_part = common_partial_suffix(cased_default_name, cased_model_name)
-                    if len(common_model_name_part) > 0:
-                        cased_model_name = class_name.replace(common_model_name_part, "")
+                    # suffix, but it should not be the case -> use the full name in this case
+                    if len(cased_model_name) < len(cased_default_name) and cased_default_name in class_name:
+                        cased_model_name = cased_default_name
                 prefix_model_name_mapping[filename].update([cased_model_name])
 
         # Check if we found multiple prefixes for some modeling files
