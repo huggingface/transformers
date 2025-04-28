@@ -391,7 +391,7 @@ class FastSpeech2ConformerVariancePredictor(nn.Module):
         dropout_rate=0.5,
     ):
         """
-        Initilize variance predictor module.
+        Initialize variance predictor module.
 
         Args:
             input_dim (`int`): Input dimension.

@@ -14,225 +14,160 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# SigLIP2
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+            <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+            <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+            <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
+
+# SigLIP2
 
 ## Overview
 
-The SigLIP2 model was proposed in [SigLIP 2: Multilingual Vision-Language Encoders with Improved Semantic Understanding, Localization, and Dense Features](https://huggingface.co/papers/2502.14786) by Michael Tschannen, Alexey Gritsenko, Xiao Wang, Muhammad Ferjad Naeem, Ibrahim Alabdulmohsin,
-Nikhil Parthasarathy, Talfan Evans, Lucas Beyer, Ye Xia, Basil Mustafa, Olivier Hénaff, Jeremiah Harmsen,
-Andreas Steiner and Xiaohua Zhai.
+[SigLIP2](https://huggingface.co/papers/2502.14786) is a family of multilingual vision-language encoders that builds on the [SigLIP](./siglip) training recipe. It includes decoder-based pretraining, self-distillation, and masked prediction to improve dense prediction tasks (segmentation, depth estimation, etc.). This model is available in two variants:
 
-The model comes in two variants
+- NaFlex supports different resolutions and maintains the native image aspect ratio
+- FixRes supports fixed resolutions and is backwards compatible with [SigLIP](./siglip)
 
- 1) FixRes - model works with fixed resolution images (backward compatible with SigLIP v1)
- 2) NaFlex - model works with variable image aspect ratios and resolutions (SigLIP2 in `transformers`)
 
-The abstract from the paper is the following:
+You can find all the original SigLIP2 checkpoints under the [SigLIP2](https://huggingface.co/collections/google/siglip2-67b5dcef38c175486e240107) collection.
 
-*We introduce SigLIP 2, a family of new multilingual vision-language encoders that build on the success
-of the original SigLIP. In this second iteration, we extend the original image-text training objective with
-several prior, independently developed techniques into a unified recipe—this includes decoder-based
-pretraining, self-supervised losses (self-distillation, masked prediction) and online data curation. With
-these changes, SigLIP 2 models outperform their SigLIP counterparts at all model scales in core capabilities, 
-including zero-shot classification (best SigLIP 2 ViT-g/16 achieves 85.0% ImageNet zero-shot
-accuracy), image-text retrieval, and transfer performance when extracting visual representations for
-Vision-Language Models (VLMs). Furthermore, the new training recipe leads to significant improvements 
-on localization and dense prediction tasks. We also train variants which support multiple resolutions 
-and preserve the input’s native aspect ratio. Finally, we train on a more diverse data-mixture that
-includes de-biasing techniques, leading to much better multilingual understanding and improved fair-
-ness. To provide users with the ability to trade-off inference cost with performance, we release model
-checkpoints at four sizes (ViT-B/86M, L/303M, So400m/400M, and g/1B).*
+> [!TIP]
+> Click on the SigLIP2 models in the right sidebar for more examples of how to apply SigLIP2 to different image and text tasks.
 
-## Usage tips
+The example below demonstrates zero-shot classification with [`Pipeline`] or the [`AutoModel`] class.
 
-- Usage of SigLIP2 is similar to [SigLIP](siglip) and [CLIP](clip). The main difference from CLIP is the training loss, which does not require a global view of all the pairwise similarities of images and texts within a batch. One needs to apply the sigmoid activation function to the logits, rather than the softmax.
-- Training is supported but does not use `torch.distributed` utilities which may limit the scalability of batch size. However, DDP and FDSP works on single-node multi-gpu setup.
-- When using the standalone [`GemmaTokenizerFast`] make sure to pass `padding="max_length"` and `max_length=64` as that's how the model was trained.
-- Model was trained with *lowercased* text, make sure you make the same preprocessing for your text labels.
-- To get the same results as the pipeline, a prompt template of "this is a photo of {label}" should be used.
-- The NaFlex variant supports processing images at higher resolutions by adjusting the `max_num_patches` parameter in the `Processor`. The default value is `max_num_patches=256`. Increasing `max_num_patches` to 1024 (4x) will approximately double processed image height and width, while preserving the aspect ratio.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/siglip2_metrics_table.png"
-alt="drawing" width="600"/>
+```py
+import torch
+from transformers import pipeline
 
-This model was contributed by [qubvel](https://huggingface.co/qubvel-hf).
-The original code can be found [here](https://github.com/google-research/big_vision/tree/main).
+image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 
-## Usage example
-
-There are 2 main ways to use SigLIP2: either using the pipeline API, which abstracts away all the complexity for you, or by using the `Siglip2Model` class yourself.
-
-### FixRes variant
-
-**Pipeline API**
-
-The pipeline allows to use the model in a few lines of code:
-
-```python
->>> from transformers import pipeline
->>> from PIL import Image
->>> import requests
-
->>> # load pipe
->>> image_classifier = pipeline(
-...     task="zero-shot-image-classification",
-...     model="google/siglip2-base-patch16-224",
-... )
-
->>> # load image
->>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
->>> image = Image.open(requests.get(url, stream=True).raw)
-
->>> # inference
->>> candidate_labels = ["2 cats", "a plane", "a remote"]
->>> outputs = image_classifier(image, candidate_labels=candidate_labels)
->>> outputs = [{"score": round(output["score"], 4), "label": output["label"] } for output in outputs]
->>> print(outputs)
-[{'score': 0.1499, 'label': '2 cats'}, {'score': 0.0008, 'label': 'a remote'}, {'score': 0.0, 'label': 'a plane'}]
+pipeline = pipeline(task="zero-shot-image-classification", model="google/siglip2-base-patch16-224", device=0, torch_dtype=torch.bfloat16)
+pipeline(image, candidate_labels=candidate_labels)
 ```
 
-**Using the model yourself**
+</hfoption>
+<hfoption id="AutoModel (FixRes)">
 
-If you want to do the pre- and postprocessing yourself, here's how to do that:
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, AutoModel
 
-```python
->>> from PIL import Image
->>> import requests
->>> from transformers import AutoProcessor, AutoModel
->>> import torch
+model = AutoModel.from_pretrained("google/siglip2-base-patch16-224", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
 
->>> model = AutoModel.from_pretrained("google/siglip2-base-patch16-224")
->>> processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
-
->>> candidate_labels = ["2 cats", "2 dogs"]
 # follows the pipeline prompt template to get same results
->>> texts = [f"This is a photo of {label}." for label in candidate_labels]
+texts = [f'This is a photo of {label}.' for label in candidate_labels]
 
 # IMPORTANT: we pass `padding=max_length` and `max_length=64` since the model was trained with this
->>> inputs = processor(text=texts, images=image, padding="max_length", max_length=64, return_tensors="pt")
+inputs = processor(text=texts, images=image, padding="max_length", max_length=64, return_tensors="pt").to("cuda")
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> logits_per_image = outputs.logits_per_image
->>> probs = torch.sigmoid(logits_per_image) # these are the probabilities
->>> print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
-15.0% that image 0 is '2 cats'
+logits_per_image = outputs.logits_per_image
+probs = torch.sigmoid(logits_per_image)
+print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 ```
 
-### NaFlex variant
+</hfoption>
+<hfoption id="AutoModel (NaFlex)">
 
-NaFlex combines ideas from FlexiViT, i.e. supporting multiple, predefined sequence lengths 
-with a single ViT model, and NaViT, namely processing images at their native aspect ratio.
-This enables processing different types of images at appropriate resolution, e.g. using a
-larger resolution to process document images, while at the same time minimizing the impact 
-of aspect ratio distortion on certain inference tasks, e.g. on OCR.
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, AutoModel
 
-Given a patch size and target sequence length, NaFlex preprocesses the data by first resizing 
-the input image such that the height and width after resizing are multiples of the patch size,
-while 
-    
-    1. keeping the aspect ratio distortion as small as possible
-    2. producing a sequence length of at most the desired target sequence length (`max_num_patches`)
-    
-The resulting distortion in width and height is at most `(patch_size - 1) / width` and
-`(patch_size - 1) / height`, respectively, which tends to be small for common resolutions and aspect ratios. 
-After resizing, the image is split into a sequence of patches, and a mask with padding information is added.
+model = AutoModel.from_pretrained("google/siglip2-base-patch16-naflex", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-naflex")
 
-```python
->>> from PIL import Image
->>> import requests
->>> from transformers import AutoProcessor, AutoModel
->>> import torch
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
+texts = [f'This is a photo of {label}.' for label in candidate_labels]
 
->>> model = AutoModel.from_pretrained("google/siglip2-base-patch16-naflex")
->>> processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-naflex")
+# default value for `max_num_patches` is 256, but you can increase resulted image resolution providing higher values e.g. `max_num_patches=512`
+inputs = processor(text=texts, images=image, padding="max_length", max_num_patches=256, return_tensors="pt").to("cuda")
 
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> candidate_labels = ["2 cats", "2 dogs"]
+logits_per_image = outputs.logits_per_image
+probs = torch.sigmoid(logits_per_image)
+print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
+```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
+
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, AutoModel, BitsAndBytesConfig
+
+bnb_config = BitsAndBytesConfig(load_in_4bit=True)
+model = AutoModel.from_pretrained("google/siglip2-large-patch16-512", quantization_config=bnb_config, device_map="auto", attn_implementation="sdpa")
+processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
+
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
+
 # follows the pipeline prompt template to get same results
->>> texts = [f"This is a photo of {label}." for label in candidate_labels]
+texts = [f'This is a photo of {label}.' for label in candidate_labels]
 
-# default value for `max_num_patches` is 256, but you can increase resulted image resolution providing
-# higher values e.g. `max_num_patches=512`
->>> inputs = processor(text=texts, images=image, max_num_patches=256, return_tensors="pt")
+# IMPORTANT: we pass `padding=max_length` and `max_length=64` since the model was trained with this
+inputs = processor(text=texts, images=image, padding="max_length", max_length=64, return_tensors="pt").to("cuda")
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> logits_per_image = outputs.logits_per_image
->>> probs = torch.sigmoid(logits_per_image) # these are the probabilities
->>> print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
-21.1% that image 0 is '2 cats'
+logits_per_image = outputs.logits_per_image
+probs = torch.sigmoid(logits_per_image)
+print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 ```
 
-## Resources
+## Notes
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SigLIP2.
+- Training is supported for DDP and FSDP on single-node multi-GPU setups. However, it does not use [torch.distributed](https://pytorch.org/tutorials/beginner/dist_overview.html) utilities which may limit the scalability of batch size.
+- When using the standalone [`GemmaTokenizerFast`] make sure to pass `padding="max_length"` and `max_length=64` as that's how the model was trained.
+- Model was trained with *lowercased* text, so make sure your text labels are preprocessed the same way.
+- To get the same results as the [`Pipeline`], a prompt template of `"This is a photo of {label}."` should be passed to the processor.
+- The NaFlex variant processes different types of images at the appropriate resolution (using a larger resolution to process document images for example), while also minimizing the impact of aspect ratio distortion for certain inference tasks like OCR.
 
-- [Zero-shot image classification task guide](../tasks/zero_shot_image_classification)
-- Demo notebook for SigLIP2 can be found [here](https://github.com/qubvel/transformers-notebooks/tree/master/notebooks/SigLIP2_inference.ipynb). 🌎
+   NaFlex resizes the input image so the height and width are multiples of the patch size after resizing. It keeps the aspect ratio distortion as low as possible and produces a sequence length of at most the desired target sequence length (`max_num_patches`). After resizing, the image is split into a sequence of patches and a mask with padding information is added.
+- Toggle the `attn_implementation` parameter to either `"sdpa"` or `"flash_attention_2"` to use a more memory-efficient attention.
+    ```py
+    # pip install -U flash-attn --no-build-isolation
 
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+    from transformers import SiglipModel
 
-
-## Combining SigLIP2 and Flash Attention 2
-
-First, make sure to install the latest version of Flash Attention 2.
-
-```bash
-pip install -U flash-attn --no-build-isolation
-```
-
-Make also sure that you have a hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of flash-attn repository. Make also sure to load your model in half-precision (e.g. `torch.float16``)
-
-To load and run a model using Flash Attention 2, refer to the snippet below:
-
-```python
->>> import torch
->>> import requests
->>> from PIL import Image
->>> from transformers import AutoProcessor, AutoModel
->>> device = "cuda" # the device to load the model onto
-
->>> model = AutoModel.from_pretrained(
-...     "google/siglip2-so400m-patch14-384",
-...     attn_implementation="flash_attention_2",
-...     torch_dtype=torch.float16,
-...     device_map=device,
-... )
->>> processor = AutoProcessor.from_pretrained("google/siglip2-so400m-patch14-384")
-
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
-
->>> candidate_labels = ["2 cats", "2 dogs"]
-# follows the pipeline prompt template to get same results
->>> texts = [f'This is a photo of {label}.' for label in candidate_labels]
-# important: we pass `padding=max_length` since the model was trained with this
->>> inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to(device)
-
->>> with torch.no_grad():
-...     with torch.autocast(device):
-...         outputs = model(**inputs)
-
->>> logits_per_image = outputs.logits_per_image
->>> probs = torch.sigmoid(logits_per_image) # these are the probabilities
->>> print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
-19.8% that image 0 is '2 cats'
-```
-
+    model = SiglipModel.from_pretrained(
+        "google/siglip2-so400m-patch14-384",
+        attn_implementation="flash_attention_2",
+        torch_dtype=torch.float16,
+        device_map=device,
+    )
+    ```
 ## Siglip2Config
 
 [[autodoc]] Siglip2Config

@@ -142,7 +142,7 @@ def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch
         return patches
 
     if n_patches_per_batch < 4:
-        # for each batch, atleast 4 small patches are required to
+        # for each batch, at least 4 small patches are required to
         # recreate a large square patch from merging them and later padding is applied
         # 3 x (8x8) patches becomes 1 x ( 8x8 ) patch (extra patch ignored, no padding)
         # 4 x (8x8) patches becomes 1 x (16x16) patch (padding later)
@@ -902,14 +902,14 @@ class DepthProFeatureFusionStage(nn.Module):
         for _ in range(self.num_layers - 1):
             self.intermediate.append(DepthProFeatureFusionLayer(config))
 
-        # final layer doesnot require deconvolution
+        # final layer does not require deconvolution
         self.final = DepthProFeatureFusionLayer(config, use_deconv=False)
 
     def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
         if self.num_layers != len(hidden_states):
             raise ValueError(
                 f"num_layers={self.num_layers} in DepthProFeatureFusionStage"
-                f"doesnot match len(hidden_states)={len(hidden_states)}"
+                f"does not match len(hidden_states)={len(hidden_states)}"
             )
 
         fused_hidden_states = []
