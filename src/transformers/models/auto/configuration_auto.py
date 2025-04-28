@@ -20,7 +20,7 @@ import warnings
 from collections import OrderedDict
 from typing import List, Union
 
-from ...configuration_utils import PretrainedConfig, dynamic_config_classes
+from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
 
@@ -1161,8 +1161,7 @@ class AutoConfig:
             config_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
             )
-            if config_class.__name__ not in dynamic_config_classes:
-                dynamic_config_classes[config_class.__name__] = cls
+            config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
             try:
