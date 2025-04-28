@@ -29,7 +29,7 @@ from ...utils import (
 # Filename mapping to contained objects
 _import_structure = {
     "configuration_hindicausallm": ["HINDICAUSALLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "HindiCausalLMConfig"],
-    "generation_config_hindicausallm": ["HindiCausalLMGenerationConfig"],  # Added generation config
+    "generation_config_hindicausallm": ["HindiCausalLMGenerationConfig"], # Added generation config
 }
 
 # Add modeling files if PyTorch is installed
@@ -37,7 +37,7 @@ try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-    pass  # No PyTorch models if torch is not installed
+    pass # No PyTorch models if torch is not installed
 else:
     _import_structure["modeling_hindicausallm"] = [
         # Add PRETRAINED_MODEL_ARCHIVE_LIST if defined in modeling_hindicausallm.py
@@ -54,7 +54,7 @@ try:
     if not is_sentencepiece_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-    pass  # No slow tokenizer if sentencepiece is not installed
+    pass # No slow tokenizer if sentencepiece is not installed
 else:
     _import_structure["tokenization_hindicausallm"] = ["HindiCausalLMTokenizer"]
 
@@ -63,7 +63,7 @@ try:
     if not is_tokenizers_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-    pass  # No fast tokenizer if tokenizers is not installed
+    pass # No fast tokenizer if tokenizers is not installed
 else:
     _import_structure["tokenization_hindicausallm_fast"] = ["HindiCausalLMTokenizerFast"]
 
@@ -72,7 +72,7 @@ else:
 if TYPE_CHECKING:
     # Unconditional imports
     from .configuration_hindicausallm import HINDICAUSALLM_PRETRAINED_CONFIG_ARCHIVE_MAP, HindiCausalLMConfig
-    from .generation_config_hindicausallm import HindiCausalLMGenerationConfig  # Added generation config
+    from .generation_config_hindicausallm import HindiCausalLMGenerationConfig # Added generation config
 
     # Conditional imports for modeling files
     try:
@@ -85,7 +85,7 @@ if TYPE_CHECKING:
         # class HindiCausalLMModel: pass
         # class HindiCausalLMForCausalLM: pass
         # class HindiCausalLMForSequenceClassification: pass
-        pass  # Or simply pass if dummy objects aren't strictly needed for type hints
+         pass # Or simply pass if dummy objects aren't strictly needed for type hints
     else:
         # from .modeling_hindicausallm import HINDI_CAUSAL_LM_PRETRAINED_MODEL_ARCHIVE_LIST # Uncomment if exists
         from .modeling_hindicausallm import (
@@ -101,9 +101,9 @@ if TYPE_CHECKING:
         if not is_sentencepiece_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
-        # Define dummy tokenizer if needed
-        # class HindiCausalLMTokenizer: pass
-        pass
+         # Define dummy tokenizer if needed
+         # class HindiCausalLMTokenizer: pass
+         pass
     else:
         from .tokenization_hindicausallm import HindiCausalLMTokenizer
 
@@ -112,7 +112,7 @@ if TYPE_CHECKING:
         if not is_tokenizers_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
-        pass  # No dummy needed for fast tokenizer usually, as slow can be used
+        pass # No dummy needed for fast tokenizer usually, as slow can be used
     else:
         from .tokenization_hindicausallm_fast import HindiCausalLMTokenizerFast
 
