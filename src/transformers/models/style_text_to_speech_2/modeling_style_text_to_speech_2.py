@@ -241,7 +241,7 @@ class StyleTextToSpeech2ProsodicTextEncoder(nn.Module):
     def forward(self, input_ids, input_lengths=None):
         batch_size, seq_len = input_ids.shape
         if input_lengths is None:
-            attention_mask = torch.ones_like(input_ids).to(input_ids.device)
+            attention_mask = torch.ones_like(input_ids)
         else:
             attention_mask = _mask_from_lengths(batch_size, seq_len, input_lengths, device=input_ids.device)
         bert_out = self.bert_model(input_ids, attention_mask=attention_mask)
