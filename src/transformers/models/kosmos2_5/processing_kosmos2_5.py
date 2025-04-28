@@ -41,10 +41,7 @@ class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": True,
             "truncation": True,
-            "max_length": None,
             "stride": 0,
-            "pad_to_multiple_of": None,
-            "return_attention_mask": None,
         },
         "images_kwargs": {
             "max_patches": 4096,
