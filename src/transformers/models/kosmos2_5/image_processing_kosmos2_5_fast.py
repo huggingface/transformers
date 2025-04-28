@@ -35,11 +35,11 @@ if is_torch_available():
     import torch
 
 
-# TODO: check docstring
+# Similar to transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches but dealing with a batch of images directly.
 def torch_extract_patches(image_tensor, patch_height, patch_width):
     """
-    Utiliy function to extract patches from a given image tensor. Returns a tensor of shape (1, `patch_height`,
-    `patch_width`, `num_channels`x `patch_height` x `patch_width`)
+    Utiliy function to extract patches from a given tensor representing a batch of images. Returns a tensor of shape
+    (batch_size, `rows`, `columns`, `num_channels` x `patch_height` x `patch_width`).
 
     Args:
         image_tensor (torch.Tensor):

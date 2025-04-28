@@ -48,8 +48,8 @@ DEFAULT_FONT_PATH = "ybelkada/fonts"
 # Copied from transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches
 def torch_extract_patches(image_tensor, patch_height, patch_width):
     """
-    Utiliy function to extract patches from a given image tensor. Returns a tensor of shape (1, `patch_height`,
-    `patch_width`, `num_channels`x `patch_height` x `patch_width`)
+    Utiliy function to extract patches from a given image tensor. Returns a tensor of shape
+    (1, `rows`, `columns`, `num_channels`x `patch_height` x `patch_width`).
 
     Args:
         image_tensor (torch.Tensor):
