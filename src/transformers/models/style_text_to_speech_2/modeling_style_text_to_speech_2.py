@@ -176,9 +176,7 @@ class AcousticTextEncoderLayer(nn.Module):
     STYLE_TEXT_TO_SPEECH_2_START_DOCSTRING,
 )
 class StyleTextToSpeech2AcousticTextEncoder(StyleTextToSpeech2PretrainedModel):
-    base_model_prefix = "acoustic_text_encoder"
     config_class = StyleTextToSpeech2AcousticTextEncoderConfig
-    main_input_name = "input_ids"
 
     def __init__(self, config: StyleTextToSpeech2AcousticTextEncoderConfig):
         super().__init__(config)
