@@ -543,9 +543,6 @@ class Kosmos2_5VisionAttention(nn.Module):
 class Kosmos2_5VisionLayer(nn.Module):
     def __init__(self, config: Kosmos2_5VisionConfig) -> None:
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-
         self.config = config
 
         self.attention = Kosmos2_5VisionAttention(config)
