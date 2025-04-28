@@ -1902,8 +1902,8 @@ class ClapModel(ClapPreTrainedModel):
             Input audio features. This should be returned by the [`ClapFeatureExtractor`] class that you can also
             retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
-            Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to
-            enhance the features.
+            Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
+            the features.
 
         Returns:
             audio_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The audio embeddings obtained by
@@ -1958,8 +1958,8 @@ class ClapModel(ClapPreTrainedModel):
             Input audio features. This should be returned by the [`ClapFeatureExtractor`] class that you can also
             retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
-            Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to
-            enhance the features.
+            Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
+            the features.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
 
