@@ -14,16 +14,14 @@
 # limitations under the License.
 import json
 import os
-from dataclasses import dataclass, asdict
-from typing import Optional, List, Union, Dict
+from typing import Dict, List, Optional, Union
 
-import numpy as np
 import torch
 
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...processing_utils import ProcessorMixin
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
-from ...utils.hub import get_file_from_repo
+from ...utils.hub import cached_file
 from ..auto import AutoTokenizer
 
 
@@ -34,13 +32,24 @@ DEFAULT_VOICE_PRESET_NAME = "af_heart"
 
 
 class StyleTextToSpeech2Processor(ProcessorMixin):
+    r"""
+    Constructs a style-text-to-speech-2 processor which wraps a text tokenizer and voice preset style into a single processor.
+
+    Args:
+        tokenizer ([`StyleTextToSpeech2Tokenizer`]):
+            An instance of [`StyleTextToSpeech2Tokenizer`].
+        voice_presets_config (`Dict[Dict[str]]`, *optional*):
+            Nested voice presets dictionary with keys:
+                - `"path_or_repo"`: path or repo to the voice presets
+                - `"voice_to_path"`: dictionary mapping voice preset names to paths in the repo
+    """
 
     tokenizer_class = "StyleTextToSpeech2Tokenizer"
     attributes = ["tokenizer"]
 
     def __init__(
-        self, 
-        tokenizer, 
+        self,
+        tokenizer,
         voice_presets_config: Dict[str, Union[str, Dict[str, str]]],
     ):
         super().__init__(tokenizer)
@@ -53,16 +62,20 @@ class StyleTextToSpeech2Processor(ProcessorMixin):
         if voice_presets_path is None:
             voice_presets_path = VOICE_PRESETS_FILES_NAMES["voice_presets_path"]
 
-        voice_presets_path = get_file_from_repo(
+        voice_presets_path = cached_file(
             pretrained_processor_name_or_path,
             voice_presets_path,
+            subfolder=kwargs.pop("subfolder", ""),
             cache_dir=kwargs.pop("cache_dir", None),
             force_download=kwargs.pop("force_download", False),
             proxies=kwargs.pop("proxies", None),
+            resume_download=kwargs.pop("resume_download", None),
+            local_files_only=kwargs.pop("local_files_only", False),
             token=kwargs.pop("token", None),
             revision=kwargs.pop("revision", None),
-            local_files_only=kwargs.pop("local_files_only", False),
-            subfolder=kwargs.pop("subfolder", ""),
+            _raise_exceptions_for_gated_repo=False,
+            _raise_exceptions_for_missing_entries=False,
+            _raise_exceptions_for_connection_errors=False,
         )
         with open(voice_presets_path) as voice_presets_json:
             voice_presets_config = json.load(voice_presets_json)
@@ -70,7 +83,7 @@ class StyleTextToSpeech2Processor(ProcessorMixin):
         tokenizer = AutoTokenizer.from_pretrained(pretrained_processor_name_or_path, **kwargs)
 
         return cls(tokenizer=tokenizer, voice_presets_config=voice_presets_config)
-    
+
     def save_pretrained(
         self,
         save_directory,
@@ -89,7 +102,7 @@ class StyleTextToSpeech2Processor(ProcessorMixin):
             save_path = os.path.join(save_directory, path)
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             torch.save(voice_preset, save_path)
-        
+
         with open(voice_presets_path, "w") as fp:
             voice_presets_config = self.voice_presets_config.copy()
             voice_presets_config["path_or_repo"] = save_directory
@@ -98,37 +111,54 @@ class StyleTextToSpeech2Processor(ProcessorMixin):
         super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
     def _load_voice_tensor(
-        self, 
+        self,
         voice_name: Optional[Union[str, List[str]]] = None,
         **kwargs
     ) -> torch.Tensor:
         path_or_repo = self.voice_presets_config["path_or_repo"]
         voice_preset_path = self.voice_presets_config["voice_to_path"][voice_name]
 
-        path = get_file_from_repo(
+        path = cached_file(
             path_or_repo,
             voice_preset_path,
+            subfolder=kwargs.pop("subfolder", None),
             cache_dir=kwargs.pop("cache_dir", None),
             force_download=kwargs.pop("force_download", False),
             proxies=kwargs.pop("proxies", None),
-            token=kwargs.pop("token", None),
-            revision=kwargs.pop("revision", None),
+            resume_download=kwargs.pop("resume_download", None),
             local_files_only=kwargs.pop("local_files_only", False),
-            subfolder=kwargs.pop("subfolder", ""),
+            token=kwargs.pop("use_auth_token", None),
+            revision=kwargs.pop("revision", None),
+            _raise_exceptions_for_gated_repo=False,
+            _raise_exceptions_for_missing_entries=False,
+            _raise_exceptions_for_connection_errors=False,
         )
         voice_preset = torch.load(path)
 
         return voice_preset
 
     def __call__(
-        self, 
+        self,
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         voice_names: Optional[Union[str, List[str]]] = None,
         return_attention_mask = True,
         **kwargs
     ):
+        r"""
+        Instantiates a style-text-to-speech-2 processor.
+
+        Args:
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The text prompt.
+            voice_names (`str`, `List[str]`):
+                The voice names to use. Can be either a single voice name applied to all texts or a list of voice names with one per text.
+                The default voice name is `"af_heart"`. For voice names, see the processor's `voice_presets_config` attribute.
+            return_attention_mask (`bool`, *optional*, defaults to `True`):
+                Whether to return the attention mask.
+            **kwargs: Additional keyword arguments passed along to the tokenizer.
+        """
         inputs = self.tokenizer(
-            text, 
+            text,
             return_attention_mask=return_attention_mask,
             **kwargs
         )
@@ -149,8 +179,8 @@ class StyleTextToSpeech2Processor(ProcessorMixin):
                 raise ValueError(
                     f"The provided number of voice names ({len(voice_names)}) does not match the number of provided texts ({batch_size})."
                     " Use a single voice name or provide a voice name for each text."
-                ) 
-        
+                )
+
         name_to_loaded_voice = {
             voice_name: self._load_voice_tensor(voice_name)
             for voice_name in voice_names
