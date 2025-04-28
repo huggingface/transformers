@@ -40,8 +40,9 @@ class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": True,
-            "truncation": True,
+            "return_token_type_ids": False,
             "stride": 0,
+            "truncation": True,
         },
         "images_kwargs": {
             "max_patches": 4096,
@@ -71,7 +72,6 @@ class Kosmos2_5Processor(ProcessorMixin):
     tokenizer_class = "PreTrainedTokenizerFast"
 
     def __init__(self, image_processor, tokenizer):
-        tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)
 
     def __call__(
