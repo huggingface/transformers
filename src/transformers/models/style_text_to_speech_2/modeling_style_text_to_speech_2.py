@@ -818,9 +818,7 @@ class StyleTextToSpeech2Generator(nn.Module):
     STYLE_TEXT_TO_SPEECH_2_START_DOCSTRING,
 )
 class StyleTextToSpeech2Predictor(StyleTextToSpeech2PretrainedModel):
-    base_model_prefix = "predictor"
     config_class = StyleTextToSpeech2PredictorConfig
-    main_input_name = "input_ids"
 
     def __init__(self, config):
         super().__init__(config)
