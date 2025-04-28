@@ -347,7 +347,7 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
         filename="zoedepth_pixel_values.pt",
         repo_type="dataset",
     )
-    original_pixel_values = torch.load(filepath, map_location="cpu")
+    original_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)
     assert torch.allclose(pixel_values, original_pixel_values)
 
     # verify logits
@@ -358,7 +358,7 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
         repo_type="dataset",
         revision="1865dbb81984f01c89e83eec10f8d07efd10743d",
     )
-    cats_pixel_values = torch.load(filepath, map_location="cpu")
+    cats_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)
     depth = model(cats_pixel_values).predicted_depth
 
     # Verify logits

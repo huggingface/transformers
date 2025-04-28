@@ -593,7 +593,7 @@ class AlignVisionBlock(nn.Module):
 
 class AlignVisionEncoder(nn.Module):
     r"""
-    Forward propogates the embeddings through each vision encoder (EfficientNet) block.
+    Forward propagates the embeddings through each vision encoder (EfficientNet) block.
 
     Args:
         config ([`AlignVisionConfig`]):

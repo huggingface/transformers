@@ -84,7 +84,7 @@ class InstructBlipVideoImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -323,3 +323,6 @@ class InstructBlipVideoImageProcessor(BaseImageProcessor):
         image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
 
         return image
+
+
+__all__ = ["InstructBlipVideoImageProcessor"]

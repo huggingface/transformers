@@ -463,7 +463,7 @@ class MegaMultiDimensionDampedEma(nn.Module):
             prev_state (`torch.Tensor` of shape `(batch_size, config.ndim)`, *optional*):
                 The hidden state returned from the previous timestep during incremental decoding.
             use_cache (`bool`, default `False`):
-                Whether to perfom incremental decoding; uses `prev_state` as the prior timestep, and returns the
+                Whether to perform incremental decoding; uses `prev_state` as the prior timestep, and returns the
                 updated EMA hidden state for use in the next step
 
         Returns:
@@ -652,7 +652,7 @@ class MegaGatedCrossAttention(nn.Module):
             output_attentions (`bool`, defaults to `False`):
                 Whether or not to return the cross-attention weights.
             use_cache (`bool`, defaults to `False`):
-                Whether to perfom incremental decoding; uses `prev_state` as the prior timestep, and returns the
+                Whether to perform incremental decoding; uses `prev_state` as the prior timestep, and returns the
                 updated EMA hidden state for use in the next step
 
         Returns:
@@ -936,7 +936,7 @@ class MegaMovingAverageGatedAttention(nn.Module):
             output_attentions (`bool`, default `False`):
                 Whether to return self-attention weights
             use_cache (`bool`, default `False`):
-                Whether to perfom incremental decoding; uses `past_key_values` as prior state, and returns the updated
+                Whether to perform incremental decoding; uses `past_key_values` as prior state, and returns the updated
                 states for use in the next step
 
         Returns:
@@ -1214,7 +1214,7 @@ class MegaBlock(nn.Module):
             output_attentions (`bool`, default `False`):
                 Whether to return self-attention weights
             use_cache (`bool`, default `False`):
-                Whether to perfom incremental decoding; uses `past_key_value` as prior state, and returns the updated
+                Whether to perform incremental decoding; uses `past_key_value` as prior state, and returns the updated
                 states for use in the next step
 
         Returns:
@@ -1684,7 +1684,7 @@ class MegaForCausalLM(MegaPreTrainedModel):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -2271,3 +2271,15 @@ class MegaForQuestionAnswering(MegaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "MegaForCausalLM",
+    "MegaForMaskedLM",
+    "MegaForMultipleChoice",
+    "MegaForQuestionAnswering",
+    "MegaForSequenceClassification",
+    "MegaForTokenClassification",
+    "MegaModel",
+    "MegaPreTrainedModel",
+]

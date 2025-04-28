@@ -165,3 +165,8 @@ class EfficientFormerConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.image_size = image_size
         self.batch_norm_eps = batch_norm_eps
+
+
+__all__ = [
+    "EfficientFormerConfig",
+]

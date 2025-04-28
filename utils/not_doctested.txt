@@ -2,8 +2,6 @@ docs/source/en/_config.py
 docs/source/en/accelerate.md
 docs/source/en/add_new_model.md
 docs/source/en/add_new_pipeline.md
-docs/source/en/agents.md
-docs/source/en/agents.md
 docs/source/en/attention.md
 docs/source/en/community.md
 docs/source/en/contributing.md
@@ -23,7 +21,6 @@ docs/source/en/internal/time_series_utils.md
 docs/source/en/internal/tokenization_utils.md
 docs/source/en/internal/trainer_utils.md
 docs/source/en/llm_tutorial.md
-docs/source/en/main_classes/agent.md
 docs/source/en/main_classes/callback.md
 docs/source/en/main_classes/configuration.md
 docs/source/en/main_classes/data_collator.md
@@ -320,17 +317,6 @@ docs/source/en/training.md
 docs/source/en/troubleshooting.md
 src/transformers/activations.py
 src/transformers/activations_tf.py
-src/transformers/agents/agent_types.py
-src/transformers/agents/agents.py
-src/transformers/agents/document_question_answering.py
-src/transformers/agents/evaluate_agent.py
-src/transformers/agents/image_question_answering.py
-src/transformers/agents/prompts.py
-src/transformers/agents/python_interpreter.py
-src/transformers/agents/speech_to_text.py
-src/transformers/agents/text_to_speech.py
-src/transformers/agents/tools.py
-src/transformers/agents/translation.py
 src/transformers/audio_utils.py
 src/transformers/commands/add_new_model_like.py
 src/transformers/commands/convert.py
@@ -953,7 +939,6 @@ src/transformers/utils/doc.py
 src/transformers/utils/dummy_detectron2_objects.py
 src/transformers/utils/dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects.py
 src/transformers/utils/dummy_flax_objects.py
-src/transformers/utils/dummy_keras_nlp_objects.py
 src/transformers/utils/dummy_music_objects.py
 src/transformers/utils/dummy_pt_objects.py
 src/transformers/utils/dummy_sentencepiece_and_tokenizers_objects.py

@@ -33,8 +33,10 @@ from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -48,11 +50,18 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     can_return_tuple,
+    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
     torch_int,
 )
 from .configuration_phi4_multimodal import Phi4MultimodalAudioConfig, Phi4MultimodalConfig, Phi4MultimodalVisionConfig
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -146,7 +155,7 @@ class Phi4MultimodalVisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Phi4MultimodalVisionEncoderLayer(nn.Module):
+class Phi4MultimodalVisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Phi4MultimodalVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -254,19 +263,12 @@ class Phi4MultimodalVisionEncoder(nn.Module):
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions=output_attentions,
-                )
+
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1029,6 +1031,9 @@ class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, Phi4MultimodalAudioGluPointWiseConv):
+            module.b1.data.zero_()
+            module.b2.data.zero_()
 
 
 def unfold_tensor(tensor, max_seq_len):
@@ -1123,7 +1128,7 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
         seq_len = math.ceil(hidden_states.shape[1] / self.config.time_reduction)
         if seq_len <= 0:
             raise ValueError(
-                f"The squence length after time reduction is invalid: {seq_len}. Your input feature is too short."
+                f"The sequence length after time reduction is invalid: {seq_len}. Your input feature is too short."
             )
 
         batch_size = hidden_states.shape[0]
@@ -1168,7 +1173,7 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
 
         unfolded = False
         bs, seq_len, _ = hidden_states.shape
-        max_seq_len = 500  # maxium position for absolute positional encoding
+        max_seq_len = 500  # maximum position for absolute positional encoding
         if seq_len > max_seq_len:
             # audio sequence is longer than max_seq_len, unfold it into chunks of max_seq_len
             unfolded = True
@@ -1202,14 +1207,7 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
         attention_mask = hs_mask.unsqueeze(1) + relative_attention_bias
 
         for layer in self.encoders:
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                )
-            else:
-                hidden_states = layer(hidden_states, attention_mask)
+            hidden_states = layer(hidden_states, attention_mask)
 
         if unfolded:
             embed_dim = hidden_states.shape[-1]
@@ -1281,6 +1279,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         return audio_embeds
 
 
+@use_kernel_forward_from_hub("RMSNorm")
 class Phi4MultimodalRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -1471,7 +1470,7 @@ class Phi4MultimodalAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Phi4MultimodalDecoderLayer(nn.Module):
+class Phi4MultimodalDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Phi4MultimodalConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1605,6 +1604,40 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
         return inputs_embeds
 
 
+class Phi4MultimodalRotaryEmbedding(nn.Module):
+    def __init__(self, config: Phi4MultimodalConfig, device=None):
+        super().__init__()
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
 PHI4_MULTIMODAL_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1651,40 +1684,11 @@ class Phi4MultimodalPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-
-class Phi4MultimodalRotaryEmbedding(nn.Module):
-    def __init__(self, config: Phi4MultimodalConfig, device=None):
-        super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        elif isinstance(module, Phi4MultimodalRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, Phi4MultimodalImageEmbedding):
+            module.global_img_feature_extensor.data.zero_()
+            module.sub_img_feature_extensor.data.zero_()
 
 
 PHI4_MULTIMODAL_MODEL_INPUTS_DOCSTRING = r"""
@@ -1868,30 +1872,17 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                    **kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1913,7 +1904,7 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
 
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
@@ -1931,6 +1922,10 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -1954,7 +1949,7 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
             ):
                 return None
 
-        dtype, device = input_tensor.dtype, input_tensor.device
+        dtype = input_tensor.dtype
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         # SlidingWindowCache or StaticCache
@@ -1974,7 +1969,6 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
             sequence_length=sequence_length,
             target_length=target_length,
             dtype=dtype,
-            device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
             config=self.config,
@@ -1984,7 +1978,7 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -2000,7 +1994,6 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         config: Phi4MultimodalConfig,
@@ -2019,8 +2012,6 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
                 The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -2036,15 +2027,17 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
             )
-            diagonal_attend_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            if config.sliding_window is not None:
+            diagonal_attend_mask = torch.arange(target_length, device=cache_position.device) > cache_position.reshape(
+                -1, 1
+            )
+            if config.get_text_config().sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
-                    sliding_attend_mask = torch.arange(target_length, device=device) <= (
-                        cache_position.reshape(-1, 1) - config.sliding_window
+                    sliding_attend_mask = torch.arange(target_length, device=cache_position.device) <= (
+                        cache_position.reshape(-1, 1) - config.get_text_config().sliding_window
                     )
                     diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask

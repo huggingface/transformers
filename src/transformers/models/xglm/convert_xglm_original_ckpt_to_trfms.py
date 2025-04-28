@@ -26,7 +26,7 @@ def make_linear_from_emb(emb):
 
 
 def convert_fairseq_xglm_checkpoint_from_disk(checkpoint_path):
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     args = Namespace(**checkpoint["cfg"]["model"])
     state_dict = checkpoint["model"]
     remove_ignore_keys_(state_dict)
