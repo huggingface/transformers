@@ -12,24 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
 import tempfile
 import unittest
 
 from transformers import (
-    AddedToken,
     ConvaiCausalLMTokenizer,
     ConvaiCausalLMTokenizerFast,
 )
 from transformers.testing_utils import (
-    get_tests_dir,
-    nested_simplify,
-    require_jinja,
-    require_read_token, # Add if model is private/gated
+    require_read_token,  # Add if model is private/gated
     require_sentencepiece,
     require_tokenizers,
-    require_torch,
     slow,
 )
 
@@ -110,7 +103,6 @@ class ConvaiCausalLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         text = "भारत एक विशाल देश है"
         # ** REPLACE with expected IDs from your tokenizer **
         expected_ids = [1, 8081, 377, 15117, 266, 685, 321] # Assuming BOS=1, no EOS added by default
-        expected_tokens = ["<s>", " भारत", " एक", " विशाल", " देश", " है"] # Example, check actual tokens
 
         # --- Slow Tokenizer ---
         tokens = tokenizer.tokenize(text)
@@ -160,20 +152,20 @@ class ConvaiCausalLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # ** REPLACE with expected IDs **
         target_encoded = [1, 100, 200, 300] # Example
 
-        slow_encoded = slow_tokenizer.encode(text, add_special_tokens=True)
+        slow_tokenizer.encode(text, add_special_tokens=True)
         # self.assertEqual(slow_encoded, target_encoded) # Uncomment and assert after replacing
 
-        slow_decoded = slow_tokenizer.decode(target_encoded, skip_special_tokens=True)
+        slow_tokenizer.decode(target_encoded, skip_special_tokens=True)
         # self.assertEqual(slow_decoded, text) # Uncomment and assert after replacing
 
         with tempfile.TemporaryDirectory() as dirname:
             fast_tokenizer.save_pretrained(dirname)
             slow_tokenizer_from_fast = self.tokenizer_class.from_pretrained(dirname)
 
-        slow_from_fast_encoded = slow_tokenizer_from_fast.encode(text, add_special_tokens=True)
+        slow_tokenizer_from_fast.encode(text, add_special_tokens=True)
         # self.assertEqual(slow_from_fast_encoded, target_encoded) # Uncomment and assert after replacing
 
-        slow_from_fast_decoded = slow_tokenizer_from_fast.decode(target_encoded, skip_special_tokens=True)
+        slow_tokenizer_from_fast.decode(target_encoded, skip_special_tokens=True)
         # self.assertEqual(slow_from_fast_decoded, text) # Uncomment and assert after replacing
 
     # Add more tests specific to Hindi or SentencePiece behavior if needed

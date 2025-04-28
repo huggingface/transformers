@@ -38,21 +38,15 @@ if is_torch_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_convaicausallm import CONVAICAUSALLM_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvaiCausalLMConfig
 
     if is_sentencepiece_available():
-        from .tokenization_convaicausallm import ConvaiCausalLMTokenizer
+        pass
 
     if is_tokenizers_available():
-        from .tokenization_convaicausallm_fast import ConvaiCausalLMTokenizerFast
+        pass
 
     if is_torch_available():
-        from .modeling_convaicausallm import (
-            ConvaiCausalLMForCausalLM,
-            ConvaiCausalLMModel,
-            ConvaiCausalLMPreTrainedModel,
-            # ConvaiCausalLMForSequenceClassification,
-        )
+        pass
 
 
 else:

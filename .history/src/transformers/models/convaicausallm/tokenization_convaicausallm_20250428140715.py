@@ -15,7 +15,7 @@
 """Tokenization class for ConvaiCausalLM."""
 import os
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import sentencepiece as spm
 

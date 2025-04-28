@@ -13,18 +13,13 @@
 # limitations under the License.
 """Testing suite for the PyTorch ConvaiCausalLM model."""
 
-import inspect
 import tempfile
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, ConvaiCausalLMConfig, is_torch_available
-from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
-    cleanup,
-    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -440,10 +435,6 @@ class ConvaiCausalLMIntegrationTest(unittest.TestCase):
     @require_read_token # Add if needed
     def test_model_4bit_generation(self):
         # Test generation with 4-bit quantization
-        EXPECTED_TEXTS_4BIT = [
-            "भारत एक विशाल देश है। इसकी", # REPLACE THIS
-            "नमस्ते दुनिया! मैं आपका सहायक", # REPLACE THIS
-        ]
         model = AutoModelForCausalLM.from_pretrained(self.model_id, low_cpu_mem_usage=True, load_in_4bit=True)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
