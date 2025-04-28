@@ -839,7 +839,6 @@ class Kosmos2_5TextAttention(nn.Module):
         hidden_states: torch.Tensor,  # text part
         encoder_hidden_states: Optional[torch.Tensor] = None,  # image part
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -919,7 +918,6 @@ class Kosmos2_5TextBlock(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
@@ -935,7 +933,6 @@ class Kosmos2_5TextBlock(nn.Module):
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            position_ids=position_ids,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
@@ -1193,9 +1190,6 @@ class Kosmos2_5TextTransformer(nn.Module):
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
-
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
