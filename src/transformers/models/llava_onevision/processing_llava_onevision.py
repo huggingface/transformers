@@ -237,7 +237,9 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         return num_image_tokens
 
     # Adapted from transformers.models.llava_next.processing_llava_next.LlavaNextProcessor._get_unpadded_features
-    def _get_unpadded_features(self, height, width, patches_height, patches_width, scale_height, scale_width, vision_aspect_ratio):
+    def _get_unpadded_features(
+        self, height, width, patches_height, patches_width, scale_height, scale_width, vision_aspect_ratio
+    ):
         """
         Get number of features for a given image with height/width. LLaVA-NeXT is different from LLaVA
         because it divided each image into patches depending on its resolution. Therefore we need to calculate how many

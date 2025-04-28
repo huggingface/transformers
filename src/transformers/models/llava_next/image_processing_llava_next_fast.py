@@ -167,7 +167,7 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         paste_x, r_x = divmod(target_width - new_width, 2)
         paste_y, r_y = divmod(target_height - new_height, 2)
 
-        padded_image = F.pad(image, padding=[paste_x, paste_y, paste_x + r_x, paste_y +r_y])
+        padded_image = F.pad(image, padding=[paste_x, paste_y, paste_x + r_x, paste_y + r_y])
 
         return padded_image
 
