@@ -884,7 +884,6 @@ class StyleTextToSpeech2Predictor(StyleTextToSpeech2PretrainedModel):
     STYLE_TEXT_TO_SPEECH_2_START_DOCSTRING,
 )
 class StyleTextToSpeech2Decoder(StyleTextToSpeech2PretrainedModel):
-    base_model_prefix = "decoder"
     config_class = StyleTextToSpeech2DecoderConfig
     main_input_name = "hidden_states"
 
