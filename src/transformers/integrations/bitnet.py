@@ -246,7 +246,7 @@ class AutoBitLinear(nn.Linear):
         dtype=None,
         online_quant: bool = False,
     ):
-        super(AutoBitLinear, self).__init__(in_features, out_features, bias)
+        super().__init__(in_features, out_features, bias)
         self.online_quant = online_quant
         if not online_quant:
             self.register_buffer(

@@ -123,6 +123,9 @@ class BitNetModel(LlamaModel):
 
 
 class BitNetForCausalLM(LlamaForCausalLM):
+    _tp_plan = None
+    _pp_plan = None
+
     def forward(
         self,
         **super_kwargs,
