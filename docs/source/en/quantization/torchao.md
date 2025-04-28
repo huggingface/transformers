@@ -324,7 +324,7 @@ embedding_config = IntxWeightOnlyConfig(
 linear_config = Int8DynamicActivationInt4WeightConfig(group_size=128)
 quant_config = AOPerModuleConfig({"_default": linear_config, "model.decoder.embed_tokens": embedding_config, "model.decoder.embed_positions": None})
 # set `include_embedding` to True in order to include embedding in quantization
-# also need to override modules to not convert in order to quantize embedding
+# when `include_embedding` is True, we'll remove input embedding from `modules_not_to_convert` as well
 quantization_config = TorchAoConfig(quant_type=quant_config, include_embedding=True)
 quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
 print("quantized model:", quantized_model)

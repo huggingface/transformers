@@ -1567,7 +1567,8 @@ class TorchAoConfig(QuantizationConfigMixin):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
         inlcude_embedding (`bool`, default to `False`):
-            Whether to include embedding in quantization or not.
+            Whether to include embedding in quantization or not, input embedding will be removed from
+            the module_not_to_convert list as well if this flag is set.
         kwargs (`Dict[str, Any]`, *optional*):
             The keyword arguments for the chosen type of quantization, for example, int4_weight_only quantization supports two keyword arguments
             `group_size` and `inner_k_tiles` currently. More API examples and documentation of arguments can be found in
