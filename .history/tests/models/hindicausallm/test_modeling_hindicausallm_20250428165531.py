@@ -64,26 +64,26 @@ class HindiCausalLMModelTester:
         is_training=True,
         use_input_mask=True,
         use_labels=True,
-        vocab_size=99,  # Small vocab for testing
-        hidden_size=32,  # Small hidden size
-        num_hidden_layers=2,  # Minimal layers
-        num_attention_heads=4,  # Example attention heads
-        num_key_value_heads=2,  # Example GQA heads
-        intermediate_size=64,  # Example intermediate size
+        vocab_size=99, # Small vocab for testing
+        hidden_size=32, # Small hidden size
+        num_hidden_layers=2, # Minimal layers
+        num_attention_heads=4, # Example attention heads
+        num_key_value_heads=2, # Example GQA heads
+        intermediate_size=64, # Example intermediate size
         hidden_act="silu",
-        max_position_embeddings=512,  # Keep reasonable for RoPE
-        rms_norm_eps=1e-6,  # Use RMS norm eps
+        max_position_embeddings=512, # Keep reasonable for RoPE
+        rms_norm_eps=1e-6, # Use RMS norm eps
         initializer_range=0.02,
         pad_token_id=0,
         eos_token_id=2,
         bos_token_id=1,
-        num_labels=3,  # For sequence classification head
-        type_sequence_label_size=2,  # For sequence classification head
+        num_labels=3, # For sequence classification head
+        type_sequence_label_size=2, # For sequence classification head
         attention_dropout=0.0,
         attention_bias=False,
-        tie_word_embeddings=False,  # Test untied case
+        tie_word_embeddings=False, # Test untied case
         scope=None,
-        cache_implementation="dynamic",  # Test default dynamic cache
+        cache_implementation="dynamic", # Test default dynamic cache
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -111,7 +111,8 @@ class HindiCausalLMModelTester:
         self.tie_word_embeddings = tie_word_embeddings
         self.scope = scope
         self.cache_implementation = cache_implementation
-        self.head_dim = hidden_size // num_attention_heads  # Calculate head_dim
+        self.head_dim = hidden_size // num_attention_heads # Calculate head_dim
+
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -143,14 +144,14 @@ class HindiCausalLMModelTester:
             max_position_embeddings=self.max_position_embeddings,
             rms_norm_eps=self.rms_norm_eps,
             initializer_range=self.initializer_range,
-            use_cache=True,  # Default use_cache=True for generation tests
+            use_cache=True, # Default use_cache=True for generation tests
             pad_token_id=self.pad_token_id,
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             attention_dropout=self.attention_dropout,
             attention_bias=self.attention_bias,
             tie_word_embeddings=self.tie_word_embeddings,
-            num_labels=self.num_labels,  # For Sequence Classification tests
+            num_labels=self.num_labels, # For Sequence Classification tests
             cache_implementation=self.cache_implementation,
         )
 
@@ -162,7 +163,9 @@ class HindiCausalLMModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_causal_lm(self, config, input_ids, input_mask, sequence_labels, token_labels):
+    def create_and_check_for_causal_lm(
+        self, config, input_ids, input_mask, sequence_labels, token_labels
+    ):
         model = self.for_causal_lm_class(config=config)
         model.to(torch_device)
         model.eval()
@@ -212,13 +215,13 @@ class HindiCausalLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         if is_torch_available()
         else {}
     )
-    test_head_masking = False  # Not implemented/tested
-    test_pruning = False  # Not implemented/tested
-    _is_stateful = True  # If using Cache object
-    has_attentions = False  # HindiCausalLMModel doesn't forcefully return attentions? Check impl. Set True if it does.
+    test_head_masking = False # Not implemented/tested
+    test_pruning = False # Not implemented/tested
+    _is_stateful = True # If using Cache object
+    has_attentions = False # HindiCausalLMModel doesn't forcefully return attentions? Check impl. Set True if it does.
 
     # TODO: Increase this value? Needs more testing.
-    model_split_percents = [0.5, 0.7]  # For testing model parallel
+    model_split_percents = [0.5, 0.7] # For testing model parallel
 
     def setUp(self):
         self.model_tester = HindiCausalLMModelTester(self)
@@ -247,12 +250,12 @@ class HindiCausalLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     @unittest.skip("HindiCausalLM uses DynamicCache, not compatible with assisted decoding currently.")
     @pytest.mark.generate
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type="random"):  # Add default
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type="random"): # Add default
         pass
 
     @unittest.skip("HindiCausalLM uses DynamicCache, not compatible with prompt lookup decoding currently.")
     @pytest.mark.generate
-    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type="random"):  # Add default
+    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type="random"): # Add default
         pass
 
     @unittest.skip("HindiCausalLM uses DynamicCache, not compatible with assisted decoding currently.")
@@ -317,13 +320,13 @@ class HindiCausalLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         super().test_attention_outputs()
 
     def test_forward_signature(self):
-        super().test_forward_signature()
+         super().test_forward_signature()
 
     def test_generate_without_input_ids(self):
         super().test_generate_without_input_ids()
 
     def test_generation_config_defaults(self):
-        super().test_generation_config_defaults()
+         super().test_generation_config_defaults()
 
     # Maybe keep this one if generation fails otherwise
     # @unittest.skip("HindiCausalLM uses DynamicCache and doesn't support continue from past kv in the same way?")
@@ -352,7 +355,7 @@ class HindiCausalLMIntegrationTest(unittest.TestCase):
         "नमस्ते दुनिया! आज हम बात करेंगे हिंदी भाषा के महत्व के बारे में। हिंदी हमारी राजभाषा है और देश के",
     ]
     EXPECTED_OUTPUT_TEXT_FA2 = [
-        # Example: Replace with actual expected output for FA2 (might match eager/sdpa)
+         # Example: Replace with actual expected output for FA2 (might match eager/sdpa)
         "भारत एक विशाल देश है जो दुनिया के सबसे बड़े लोकतंत्रों में से एक है। यह दक्षिण एशिया में स्थित है और",
         "नमस्ते दुनिया! आज हम बात करेंगे हिंदी भाषा के महत्व के बारे में। हिंदी हमारी राजभाषा है और देश के",
     ]
@@ -374,41 +377,35 @@ class HindiCausalLMIntegrationTest(unittest.TestCase):
         # Check if outputs match expected (flexible check might be needed for float variations)
         self.assertListEqual(output_texts, expected_texts)
 
-    @require_read_token  # If model is gated/private
+    @require_read_token # If model is gated/private
     def test_model_eager_bf16(self):
-        model = (
-            AutoModelForCausalLM.from_pretrained(
-                self.model_id,
-                low_cpu_mem_usage=True,  # Good practice for large models
-                torch_dtype=torch.bfloat16,
-                attn_implementation="eager",
-            )
-            .to(torch_device)
-            .eval()
-        )
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            low_cpu_mem_usage=True, # Good practice for large models
+            torch_dtype=torch.bfloat16,
+            attn_implementation="eager"
+        ).to(torch_device).eval()
         self._check_generation(model, self.EXPECTED_OUTPUT_TEXT_EAGER)
 
     @require_read_token
     def test_model_eager_fp16(self):
-        model = (
-            AutoModelForCausalLM.from_pretrained(
-                self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16, attn_implementation="eager"
-            )
-            .to(torch_device)
-            .eval()
-        )
-        self._check_generation(model, self.EXPECTED_OUTPUT_TEXT_EAGER)  # Assuming fp16 gives same result for greedy
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.float16,
+            attn_implementation="eager"
+        ).to(torch_device).eval()
+        self._check_generation(model, self.EXPECTED_OUTPUT_TEXT_EAGER) # Assuming fp16 gives same result for greedy
 
     @require_read_token
-    @require_torch_gpu  # SDPA often needs GPU
+    @require_torch_gpu # SDPA often needs GPU
     def test_model_sdpa_bf16(self):
-        model = (
-            AutoModelForCausalLM.from_pretrained(
-                self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="sdpa"
-            )
-            .to(torch_device)
-            .eval()
-        )
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.bfloat16,
+            attn_implementation="sdpa"
+        ).to(torch_device).eval()
         self._check_generation(model, self.EXPECTED_OUTPUT_TEXT_SDPA)
 
     @require_flash_attn
@@ -416,16 +413,12 @@ class HindiCausalLMIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     def test_model_flash_attn_2_bf16(self):
-        model = (
-            AutoModelForCausalLM.from_pretrained(
-                self.model_id,
-                low_cpu_mem_usage=True,
-                torch_dtype=torch.bfloat16,
-                attn_implementation="flash_attention_2",
-            )
-            .to(torch_device)
-            .eval()
-        )
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.bfloat16,
+            attn_implementation="flash_attention_2"
+        ).to(torch_device).eval()
         self._check_generation(model, self.EXPECTED_OUTPUT_TEXT_FA2)
 
     @require_read_token
@@ -435,23 +428,14 @@ class HindiCausalLMIntegrationTest(unittest.TestCase):
             "text-generation",
             model=self.model_id,
             torch_dtype=torch.bfloat16,
-            device=torch_device,  # Use device from testing utils
+            device=torch_device, # Use device from testing utils
             # attn_implementation="sdpa" # Optionally specify attn for pipeline
         )
         # Adjust expected outputs to remove potential special tokens added by pipeline/tokenizer defaults
-        expected_pipeline_texts = [
-            t.split(" है", 1)[1].strip() if " है" in t else t for t in self.EXPECTED_OUTPUT_TEXT_EAGER
-        ]  # Example adjustment
-        expected_pipeline_texts = [
-            t.replace("नमस्ते दुनिया! ", "").strip() if t.startswith("नमस्ते दुनिया!") else t
-            for t in expected_pipeline_texts
-        ]
+        expected_pipeline_texts = [t.split(" है", 1)[1].strip() if " है" in t else t for t in self.EXPECTED_OUTPUT_TEXT_EAGER] # Example adjustment
+        expected_pipeline_texts = [t.replace("नमस्ते दुनिया! ","").strip() if t.startswith("नमस्ते दुनिया!") else t for t in expected_pipeline_texts]
 
-        outputs = pipe(
-            self.input_text, max_new_tokens=20, do_sample=False, pad_token_id=self.tokenizer.eos_token_id
-        )  # Ensure pad_token_id for pipeline
+        outputs = pipe(self.input_text, max_new_tokens=20, do_sample=False, pad_token_id=self.tokenizer.eos_token_id) # Ensure pad_token_id for pipeline
 
-        generated_texts = [
-            out[0]["generated_text"].replace(inp, "").strip() for inp, out in zip(self.input_text, outputs)
-        ]
+        generated_texts = [out[0]["generated_text"].replace(inp, "").strip() for inp, out in zip(self.input_text, outputs)]
         self.assertListEqual(generated_texts, expected_pipeline_texts)
