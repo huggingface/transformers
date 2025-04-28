@@ -250,26 +250,5 @@ class Kosmos2_5Config(PretrainedConfig):
 
         self.latent_query_num = latent_query_num
 
-    @classmethod
-    def from_text_vision_configs(
-        cls,
-        text_config: Kosmos2_5TextConfig,
-        vision_config: Kosmos2_5VisionConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`Kosmos2_5Config`] (or a derived class) from Kosmos2_5 text model configuration and Kosmos2_5
-        vision model configuration.
-
-        Returns:
-            [`Kosmos2_5Config`]: An instance of a configuration object
-        """
-
-        return cls(
-            text_config=text_config.to_dict(),
-            vision_config=vision_config.to_dict(),
-            **kwargs,
-        )
-
 
 __all__ = ["Kosmos2_5Config"]
