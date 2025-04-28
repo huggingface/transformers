@@ -334,11 +334,11 @@ class VitPoseImageProcessor(BaseImageProcessor):
             Whether to apply an affine transformation to the input images.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 256, "width": 192}`):
             Resolution of the image after `affine_transform` is applied. Only has an effect if `do_affine_transform` is set to `True`. Can
-            be overriden by `size` in the `preprocess` method.
+            be overridden by `size` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.).
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overriden by `rescale_factor` in the `preprocess`
+            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
             method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.

@@ -171,7 +171,7 @@ def npu_flash_attn_func(
         head_num = q.shape[2]
         output = torch_npu.npu_fusion_attention(q, k, v, head_num, "BSND", keep_prob=keep_prob, scale=softmax_scale)[0]
     else:
-        attn_mask_npu = torch.triu(torch.ones([2048, 2048]), diagonal=1).bool().to(q.device)
+        attn_mask_npu = torch.triu(torch.ones([2048, 2048], device=q.device), diagonal=1).bool()
         head_num = q.shape[2]
         output = torch_npu.npu_fusion_attention(
             q,
@@ -222,7 +222,7 @@ def npu_flash_attn_varlen_func(
             actual_seq_kvlen=tuple(cu_seqlens_k[1:].cpu().numpy().tolist()),
         )[0]
     else:
-        attn_mask_npu = torch.triu(torch.ones([2048, 2048]), diagonal=1).bool().to(q.device)
+        attn_mask_npu = torch.triu(torch.ones([2048, 2048], device=q.device), diagonal=1).bool()
         head_num = q.shape[1]
         output = torch_npu.npu_fusion_attention(
             q,

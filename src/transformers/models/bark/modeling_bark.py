@@ -1296,7 +1296,7 @@ class BarkFineModel(BarkPreTrainedModel):
     @add_start_docstrings_to_model_forward(BARK_FINE_INPUTS_DOCSTRING)
     def forward(
         self,
-        codebook_idx: int,  # an additionnal idx corresponding to the id of the codebook that will be predicted
+        codebook_idx: int,  # an additional idx corresponding to the id of the codebook that will be predicted
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1547,7 +1547,7 @@ class BarkFineModel(BarkPreTrainedModel):
     - [`BarkSemanticModel`] (also referred to as the 'text' model): a causal auto-regressive transformer model that
       takes
     as input tokenized text, and predicts semantic text tokens that capture the meaning of the text.
-    - [`BarkCoarseModel`] (also refered to as the 'coarse acoustics' model), also a causal autoregressive transformer,
+    - [`BarkCoarseModel`] (also referred to as the 'coarse acoustics' model), also a causal autoregressive transformer,
     that takes into input the results of the last model. It aims at regressing the first two audio codebooks necessary
     to `encodec`.
     - [`BarkFineModel`] (the 'fine acoustics' model), this time a non-causal autoencoder transformer, which iteratively
@@ -1640,7 +1640,7 @@ class BarkModel(BarkPreTrainedModel):
             self.to("cpu")
             torch_accelerator_module.empty_cache()  # otherwise we don't see the memory savings (but they probably exist)
 
-        # this layer is used outside the first foward pass of semantic so need to be loaded before semantic
+        # this layer is used outside the first forward pass of semantic so need to be loaded before semantic
         self.semantic.input_embeds_layer, _ = cpu_offload_with_hook(self.semantic.input_embeds_layer, device)
 
         hook = None

@@ -184,7 +184,7 @@ inputs = tokenizer(text, return_tensors="pt").to(model.device)
 print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=False)[0]))
 ```
 
-<hfoption>
+</hfoption>
 
 <hfoption id="inference xpu">
 
@@ -203,7 +203,7 @@ inputs = tokenizer(text, return_tensors="pt").to(model.device)
 print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=False)[0]))
 ```
 
-<hfoption>
+</hfoption>
 
 <hfoption id="inference cuda">
 
@@ -222,7 +222,7 @@ inputs = tokenizer(text, return_tensors="pt").to(model.device)
 print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=False)[0]))
 ```
 
-<hfoption>
+</hfoption>
 
 <hfoption id="inference backend">
 
@@ -245,7 +245,7 @@ inputs = tokenizer(text, return_tensors="pt").to(model.device)
 print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=False)[0]))
 ```
 
-<hfoption>
+</hfoption>
 
 
 <hfoption id="format convert">
@@ -266,9 +266,9 @@ inputs = tokenizer(text, return_tensors="pt").to(model.device)
 print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=False)[0]))
 ```
 
-<hfoption>
+</hfoption>
 
-<hfoptions>
+</hfoptions>
 
 ## Issues
 
