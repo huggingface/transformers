@@ -16,9 +16,7 @@ from transformers.models.clip.modeling_clip import (
     CLIPAttention,
     CLIPEncoder,
     CLIPEncoderLayer,
-    CLIPFlashAttention2,
     CLIPPreTrainedModel,
-    CLIPSdpaAttention,
     CLIPVisionModel,
     CLIPVisionTransformer,
 )

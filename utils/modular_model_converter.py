@@ -1768,8 +1768,10 @@ if __name__ == "__main__":
         args.files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
     else:
         for i, model_name in enumerate(args.files_to_parse):
-            if not os.sep in model_name:
-                args.files_to_parse[i] = os.path.join("src", "transformers", "models", model_name, f"modular_{model_name}.py")
+            if os.sep not in model_name:
+                args.files_to_parse[i] = os.path.join(
+                    "src", "transformers", "models", model_name, f"modular_{model_name}.py"
+                )
 
     priority_list, _ = find_priority_list(args.files_to_parse)
     assert len(priority_list) == len(args.files_to_parse), "Some files will not be converted"
