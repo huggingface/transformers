@@ -238,6 +238,10 @@ class LlamaAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        from flash_attn.layers.rotary import RotaryEmbedding as FlashRotaryEmbedding
+
+        
+        self.rotary_emb = FlashRotaryEmbedding(dim=self.head_dim, base=config.rope_theta, interleaved=False)
 
     def forward(
         self,
@@ -251,13 +255,21 @@ class LlamaAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        key_states = self.k_proj(hidden_states).view(hidden_shape)
+        value_states = self.v_proj(hidden_states).view(hidden_shape)
 
+        # cos, sin = position_embeddings
+        #query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
         if (self.layer_idx + 1) % 4 != 0:
-            cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+            kv = torch.cat((key_states[:,:,None], value_states[:,:,None]), dim=2)
+            query_states, kv = self.rotary_emb(
+                query_states, kv, seqlen_offset=0, max_seqlen=None
+            )  # TODO: should we use position_ids here? flash_attn doesn't
+            key_states = kv[:,:,0]
+            value_states = kv[:,:,1]
+            cos = self.rotary_emb._cos_cached
+            sin = self.rotary_emb._sin_cached
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -266,6 +278,10 @@ class LlamaAttention(nn.Module):
             else:
                 cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
 
@@ -276,7 +292,8 @@ class LlamaAttention(nn.Module):
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                # attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS["flash_attention_2"]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -289,7 +306,7 @@ class LlamaAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.view(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -488,7 +505,7 @@ class LlamaModel(LlamaPreTrainedModel):
             [LlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = LlamaRotaryEmbedding(config=config)
+        # self.rotary_emb = LlamaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -556,7 +573,8 @@ class LlamaModel(LlamaPreTrainedModel):
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        # position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = None
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
