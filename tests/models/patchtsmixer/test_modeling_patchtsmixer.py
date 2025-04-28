@@ -92,12 +92,12 @@ class PatchTSMixerModelTester:
         head_dropout: float = 0.2,
         # forecast related
         prediction_length: int = 16,
-        out_channels: int = None,
+        out_channels: Optional[int] = None,
         # Classification/regression related
         # num_labels: int = 3,
         num_targets: int = 3,
-        output_range: list = None,
-        head_aggregation: str = None,
+        output_range: Optional[list] = None,
+        head_aggregation: Optional[str] = None,
         # Trainer related
         batch_size=13,
         is_training=True,
