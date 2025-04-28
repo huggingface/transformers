@@ -1423,6 +1423,7 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         self.model = BambaModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.use_z_loss = config.use_z_loss
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1521,6 +1522,8 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            if self.use_z_loss:
+                loss = loss + .0001 * logits.logsumexp(dim=-1).pow(2).mean()
 
         return CausalLMOutputWithPast(
             loss=loss,
