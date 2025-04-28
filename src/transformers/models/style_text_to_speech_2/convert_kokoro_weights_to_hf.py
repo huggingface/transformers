@@ -25,7 +25,7 @@ from transformers import (
     StyleTextToSpeech2Tokenizer,
     StyleTextToSpeech2Processor,
 )
-from transformers.utils.hub import get_file_from_repo
+from transformers.utils.hub import cached_file
 
 
 # fmt: off
@@ -145,9 +145,9 @@ def write_model(
     os.makedirs(output_dir, exist_ok=True)
 
     config = StyleTextToSpeech2Config()
-    model_path = get_file_from_repo(
+    model_path = cached_file(
             input_path_or_repo,
-            model_name,
+            model_name, 
     )
     print(f"Fetching all parameters from the checkpoint at {model_path}...")
     loaded = torch.load(model_path, map_location="cpu")
