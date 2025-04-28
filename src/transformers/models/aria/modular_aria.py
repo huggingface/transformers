@@ -276,7 +276,7 @@ class AriaConfig(PretrainedConfig):
         vision_config=None,
         vision_feature_layer: int = -1,
         text_config: AriaTextConfig = None,
-        projector_patch_to_query_dict: Dict = None,
+        projector_patch_to_query_dict: Optional[Dict] = None,
         image_token_index: int = 9,
         initializer_range: float = 0.02,
         **kwargs,
@@ -514,8 +514,8 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        image_mean: List[float] = None,
-        image_std: List[float] = None,
+        image_mean: Optional[List[float]] = None,
+        image_std: Optional[List[float]] = None,
         max_image_size: int = 980,
         min_image_size: int = 336,
         split_resolutions: Optional[List[Tuple[int, int]]] = None,
