@@ -342,7 +342,6 @@ class ModelOutput(OrderedDict):
         `static_graph=True` with modules that output `ModelOutput` subclasses.
         """
         if is_torch_available():
-
             if version.parse(get_torch_version()) >= version.parse("2.2"):
                 from torch.utils._pytree import register_pytree_node
 
