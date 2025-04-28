@@ -1364,7 +1364,7 @@ class UdopStack(UdopPreTrainedModel):
 
         if inputs_embeds is None:
             if self.embed_tokens is None:
-                raise ValueError("You have to intialize the model with valid token embeddings")
+                raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
 
         if pixel_values is not None:

@@ -1807,7 +1807,7 @@ class PatchTSMixerForTimeSeriesClassificationOutput(ModelOutput):
 
     Args:
         prediction_outputs (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
-            Prediction output from the classfication head.
+            Prediction output from the classification head.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
             Backbone embeddings before passing through the head.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):

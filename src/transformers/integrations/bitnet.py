@@ -190,6 +190,98 @@ class BitLinear(nn.Module):
         return y
 
 
+class WeightQuant(torch.autograd.Function):
+    """
+    Implements a custom autograd function for weight quantization.
+    This performs ternary quantization (-1, 0, 1) based on scaling by the
+    mean absolute value of the weights. It uses the Straight-Through Estimator
+    (STE) for the backward pass.
+    """
+
+    @staticmethod
+    @torch.compile
+    def forward(ctx, weight):
+        dtype = weight.dtype
+        weight = weight.float()
+        scale = 1.0 / weight.abs().mean().clamp_(min=1e-5)
+        weight = (weight * scale).round().clamp(-1, 1) / scale
+        return weight.to(dtype)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        grad_input = grad_output.clone()
+        return grad_input
+
+
+class ActQuant(torch.autograd.Function):
+    """
+    Implements a custom autograd function for activation quantization.
+    This performs symmetric 8-bit quantization (to the range [-128, 127])
+    based on the maximum absolute value along the last dimension (per-token/row scaling).
+    It uses the Straight-Through Estimator (STE) for the backward pass.
+    """
+
+    @staticmethod
+    @torch.compile
+    def forward(ctx, activation):
+        dtype = activation.dtype
+        activation = activation.float()
+        scale = 127 / activation.abs().max(dim=-1, keepdim=True).values.clamp_(min=1e-5)
+        activation = (activation * scale).round().clamp(-128, 127) / scale
+        return activation.to(dtype)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        grad_input = grad_output.clone()
+        return grad_input
+
+
+class AutoBitLinear(nn.Linear):
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        bias: bool = True,
+        device=None,
+        dtype=None,
+        online_quant: bool = False,
+    ):
+        super().__init__(in_features, out_features, bias)
+        self.online_quant = online_quant
+        if not online_quant:
+            self.register_buffer(
+                "weight_scale",
+                torch.ones(
+                    (1),
+                    dtype=dtype,
+                    device=device,
+                ),
+            )
+            self._register_load_state_dict_pre_hook(self.load_hook)
+
+    def load_hook(
+        self,
+        state_dict,
+        prefix,
+        *args,
+        **kwargs,
+    ):
+        if (prefix + "weight") in state_dict and state_dict[prefix + "weight"].dtype != self.weight.dtype:
+            state_dict[prefix + "weight"] = unpack_weights(state_dict[prefix + "weight"], dtype=self.weight.dtype)
+        return state_dict
+
+    def forward(self, input):
+        if self.online_quant:
+            weight = WeightQuant.apply(self.weight)
+        else:
+            weight = self.weight
+        input = ActQuant.apply(input)
+        output = F.linear(input, weight, self.bias)
+        if not self.online_quant:
+            output = output * self.weight_scale
+        return output
+
+
 def _replace_with_bitnet_linear(
     model,
     modules_to_not_convert=None,
@@ -218,15 +310,27 @@ def _replace_with_bitnet_linear(
                 if isinstance(module, nn.Linear) and name not in modules_to_not_convert:
                     in_features = module.in_features
                     out_features = module.out_features
-                    model._modules[name] = BitLinear(
-                        in_features=in_features,
-                        out_features=out_features,
-                        bias=module.bias is not None,
-                        device=module.weight.device,
-                        dtype=module.weight.dtype,
-                    )
+                    if quantization_config and quantization_config.linear_class == "autobitlinear":
+                        model._modules[name] = AutoBitLinear(
+                            in_features=in_features,
+                            out_features=out_features,
+                            bias=module.bias is not None,
+                            device=module.weight.device,
+                            dtype=module.weight.dtype,
+                            online_quant=(quantization_config.quantization_mode == "online"),
+                        )
+                        if quantization_config.quantization_mode == "offline":
+                            model._modules[name].requires_grad_(False)
+                    else:
+                        model._modules[name] = BitLinear(
+                            in_features=in_features,
+                            out_features=out_features,
+                            bias=module.bias is not None,
+                            device=module.weight.device,
+                            dtype=module.weight.dtype,
+                        )
+                        model._modules[name].requires_grad_(False)
                     has_been_replaced = True
-                    model._modules[name].requires_grad_(False)
 
         if len(list(module.children())) > 0:
             _, has_been_replaced = _replace_with_bitnet_linear(

@@ -1487,7 +1487,7 @@ FLAX_PEGASUS_CONDITIONAL_GENERATION_DOCSTRING = """
 
     Summarization example:
 
-    ```pyton
+    ```python
     >>> from transformers import AutoTokenizer, FlaxPegasusForConditionalGeneration
 
     >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
