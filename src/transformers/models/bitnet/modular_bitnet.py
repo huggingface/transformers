@@ -123,6 +123,7 @@ class BitNetModel(LlamaModel):
 
 
 class BitNetForCausalLM(LlamaForCausalLM):
+    _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = None
     _pp_plan = None
 
