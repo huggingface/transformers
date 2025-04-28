@@ -1146,6 +1146,9 @@ class SamHQPreTrainedModel(PreTrainedModel):
             if module.use_rel_pos:
                 module.rel_pos_h.data.zero_()
                 module.rel_pos_w.data.zero_()
+        if isinstance(module, SamHQVisionEncoder):
+            if module.pos_embed is not None:
+                module.pos_embed.data.zero_()
 
 
 SAM_HQ_VISION_INPUTS_DOCSTRING = r"""
