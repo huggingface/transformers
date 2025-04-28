@@ -1419,7 +1419,7 @@ class PLBartDecoderWrapper(PLBartPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: PLBartConfig):
         super().__init__(config)
         self.decoder = PLBartDecoder(config)
 
@@ -1432,7 +1432,7 @@ class PLBartDecoderWrapper(PLBartPreTrainedModel):
 class PLBartForCausalLM(PLBartPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: PLBartConfig):
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False

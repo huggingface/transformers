@@ -1749,7 +1749,7 @@ class MvpDecoderWrapper(MvpPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: MvpConfig):
         super().__init__(config)
         self.decoder = MvpDecoder(config)
 

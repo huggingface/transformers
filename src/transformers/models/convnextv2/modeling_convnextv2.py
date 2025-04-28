@@ -301,7 +301,7 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
 )
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextModel with CONVNEXT->CONVNEXTV2, ConvNext->ConvNextV2
 class ConvNextV2Model(ConvNextV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvNextV2Config):
         super().__init__(config)
         self.config = config
 
@@ -355,7 +355,7 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextForImageClassification with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2,convnext->convnextv2
 class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvNextV2Config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -431,7 +431,7 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
 )
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextBackbone with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2,facebook/convnext-tiny-224->facebook/convnextv2-tiny-1k-224
 class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
-    def __init__(self, config):
+    def __init__(self, config: ConvNextV2Config):
         super().__init__(config)
         super()._init_backbone(config)
 

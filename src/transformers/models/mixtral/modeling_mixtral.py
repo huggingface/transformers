@@ -837,7 +837,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config):
+    def __init__(self, config: MixtralConfig):
         super().__init__(config)
         self.model = MixtralModel(config)
         self.vocab_size = config.vocab_size
@@ -973,7 +973,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class MixtralForSequenceClassification(MixtralPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MixtralConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = MixtralModel(config)
@@ -1061,7 +1061,7 @@ class MixtralForSequenceClassification(MixtralPreTrainedModel):
 
 @auto_docstring
 class MixtralForTokenClassification(MixtralPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MixtralConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = MixtralModel(config)
@@ -1135,7 +1135,7 @@ class MixtralForTokenClassification(MixtralPreTrainedModel):
 class MixtralForQuestionAnswering(MixtralPreTrainedModel):
     base_model_prefix = "model"
 
-    def __init__(self, config):
+    def __init__(self, config: MixtralConfig):
         super().__init__(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
         self.model = MixtralModel(config)  # diff with Llama: transformer->model

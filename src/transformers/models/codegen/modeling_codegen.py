@@ -324,7 +324,7 @@ class CodeGenPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class CodeGenModel(CodeGenPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CodeGenConfig):
         super().__init__(config)
 
         self.embed_dim = config.n_embd
@@ -615,7 +615,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
 class CodeGenForCausalLM(CodeGenPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: CodeGenConfig):
         super().__init__(config)
         self.transformer = CodeGenModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size)

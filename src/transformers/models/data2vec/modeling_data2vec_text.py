@@ -609,7 +609,7 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
     """
 )
 class Data2VecTextModel(Data2VecTextPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: Data2VecTextConfig, add_pooling_layer=True):
         """
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether to add a pooling layer on top of the last layer hidden state..
@@ -755,7 +755,7 @@ class Data2VecTextModel(Data2VecTextPreTrainedModel):
 class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -871,7 +871,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
 class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -985,7 +985,7 @@ class Data2VecTextLMHead(nn.Module):
 
 @auto_docstring
 class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1071,7 +1071,7 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
 
 @auto_docstring
 class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
 
         self.data2vec_text = Data2VecTextModel(config)
@@ -1152,7 +1152,7 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
 
 @auto_docstring
 class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1247,7 +1247,7 @@ class Data2VecTextClassificationHead(nn.Module):
 
 @auto_docstring
 class Data2VecTextForQuestionAnswering(Data2VecTextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
         self.config = config
         self.num_labels = config.num_labels

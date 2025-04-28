@@ -1676,7 +1676,7 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
 class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: Phi4MultimodalConfig):
         super().__init__(config)
         self.model = Phi4MultimodalModel(config)
         self.vocab_size = config.vocab_size

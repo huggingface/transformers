@@ -658,7 +658,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config):
+    def __init__(self, config: Gemma2Config):
         super().__init__(config)
         self.model = Gemma2Model(config)
         self.vocab_size = config.vocab_size
@@ -836,7 +836,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class Gemma2ForSequenceClassification(Gemma2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Gemma2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = Gemma2Model(config)
@@ -924,7 +924,7 @@ class Gemma2ForSequenceClassification(Gemma2PreTrainedModel):
 
 @auto_docstring
 class Gemma2ForTokenClassification(Gemma2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Gemma2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = Gemma2Model(config)

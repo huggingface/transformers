@@ -787,7 +787,7 @@ class CamembertModel(CamembertPreTrainedModel):
     _no_split_modules = []
 
     # Copied from transformers.models.roberta.modeling_roberta.RobertaModel.__init__ with Roberta->Camembert
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: CamembertConfig, add_pooling_layer=True):
         """
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether to add a pooling layer on top of the last layer hidden state.
@@ -978,7 +978,7 @@ class CamembertModel(CamembertPreTrainedModel):
 class CamembertForMaskedLM(CamembertPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1061,7 +1061,7 @@ class CamembertForMaskedLM(CamembertPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification with Roberta->Camembert, ROBERTA->CAMEMBERT
 class CamembertForSequenceClassification(CamembertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1148,7 +1148,7 @@ class CamembertForSequenceClassification(CamembertPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice with Roberta->Camembert, ROBERTA->CAMEMBERT
 class CamembertForMultipleChoice(CamembertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
 
         self.roberta = CamembertModel(config)
@@ -1230,7 +1230,7 @@ class CamembertForMultipleChoice(CamembertPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification with Roberta->Camembert, ROBERTA->CAMEMBERT
 class CamembertForTokenClassification(CamembertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1303,7 +1303,7 @@ class CamembertForTokenClassification(CamembertPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering with Roberta->Camembert, ROBERTA->CAMEMBERT
 class CamembertForQuestionAnswering(CamembertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1384,7 +1384,7 @@ class CamembertForQuestionAnswering(CamembertPreTrainedModel):
 class CamembertForCausalLM(CamembertPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
 
         if not config.is_decoder:

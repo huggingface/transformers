@@ -1682,7 +1682,7 @@ class BartForSequenceClassification(BartPreTrainedModel):
 class BartForQuestionAnswering(BartPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: BartConfig):
         super().__init__(config)
 
         config.num_labels = 2
@@ -1802,7 +1802,7 @@ class BartDecoderWrapper(BartPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: BartConfig):
         super().__init__(config)
         self.decoder = BartDecoder(config)
 
@@ -1814,7 +1814,7 @@ class BartDecoderWrapper(BartPreTrainedModel):
 class BartForCausalLM(BartPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: BartConfig):
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False

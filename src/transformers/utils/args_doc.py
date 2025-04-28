@@ -40,6 +40,8 @@ UNROLL_KWARGS_CLASSES = {
     "ImageProcessorFast",
 }
 
+OPTIONAL_STRING = r", *optional*"
+
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
 
 
@@ -195,7 +197,7 @@ class ModelArgs:
     if the model is configured as a decoder.
     """
 
-    encoder_attention_mask = r""" of shape `(batch_size, sequence_length)`, *optional*):
+    encoder_attention_mask = r""" of shape `(batch_size, sequence_length)`:
     Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
     the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
@@ -238,7 +240,9 @@ class ModelArgs:
     of shape `(batch_size, sequence_length)`.
     """
 
-    past_key_value = r""":deprecated in favor of `past_key_values`"""
+    past_key_value = r""":
+    deprecated in favor of `past_key_values`
+    """
 
     inputs_embeds = r""":
     Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
@@ -532,6 +536,14 @@ def set_min_indent(docstring, indent_level):
     return textwrap.indent(textwrap.dedent(docstring), " " * indent_level)
 
 
+def parse_shape(docstring):
+    shape_pattern = re.compile(r"(of shape\s*(?:`.*?`|\(.*?\)))")
+    match = shape_pattern.search(docstring)
+    if match:
+        return " " + match.group(1)
+    return None
+
+
 def parse_docstring(docstring):
     """
     Parse the docstring to extract the Args section and return it as a dictionary.
@@ -553,14 +565,24 @@ def parse_docstring(docstring):
     params = {}
     if args_section:
         param_pattern = re.compile(
-            r"^\s*(\w+)\s*\((.*?)\):\s*(.*?)(?=\n^\s*\w+\s*\(|\n\s*$)", re.DOTALL | re.MULTILINE
+            # |--- Group 1 ---|| Group 2 ||- Group 3 --||---------- Group 4 ----------|
+            r"^\s*(\w+)\s*\(\s*([^, \)]*)\s*(.*?)\s*\):\s*(.*?)(?=\n^\s*\w+\s*\(|\n\s*$)",
+            re.DOTALL | re.MULTILINE,
         )
         for match in param_pattern.finditer(args_section):
             param_name = match.group(1)
-            param_type = match.group(2)
-            param_description = match.group(3).strip()
+            param_type = match.group(2).replace("`", "")
+            additional_info = match.group(3)
+            optional = "optional" in additional_info
+            shape = parse_shape(additional_info)
+            param_description = match.group(4).strip()
             param_description = equalize_indent(f"\n{param_description}\n", 4)
-            params[param_name] = {"type": param_type, "description": param_description}
+            params[param_name] = {
+                "type": param_type,
+                "description": param_description,
+                "optional": optional,
+                "shape": shape,
+            }
 
     match = re.search(r"(?m)^([ \t]*)(?=Example|Return)", docstring)
     if match:
@@ -767,7 +789,6 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
         documented_params, func_documentation = parse_docstring(func_documentation)
         if model_name_lowercase is not None:
             documented_params = format_args_docstring(documented_params, model_name_lowercase)
-
     for param_name, param in sig.parameters.items():
         if (
             param_name in ARGS_TO_IGNORE
@@ -775,14 +796,28 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
             or param.kind == inspect.Parameter.VAR_KEYWORD
         ):
             continue
+        shape = None
+        optional = False
+        optional_string = ""
+        shape_string = ""
         if param.annotation != inspect.Parameter.empty:
             param_type = param.annotation
             if "typing" in str(param_type):
                 param_type = "".join(str(param_type).split("typing.")).replace("transformers.", "~")
-            else:
+            elif hasattr(param_type, "__module__"):
                 param_type = f"{param_type.__module__.replace('transformers.', '~').replace('builtins', '')}.{param.annotation.__name__}"
+                if param_type[0] == ".":
+                    param_type = param_type[1:]
+            else:
+                print(
+                    f"🚨 {param_type} for {param_name} of {func.__qualname__} in file {func.__code__.co_filename} has an invalid type"
+                )
             if "ForwardRef" in param_type:
                 param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
+            if "Optional" in param_type:
+                param_type = re.sub(r"Optional\[(.*?)\]", r"\1", param_type)
+                optional = True
+                optional_string = OPTIONAL_STRING
         else:
             param_type = ""
 
@@ -794,14 +829,27 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
         if param_name in documented_params:
             if param_type == "" and documented_params[param_name].get("type", None) is not None:
                 param_type = documented_params[param_name]["type"]
+            optional = documented_params[param_name]["optional"]
+            optional_string = OPTIONAL_STRING if optional else ""
+            shape = documented_params[param_name]["shape"]
+            shape_string = shape if shape else ""
+            if param_type == "":
+                print(f"🚨 {param_name} for {func.__qualname__} of {class_name} has no type")
             docstring += set_min_indent(
-                f"{param_name} (`{param_type}`{param_default}):{documented_params[param_name]['description']}\n",
+                f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}):{documented_params[param_name]['description']}\n",
                 indent_level + 8,
             )
         elif param_name in (source_args_dict := source_args_doc([ModelArgs, ImageProcessorArgs])):
             indented_doc = source_args_dict[param_name]
+            pre_doc = indented_doc.split(":\n")[0]
+            shape = parse_shape(pre_doc)
+            shape_string = shape if shape else ""
+            indented_doc = ":\n" + ":\n".join(indented_doc.split(":\n")[1:])
+            if param_type == "":
+                print(f"🚨 {param_name} for {func.__qualname__} in file {func.__code__.co_filename} has no type")
             docstring += set_min_indent(
-                f"{param_name} (`{param_type}`{param_default}){indented_doc}", indent_level + 8
+                f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}){indented_doc}",
+                indent_level + 8,
             )
         else:
             undocumented_parameters.append(
@@ -841,6 +889,13 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
                     param_type = f"{param_type.replace('transformers.', '~').replace('builtins', '')}.{param_name}"
                 if "ForwardRef" in param_type:
                     param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
+                if "Optional" in param_type:
+                    param_type = re.sub(r"Optional\[(.*?)\]", r"\1", param_type)
+                    optional = True
+                    optional_string = OPTIONAL_STRING
+                else:
+                    optional = False
+                    optional_string = ""
                 # Check if the parameter has a default value (considered optional)
                 # is_optional = param.default != inspect.Parameter.empty
                 param_default = ""
@@ -851,14 +906,23 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
                 if param_name in documented_kwargs:
                     if param_type == "" and documented_kwargs[param_name].get("type", None) is not None:
                         param_type = documented_kwargs[param_name]["type"]
+                        optional = documented_kwargs[param_name]["optional"]
+                        optional_string = OPTIONAL_STRING if optional else ""
+                        shape = documented_kwargs[param_name]["shape"]
+                        shape_string = shape if shape else ""
                     docstring += set_min_indent(
-                        f"{param_name} (`{param_type}`{param_default}):{documented_kwargs[param_name]['description']}\n",
+                        f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}):{documented_kwargs[param_name]['description']}\n",
                         indent_level + 8,
                     )
                 elif param_name in (source_args_dict := source_args_doc(ImageProcessorArgs)):
                     indented_doc = source_args_dict[param_name]
+                    pre_doc = indented_doc.split(":\n")[0]
+                    shape = parse_shape(pre_doc)
+                    shape_string = shape if shape else ""
+                    indented_doc = ":\n" + ":\n".join(indented_doc.split(":\n")[1:])
                     docstring += set_min_indent(
-                        f"{param_name} (`{param_type}`{param_default}){indented_doc}", indent_level + 8
+                        f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}){indented_doc}",
+                        indent_level + 8,
                     )
                 else:
                     undocumented_parameters.append(
@@ -969,7 +1033,7 @@ def auto_class_docstring(cls, custom_intro=None, checkpoint=None):
     if name != [] or custom_intro is not None:
         name = name[0] if name else None
         if custom_intro is not None:
-            pre_block = equalize_indent(custom_intro, indent_level + 4)
+            pre_block = equalize_indent(custom_intro, indent_level)
             if not pre_block.endswith("\n"):
                 pre_block += "\n"
         elif model_name_title is None:
@@ -1004,8 +1068,6 @@ def auto_class_docstring(cls, custom_intro=None, checkpoint=None):
             f"You used `@auto_class_docstring` decorator on `{cls.__name__}` but this class is not part of the AutoMappings. Remove the decorator"
         )
     # Assign the dynamically generated docstring to the wrapper class
-    if cls.__doc__ is not None:
-        docstring += cls.__doc__
     cls.__doc__ = docstring
 
     return cls

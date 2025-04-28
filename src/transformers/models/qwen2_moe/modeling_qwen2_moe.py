@@ -740,23 +740,6 @@ class Qwen2MoeDecoderLayer(nn.Module):
         return outputs
 
 
-QWEN2MOE_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Qwen2MoeConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
 @auto_docstring
 class Qwen2MoePreTrainedModel(PreTrainedModel):
     config_class = Qwen2MoeConfig
@@ -1180,7 +1163,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen2MoeConfig):
         super().__init__(config)
         self.model = Qwen2MoeModel(config)
         self.vocab_size = config.vocab_size
@@ -1314,7 +1297,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
 @auto_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Qwen2Moe, LLAMA->QWEN2MOE, BaseModelOutputWithPast->MoeModelOutputWithPast
 class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Qwen2MoeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = Qwen2MoeModel(config)
@@ -1403,7 +1386,7 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Qwen2Moe, LLAMA->QWEN2MOE, BaseModelOutputWithPast->MoeModelOutputWithPast
 class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Qwen2MoeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = Qwen2MoeModel(config)
@@ -1478,7 +1461,7 @@ class Qwen2MoeForTokenClassification(Qwen2MoePreTrainedModel):
 class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
     base_model_prefix = "model"
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen2MoeConfig):
         super().__init__(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
         self.model = Qwen2MoeModel(config)  # diff with Llama: transformer->model

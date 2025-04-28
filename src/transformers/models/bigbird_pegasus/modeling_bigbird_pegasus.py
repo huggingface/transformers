@@ -2580,7 +2580,7 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
 class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
 
         config.num_labels = 2
@@ -2702,7 +2702,7 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
         self.decoder = BigBirdPegasusDecoder(config)
 
@@ -2714,7 +2714,7 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
 class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: BigBirdPegasusConfig):
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False

@@ -294,7 +294,7 @@ class MistralForSequenceClassification(LlamaForSequenceClassification):
 class MistralForQuestionAnswering(LlamaForQuestionAnswering):
     base_model_prefix = "model"
 
-    def __init__(self, config):
+    def __init__(self, config: MistralConfig):
         super().__init__(config)
         self.model = MistralModel(config)  # diff with Llama: transformer->model
         del self.transformer

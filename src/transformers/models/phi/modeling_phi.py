@@ -594,7 +594,7 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config):
+    def __init__(self, config: PhiConfig):
         super().__init__(config)
         self.model = PhiModel(config)
         self.vocab_size = config.vocab_size
@@ -694,7 +694,7 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class PhiForSequenceClassification(PhiPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PhiConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = PhiModel(config)
@@ -782,7 +782,7 @@ class PhiForSequenceClassification(PhiPreTrainedModel):
 
 @auto_docstring
 class PhiForTokenClassification(PhiPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PhiConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = PhiModel(config)

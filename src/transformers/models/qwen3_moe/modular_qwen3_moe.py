@@ -47,8 +47,6 @@ from .configuration_qwen3_moe import Qwen3MoeConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "Qwen/Qwen3-MoE-15B-A2B"
-
 
 class Qwen3MoeAttention(Qwen3Attention):  # This is the main diff with qwen2Moe!
     pass
@@ -237,7 +235,7 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 class Qwen3MoeForCausalLM(MixtralForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: Qwen3MoeConfig):
         super().__init__(config)
         self.model = Qwen3MoeModel(config)
         self.num_experts = config.num_experts

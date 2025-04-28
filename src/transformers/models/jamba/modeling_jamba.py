@@ -1491,7 +1491,7 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
 @auto_docstring
 # Copied from transformers.models.mixtral.modeling_mixtral.MixtralForSequenceClassification with Mixtral->Jamba, MIXTRAL->JAMBA, BaseModelOutputWithPast->MoeModelOutputWithPast
 class JambaForSequenceClassification(JambaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: JambaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = JambaModel(config)

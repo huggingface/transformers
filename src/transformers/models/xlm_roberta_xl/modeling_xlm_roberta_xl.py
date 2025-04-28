@@ -675,12 +675,8 @@ class XLMRobertaXLPooler(nn.Module):
         return pooled_output
 
 
+@auto_docstring
 class XLMRobertaXLPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = XLMRobertaXLConfig
     base_model_prefix = "roberta"
     _no_split_modules = ["XLMRobertaXLEmbeddings", "XLMRobertaXLLayer"]
@@ -723,7 +719,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
 
     _no_split_modules = ["XLMRobertaXLEmbeddings", "XLMRobertaXLLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: XLMRobertaXLConfig, add_pooling_layer=True):
         """
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether to add a pooling layer on top of the last layer hidden state.
@@ -912,7 +908,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
 class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaXLConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -1066,7 +1062,7 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
 class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaXLConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1177,7 +1173,7 @@ class XLMRobertaXLLMHead(nn.Module):
 
 @auto_docstring
 class XLMRobertaXLForSequenceClassification(XLMRobertaXLPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaXLConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1260,7 +1256,7 @@ class XLMRobertaXLForSequenceClassification(XLMRobertaXLPreTrainedModel):
 
 @auto_docstring
 class XLMRobertaXLForMultipleChoice(XLMRobertaXLPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaXLConfig):
         super().__init__(config)
 
         self.roberta = XLMRobertaXLModel(config)
@@ -1338,7 +1334,7 @@ class XLMRobertaXLForMultipleChoice(XLMRobertaXLPreTrainedModel):
 
 @auto_docstring
 class XLMRobertaXLForTokenClassification(XLMRobertaXLPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaXLConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1438,7 +1434,7 @@ class XLMRobertaXLClassificationHead(nn.Module):
 
 @auto_docstring
 class XLMRobertaXLForQuestionAnswering(XLMRobertaXLPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaXLConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

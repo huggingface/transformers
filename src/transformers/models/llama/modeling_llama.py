@@ -622,7 +622,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config):
+    def __init__(self, config: LlamaConfig):
         super().__init__(config)
         self.model = LlamaModel(config)
         self.vocab_size = config.vocab_size
@@ -722,7 +722,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class LlamaForSequenceClassification(LlamaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LlamaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = LlamaModel(config)
@@ -813,7 +813,7 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
     base_model_prefix = "transformer"
 
     # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Llama
-    def __init__(self, config):
+    def __init__(self, config: LlamaConfig):
         super().__init__(config)
         self.transformer = LlamaModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
@@ -874,7 +874,7 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
 
 @auto_docstring
 class LlamaForTokenClassification(LlamaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LlamaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = LlamaModel(config)

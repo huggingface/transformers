@@ -342,7 +342,7 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GPTNeoXModel(GPTNeoXPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoXConfig):
         super().__init__(config)
         self.config = config
 
@@ -611,7 +611,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
     _tp_plan = {"embed_out": "colwise_rep"}
     _pp_plan = {"embed_out": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoXConfig):
         super().__init__(config)
 
         self.gpt_neox = GPTNeoXModel(config)
@@ -704,7 +704,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoXConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.gpt_neox = GPTNeoXModel(config)
@@ -846,7 +846,7 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
 
 @auto_docstring
 class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoXConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.gpt_neox = GPTNeoXModel(config)

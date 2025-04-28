@@ -51,9 +51,6 @@ from .configuration_albert import AlbertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "albert/albert-base-v2"
-_CONFIG_FOR_DOC = "AlbertConfig"
-
 
 def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
@@ -908,7 +905,7 @@ class AlbertSOPHead(nn.Module):
 class AlbertForMaskedLM(AlbertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "predictions.decoder.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: AlbertConfig):
         super().__init__(config)
 
         self.albert = AlbertModel(config, add_pooling_layer=False)

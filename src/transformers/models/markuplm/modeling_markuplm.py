@@ -736,7 +736,7 @@ class MarkupLMPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class MarkupLMModel(MarkupLMPreTrainedModel):
     # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->MarkupLM
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: MarkupLMConfig, add_pooling_layer=True):
         """
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether to add a pooling layer on top of the last layer hidden state.
@@ -886,7 +886,7 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
 @auto_docstring
 class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with bert->markuplm, Bert->MarkupLM
-    def __init__(self, config):
+    def __init__(self, config: MarkupLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -999,7 +999,7 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
 @auto_docstring
 class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification.__init__ with bert->markuplm, Bert->MarkupLM
-    def __init__(self, config):
+    def __init__(self, config: MarkupLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1100,7 +1100,7 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
 @auto_docstring
 class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification.__init__ with bert->markuplm, Bert->MarkupLM
-    def __init__(self, config):
+    def __init__(self, config: MarkupLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config

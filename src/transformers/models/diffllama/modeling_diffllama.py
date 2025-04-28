@@ -889,7 +889,7 @@ class DiffLlamaForCausalLM(DiffLlamaPreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config):
+    def __init__(self, config: DiffLlamaConfig):
         super().__init__(config)
         self.model = DiffLlamaModel(config)
         self.vocab_size = config.vocab_size
@@ -1002,7 +1002,7 @@ class DiffLlamaForCausalLM(DiffLlamaPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class DiffLlamaForSequenceClassification(DiffLlamaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DiffLlamaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = DiffLlamaModel(config)
@@ -1092,7 +1092,7 @@ class DiffLlamaForSequenceClassification(DiffLlamaPreTrainedModel):
 class DiffLlamaForQuestionAnswering(DiffLlamaPreTrainedModel):
     base_model_prefix = "transformer"
 
-    def __init__(self, config):
+    def __init__(self, config: DiffLlamaConfig):
         super().__init__(config)
         self.transformer = DiffLlamaModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
@@ -1153,7 +1153,7 @@ class DiffLlamaForQuestionAnswering(DiffLlamaPreTrainedModel):
 
 @auto_docstring
 class DiffLlamaForTokenClassification(DiffLlamaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DiffLlamaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = DiffLlamaModel(config)

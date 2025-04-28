@@ -592,10 +592,8 @@ class RobertaPreLayerNormPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-@auto_docstring
-class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
-    """
-
+@auto_docstring(
+    custom_intro="""
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in *Attention is
     all you need*_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
@@ -606,10 +604,10 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
 
     .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
-
     """
-
-    def __init__(self, config, add_pooling_layer=True):
+)
+class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
+    def __init__(self, config: RobertaPreLayerNormConfig, add_pooling_layer: bool = True):
         """
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether to add a pooling layer on top of the last layer hidden state.
@@ -766,7 +764,7 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
 class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -890,7 +888,7 @@ class RobertaPreLayerNormForMaskedLM(RobertaPreLayerNormPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM.__init__ with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1005,7 +1003,7 @@ class RobertaPreLayerNormLMHead(nn.Module):
 
 @auto_docstring
 class RobertaPreLayerNormForSequenceClassification(RobertaPreLayerNormPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1093,7 +1091,7 @@ class RobertaPreLayerNormForSequenceClassification(RobertaPreLayerNormPreTrained
 @auto_docstring
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
 class RobertaPreLayerNormForMultipleChoice(RobertaPreLayerNormPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
 
         self.roberta_prelayernorm = RobertaPreLayerNormModel(config)
@@ -1174,7 +1172,7 @@ class RobertaPreLayerNormForMultipleChoice(RobertaPreLayerNormPreTrainedModel):
 
 @auto_docstring
 class RobertaPreLayerNormForTokenClassification(RobertaPreLayerNormPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1270,7 +1268,7 @@ class RobertaPreLayerNormClassificationHead(nn.Module):
 
 @auto_docstring
 class RobertaPreLayerNormForQuestionAnswering(RobertaPreLayerNormPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

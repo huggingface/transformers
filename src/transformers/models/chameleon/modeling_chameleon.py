@@ -1071,13 +1071,6 @@ class ChameleonVQVAE(ChameleonPreTrainedModel):
 
 @auto_docstring
 class ChameleonModel(ChameleonPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ChameleonDecoderLayer`]
-
-    Args:
-        config: ChameleonConfig
-    """
-
     def __init__(self, config: ChameleonConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1378,7 +1371,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
 class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: ChameleonConfig):
         super().__init__(config)
         self.model = ChameleonModel(config)
         self.vocab_size = config.vocab_size

@@ -891,7 +891,7 @@ class RoCBertModel(RoCBertPreTrainedModel):
     """
 
     # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->RoCBert
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: RoCBertConfig, add_pooling_layer=True):
         """
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether to add a pooling layer on top of the last layer hidden state.
@@ -1273,7 +1273,7 @@ class RoCBertForMaskedLM(RoCBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     # Copied from transformers.models.bert.modeling_bert.BertForMaskedLM.__init__ with Bert->RoCBert,bert->roc_bert
-    def __init__(self, config):
+    def __init__(self, config: RoCBertConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1414,7 +1414,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.__init__ with BertLMHeadModel->RoCBertForCausalLM,Bert->RoCBert,bert->roc_bert
-    def __init__(self, config):
+    def __init__(self, config: RoCBertConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -1610,7 +1610,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
 )
 class RoCBertForSequenceClassification(RoCBertPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification.__init__ with Bert->RoCBert,bert->roc_bert
-    def __init__(self, config):
+    def __init__(self, config: RoCBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1716,7 +1716,7 @@ class RoCBertForSequenceClassification(RoCBertPreTrainedModel):
 )
 class RoCBertForMultipleChoice(RoCBertPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice.__init__ with Bert->RoCBert,bert->roc_bert
-    def __init__(self, config):
+    def __init__(self, config: RoCBertConfig):
         super().__init__(config)
 
         self.roc_bert = RoCBertModel(config)
@@ -1821,7 +1821,7 @@ class RoCBertForMultipleChoice(RoCBertPreTrainedModel):
 )
 class RoCBertForTokenClassification(RoCBertPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification.__init__ with Bert->RoCBert,bert->roc_bert
-    def __init__(self, config):
+    def __init__(self, config: RoCBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1907,7 +1907,7 @@ class RoCBertForTokenClassification(RoCBertPreTrainedModel):
 )
 class RoCBertForQuestionAnswering(RoCBertPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with Bert->RoCBert,bert->roc_bert
-    def __init__(self, config):
+    def __init__(self, config: RoCBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

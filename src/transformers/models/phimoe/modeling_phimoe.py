@@ -1420,7 +1420,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
 @auto_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Phimoe, LLAMA->PHIMOE, BaseModelOutputWithPast->MoeModelOutputWithPast
 class PhimoeForSequenceClassification(PhimoePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PhimoeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = PhimoeModel(config)

@@ -725,7 +725,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
     https://arxiv.org/pdf/2004.02984.pdf
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: MobileBertConfig, add_pooling_layer=True):
         """
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether to add a pooling layer on top of the last layer hidden state.
@@ -835,7 +835,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
 class MobileBertForPreTraining(MobileBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
         self.mobilebert = MobileBertModel(config)
         self.cls = MobileBertPreTrainingHeads(config)
@@ -941,7 +941,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
 class MobileBertForMaskedLM(MobileBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
         self.mobilebert = MobileBertModel(config, add_pooling_layer=False)
         self.cls = MobileBertOnlyMLMHead(config)
@@ -1032,7 +1032,7 @@ class MobileBertOnlyNSPHead(nn.Module):
     custom_intro="""MobileBert Model with a `next sentence prediction (classification)` head on top.""",
 )
 class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
 
         self.mobilebert = MobileBertModel(config)
@@ -1127,7 +1127,7 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification with Bert->MobileBert all-casing
 class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1218,7 +1218,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with Bert->MobileBert all-casing
 class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1297,7 +1297,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->MobileBert all-casing
 class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
 
         self.mobilebert = MobileBertModel(config)
@@ -1381,7 +1381,7 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with Bert->MobileBert all-casing
 class MobileBertForTokenClassification(MobileBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

@@ -644,7 +644,7 @@ class BioGptModel(BioGptPreTrainedModel):
 class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["output_projection.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: BioGptConfig):
         super().__init__(config)
 
         self.biogpt = BioGptModel(config)
@@ -731,7 +731,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class BioGptForTokenClassification(BioGptPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BioGptConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

@@ -629,12 +629,8 @@ class BitEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class BitPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = BitConfig
     base_model_prefix = "bit"
     main_input_name = "pixel_values"
@@ -657,7 +653,7 @@ class BitPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class BitModel(BitPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BitConfig):
         super().__init__(config)
         self.config = config
 
@@ -707,7 +703,7 @@ class BitModel(BitPreTrainedModel):
 
 @auto_docstring
 class BitForImageClassification(BitPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BitConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.bit = BitModel(config)
@@ -772,7 +768,7 @@ class BitForImageClassification(BitPreTrainedModel):
 
 @auto_docstring
 class BitBackbone(BitPreTrainedModel, BackboneMixin):
-    def __init__(self, config):
+    def __init__(self, config: BitConfig):
         super().__init__(config)
         super()._init_backbone(config)
 

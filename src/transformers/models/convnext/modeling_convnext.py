@@ -276,7 +276,7 @@ class ConvNextPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class ConvNextModel(ConvNextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvNextConfig):
         super().__init__(config)
         self.config = config
 
@@ -329,7 +329,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
 
 @auto_docstring
 class ConvNextForImageClassification(ConvNextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvNextConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -400,7 +400,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
 
 @auto_docstring
 class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
-    def __init__(self, config):
+    def __init__(self, config: ConvNextConfig):
         super().__init__(config)
         super()._init_backbone(config)
 

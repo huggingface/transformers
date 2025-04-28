@@ -1172,7 +1172,7 @@ class BloomForTokenClassification(BloomPreTrainedModel):
 
 @auto_docstring
 class BloomForQuestionAnswering(BloomPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BloomConfig):
         super().__init__(config)
         self.transformer = BloomModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)

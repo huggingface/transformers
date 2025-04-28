@@ -1685,7 +1685,7 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
 class MBartForQuestionAnswering(MBartPreTrainedModel):
     _tied_weights_keys = ["model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: MBartConfig):
         super().__init__(config)
 
         config.num_labels = 2
@@ -1807,7 +1807,7 @@ class MBartDecoderWrapper(MBartPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: MBartConfig):
         super().__init__(config)
         self.decoder = MBartDecoder(config)
 
@@ -1819,7 +1819,7 @@ class MBartDecoderWrapper(MBartPreTrainedModel):
 class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: MBartConfig):
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False

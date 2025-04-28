@@ -49,9 +49,6 @@ from .configuration_ernie import ErnieConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "nghuyong/ernie-1.0-base-zh"
-_CONFIG_FOR_DOC = "ErnieConfig"
-
 
 class ErnieEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
@@ -641,12 +638,8 @@ class ErniePreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+@auto_docstring
 class ErniePreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = ErnieConfig
     base_model_prefix = "ernie"
     supports_gradient_checkpointing = True
@@ -703,10 +696,8 @@ class ErnieForPreTrainingOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-@auto_docstring
-class ErnieModel(ErniePreTrainedModel):
-    """
-
+@auto_docstring(
+    custom_intro="""
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in [Attention is
     all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
@@ -716,9 +707,10 @@ class ErnieModel(ErniePreTrainedModel):
     to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
-
+)
+class ErnieModel(ErniePreTrainedModel):
     # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->Ernie
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: ErnieConfig, add_pooling_layer=True):
         """
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether to add a pooling layer on top of the last layer hidden state.
@@ -877,7 +869,7 @@ class ErnieForPreTraining(ErniePreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     # Copied from transformers.models.bert.modeling_bert.BertForPreTraining.__init__ with Bert->Ernie,bert->ernie
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
 
         self.ernie = ErnieModel(config)
@@ -983,7 +975,7 @@ class ErnieForCausalLM(ErniePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.__init__ with BertLMHeadModel->ErnieForCausalLM,Bert->Ernie,bert->ernie
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -1096,7 +1088,7 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     # Copied from transformers.models.bert.modeling_bert.BertForMaskedLM.__init__ with Bert->Ernie,bert->ernie
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1209,7 +1201,7 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
 @auto_docstring(custom_intro="""Ernie Model with a `next sentence prediction (classification)` head on top.""")
 class ErnieForNextSentencePrediction(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForNextSentencePrediction.__init__ with Bert->Ernie,bert->ernie
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
 
         self.ernie = ErnieModel(config)
@@ -1313,7 +1305,7 @@ class ErnieForNextSentencePrediction(ErniePreTrainedModel):
 @auto_docstring
 class ErnieForSequenceClassification(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification.__init__ with Bert->Ernie,bert->ernie
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1411,7 +1403,7 @@ class ErnieForSequenceClassification(ErniePreTrainedModel):
 @auto_docstring
 class ErnieForMultipleChoice(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice.__init__ with Bert->Ernie,bert->ernie
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
 
         self.ernie = ErnieModel(config)
@@ -1502,7 +1494,7 @@ class ErnieForMultipleChoice(ErniePreTrainedModel):
 @auto_docstring
 class ErnieForTokenClassification(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification.__init__ with Bert->Ernie,bert->ernie
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1580,7 +1572,7 @@ class ErnieForTokenClassification(ErniePreTrainedModel):
 @auto_docstring
 class ErnieForQuestionAnswering(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with Bert->Ernie,bert->ernie
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

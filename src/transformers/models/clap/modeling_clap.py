@@ -1652,10 +1652,8 @@ class ClapAudioModel(ClapPreTrainedModel):
         )
 
 
-@auto_docstring
-class ClapTextModel(ClapPreTrainedModel):
-    """
-
+@auto_docstring(
+    custom_intro="""
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in *Attention is
     all you need*_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
@@ -1666,12 +1664,12 @@ class ClapTextModel(ClapPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
 
     .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
-
     """
-
+)
+class ClapTextModel(ClapPreTrainedModel):
     config_class = ClapTextConfig
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: ClapTextConfig, add_pooling_layer=True):
         """
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether to add a pooling layer on top of the last layer hidden state.

@@ -625,7 +625,7 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
     """
 )
 class BertGenerationEncoder(BertGenerationPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertGenerationConfig):
         super().__init__(config)
         self.config = config
 
@@ -775,7 +775,7 @@ class BertGenerationOnlyLMHead(nn.Module):
 class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
-    def __init__(self, config):
+    def __init__(self, config: BertGenerationConfig):
         super().__init__(config)
 
         if not config.is_decoder:

@@ -30,11 +30,9 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     can_return_tuple,
     logging,
-    replace_return_docstrings,
 )
 from ..chameleon.modeling_chameleon import (
     ChameleonPreTrainedModel,
@@ -49,15 +47,12 @@ from ..siglip.modeling_siglip import SiglipAttention
 from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 
 
-_CONFIG_FOR_DOC = "Emu3Config"
-_CHECKPOINT_FOR_DOC = "BAAI/Emu3-Chat-hf"
-
 logger = logging.get_logger(__name__)
 
 
 # Has extra dropout which no other model in the library has
 class Emu3DecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: Emu3Config, layer_idx: int):
+    def __init__(self, config: Emu3TextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.dropout = nn.Dropout(config.attention_dropout)
 
@@ -705,29 +700,11 @@ class Emu3VQVAEDecoder(nn.Module):
         return hidden_states
 
 
-EMU3_VQ_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Emu3VQVAEConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    """The VQ-VAE model used in Emu3 for encoding/decoding images into discrete tokens.
+@auto_docstring(
+    custom_intro="""The VQ-VAE model used in Emu3 for encoding/decoding images into discrete tokens.
     This model follows the "Make-a-scene: Scene-based text-to-image generation with human priors" paper from
     [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv Taigman](https://arxiv.org/abs/2203.13131).
-    """,
-    EMU3_VQ_START_DOCSTRING,
+    """
 )
 class Emu3VQVAE(PreTrainedModel):
     config_class = Emu3VQVAEConfig
@@ -1064,14 +1041,14 @@ EMU3_INPUTS_DOCSTRING = r"""
 
 
 class Emu3TextModel(LlamaModel, Emu3PreTrainedModel):
-    def __init__(self, config: Emu3Config):
+    def __init__(self, config: Emu3TextConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
             [Emu3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(EMU3_TEXT_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         super().forward(**super_kwargs)
 
@@ -1079,15 +1056,15 @@ class Emu3TextModel(LlamaModel, Emu3PreTrainedModel):
 class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
     config_class = Emu3TextConfig
 
-    def __init__(self, config):
+    def __init__(self, config: Emu3TextConfig):
         super().__init__(config)
         self.model = Emu3TextModel(config)
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(EMU3_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="Emu3TextConfig")
+    @auto_docstring
     def forward(**super_kwargs):
         r"""
+        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1099,8 +1076,6 @@ class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
                 If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
                 This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
 
         Example:
 
@@ -1125,7 +1100,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["text_model.lm_head.weight"]
     _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compilable
 
-    def __init__(self, config):
+    def __init__(self, config: Emu3Config):
         super().__init__(config)
         self.text_model = Emu3ForCausalLM._from_config(config.text_config)
         self.vqmodel = Emu3VQVAE(config.vq_config)
@@ -1177,8 +1152,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         return image
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(EMU3_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1207,8 +1181,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
                 If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
                 This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
 
         Example:
 

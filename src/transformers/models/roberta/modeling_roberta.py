@@ -680,12 +680,8 @@ class RobertaPooler(nn.Module):
         return pooled_output
 
 
+@auto_docstring
 class RobertaPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = RobertaConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
@@ -729,7 +725,7 @@ class RobertaModel(RobertaPreTrainedModel):
 
     _no_split_modules = ["RobertaEmbeddings", "RobertaLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: RobertaConfig, add_pooling_layer=True):
         """
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether to add a pooling layer on top of the last layer hidden state.
@@ -918,7 +914,7 @@ class RobertaModel(RobertaPreTrainedModel):
 class RobertaForCausalLM(RobertaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -1039,7 +1035,7 @@ class RobertaForCausalLM(RobertaPreTrainedModel, GenerationMixin):
 class RobertaForMaskedLM(RobertaPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1152,7 +1148,7 @@ class RobertaLMHead(nn.Module):
 
 @auto_docstring
 class RobertaForSequenceClassification(RobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1238,7 +1234,7 @@ class RobertaForSequenceClassification(RobertaPreTrainedModel):
 
 @auto_docstring
 class RobertaForMultipleChoice(RobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
 
         self.roberta = RobertaModel(config)
@@ -1319,7 +1315,7 @@ class RobertaForMultipleChoice(RobertaPreTrainedModel):
 
 @auto_docstring
 class RobertaForTokenClassification(RobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1413,7 +1409,7 @@ class RobertaClassificationHead(nn.Module):
 
 @auto_docstring
 class RobertaForQuestionAnswering(RobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

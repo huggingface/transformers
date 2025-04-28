@@ -901,7 +901,7 @@ class CaninePreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class CanineModel(CaninePreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: CanineConfig, add_pooling_layer=True):
         """
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether to add a pooling layer on top of the last layer hidden state.
@@ -1174,7 +1174,7 @@ class CanineModel(CaninePreTrainedModel):
 
 @auto_docstring
 class CanineForSequenceClassification(CaninePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CanineConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1260,7 +1260,7 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
 
 @auto_docstring
 class CanineForMultipleChoice(CaninePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CanineConfig):
         super().__init__(config)
 
         self.canine = CanineModel(config)
@@ -1340,7 +1340,7 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
 
 @auto_docstring
 class CanineForTokenClassification(CaninePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CanineConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1437,7 +1437,7 @@ class CanineForTokenClassification(CaninePreTrainedModel):
 
 @auto_docstring
 class CanineForQuestionAnswering(CaninePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CanineConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

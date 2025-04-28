@@ -1610,7 +1610,7 @@ class PegasusXDecoderWrapper(PegasusXPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: PegasusXConfig):
         super().__init__(config)
         self.decoder = PegasusXDecoder(config)
 

@@ -823,7 +823,7 @@ class LiltModel(LiltPreTrainedModel):
 )
 class LiltForSequenceClassification(LiltPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->Lilt, roberta->lilt
-    def __init__(self, config):
+    def __init__(self, config: LiltConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -941,7 +941,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
 )
 class LiltForTokenClassification(LiltPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->Lilt, roberta->lilt
-    def __init__(self, config):
+    def __init__(self, config: LiltConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1067,7 +1067,7 @@ class LiltClassificationHead(nn.Module):
 )
 class LiltForQuestionAnswering(LiltPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->Lilt, roberta->lilt
-    def __init__(self, config):
+    def __init__(self, config: LiltConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

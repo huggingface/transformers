@@ -1142,8 +1142,8 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
 
     config_class = AltCLIPTextConfig
 
-    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->AltRoberta
-    def __init__(self, config, add_pooling_layer=True):
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapTextConfig->AltCLIPTextConfig, ClapText->AltRoberta
+    def __init__(self, config: AltCLIPTextConfig, add_pooling_layer=True):
         """
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether to add a pooling layer on top of the last layer hidden state.
@@ -1289,7 +1289,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
 class AltCLIPTextModel(AltCLIPPreTrainedModel):
     config_class = AltCLIPTextConfig
 
-    def __init__(self, config):
+    def __init__(self, config: AltCLIPTextConfig):
         super().__init__(config)
         self.roberta = AltRobertaModel(config, add_pooling_layer=False)
         self.transformation = nn.Linear(config.hidden_size, config.project_dim)
@@ -1432,7 +1432,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        token_type_ids=None,
+        token_type_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

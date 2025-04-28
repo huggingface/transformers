@@ -307,7 +307,7 @@ class PhiModel(LlamaModel):
 
 
 class PhiForCausalLM(LlamaForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: PhiConfig):
         super().__init__(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
 

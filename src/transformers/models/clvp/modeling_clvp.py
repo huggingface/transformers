@@ -436,7 +436,7 @@ class ClvpEncoderMLP(nn.Module):
 
 
 class ClvpEncoderLayer(nn.Module):
-    def __init__(self, config: ClvpConfig):
+    def __init__(self, config: ClvpEncoderConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -497,13 +497,13 @@ class ClvpEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.xlm.modeling_xlm.XLMSequenceSummary with XLM->Clvp
+# Copied from transformers.models.xlm.modeling_xlm.XLMSequenceSummary with XLMConfig->ClvpDecoderConfig,  XLM->Clvp
 class ClvpSequenceSummary(nn.Module):
     r"""
     Compute a single vector summary of a sequence hidden states.
 
     Args:
-        config ([`ClvpConfig`]):
+        config ([`ClvpDecoderConfig`]):
             The config used by the model. Relevant arguments in the config class of the model are (refer to the actual
             config class of your model for the default values it uses):
 
@@ -524,7 +524,7 @@ class ClvpSequenceSummary(nn.Module):
             - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and activation.
     """
 
-    def __init__(self, config: ClvpConfig):
+    def __init__(self, config: ClvpDecoderConfig):
         super().__init__()
 
         self.summary_type = getattr(config, "summary_type", "last")
@@ -852,7 +852,7 @@ class ClvpPreTrainedModel(PreTrainedModel):
     """
 )
 class ClvpEncoder(ClvpPreTrainedModel):
-    def __init__(self, config: ClvpConfig):
+    def __init__(self, config: ClvpEncoderConfig):
         super().__init__(config)
 
         self.config = config
@@ -977,7 +977,7 @@ class ClvpEncoder(ClvpPreTrainedModel):
     """
 )
 class ClvpDecoder(ClvpPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ClvpDecoderConfig):
         super().__init__(config)
 
         self.config = config
@@ -1221,7 +1221,7 @@ class ClvpModel(ClvpPreTrainedModel):
 
 @auto_docstring
 class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: ClvpDecoderConfig):
         super().__init__(config)
 
         self.config = config

@@ -615,7 +615,7 @@ class MistralForCausalLM(MistralPreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config):
+    def __init__(self, config: MistralConfig):
         super().__init__(config)
         self.model = MistralModel(config)
         self.vocab_size = config.vocab_size
@@ -715,7 +715,7 @@ class MistralForCausalLM(MistralPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class MistralForTokenClassification(MistralPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MistralConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = MistralModel(config)
@@ -787,7 +787,7 @@ class MistralForTokenClassification(MistralPreTrainedModel):
 
 @auto_docstring
 class MistralForSequenceClassification(MistralPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MistralConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = MistralModel(config)
@@ -877,7 +877,7 @@ class MistralForSequenceClassification(MistralPreTrainedModel):
 class MistralForQuestionAnswering(MistralPreTrainedModel):
     base_model_prefix = "model"
 
-    def __init__(self, config):
+    def __init__(self, config: MistralConfig):
         super().__init__(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
         self.model = MistralModel(config)  # diff with Llama: transformer->model

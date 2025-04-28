@@ -1244,7 +1244,7 @@ class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
         self.decoder = BlenderbotDecoder(config)
 
@@ -1256,7 +1256,7 @@ class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
 class BlenderbotForCausalLM(BlenderbotPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: BlenderbotConfig):
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False

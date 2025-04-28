@@ -849,7 +849,7 @@ class NemotronModel(NemotronPreTrainedModel):
 class NemotronForCausalLM(NemotronPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: NemotronConfig):
         super().__init__(config)
         self.model = NemotronModel(config)
         self.vocab_size = config.vocab_size
@@ -962,7 +962,7 @@ class NemotronForCausalLM(NemotronPreTrainedModel, GenerationMixin):
 @auto_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronForSequenceClassification(NemotronPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: NemotronConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = NemotronModel(config)
@@ -1054,7 +1054,7 @@ class NemotronForQuestionAnswering(NemotronPreTrainedModel):
     base_model_prefix = "transformer"
 
     # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Nemotron
-    def __init__(self, config):
+    def __init__(self, config: NemotronConfig):
         super().__init__(config)
         self.transformer = NemotronModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
@@ -1116,7 +1116,7 @@ class NemotronForQuestionAnswering(NemotronPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronForTokenClassification(NemotronPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: NemotronConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = NemotronModel(config)

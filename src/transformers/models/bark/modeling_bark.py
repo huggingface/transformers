@@ -367,12 +367,8 @@ class BarkBlock(nn.Module):
         return outputs  # hidden_states, ((present), attentions)
 
 
+@auto_docstring
 class BarkPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = BarkConfig
     supports_gradient_checkpointing = False
     _supports_flash_attn_2 = True
@@ -421,7 +417,7 @@ class BarkPreTrainedModel(PreTrainedModel):
 class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config_class = BarkSubModelConfig
 
-    def __init__(self, config):
+    def __init__(self, config: BarkSubModelConfig):
         super().__init__(config)
         self.config = config
 
@@ -1008,7 +1004,7 @@ class BarkFineModel(BarkPreTrainedModel):
     config_class = BarkFineConfig
     main_input_name = "codebook_idx"
 
-    def __init__(self, config):
+    def __init__(self, config: BarkFineConfig):
         # non-causal gpt-like model with one embedding layer and one lm_head for each codebook of Encodec
         super().__init__(config)
         self.config = config
@@ -1437,7 +1433,7 @@ class BarkFineModel(BarkPreTrainedModel):
 class BarkModel(BarkPreTrainedModel):
     config_class = BarkConfig
 
-    def __init__(self, config):
+    def __init__(self, config: BarkConfig):
         super().__init__(config)
 
         self.semantic = BarkSemanticModel(config.semantic_config)

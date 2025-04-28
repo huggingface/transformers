@@ -577,7 +577,7 @@ class Gemma2Model(GemmaModel):
 
 
 class Gemma2ForCausalLM(GemmaForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: Gemma2Config):
         super().__init__(config)
         self.model = Gemma2Model(config)
         self.post_init()
@@ -715,14 +715,14 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
 
 
 class Gemma2ForSequenceClassification(GemmaForSequenceClassification):
-    def __init__(self, config):
+    def __init__(self, config: Gemma2Config):
         super().__init__(config)
         self.model = Gemma2Model(config)
         self.post_init()
 
 
 class Gemma2ForTokenClassification(GemmaForTokenClassification):
-    def __init__(self, config):
+    def __init__(self, config: Gemma2Config):
         super().__init__(config)
         self.model = Gemma2Model(config)
         self.post_init()

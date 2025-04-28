@@ -1030,7 +1030,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     config_class = ChineseCLIPTextConfig
     _no_split_modules = ["ChineseCLIPTextEmbeddings"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: ChineseCLIPTextConfig, add_pooling_layer: bool = True):
         """
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether to add a pooling layer on top of the last layer hidden state.

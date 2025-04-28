@@ -1436,7 +1436,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
 
 @auto_docstring
 class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
-    def __init__(self, config):
+    def __init__(self, config: BeitConfig):
         super().__init__(config)
         super()._init_backbone(config)
 

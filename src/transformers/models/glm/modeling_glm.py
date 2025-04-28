@@ -624,7 +624,7 @@ class GlmForCausalLM(GlmPreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config):
+    def __init__(self, config: GlmConfig):
         super().__init__(config)
         self.model = GlmModel(config)
         self.vocab_size = config.vocab_size
@@ -724,7 +724,7 @@ class GlmForCausalLM(GlmPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class GlmForSequenceClassification(GlmPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GlmConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = GlmModel(config)
@@ -812,7 +812,7 @@ class GlmForSequenceClassification(GlmPreTrainedModel):
 
 @auto_docstring
 class GlmForTokenClassification(GlmPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GlmConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = GlmModel(config)

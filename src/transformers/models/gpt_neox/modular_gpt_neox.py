@@ -29,14 +29,10 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     rotate_half,
 )
+from .configuration_gpt_neox import GPTNeoXConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-_CHECKPOINT_FOR_DOC = "trl-internal-testing/tiny-random-GPTNeoXForCausalLM"
-_REAL_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neox-20b"
-_CONFIG_FOR_DOC = "GPTNeoXConfig"
 
 
 class GPTNeoXMLP(nn.Module):
@@ -294,12 +290,8 @@ class GPTNeoXPreTrainedModel(LlamaPreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-GPT_NEOX_START_DOCSTRING = None  # Will be picked up by modular
-GPT_NEOX_INPUTS_DOCSTRING = None  # Will be picked up by modular
-
-
 class GPTNeoXModel(LlamaModel, nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoXConfig):
         nn.Module.__init__(config)
         self.config = config
 
@@ -445,7 +437,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
     _tp_plan = {"embed_out": "colwise_rep"}
     _pp_plan = {"embed_out": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoXConfig):
         super().__init__(config)
 
         self.gpt_neox = GPTNeoXModel(config)
@@ -538,7 +530,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoXConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.gpt_neox = GPTNeoXModel(config)
@@ -680,7 +672,7 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
 
 @auto_docstring
 class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoXConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.gpt_neox = GPTNeoXModel(config)

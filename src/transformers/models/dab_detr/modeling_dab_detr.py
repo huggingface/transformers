@@ -915,9 +915,9 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        inputs_embeds,
-        attention_mask,
-        object_queries,
+        inputs_embeds: torch.FloatTensor,
+        attention_mask: torch.Tensor,
+        object_queries: torch.Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1030,17 +1030,17 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        inputs_embeds,
-        encoder_hidden_states,
-        memory_key_padding_mask,
-        object_queries,
-        query_position_embeddings,
+        inputs_embeds: torch.FloatTensor,
+        encoder_hidden_states: torch.FloatTensor,
+        memory_key_padding_mask: torch.BoolTensor,
+        object_queries: torch.FloatTensor,
+        query_position_embeddings: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
         r"""
-        memory_key_padding_mask (`torch.Tensor.bool` of shape `(batch_size, sequence_length)`):
+        memory_key_padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
             The memory_key_padding_mask indicates which positions in the memory (encoder outputs) should be ignored during the attention computation,
             ensuring padding tokens do not influence the attention mechanism.
         object_queries (`torch.FloatTensor` of shape `(sequence_length, batch_size, hidden_size)`, *optional*):

@@ -989,7 +989,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
 class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
     config_class = BridgeTowerVisionConfig
 
-    def __init__(self, config):
+    def __init__(self, config: BridgeTowerVisionConfig):
         super().__init__(config)
         self.visual = BridgeTowerVisionTransformer(config)
 
@@ -1019,7 +1019,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
 
     config_class = BridgeTowerTextConfig
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: BridgeTowerTextConfig, add_pooling_layer: bool = True):
         super().__init__(config)
         self.config = config
 
@@ -1159,7 +1159,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
 
 @auto_docstring
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BridgeTowerConfig):
         super().__init__(config)
         self.config = config
         vision_config = config.vision_config
@@ -1512,7 +1512,7 @@ class BridgeTowerITMHead(nn.Module):
 class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
     _tied_weights_keys = ["mlm_score.decoder.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: BridgeTowerConfig):
         super().__init__(config)
 
         self.bridgetower = BridgeTowerModel(config)
@@ -1615,7 +1615,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
     """
 )
 class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BridgeTowerConfig):
         super().__init__(config)
 
         self.bridgetower = BridgeTowerModel(config)
@@ -1726,7 +1726,7 @@ class BridgeTowerContrastiveHead(nn.Module):
     """
 )
 class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BridgeTowerConfig):
         super().__init__(config)
 
         self.bridgetower = BridgeTowerModel(config)

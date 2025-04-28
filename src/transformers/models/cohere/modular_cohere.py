@@ -308,7 +308,7 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 class CohereForCausalLM(LlamaForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: CohereConfig):
         super().__init__(config)
         self.model = CohereModel(config)
         self.logit_scale = config.logit_scale
