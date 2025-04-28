@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch ConvaiCausalLM model using the modular approach."""
-
+""" PyTorch ConvaiCausalLM model using the modular approach."""
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -40,9 +39,8 @@ logger = logging.get_logger(__name__)
 
 # ==== Helper Functions ====
 
-
-# Copied from transformers.models.llama.modeling_llama._repeat_kv  <--- CORRECTED COMMENT PATH
-def _repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+# Copied from transformers.models.llama.modeling_llama.repeat_kv
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
     num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
@@ -52,10 +50,8 @@ def _repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-# Copied from transformers.models.llama.modeling_llama._make_causal_mask
-def _make_causal_mask(
+# Removed # Copied from comment for make_causal_mask as it might not exist standalone in target llama version
+def make_causal_mask(
     input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
 ):
     """
@@ -74,8 +70,8 @@ def _make_causal_mask(
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-# Copied from transformers.models.llama.modeling_llama._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+# Removed # Copied from comment for expand_mask as it might not exist standalone in target llama version
+def expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -89,7 +85,6 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 
 # ==== Custom Attention (No RoPE, GQA) ====
-# Not inheriting from LlamaAttention due to RoPE difference.
 class ConvaiCausalLMAttention(nn.Module):
     """
     Grouped Query Attention module for ConvaiCausalLM. Does not use RoPE.
@@ -99,11 +94,10 @@ class ConvaiCausalLMAttention(nn.Module):
         layer_idx (`int`, *optional*):
             Layer index for KV cache. Required if `use_cache=True`.
     """
-
     def __init__(self, config: ConvaiCausalLMConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
-        self.layer_idx = layer_idx  # Useful for KV caching layer index
+        self.layer_idx = layer_idx # Useful for KV caching layer index
         if layer_idx is None:
             logger.warning_once(
                 f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
@@ -131,17 +125,17 @@ class ConvaiCausalLMAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
-    # _repeat_kv method is DEFINED OUTSIDE this class now
+    # Note: repeat_kv method is DEFINED OUTSIDE this class now
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,  # No RoPE, so position_ids not used for embedding here
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,  # Assume structure is (key_states, value_states)
+        position_ids: Optional[torch.LongTensor] = None, # No RoPE, so position_ids not used for embedding here
+        past_key_value: Optional[Tuple[torch.Tensor]] = None, # Assume structure is (key_states, value_states)
         output_attentions: bool = False,
         use_cache: bool = False,
-        **kwargs,  # Handles potential cache_position argument if using Cache class later
+        **kwargs, # Handles potential cache_position argument if using Cache class later
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -168,42 +162,40 @@ class ConvaiCausalLMAttention(nn.Module):
         past_key_value = (key_states, value_states) if use_cache else None
 
         # Repeat KVs for GQA - Call the standalone helper function
-        key_states = _repeat_kv(key_states, self.num_key_value_groups)
-        value_states = _repeat_kv(value_states, self.num_key_value_groups)
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         # Attention calculation (Standard Scaled Dot-Product Attention)
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / (self.head_dim**0.5)
 
         # Check shapes before mask application
         if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
-                f" {attn_weights.size()}"
-            )
+             raise ValueError(
+                 f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
+                 f" {attn_weights.size()}"
+             )
 
         # Apply causal attention mask
         if attention_mask is not None:
-            # Expected mask shape: [bsz, 1, q_len, kv_seq_len]
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights + attention_mask
+             # Expected mask shape: [bsz, 1, q_len, kv_seq_len]
+             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+                 raise ValueError(
+                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
+                 )
+             attn_weights = attn_weights + attention_mask
 
         # Upcast attention to fp32 for stability
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(
-            attn_weights, p=self.attention_dropout, training=self.training
-        )  # Apply dropout
+        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training) # Apply dropout
 
         attn_output = torch.matmul(attn_weights, value_states)
 
         # Check output shape after matmul
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
+             raise ValueError(
+                 f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
+                 f" {attn_output.size()}"
+             )
 
         # Reshape and project output
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -215,55 +207,33 @@ class ConvaiCausalLMAttention(nn.Module):
 
         return attn_output, attn_weights, past_key_value
 
-
 # ==== MLP (Inherited) ====
-# Explicitly define the MLP class inheriting from LlamaMLP
-# This helps the modular converter resolve the dependency correctly.
 class ConvaiCausalLMMLP(LlamaMLP):
     """MLP for ConvaiCausalLM, inheriting directly from LlamaMLP."""
-
     pass
 
 
 # ==== Decoder Layer ====
-# Define standalone as it uses specific Attention, MLP, and LayerNorm
 class ConvaiCausalLMDecoderLayer(nn.Module):
     def __init__(self, config: ConvaiCausalLMConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         # Use standard LayerNorm
-        self.input_layernorm = nn.LayerNorm(
-            config.hidden_size, eps=config.layer_norm_eps
-        )  # Assumes layer_norm_eps in config
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) # Assumes layer_norm_eps in config
         self.self_attn = ConvaiCausalLMAttention(config=config, layer_idx=layer_idx)
-        self.mlp = ConvaiCausalLMMLP(config)  # Use the explicitly defined inherited MLP
+        self.mlp = ConvaiCausalLMMLP(config) # Use the explicitly defined inherited MLP
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,  # Passed to attention, but not used for RoPE
+        position_ids: Optional[torch.LongTensor] = None, # Passed to attention, but not used for RoPE
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
-        **kwargs,  # Handles potential cache_position argument
+        **kwargs, # Handles potential cache_position argument
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            position_ids (`torch.LongTensor` of shape `(batch, seq_len)`, *optional*):
-                Indices of positions of each input sequence tokens in the position embeddings. Passed but not used by RoPE.
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-        """
         residual = hidden_states
 
         # --- Start: Pre-LayerNorm Application ---
@@ -271,7 +241,7 @@ class ConvaiCausalLMDecoderLayer(nn.Module):
 
         # Self Attention
         attn_outputs = self.self_attn(
-            hidden_states=hidden_states_norm,  # Apply attention to normalized states
+            hidden_states=hidden_states_norm, # Apply attention to normalized states
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
@@ -283,15 +253,13 @@ class ConvaiCausalLMDecoderLayer(nn.Module):
         self_attn_weights = attn_outputs[1]
         present_key_value = attn_outputs[2]
 
-        hidden_states = residual + hidden_states_attn  # First residual connection
-        # --- End: Self Attention Block ---
+        hidden_states = residual + hidden_states_attn # First residual connection
 
         # --- Start: MLP Block ---
         residual = hidden_states
-        hidden_states_norm = self.post_attention_layernorm(hidden_states)  # Normalize before MLP
+        hidden_states_norm = self.post_attention_layernorm(hidden_states) # Normalize before MLP
         hidden_states_mlp = self.mlp(hidden_states_norm)
-        hidden_states = residual + hidden_states_mlp  # Second residual connection
-        # --- End: MLP Block ---
+        hidden_states = residual + hidden_states_mlp # Second residual connection
 
         outputs = (hidden_states,)
 
@@ -309,18 +277,15 @@ class ConvaiCausalLMPreTrainedModel(PreTrainedModel):
     config_class = ConvaiCausalLMConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["ConvaiCausalLMDecoderLayer"]  # Optimize for FSDP/activation checkpointing
-    _skip_keys_device_placement = "past_key_values"  # KV cache stays on device
-    _supports_flash_attn_2 = False  # Set to True if Flash Attention 2 is integrated later
-    _supports_sdpa = False  # Set to True if torch.nn.functional.scaled_dot_product_attention is integrated later
-    _supports_cache_class = False  # Set to True if Cache class (e.g., StaticCache) is used
+    _no_split_modules = ["ConvaiCausalLMDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = False
+    _supports_sdpa = False
+    _supports_cache_class = False
 
-    # Copied from original notebook code for weight initialization
     def _init_weights(self, module):
-        """Initialize the weights"""
-        std = self.config.initializer_range  # Use initializer_range from config
+        std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            # Slightly different init than standard transformer (no truncation)
             torch.nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
@@ -328,23 +293,18 @@ class ConvaiCausalLMPreTrainedModel(PreTrainedModel):
             torch.nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        # Initialize LayerNorm weights to 1 and biases to 0
         elif isinstance(module, nn.LayerNorm):
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
-            if hasattr(module, "weight") and module.weight is not None:
-                module.weight.data.fill_(1.0)
+             if hasattr(module, 'bias') and module.bias is not None:
+                  module.bias.data.zero_()
+             if hasattr(module, 'weight') and module.weight is not None:
+                  module.weight.data.fill_(1.0)
 
 
 # ==== Main Model ====
 class ConvaiCausalLMModel(ConvaiCausalLMPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ConvaiCausalLMDecoderLayer`]
-
-    Args:
-        config: ConvaiCausalLMConfig
+    Transformer decoder consisting of *config.num_hidden_layers* layers.
     """
-
     def __init__(self, config: ConvaiCausalLMConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -354,11 +314,9 @@ class ConvaiCausalLMModel(ConvaiCausalLMPreTrainedModel):
         self.layers = nn.ModuleList(
             [ConvaiCausalLMDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        # Use standard LayerNorm for the final normalization
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)  # Assumes layer_norm_eps in config
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        self.gradient_checkpointing = False  # Can be enabled via trainer args or model.gradient_checkpointing_enable()
-        # Initialize weights and apply final processing
+        self.gradient_checkpointing = False
         self.post_init()
 
     def get_input_embeddings(self):
@@ -367,37 +325,32 @@ class ConvaiCausalLMModel(ConvaiCausalLMPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    # Reuse LlamaModel's _prepare_decoder_attention_mask logic by using the helper functions defined above
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        device = inputs_embeds.device
-        dtype = inputs_embeds.dtype
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape,
-                dtype,
-                device=device,
-                past_key_values_length=past_key_values_length,
-            )
+         combined_attention_mask = None
+         device = inputs_embeds.device
+         dtype = inputs_embeds.dtype
+         if input_shape[-1] > 1:
+             combined_attention_mask = make_causal_mask(
+                 input_shape,
+                 dtype,
+                 device=device,
+                 past_key_values_length=past_key_values_length,
+             )
 
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, dtype, tgt_len=input_shape[-1]).to(device)
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
+         if attention_mask is not None:
+             expanded_attn_mask = expand_mask(attention_mask, dtype, tgt_len=input_shape[-1]).to(device)
+             combined_attention_mask = (
+                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
+             )
 
-        return combined_attention_mask
+         return combined_attention_mask
 
-    # Forward similar to standard decoder models, but without RoPE steps
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,  # Passed down, but not used for RoPE
-        past_key_values: Optional[List[torch.FloatTensor]] = None,  # Expects a List/Tuple of (k, v) tuples
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -411,7 +364,6 @@ class ConvaiCausalLMModel(ConvaiCausalLMPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -425,38 +377,28 @@ class ConvaiCausalLMModel(ConvaiCausalLMPreTrainedModel):
 
         past_key_values_length = 0
         if past_key_values is not None:
-            # Assuming past_key_values is a list/tuple of tuples (k, v)
-            # And Cache class is not used (_supports_cache_class = False)
-            # Add safety checks for past_key_values structure
-            if (
-                hasattr(past_key_values, "__len__")
-                and len(past_key_values) > 0
-                and hasattr(past_key_values[0], "__len__")
-                and len(past_key_values[0]) > 0
-            ):
-                try:
-                    past_key_values_length = past_key_values[0][0].shape[2]  # Get length from first layer's key cache
-                except (AttributeError, IndexError):
-                    logger.warning("Could not determine past_key_values length from structure.")
-                    past_key_values_length = 0
-            else:
-                logger.warning("past_key_values structure is unexpected.")
-                past_key_values_length = 0
+             if hasattr(past_key_values, "__len__") and len(past_key_values) > 0 and hasattr(past_key_values[0], "__len__") and len(past_key_values[0]) > 0:
+                 try:
+                     past_key_values_length = past_key_values[0][0].shape[2]
+                 except (AttributeError, IndexError):
+                      logger.warning("Could not determine past_key_values length from structure.")
+                      past_key_values_length = 0
+             else:
+                 logger.warning("past_key_values structure is unexpected.")
+                 past_key_values_length = 0
 
         if position_ids is None:
-            position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
-            )
-            position_ids = position_ids.unsqueeze(0)  # Shape (1, seq_length)
+             position_ids = torch.arange(
+                 past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+             )
+             position_ids = position_ids.unsqueeze(0)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        # Prepare causal attention mask
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
         )
-        # ============================
 
         hidden_states = inputs_embeds
 
@@ -467,7 +409,6 @@ class ConvaiCausalLMModel(ConvaiCausalLMPreTrainedModel):
                 )
                 use_cache = False
 
-        # Decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
@@ -479,82 +420,56 @@ class ConvaiCausalLMModel(ConvaiCausalLMPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                # Helper function for gradient checkpointing
-                # Make sure past_key_value is not part of the inputs list when calling checkpoint
-                # Pass it implicitly through the custom forward function
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # inputs are: hidden_states, attention_mask, position_ids
-                        # Pass other arguments explicitly if needed by the layer's forward
-                        return module(
-                            *inputs,
-                            past_key_value=past_key_value,
-                            output_attentions=output_attentions,
-                            use_cache=use_cache,
-                        )
+                 def create_custom_forward(module):
+                     def custom_forward(*inputs):
+                         return module(*inputs, past_key_value=past_key_value, output_attentions=output_attentions, use_cache=use_cache)
+                     return custom_forward
 
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
-                    hidden_states,
-                    attention_mask,
-                    position_ids,
-                    use_reentrant=False,  # Recommended way
-                )
-                # Gradient checkpointing returns only the first output (hidden_states) by default
-                # If other outputs are needed (attentions, cache), the implementation needs adjustment
-                # or gradient checkpointing cannot be used with use_cache=True or output_attentions=True
-
+                 layer_outputs = torch.utils.checkpoint.checkpoint(
+                     create_custom_forward(decoder_layer),
+                     hidden_states,
+                     attention_mask,
+                     position_ids,
+                     use_reentrant=False
+                 )
             else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                )
+                 layer_outputs = decoder_layer(
+                     hidden_states,
+                     attention_mask=attention_mask,
+                     position_ids=position_ids,
+                     past_key_value=past_key_value,
+                     output_attentions=output_attentions,
+                     use_cache=use_cache,
+                 )
 
             hidden_states = layer_outputs[0]
 
-            # Handle outputs depending on use_cache and output_attentions
             if use_cache:
-                # layer_outputs includes present_key_value if use_cache=True
-                present_key_value_index = 2 if output_attentions else 1
-                if len(layer_outputs) > present_key_value_index:
-                    next_decoder_cache += (layer_outputs[present_key_value_index],)
-                else:
-                    # This case might happen if gradient checkpointing is used and not configured
-                    # to return the cache state. Log a warning or error if needed.
-                    if self.gradient_checkpointing and self.training:
-                        # Expected behavior with gradient checkpointing when use_cache=True was attempted
-                        pass  # Cache is implicitly disabled
-                    else:
-                        logger.warning_once(
-                            "KV Cache not found in layer outputs, possibly due to unexpected layer output format."
-                        )
+                 present_key_value_index = 2 if output_attentions else 1
+                 if len(layer_outputs) > present_key_value_index:
+                     next_decoder_cache += (layer_outputs[present_key_value_index],)
+                 else:
+                     if self.gradient_checkpointing and self.training:
+                         pass
+                     else:
+                         logger.warning_once("KV Cache not found in layer outputs.")
 
             if output_attentions:
-                # layer_outputs includes attn_weights if output_attentions=True
-                attn_weights_index = 1
-                if len(layer_outputs) > attn_weights_index:
-                    all_self_attns += (layer_outputs[attn_weights_index],)
-                else:
+                 attn_weights_index = 1
+                 if len(layer_outputs) > attn_weights_index:
+                      all_self_attns += (layer_outputs[attn_weights_index],)
+                 else:
                     if self.gradient_checkpointing and self.training:
-                        pass  # Expected behavior
+                        pass
                     else:
                         logger.warning_once("Attention weights not found in layer outputs.")
 
-        # Apply final LayerNorm
         hidden_states = self.norm(hidden_states)
 
-        # Add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
-        # Ensure next_cache is None if gradient_checkpointing was enabled, as cache is implicitly turned off
         if self.gradient_checkpointing and self.training:
             next_cache = None
 
@@ -570,15 +485,13 @@ class ConvaiCausalLMModel(ConvaiCausalLMPreTrainedModel):
 
 # ==== Causal LM Head Model ====
 class ConvaiCausalLMForCausalLM(ConvaiCausalLMPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]  # Specify keys to potentially tie
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
         self.model = ConvaiCausalLMModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -604,7 +517,7 @@ class ConvaiCausalLMForCausalLM(ConvaiCausalLMPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,  # Expects list/tuple of (k, v)
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -615,27 +528,7 @@ class ConvaiCausalLMForCausalLM(ConvaiCausalLMPreTrainedModel):
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
-
-        Example:
-        ```python
-        >>> from transformers import AutoTokenizer, ConvaiCausalLMForCausalLM
-
-        >>> model_name = "convaiinnovations/hindi-causal-lm" # Replace with your actual model path/ID
-        >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-        >>> model = ConvaiCausalLMForCausalLM.from_pretrained(model_name)
-
-        >>> prompt = "भारत एक विशाल देश है"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate text
-        >>> outputs = model.generate(**inputs, max_new_tokens=50)
-        >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-        ```
+                Labels for computing the masked language modeling loss.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -643,7 +536,6 @@ class ConvaiCausalLMForCausalLM(ConvaiCausalLMPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Decoder outputs consists of (last_hidden_state, past_key_values, hidden_states, attentions)
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -658,87 +550,71 @@ class ConvaiCausalLMForCausalLM(ConvaiCausalLMPreTrainedModel):
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-        # Ensure logits are float32 for loss computation and stable softmax
         logits = logits.float()
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             shift_logits = shift_logits.view(-1, self.config.vocab_size)
             shift_labels = shift_labels.view(-1)
-            # Ensure labels are on the same device as logits
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
         if not return_dict:
-            # Ensure past_key_values are handled correctly in non-dict output
-            # Access past_key_values from the BaseModelOutputWithPast object if return_dict=True was used internally
-            past_key_values_out = (
-                outputs.past_key_values if isinstance(outputs, BaseModelOutputWithPast) else outputs[1]
-            )
-            output = (logits,) + (past_key_values_out,) + outputs[2:]  # Assuming outputs[1] was cache
+            past_key_values_out = outputs.past_key_values if isinstance(outputs, BaseModelOutputWithPast) else outputs[1]
+            other_outputs = outputs[2:] if isinstance(outputs, BaseModelOutputWithPast) else outputs[2:]
+            output = (logits,) + (past_key_values_out,) + other_outputs
             return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,  # Ensure BaseOutput returns this field correctly
+            past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
-    # Standard prepare_inputs_for_generation from other decoder models
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
+    # <<< REMOVED "# Copied from..." comment for prepare_inputs_for_generation
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
-    ):
-        # Omit graph/cache validation logic if not using Cache class
-        past_length = 0
-        if past_key_values is not None:
-            # Assumes past_key_values is a tuple/list of (k, v) tuples
-            if hasattr(past_key_values, "__len__"):  # Basic check if it's indexable
-                if len(past_key_values) > 0 and hasattr(past_key_values[0], "__len__") and len(past_key_values[0]) > 0:
-                    try:
-                        past_length = past_key_values[0][0].shape[2]
-                    except (AttributeError, IndexError):
-                        logger.warning("Could not determine past_key_values length.")
-                        past_length = 0
-                else:
-                    logger.warning("past_key_values structure is unexpected.")
-            else:
-                logger.warning("past_key_values structure is unexpected.")
+         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+     ):
+         past_length = 0
+         if past_key_values is not None:
+             if hasattr(past_key_values, "__len__"):
+                  if len(past_key_values) > 0 and hasattr(past_key_values[0], "__len__") and len(past_key_values[0]) > 0:
+                       try:
+                            past_length = past_key_values[0][0].shape[2]
+                       except (AttributeError, IndexError):
+                            logger.warning("Could not determine past_key_values length.")
+                            past_length = 0
+                  else:
+                       logger.warning("past_key_values structure is unexpected.")
+             else:
+                 logger.warning("past_key_values structure is unexpected.")
 
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            # Cut ids to generating position
-            if input_ids.shape[1] > past_length:
-                input_ids = input_ids[:, past_length:]
-            model_inputs = {"input_ids": input_ids}
+         if inputs_embeds is not None and past_key_values is None:
+             model_inputs = {"inputs_embeds": inputs_embeds}
+         else:
+              if input_ids.shape[1] > past_length:
+                  input_ids = input_ids[:, past_length:]
+              model_inputs = {"input_ids": input_ids}
 
-        # Create position_ids on the fly for batch generation
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                # Append past length only if position_ids are dynamically created
-                position_ids = position_ids[:, past_length:] + past_length
+         position_ids = kwargs.get("position_ids", None)
+         if attention_mask is not None and position_ids is None:
+             position_ids = attention_mask.long().cumsum(-1) - 1
+             position_ids.masked_fill_(attention_mask == 0, 1)
+             if past_key_values:
+                  position_ids = position_ids[:, past_length:] + past_length
 
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "attention_mask": attention_mask,
-            }
-        )
-        # Filter out None values before returning
-        model_inputs = {k: v for k, v in model_inputs.items() if v is not None}
-        return model_inputs
+         model_inputs.update(
+             {
+                 "position_ids": position_ids,
+                 "past_key_values": past_key_values,
+                 "use_cache": kwargs.get("use_cache"),
+                 "attention_mask": attention_mask,
+             }
+         )
+         model_inputs = {k: v for k, v in model_inputs.items() if v is not None}
+         return model_inputs
