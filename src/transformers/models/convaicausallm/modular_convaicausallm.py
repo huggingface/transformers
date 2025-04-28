@@ -17,13 +17,12 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
 
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..llama.modeling_llama import LlamaMLP # Inherit MLP structure
+from ..llama.modeling_llama import LlamaMLP  # Inherit MLP structure
 
 # Import configuration class directly
 from .configuration_convaicausallm import ConvaiCausalLMConfig
