@@ -92,7 +92,7 @@ class MusicgenMelodyOutputWithPast(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-            Sequence of conditional hidden-states representing the concatenation of the projeted text encoder output and the projeted audio encoder output.
+            Sequence of conditional hidden-states representing the concatenation of the projected text encoder output and the projected audio encoder output.
             Used as a conditional signal.
     """
 
@@ -757,8 +757,8 @@ MUSICGEN_MELODY_INPUTS_DOCSTRING = r"""
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-            Sequence of conditional hidden-states representing the concatenation of the projeted text encoder output and the projeted audio encoder output.
-            Used as a conditional signal and will thus be concatenated to the projeted `decoder_input_ids`.
+            Sequence of conditional hidden-states representing the concatenation of the projected text encoder output and the projected audio encoder output.
+            Used as a conditional signal and will thus be concatenated to the projected `decoder_input_ids`.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
@@ -818,7 +818,7 @@ MUSICGEN_MELODY_DECODER_INPUTS_DOCSTRING = r"""
             [What are attention masks?](../glossary#attention-mask)
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states representing the concatenation of the text encoder output and the processed audio encoder output.
-            Used as a conditional signal and will thus be concatenated to the projeted `decoder_input_ids`.
+            Used as a conditional signal and will thus be concatenated to the projected `decoder_input_ids`.
         encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
             Mask to avoid performing attention on conditional hidden states. Mask values
             selected in `[0, 1]`:
@@ -1522,7 +1522,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
         # 7. determine generation mode
         generation_mode = generation_config.get_generation_mode()
 
-        # 8. prepare batched CFG externally (to enable coexistance with the unbatched CFG)
+        # 8. prepare batched CFG externally (to enable coexistence with the unbatched CFG)
         if generation_config.guidance_scale is not None and generation_config.guidance_scale > 1:
             logits_processor.append(ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale))
             generation_config.guidance_scale = None
@@ -2478,7 +2478,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         # 7. determine generation mode
         generation_mode = generation_config.get_generation_mode()
 
-        # 8. prepare batched CFG externally (to enable coexistance with the unbatched CFG)
+        # 8. prepare batched CFG externally (to enable coexistence with the unbatched CFG)
         if generation_config.guidance_scale is not None and generation_config.guidance_scale > 1:
             logits_processor.append(ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale))
             generation_config.guidance_scale = None
