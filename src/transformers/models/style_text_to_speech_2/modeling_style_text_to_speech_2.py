@@ -145,11 +145,8 @@ class AcousticTextEncoderLayer(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
 
         # apply weight norm
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            weight_norm = nn.utils.parametrizations.weight_norm
+        nn.utils.parametrizations.weight_norm(self.conv)
 
-        weight_norm(self.conv)
 
     def forward(self, hidden_states, input_lengths=None):
         # TODO: this op does not give the same output when batched and padded, but close output.
@@ -378,24 +375,20 @@ class StyleTextToSpeech2AdainResBlock1d(nn.Module):
         self.norm2 = StyleTextToSpeech2AdaLayerNorm(hidden_size_out, style_size, use_instance_norm=True)
         
         # apply weight norm
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        weight_norm(self.conv1)
-        weight_norm(self.conv2)
+        nn.utils.parametrizations.weight_norm(self.conv1)
+        nn.utils.parametrizations.weight_norm(self.conv2)
 
         if upsample:
             self.upsample = lambda x: F.interpolate(x, scale_factor=2, mode='nearest')
             self.pool = nn.ConvTranspose1d(hidden_size_in, hidden_size_in, kernel_size=3, stride=2, groups=hidden_size_in, padding=1, output_padding=1)
-            weight_norm(self.pool)
+            nn.utils.parametrizations.weight_norm(self.pool)
         else:
             self.upsample = lambda x: x
             self.pool = nn.Identity()
         
         if learned_shortcut:
             self.conv1_shortcut = nn.Conv1d(hidden_size_in, hidden_size_out, kernel_size=1, stride=1, padding=0, bias=False)
-            weight_norm(self.conv1_shortcut)
+            nn.utils.parametrizations.weight_norm(self.conv1_shortcut)
         else:
             self.conv1_shortcut = nn.Identity()
 
@@ -510,12 +503,8 @@ class StyleTextToSpeech2AdainResBlockLayer(nn.Module):
         self.alpha2 = nn.Parameter(torch.ones(channels))
 
         # apply weight norm
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        weight_norm(self.conv1)
-        weight_norm(self.conv2)
+        nn.utils.parametrizations.weight_norm(self.conv1)
+        nn.utils.parametrizations.weight_norm(self.conv2)
 
     def _get_padding(self, kernel_size, dilation):
         return int((kernel_size * dilation - dilation) / 2)
@@ -676,11 +665,7 @@ class StyleTextToSpeech2GeneratorLayer(nn.Module):
         self.reflection_pad = nn.ReflectionPad1d((1, 0)) if reflection_pad else nn.Identity()
 
         # apply weight norm
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        weight_norm(self.up)
+        nn.utils.parametrizations.weight_norm(self.up)
 
     def _noise_conv_out_length(self, input_lengths):
         if input_lengths is None:
@@ -780,11 +765,7 @@ class StyleTextToSpeech2Generator(nn.Module):
         )
 
         # apply weight norm
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        weight_norm(self.conv_post)
+        nn.utils.parametrizations.weight_norm(self.conv_post)
 
     def _stft_output_length(self, length):
         return 1 + length // self.hop_length
@@ -938,13 +919,9 @@ class StyleTextToSpeech2Decoder(StyleTextToSpeech2PretrainedModel):
         )
 
         # apply weight norm
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        weight_norm(self.pitch_conv)
-        weight_norm(self.energy_conv)
-        weight_norm(self.acoustic_residual)
+        nn.utils.parametrizations.weight_norm(self.pitch_conv)
+        nn.utils.parametrizations.weight_norm(self.energy_conv)
+        nn.utils.parametrizations.weight_norm(self.acoustic_residual)
 
     def forward(
         self,
