@@ -455,7 +455,6 @@ class SamHQModel(SamModel):
 
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
 
-
     def __init__(self, config):
         super().__init__(config)
         self.vision_encoder = SamHQVisionEncoder(config.vision_config)
