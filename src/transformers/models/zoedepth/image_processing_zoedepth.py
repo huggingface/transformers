@@ -474,7 +474,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             outputs_flipped ([`ZoeDepthDepthEstimatorOutput`], *optional*):
                 Raw outputs of the model from flipped input (averaged out in the end).
             do_remove_padding (`bool`, *optional*):
-                By default ZoeDepth addes padding equal to `int(√(height / 2) * 3)` (and similarly for width) to fix the
+                By default ZoeDepth adds padding equal to `int(√(height / 2) * 3)` (and similarly for width) to fix the
                 boundary artifacts in the output depth map, so we need remove this padding during post_processing. The
                 parameter exists here in case the user changed the image preprocessing to not include padding.
 

@@ -1297,7 +1297,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
     ):
         """
         Autoregressive model on either lyric tokens or music tokens, or both. The attention pattern should be properly
-        set fro each configuration.
+        set for each configuration.
 
         Args:
             config (`JukeboxPriorConfig`):
