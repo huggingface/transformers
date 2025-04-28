@@ -1756,6 +1756,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
             self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self.image_token_index = config.image_token_index  # mostly for testing purposes
         self.adapter = MolmoAdapterModel._from_config(config.pooling_config)
 
         self.post_init()

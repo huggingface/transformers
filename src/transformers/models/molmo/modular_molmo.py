@@ -1295,6 +1295,7 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
 
     def __init__(self, config: MolmoConfig):
         super().__init__(config)
+        self.image_token_index = config.image_token_index  # mostly for testing purposes
         self.adapter = MolmoAdapterModel._from_config(config.pooling_config)
 
         self.language_model = MolmoForCausalLM._from_config(config.text_config)

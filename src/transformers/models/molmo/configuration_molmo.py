@@ -241,7 +241,7 @@ class MolmoTextConfig(PretrainedConfig):
             Vocabulary size of the Molmo model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`MolmoTextModel`]
         additional_embedding_size (`int`, *optional*, defaults to 0):
-            Size of extra embeddings in molmo models. Weights are not tied in Molmo models and the word embeddings are larger than the lm_head.
+            Optional size of extra embeddings in molmo models. Weights are not tied in Molmo models and the word embeddings are larger than the lm_head.
         intermediate_size (`int`, *optional*, defaults to 37888):
             Dimension of the MLP representations.
         hidden_act (`str` or `function`, *optional*, defaults to `"swiglu"`):
@@ -351,7 +351,7 @@ class MolmoTextConfig(PretrainedConfig):
         num_hidden_layers=28,
         head_dim=128,
         vocab_size=152192,
-        additional_embedding_size=0,
+        additional_embedding_size=128,
         intermediate_size=37888,
         hidden_act="swiglu",
         max_position_embeddings=4096,
