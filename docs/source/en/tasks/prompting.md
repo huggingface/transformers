@@ -78,32 +78,67 @@ Crafting a good prompt alone, also known as zero-shot prompting, may not be enou
 
 This section covers a few prompting techniques.
 
-### Few-shot
+### Few-shot Prompting
 
-Few-shot prompting improves accuracy and performance by including specific examples of what a model should generate given an input. The explicit examples give the model a better understanding of the task and the output format you're looking for. Try experimenting with different numbers of examples (2, 4, 8, etc.) to see how it affects performance.
+Few-shot prompting improves accuracy and performance by including specific examples of what a model should generate given an input. The explicit examples give the model a better understanding of the task and the output format you’re looking for. Try experimenting with different numbers of examples (2, 4, 8, etc.) to see how it affects performance. The example below provides the model with 1 example (1-shot) of the output format (a date in MM/DD/YYYY format) it should return.
 
-The example below provides the model with 1 example (1-shot) of the output format (a date in MM/DD/YYYY format) it should return.
-
-```py
+```python
 from transformers import pipeline
 import torch
 
 pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
 prompt = """Text: The first human went into space and orbited the Earth on April 12, 1961.
 Date: 04/12/1961
-Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
+Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon.
 Date:"""
 
 outputs = pipeline(prompt, max_new_tokens=12, do_sample=True, top_k=10)
 for output in outputs:
     print(f"Result: {output['generated_text']}")
-Result: Text: The first human went into space and orbited the Earth on April 12, 1961.
-Date: 04/12/1961
-Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
-Date: 09/28/1960
+# Result: Text: The first human went into space and orbited the Earth on April 12, 1961.
+# Date: 04/12/1961
+# Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon.
+# Date: 09/28/1960
 ```
 
-The downside of few-shot prompting is that you need to create lengthier prompts which increases computation and latency. There is also a limit to prompt lengths. Finally, a model can learn unintended patterns from your examples and it doesn't work well on complex reasoning tasks.
+The downside of few-shot prompting is that you need to create lengthier prompts which increases computation and latency. There is also a limit to prompt lengths. Finally, a model can learn unintended patterns from your examples and it doesn’t work well on complex reasoning tasks.
+
+**Structuring Few-Shot Examples for Chat-Trained Models**
+
+Many modern instruction-tuned Large Language Models, like the one in the example above (Mistral-7B-Instruct-v0.1), are trained on datasets that resemble conversations. These datasets often distinguish between turns taken by a "user" providing instructions or questions and an "assistant" providing responses. Some datasets also include a "system" role for initial guidance.
+
+To better align with the training of these models and potentially improve performance when using few-shot examples, you can structure your prompts using the model's specific **chat template**. The `apply_chat_template` method in the Hugging Face Transformers library facilitates this by formatting your input as a list of dictionaries, each representing a turn with a `"role"` and `"content"`.
+
+Here's how the previous 1-shot example can be restructured using the chat template:
+
+```python
+from transformers import pipeline
+import torch
+
+pipeline = pipeline(model="mistralai/Mistral-7B-Instruct-v0.1", torch_dtype=torch.bfloat16, device_map="auto")
+
+messages = [
+    {"role": "user", "content": "Text: The first human went into space and orbited the Earth on April 12, 1961."},
+    {"role": "assistant", "content": "Date: 04/12/1961"},
+    {"role": "user", "content": "Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon."}
+]
+
+prompt = pipeline.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+
+outputs = pipeline(prompt, max_new_tokens=12, do_sample=True, top_k=10)
+
+for output in outputs:
+    print(f"Result: {output['generated_text']}")
+```
+
+In this revised approach, the few-shot example (the first text-date pair) is represented by a "user" turn and an "assistant" turn. The subsequent input for the model to complete is another "user" turn. The `apply_chat_template` method then formats these turns into the appropriate input for the Mistral model.
+
+While the original few-shot prompting approach embedded examples within a single text string, using the chat template format can offer benefits by more closely mirroring the model's training:
+
+* **Potentially Improved Understanding:** The model might better recognize the pattern and the expected roles of user input and assistant output.
+* **More Consistent Output:** Structuring the input according to the model's training can lead to more reliable adherence to the desired output format.
+
+When working with different instruction-tuned models, it's crucial to consult their specific documentation to understand their recommended chat template and how to best structure your few-shot examples using this format.
 
 ### Chain-of-thought
 
