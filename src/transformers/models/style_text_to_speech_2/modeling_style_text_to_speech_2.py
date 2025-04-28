@@ -504,17 +504,17 @@ class StyleTextToSpeech2AdainResBlockLayer(nn.Module):
         return int((kernel_size * dilation - dilation) / 2)
     
     def forward(self, hidden_states, style, input_lengths):
-        x = self.norm1(hidden_states, style, input_lengths)
-        x = x + (1 / self.alpha1) * (torch.sin(self.alpha1 * x) ** 2)
-        x = self.conv1(x.transpose(1, 2)).transpose(1, 2)
-        x = _mask_hidden_states(x, input_lengths)
+        residual = self.norm1(hidden_states, style, input_lengths)
+        residual = residual + (1 / self.alpha1) * (torch.sin(self.alpha1 * residual) ** 2)
+        residual = self.conv1(residual.transpose(1, 2)).transpose(1, 2)
+        residual = _mask_hidden_states(residual, input_lengths)
 
-        x = self.norm2(x, style, input_lengths)
-        x = x + (1 / self.alpha2) * (torch.sin(self.alpha2 * x) ** 2)
-        x = self.conv2(x.transpose(1, 2)).transpose(1, 2)
-        x = _mask_hidden_states(x, input_lengths)
+        residual = self.norm2(residual, style, input_lengths)
+        residual = residual + (1 / self.alpha2) * (torch.sin(self.alpha2 * residual) ** 2)
+        residual = self.conv2(residual.transpose(1, 2)).transpose(1, 2)
+        residual = _mask_hidden_states(residual, input_lengths)
     
-        return x + hidden_states
+        return residual + hidden_states
 
 
 class StyleTextToSpeech2AdainResBlock(nn.Module):
