@@ -441,7 +441,6 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
     def _merge_input_ids_with_image_features(
         self,
         image_features,
-        feature_lens,
         inputs_embeds,
         input_ids,
         attention_mask,
@@ -530,6 +529,10 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
         """
         image_token_index = image_token_index if image_token_index is not None else self.config.image_token_index
         ignore_index = ignore_index if ignore_index is not None else self.config.ignore_index
+
+        feature_lens = [elem.shape[0] for elem in image_features]
+        image_features = torch.cat(image_features, 0)
+        feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features.device)
 
         with torch.no_grad():
             num_images = feature_lens.size(0)
@@ -748,7 +751,7 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
                         raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
                 if self.config.vision_config.img_anyres_strategy == "global":
-                    selected_image_features = []
+                    flattened_image_features = []
                     # NOTE: both _image_sizes_list and _pixel_values_list are lists of lists, each item represents an training instance with one or multiple images
                     for idx, (image_size_for_instance, pixel_values_for_instance) in enumerate(zip(_image_sizes_list, _pixel_values_list)):
                         assert len(image_size_for_instance) == len(pixel_values_for_instance), f"{len(image_size_for_instance)} != {len(pixel_values_for_instance)}"
@@ -760,7 +763,7 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
                             selected_image_feature = self.multi_modal_projector(selected_image_feature)
                             if "mm_use_row_seperator" not in self.config.vision_config or self.config.vision_config.mm_use_row_seperator:
                                 selected_image_feature = torch.cat((selected_image_feature, self.multi_modal_projector.row_seperator.repeat(selected_image_feature.shape[0],1,1)), dim=1)
-                            selected_image_features.append(selected_image_feature.flatten(0, 1))
+                            flattened_image_features.append(selected_image_feature.flatten(0, 1))
                 elif self.config.vision_config.img_anyres_strategy == "crop":
                     # calculate number of crops for each instance in the batch given _image_sizes_list
                     _image_sizes_list_temp = sum(_image_sizes_list, [])
@@ -772,22 +775,17 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
 
                     num_crops_list = [_image_size[0]*_image_size[1] for _image_size in _image_sizes_list_temp]
                     image_features_split = torch.split(image_features, num_crops_list, dim=0)
-                    selected_image_features = []
+                    flattened_image_features = []
                     for image_feature, image_size in zip(image_features_split, _image_sizes_list_temp):
                         image_feature = image_feature.view(image_size[0], image_size[1], *image_feature.shape[1:])
                         image_feature = image_feature.permute(0, 2, 1, 3, 4).flatten(2, 3).flatten(0, 1)
                         if "mm_use_row_seperator" not in self.config.vision_config or self.config.vision_config.mm_use_row_seperator:
                             image_feature = torch.cat((image_feature, self.multi_modal_projector.row_seperator.repeat(image_feature.shape[0],1,1)), dim=1)
-                        selected_image_features.append(image_feature.flatten(0, 1))
+                        flattened_image_features.append(image_feature.flatten(0, 1))
 
                 # NOTE we only support multimodal_patch_merge_type == "spatial_unpad"
-                feature_lens = [elem.shape[0] for elem in selected_image_features]        
-                image_features = torch.cat(selected_image_features, 0)
-                feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features.device)
-                
                 inputs_embeds, attention_mask, position_ids, labels = self._merge_input_ids_with_image_features(
-                    image_features,
-                    feature_lens,
+                    flattened_image_features,
                     inputs_embeds,
                     input_ids,
                     attention_mask,

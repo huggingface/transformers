@@ -51,7 +51,7 @@ class MagmaProcessor(ProcessorMixin):
     def __call__(
         self,
         text: Union[TextInput, List[TextInput]],
-        images: Union[ImageInput, List[ImageInput]],
+        images: Union[ImageInput, List[ImageInput]] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
