@@ -53,13 +53,13 @@ class HindiCausalLMGenerationConfig(GenerationConfig):
     def __init__(
         self,
         max_length=128,
-        temperature=0.7,  # Maintained default
+        temperature=0.7, # Maintained default
         top_k=50,
         top_p=0.9,
         do_sample=True,
-        pad_token_id=0,  # Default based on provided config
-        bos_token_id=1,  # Default based on provided config
-        eos_token_id=2,  # Default based on provided config
+        pad_token_id=0, # Default based on provided config
+        bos_token_id=1, # Default based on provided config
+        eos_token_id=2, # Default based on provided config
         repetition_penalty=1.1,
         **kwargs,
     ):

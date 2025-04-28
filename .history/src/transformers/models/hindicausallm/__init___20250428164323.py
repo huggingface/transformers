@@ -24,7 +24,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_hindicausallm": ["HindiCausalLMConfig"],
-    "generation_config_hindicausallm": ["HindiCausalLMGenerationConfig"],  # Added generation config
+    "generation_config_hindicausallm": ["HindiCausalLMGenerationConfig"], # Added generation config
 }
 
 try:

@@ -115,16 +115,16 @@ class HindiCausalLMConfig(PretrainedConfig):
         hidden_act="silu",
         max_position_embeddings=512,
         initializer_range=0.02,
-        rms_norm_eps=1e-5,  # Renamed from layer_norm_eps
+        rms_norm_eps=1e-5, # Renamed from layer_norm_eps
         use_cache=True,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
         tie_word_embeddings=True,
         rope_theta=10000.0,
-        attention_bias=False,  # Added attention_bias
+        attention_bias=False, # Added attention_bias
         attention_dropout=0.0,
-        cache_implementation="dynamic",  # Added cache_implementation
+        cache_implementation="dynamic", # Added cache_implementation
         **kwargs,
     ):
         self.vocab_size = vocab_size
