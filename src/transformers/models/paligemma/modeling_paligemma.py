@@ -49,7 +49,6 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
     sequence_length: int,
     target_length: int,
     dtype: torch.dtype,
-    device: torch.device,
     min_dtype: float,
     cache_position: torch.Tensor,
     batch_size: int,
@@ -70,8 +69,6 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
             The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
         dtype (`torch.dtype`):
             The dtype to use for the 4D attention mask.
-        device (`torch.device`):
-            The device to place the 4D attention mask on.
         min_dtype (`float`):
             The minimum value representable with the dtype `dtype`.
         cache_position (`torch.Tensor`):
@@ -85,7 +82,9 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
         # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
         causal_mask = attention_mask
     else:
-        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+        causal_mask = torch.full(
+            (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
+        )
         # Causal diagonal mask only if training, otherwise attend to the whole prefix. Training-specific attn for prefix is handled below
         if sequence_length != 1:
             if is_training:
