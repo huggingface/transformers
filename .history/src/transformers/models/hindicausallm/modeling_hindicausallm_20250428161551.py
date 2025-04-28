@@ -40,10 +40,11 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "HindiCausalLMConfig"
 
 
+
 class HindiCausalLMLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-5):  # Changed default eps to match config
         """
-        HindiCausalLMLayerNorm is equivalent to T5LayerNorm
+        HindiCausalLMLayerNorm is equivalent to T5LayerNorm or LlamaRMSNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -56,6 +57,7 @@ class HindiCausalLMLayerNorm(nn.Module):
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         output = self.weight * hidden_states  # Removed bias addition
         return output.to(input_dtype)
+
 
 
 class HindiCausalLMRotaryEmbedding(nn.Module):
@@ -95,6 +97,7 @@ class HindiCausalLMRotaryEmbedding(nn.Module):
         )
 
 
+# Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -102,6 +105,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -124,6 +128,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+# Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -140,7 +145,7 @@ class HindiCausalLMAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper with GQA and RoPE"""
 
     # Updated to use Cache and DynamicCache
-
+    # Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->HindiCausalLM, modifications for config names
     def __init__(self, config: HindiCausalLMConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -261,6 +266,7 @@ class HindiCausalLMAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaMLP with Llama->HindiCausalLM
 class HindiCausalLMMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -276,6 +282,7 @@ class HindiCausalLMMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->HindiCausalLM
 class HindiCausalLMDecoderLayer(nn.Module):
     def __init__(self, config: HindiCausalLMConfig, layer_idx: int):
         super().__init__()
@@ -473,6 +480,7 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
         config: HindiCausalLMConfig
     """
 
+    # Adapted from transformers.models.llama.modeling_llama.LlamaModel
     def __init__(self, config: HindiCausalLMConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -629,6 +637,7 @@ class HindiCausalLMModel(HindiCausalLMPreTrainedModel):
     HINDICAUSALLM_START_DOCSTRING,
 )
 class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
+    # Adapted from transformers.models.llama.modeling_llama.LlamaForCausalLM
     _tied_weights_keys = ["lm_head.weight"]  # specify tied weights
 
     def __init__(self, config):
@@ -747,6 +756,7 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    # Adapted from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
@@ -792,6 +802,7 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
         return model_inputs
 
     @staticmethod
+    # Adapted from transformers.models.llama.modeling_llama.LlamaForCausalLM._reorder_cache
     def _reorder_cache(past_key_values: Cache, beam_idx: torch.LongTensor) -> Cache:
         if past_key_values is None:
             logger.warning(
@@ -817,6 +828,7 @@ class HindiCausalLMForCausalLM(HindiCausalLMPreTrainedModel):
     HINDICAUSALLM_START_DOCSTRING,
 )
 class HindiCausalLMForSequenceClassification(HindiCausalLMPreTrainedModel):
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
