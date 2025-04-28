@@ -1313,19 +1313,9 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Ensure tensors are on the same device
-            shift_labels = shift_labels.to(shift_logits.device)
             loss = self.loss_function(
-                shift_logits,
-                shift_labels,
+                logits,
+                labels,
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
