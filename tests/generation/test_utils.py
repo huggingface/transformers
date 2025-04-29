@@ -33,6 +33,7 @@ from transformers.testing_utils import (
     CaptureLogger,
     is_flaky,
     require_accelerate,
+    require_deterministic_for_xpu,
     require_flash_attn,
     require_optimum_quanto,
     require_read_token,
@@ -1991,6 +1992,7 @@ class GenerationTesterMixin:
                     )
 
     @parameterized.expand([("offloaded",)])  # ("offloaded_static",) TODO: @raushan fixme in some models (eg T5)
+    @require_deterministic_for_xpu
     @require_torch_accelerator
     @pytest.mark.generate
     def test_offloaded_cache_implementation(self, cache_implementation):
