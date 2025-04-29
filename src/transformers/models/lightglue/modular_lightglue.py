@@ -19,7 +19,6 @@ import torch
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 
-from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -27,6 +26,7 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from ..auto import CONFIG_MAPPING
 from ..auto.modeling_auto import AutoModelForKeypointDetection
+from ..clip.modeling_clip import CLIPMLP
 from ..cohere.modeling_cohere import apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 
@@ -146,6 +146,7 @@ class LightGlueConfig(PretrainedConfig):
         self.keypoint_detector_config = keypoint_detector_config
 
         self.hidden_size = descriptor_dim
+        self.intermediate_size = descriptor_dim * 2
         self.hidden_act = hidden_act
         self.attention_dropout = attention_dropout
         self.attention_bias = attention_bias
@@ -317,20 +318,17 @@ class LightGlueAttention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class LightGlueMLP(nn.Module):
+class LightGlueMLP(CLIPMLP):
     def __init__(self, config: LightGlueConfig):
-        super().__init__()
-        hidden_size = config.hidden_size
-        self.dense = nn.Linear(2 * hidden_size, 2 * hidden_size)
-        self.layer_norm = nn.LayerNorm(2 * hidden_size, elementwise_affine=True)
-        self.activation = ACT2FN[config.hidden_act]
-        self.output = nn.Linear(2 * hidden_size, hidden_size)
+        super().__init__(config)
+        self.fc1 = nn.Linear(config.intermediate_size, config.intermediate_size)
+        self.layer_norm = nn.LayerNorm(config.intermediate_size, elementwise_affine=True)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
+        hidden_states = self.fc1(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.output(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
         return hidden_states
 
 

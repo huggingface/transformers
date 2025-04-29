@@ -53,14 +53,14 @@ def verify_model_outputs(model, device):
 
     predicted_number_of_matches = torch.sum(outputs.matches[0][0] != -1).item()
 
-    expected_max_number_keypoints = 865
+    expected_max_number_keypoints = 866
     expected_matches_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
     expected_matching_scores_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
 
     expected_matches_values = torch.tensor([-1, -1, 5, -1, -1, 19, -1, 10, -1, 11], dtype=torch.int64).to(device)
     expected_matching_scores_values = torch.tensor([0, 0, 0.2997, 0, 0, 0.6762, 0, 0.8826, 0, 0.5583]).to(device)
 
-    expected_number_of_matches = 141
+    expected_number_of_matches = 140
 
     assert outputs.matches.shape == expected_matches_shape
     assert outputs.matching_scores.shape == expected_matching_scores_shape
@@ -75,15 +75,15 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"posenc.Wr": r"positional_encoder.projector",
     r"self_attn.(\d+).Wqkv": r"transformer_layers.\1.self_attention_block.Wqkv",
     r"self_attn.(\d+).out_proj": r"transformer_layers.\1.self_attention_block.attention.o_proj",
-    r"self_attn.(\d+).ffn.0": r"transformer_layers.\1.self_attention_block.mlp.dense",
+    r"self_attn.(\d+).ffn.0": r"transformer_layers.\1.self_attention_block.mlp.fc1",
     r"self_attn.(\d+).ffn.1": r"transformer_layers.\1.self_attention_block.mlp.layer_norm",
-    r"self_attn.(\d+).ffn.3": r"transformer_layers.\1.self_attention_block.mlp.output",
+    r"self_attn.(\d+).ffn.3": r"transformer_layers.\1.self_attention_block.mlp.fc2",
     r"cross_attn.(\d+).to_qk": r"transformer_layers.\1.cross_attention_block.to_qk",
     r"cross_attn.(\d+).to_v": r"transformer_layers.\1.cross_attention_block.attention.v_proj",
     r"cross_attn.(\d+).to_out": r"transformer_layers.\1.cross_attention_block.attention.o_proj",
-    r"cross_attn.(\d+).ffn.0": r"transformer_layers.\1.cross_attention_block.mlp.dense",
+    r"cross_attn.(\d+).ffn.0": r"transformer_layers.\1.cross_attention_block.mlp.fc1",
     r"cross_attn.(\d+).ffn.1": r"transformer_layers.\1.cross_attention_block.mlp.layer_norm",
-    r"cross_attn.(\d+).ffn.3": r"transformer_layers.\1.cross_attention_block.mlp.output",
+    r"cross_attn.(\d+).ffn.3": r"transformer_layers.\1.cross_attention_block.mlp.fc2",
     r"log_assignment.(\d+).matchability": r"match_assignment_layers.\1.matchability",
     r"log_assignment.(\d+).final_proj": r"match_assignment_layers.\1.final_projection",
     r"token_confidence.(\d+).token.0": r"token_confidence.\1.token",

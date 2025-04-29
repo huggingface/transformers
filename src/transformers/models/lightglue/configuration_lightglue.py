@@ -133,6 +133,7 @@ class LightGlueConfig(PretrainedConfig):
         self.keypoint_detector_config = keypoint_detector_config
 
         self.hidden_size = descriptor_dim
+        self.intermediate_size = descriptor_dim * 2
         self.hidden_act = hidden_act
         self.attention_dropout = attention_dropout
         self.attention_bias = attention_bias

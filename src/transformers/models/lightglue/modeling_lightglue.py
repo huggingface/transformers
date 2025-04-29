@@ -257,17 +257,17 @@ class LightGlueAttention(nn.Module):
 class LightGlueMLP(nn.Module):
     def __init__(self, config: LightGlueConfig):
         super().__init__()
-        hidden_size = config.hidden_size
-        self.dense = nn.Linear(2 * hidden_size, 2 * hidden_size)
-        self.layer_norm = nn.LayerNorm(2 * hidden_size, elementwise_affine=True)
-        self.activation = ACT2FN[config.hidden_act]
-        self.output = nn.Linear(2 * hidden_size, hidden_size)
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.intermediate_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.layer_norm = nn.LayerNorm(config.intermediate_size, elementwise_affine=True)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
+        hidden_states = self.fc1(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.output(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
         return hidden_states
 
 
