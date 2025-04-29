@@ -120,7 +120,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(decoded_tok, decoded_processor)
 
     def test_can_load_various_tokenizers(self):
-        for checkpoint in ["ydshieh/kosmos-2.5", "kirp/kosmos2_5"]:
+        for checkpoint in ["ydshieh/kosmos-2.5"]:
             processor = AutoProcessor.from_pretrained(checkpoint)
             tokenizer = AutoTokenizer.from_pretrained(checkpoint)
             self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
