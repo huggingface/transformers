@@ -836,26 +836,18 @@ def _load_state_dict_into_meta_model(
 
     return disk_offload_index, cpu_offload_index
 
+def resolve_state_dict_tensor_refs(model_to_load, state_dict, expected_keys):
+    state_dict_tensor_refs = {}
 
-def resolve_state_dict_modules(model_to_load, state_dict, expected_keys):
-    state_dict_modules = {}
-
-    for tensor_name in state_dict.keys():
-        if tensor_name not in expected_keys:
+    for full_tensor_name in state_dict.keys():
+        if full_tensor_name not in expected_keys:
             continue
 
-        splits = tensor_name.split(".")
-        module = model_to_load
-        for split in splits:
-            try:
-                module = getattr(module, split)
-            except Exception as exception:
-                print(exception)
-                pass
+        module, tensor_name = get_module_from_name(model_to_load, full_tensor_name)
 
-        state_dict_modules[tensor_name] = module
+        state_dict_tensor_refs[full_tensor_name] = getattr(module, tensor_name)
 
-    return state_dict_modules
+    return state_dict_tensor_refs
 
 # This function is in global scope so it's picklable for multiprocessing
 def load_shard_file(args):
@@ -938,12 +930,12 @@ def load_shard_file(args):
         )
     # We now figure out what in the state dict changed and store the module used for each layer, this will contain the device
     # information we need in order to resolve all of the layers after multiprocessing which we write back to the original model_to_load meta model
-    state_dict_modules = resolve_state_dict_modules(model_to_load, state_dict, expected_keys)
+    state_dict_tensor_refs = resolve_state_dict_tensor_refs(model_to_load, state_dict, expected_keys)
 
     # force memory release if loading multiple shards, to avoid having 2 state dicts in memory in next loop
     del state_dict
 
-    return error_msgs, disk_offload_index, cpu_offload_index, state_dict_modules
+    return error_msgs, disk_offload_index, cpu_offload_index, state_dict_tensor_refs
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
     if variant is not None:
@@ -5050,7 +5042,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         error_msgs = []
 
         # Use multiprocessing Pool for parallel execution, off by default
-        if json.loads(os.environ.get("HF_ENABLE_PARALLEL_LOADING", "false")):
+        if json.loads(os.environ.get("HF_ENABLE_PARALLEL_LOADING", "false")) and not is_deepspeed_zero3_enabled():
             original_start_method = multiprocessing.get_start_method(allow_none=True)
 
             try:
@@ -5063,7 +5055,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 num_workers = min(len(args_list), num_workers)
 
                 logger.info(f"Loading model weights in parallel with {num_workers} workers...")
-                state_dict_modules_list = []
+                state_dict_tensor_refs_list = []
 
                 with multiprocessing.Pool(processes=num_workers) as pool:
                     # For nice tqdm bars
@@ -5074,12 +5066,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                                 _error_msgs,
                                 disk_offload_index,
                                 cpu_offload_index,
-                                state_dict_modules,
+                                state_dict_tensor_refs,
                             ) = result
 
                             error_msgs += _error_msgs
 
-                            state_dict_modules_list.append(state_dict_modules)
+                            state_dict_tensor_refs_list.append(state_dict_tensor_refs)
 
                             pbar.update(1)
 
@@ -5088,14 +5080,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 # This is required because model_to_load is pickled when using multiprocessing, which means the ref to model_to_load is different for each worker, so you only get some of the state with respect to the loaded tensors
                 # You could in theory return each worker's copy of the model and use .named_parameters(), and .named_buffers(), but this appears to be more robust
                 # in that all you have to care about are the names of the layers in the state dict, as long as the logic that lead to the creation of the state_dict is correct, this will also be correct
-                for state_dict_modules in state_dict_modules_list:
-                    for full_name, param in state_dict_modules.items():
-                        *module_path, attr_name = full_name.split(".")
-                        module_path = ".".join(module_path)
-                        module = model_to_load.get_submodule(module_path)
-                        setattr(module, attr_name, param)
+                for state_dict_tensor_refs in state_dict_tensor_refs_list:
+                    for full_tensor_name, tensor in state_dict_tensor_refs.items():
+                        module, tensor_name = get_module_from_name(model_to_load, full_tensor_name)
+                        setattr(module, tensor_name, tensor)
 
-                del state_dict_modules_list
+                del state_dict_tensor_refs_list
                 gc.collect()
             finally:
                 # Restore the start method to prevent side effects for other code that may be running
@@ -5107,12 +5097,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 args_list = logging.tqdm(args_list, desc="Loading checkpoint shards")
 
             for args in args_list:
-                _error_msgs, disk_offload_index, cpu_offload_index, state_dict_modules = (
+                _error_msgs, disk_offload_index, cpu_offload_index, state_dict_tensor_refs = (
                     load_shard_file(args)
                 )
                 error_msgs += _error_msgs
 
-                del state_dict_modules
+                del state_dict_tensor_refs
                 gc.collect()
 
         # Adjust offloaded weights name and save if needed
