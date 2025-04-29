@@ -102,23 +102,32 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxialiary loss coefficient
         shared_intermediate_size (`int`, *optional*, defaults to 0): intermediate size for shared experts. 0 implies
             no shared experts.
-        #TODO : Add the following.
-        normalization_function=None,
-        position_embedding_type="nope",
-        init_method="mup",
-        layer_types=None,
-        mamba_n_heads=128,
-        mamba_n_groups=1,
-        mamba_d_state=256,
-        mamba_d_head="auto",
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_chunk_size=256,
-        mamba_conv_bias=True,
-        mamba_proj_bias=False,
-        logits_to_keep=1,
-
-
+        position_embedding_type (`str`): positional embedding type to be used.
+            # TODO - probably should pass `None` instead of "nope" and add explanation of what that means.
+        layer_types (`List`): list of strins to be used as layer types.
+            Allowed choices: "mamba", "attention".
+        mamba_n_heads (`int`, *optional*, defaults to 128):
+            The number of mamba heads used in the v2 implementation.
+        mamba_n_groups (`int`, *optional*, defaults to 1):
+            The number of the mamba groups used in the v2 implementation.
+        mamba_d_state (`int`, *optional*, defaults to 256):
+            The dimension the mamba state space latents
+        mamba_d_head (`int`, *optional*, defaults to `"auto"`):
+            Head embedding dimension size
+        mamba_d_conv (`int`, *optional*, defaults to 4):
+            The size of the mamba convolution kernel
+        mamba_expand (`int`, *optional*, defaults to 2):
+            Expanding factor (relative to hidden_size) used to determine the mamba intermediate size
+        mamba_chunk_size (`int`, *optional*, defaults to 256):
+            The chunks in which to break the sequence when doing prefill/training
+        mamba_conv_bias (`bool`, *optional*, defaults to `True`):
+            Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
+        mamba_proj_bias (`bool`, *optional*, defaults to `False`):
+            Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
+        logits_to_keep (`int`, *optional*, defaults to 1):
+            The number of logits to keep. TODO this should probably not be here,
+            move to forward () time arg and figure out how it applies to this
+            model output type.
     ```python
     >>> from transformers import GraniteMoeHybridModel, GraniteMoeHybridConfig
 
@@ -131,7 +140,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
     ```"""
 
     model_type = "granitemoehybrid"
-    # what is this?
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -164,9 +172,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         shared_intermediate_size=0,
-        normalization_function=None,
         position_embedding_type="nope",
-        init_method="mup",
         # layer types should be a List of str
         layer_types=None,
         # took defaults from bamba config
@@ -212,10 +218,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.shared_intermediate_size = shared_intermediate_size
-        # new variables
-        self.normalization_function = normalization_function
         self.position_embedding_type = position_embedding_type
-        self.init_method = init_method
 
         mamba_intermediate = mamba_expand * hidden_size
 

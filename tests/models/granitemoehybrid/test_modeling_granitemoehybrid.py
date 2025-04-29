@@ -74,7 +74,6 @@ class GraniteMoeHybridModelTester:
         shared_intermediate_size=174,
         normalization_function=None,
         position_embedding_type="nope",
-        init_method="mup",
         # layer types should be a List of str
         layer_types=None,
         # took defaults from bamba config
@@ -127,7 +126,6 @@ class GraniteMoeHybridModelTester:
         self.shared_intermediate_size = shared_intermediate_size
         self.normalization_function = normalization_function
         self.position_embedding_type = position_embedding_type
-        self.init_method = init_method
         # layer types should be a List of str
         self.layer_types = layer_types
         # took defaults from bamba config
