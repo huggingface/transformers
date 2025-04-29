@@ -314,7 +314,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         inputs = tokenizer(["Here's everything I know about cats. Cats"], return_tensors="pt").to(model.device)
 
         set_seed(0)
-        gen_out= model.generate(**inputs, do_sample=True, max_new_tokens=256)
+        gen_out = model.generate(**inputs, do_sample=True, max_new_tokens=256)
 
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         expected_text = (
