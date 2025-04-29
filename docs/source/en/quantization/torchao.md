@@ -304,7 +304,7 @@ output_text = tokenizer.batch_decode(
 print(output_text)
 ```
 
-#### 1. Quantizing different layers with different quantization configs
+#### 2. Quantizing different layers with different quantization configs
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
