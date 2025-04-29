@@ -81,14 +81,16 @@ class PerceptionLMProcessor(ProcessorMixin):
         patch_size=None,
         vision_feature_select_strategy=None,
         chat_template=None,
-        image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
+        image_token="<|image|>",  # set the default and let users change if they have peculiar special tokens in rare cases
         num_additional_image_tokens=0,
+        pooling_ratio=2,
         **kwargs,
     ):
         self.patch_size = patch_size
         self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.pooling_ratio = pooling_ratio
         self.image_token_id = (
             tokenizer.image_token_id
             if getattr(tokenizer, "image_token_id", None)
@@ -147,6 +149,7 @@ class PerceptionLMProcessor(ProcessorMixin):
             **kwargs,
         )
         if images is not None:
+            print("image_processor class", self.image_processor.__class__)
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
@@ -161,13 +164,14 @@ class PerceptionLMProcessor(ProcessorMixin):
         if image_inputs.get("pixel_values") is not None:
             # Replace the image token with the expanded image token sequence
             pixel_values = image_inputs["pixel_values"]
+            print("pixel_values", pixel_values.shape)
             height, width = get_image_size(to_numpy_array(pixel_values[0]))
-            num_image_tokens = (height // self.patch_size) * (
-                width // self.patch_size
-            ) + self.num_additional_image_tokens
-            if self.vision_feature_select_strategy == "default":
-                num_image_tokens -= 1
-
+            num_tiles = pixel_values[0].shape[0]
+            num_image_tokens = (height // self.patch_size // self.pooling_ratio) * (
+                width // self.patch_size // self.pooling_ratio
+            ) * num_tiles
+            print("num_image_tokens", num_image_tokens)
+            print("self.image_token", self.image_token)
             prompt_strings = []
             for sample in text:
                 sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
