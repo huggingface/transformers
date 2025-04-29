@@ -450,10 +450,10 @@ class DinoDetrDeformableTransformerOutput(ModelOutput):
             used to compute the weighted average in the cross-attention heads.
     """
 
-    hs: torch.FloatTensor = None
-    references: torch.FloatTensor = None
-    hs_enc: torch.FloatTensor = None
-    ref_enc: torch.FloatTensor = None
+    hidden_states: torch.FloatTensor = None
+    reference_points: torch.FloatTensor = None
+    hidden_states_encoder: torch.FloatTensor = None
+    reference_points_encoder: torch.FloatTensor = None
     init_box_proposal: torch.FloatTensor = None
     encoder_states: torch.FloatTensor = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1970,8 +1970,8 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         self,
         pixel_values,
         pixel_masks,
+        pixel_position_embeddings,
         query_reference_points,
-        query_positional_embeddings,
         queries,
         attn_mask=None,
         return_dict: Optional[bool] = None,
@@ -1996,7 +1996,7 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         mask_flatten = []
         level_pos_embed_flatten = []
         spatial_shapes_list = []
-        for level, (src, mask, pos_embed) in enumerate(zip(pixel_values, pixel_masks, query_positional_embeddings)):
+        for level, (src, mask, pos_embed) in enumerate(zip(pixel_values, pixel_masks, pixel_position_embeddings)):
             batch_size, c, height, width = src.shape
             spatial_shape = (height, width)
             spatial_shapes_list.append(spatial_shape)
@@ -2163,11 +2163,14 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             output_attentions=output_attentions,
         )
         if not return_dict:
-            hs, references = outputs_decoder_part[0], outputs_decoder_part[1]
+            hidden_states, reference_points = (
+                outputs_decoder_part[0],
+                outputs_decoder_part[1],
+            )
             if output_attentions:
                 decoder_attentions = outputs_decoder_part[-1]
         else:
-            hs, references = (
+            hidden_states, reference_points = (
                 outputs_decoder_part["intermediate"],
                 outputs_decoder_part["ref_points"],
             )
@@ -2177,24 +2180,24 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         # Postprocess
         if self.two_stage_type == "standard":
             if self.two_stage_keep_all_tokens:
-                hs_enc = output_memory.unsqueeze(0)
-                ref_enc = enc_outputs_coord_unselected.unsqueeze(0)
+                hidden_states_encoder = output_memory.unsqueeze(0)
+                reference_points_encoder = enc_outputs_coord_unselected.unsqueeze(0)
                 init_box_proposal = output_proposals
 
             else:
-                hs_enc = queries_undetach.unsqueeze(0)
-                ref_enc = query_reference_points_undetach.sigmoid().unsqueeze(0)
+                hidden_states_encoder = queries_undetach.unsqueeze(0)
+                reference_points_encoder = query_reference_points_undetach.sigmoid().unsqueeze(0)
         else:
-            hs_enc = ref_enc = None
+            hidden_states_encoder = reference_points_encoder = None
 
         if not return_dict:
             return tuple(
                 v
                 for v in [
-                    hs,
-                    references,
-                    hs_enc,
-                    ref_enc,
+                    hidden_states,
+                    reference_points,
+                    hidden_states_encoder,
+                    reference_points_encoder,
                     init_box_proposal,
                     encoder_states,
                     encoder_attentions,
@@ -2203,10 +2206,10 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
                 # if v is not None
             )
         return DinoDetrDeformableTransformerOutput(
-            hs=hs,
-            references=references,
-            hs_enc=hs_enc,
-            ref_enc=ref_enc,
+            hidden_states=hidden_states,
+            reference_points=reference_points,
+            hidden_states_encoder=hidden_states_encoder,
+            reference_points_encoder=reference_points_encoder,
             init_box_proposal=init_box_proposal,
             encoder_states=encoder_states,
             encoder_attentions=encoder_attentions,
@@ -2290,60 +2293,19 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
     _no_split_modules = None
 
     def __init__(self, config: DinoDetrConfig):
-        """
-        backbone,
-        transformer,
-        num_classes,
-        num_queries,
-        aux_loss=False,
-        query_dim=2,
-        random_refpoints_xy=False,
-        fix_refpoints_hw=-1,
-        num_feature_levels=1,
-        num_heads=8,
-        # two stage
-        two_stage_type="no",  # ['no', 'standard']
-        two_stage_add_query_num=0,
-        dec_pred_class_embed_share=True,
-        dec_pred_bbox_embed_share=True,
-        two_stage_class_embed_share=True,
-        two_stage_bbox_embed_share=True,
-        decoder_sa_type="sa",
-        num_patterns=0,
-        dn_number=100,
-        dn_box_noise_scale=0.4,
-        dn_label_noise_ratio=0.5,
-        dn_labelbook_size=100,
-        """
         super().__init__(config)
         # create deformable transformer
         self.transformer = DinoDetrDeformableTransformer(config=config)
-        self.num_queries = config.num_queries
-        self.num_classes = config.num_classes
-        self.d_model = d_model = self.transformer.d_model
-        self.num_feature_levels = config.num_feature_levels
-        self.num_heads = config.num_heads
         self.label_enc = nn.Embedding(config.dn_labelbook_size + 1, config.d_model)
-
-        # setting query dim
-        self.query_dim = config.query_dim
-        self.random_refpoints_xy = config.random_refpoints_xy
-        self.fix_refpoints_hw = config.fix_refpoints_hw
-
-        # for dn training
-        self.num_patterns = config.num_patterns
-        self.dn_number = config.dn_number
-        self.dn_box_noise_scale = config.dn_box_noise_scale
-        self.dn_label_noise_ratio = config.dn_label_noise_ratio
-        self.dn_labelbook_size = config.dn_labelbook_size
 
         # Create backbone + positional encoding
         backbone = DinoDetrConvEncoder(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = DinoDetrConvModel(backbone, position_embeddings)
         self.output_hidden_states = config.output_hidden_states
+        d_model = config.d_model
 
-        # prepare input projection layers
+        # Prepare input projection layers
         if config.num_feature_levels > 1:
             num_backbone_outs = len(self.backbone.num_channels)
             input_proj_list = []
@@ -2380,18 +2342,13 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 ]
             )
 
-        self.aux_loss = config.auxiliary_loss
-
-        # prepare pred layers
-        self.dec_pred_class_embed_share = config.dec_pred_class_embed_share
-        self.dec_pred_bbox_embed_share = config.dec_pred_bbox_embed_share
-        # prepare class & box embed
+        # Prepare class & box embed
         self.class_embed = nn.Linear(config.d_model, config.num_classes)
         self.bbox_embed = DinoDetrMLPPredictionHead(d_model, d_model, 4, 3)
         # init the two embed layers
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
-        self.class_embed.bias.data = torch.ones(self.num_classes) * bias_value
+        self.class_embed.bias.data = torch.ones(config.num_classes) * bias_value
         nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
         nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
 
@@ -2406,9 +2363,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         self.transformer.decoder.bbox_embed = self.bbox_embed
         self.transformer.decoder.class_embed = self.class_embed
 
-        # two stage
-        self.two_stage_type = config.two_stage_type
-        self.two_stage_add_query_num = config.two_stage_add_query_num
+        # Adjust embeddings based on two stage approach
         if config.two_stage_type != "no":
             if config.two_stage_bbox_embed_share:
                 self.transformer.enc_out_bbox_embed = self.bbox_embed[0]
@@ -2420,11 +2375,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
             else:
                 self.transformer.enc_out_class_embed = copy.deepcopy(self.class_embed[0])
 
-            self.refpoint_embed = None
-            if self.two_stage_add_query_num > 0:
-                self.init_ref_points(config.two_stage_add_query_num)
-
-        self.decoder_sa_type = config.decoder_sa_type
         if config.decoder_sa_type == "ca_label":
             self.label_embedding = nn.Embedding(config.num_classes, d_model)
             for layer in self.transformer.decoder.layers:
@@ -2442,30 +2392,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         for proj in self.input_proj:
             nn.init.xavier_uniform_(proj[0].weight, gain=1)
             nn.init.constant_(proj[0].bias, 0)
-
-    def init_ref_points(self, use_num_queries):
-        self.refpoint_embed = nn.Embedding(use_num_queries, self.query_dim)
-        if self.random_refpoints_xy:
-            self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
-            self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
-            self.refpoint_embed.weight.data[:, :2].requires_grad = False
-
-        if self.fix_refpoints_hw > 0:
-            print("fix_refpoints_hw: {}".format(self.fix_refpoints_hw))
-            self.refpoint_embed.weight.data[:, 2:] = self.fix_refpoints_hw
-            self.refpoint_embed.weight.data[:, 2:] = inverse_sigmoid(self.refpoint_embed.weight.data[:, 2:])
-            self.refpoint_embed.weight.data[:, 2:].requires_grad = False
-        elif int(self.fix_refpoints_hw) == -1:
-            pass
-        elif int(self.fix_refpoints_hw) == -2:
-            print("learn a shared h and w")
-            self.refpoint_embed = nn.Embedding(use_num_queries, 2)
-            self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
-            self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
-            self.refpoint_embed.weight.data[:, :2].requires_grad = False
-            self.hw_embed = nn.Embedding(1, 1)
-        else:
-            raise NotImplementedError("Unknown fix_refpoints_hw {}".format(self.fix_refpoints_hw))
 
     @add_start_docstrings_to_model_forward(DINO_DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DinoDetrModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -2515,56 +2441,62 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
 
-        features, poss = self.backbone(pixel_values, pixel_mask)
+        features, position_embeddings = self.backbone(pixel_values, pixel_mask)
         srcs = []
         masks = []
-        for l, (src, mask) in enumerate(features):
-            srcs.append(self.input_proj[l](src))
+        for level, (src, mask) in enumerate(features):
+            srcs.append(self.input_proj[level](src))
             masks.append(mask)
-        if self.num_feature_levels > len(srcs):
-            _len_srcs = len(srcs)
-            for l in range(_len_srcs, self.num_feature_levels):
-                if l == _len_srcs:
-                    src = self.input_proj[l](features[-1][0])
+        if self.config.num_feature_levels > len(srcs):
+            srcs_length = len(srcs)
+            for additional_level in range(srcs_length, self.config.num_feature_levels):
+                if additional_level == srcs_length:
+                    src = self.input_proj[additional_level](features[-1][0])
                 else:
-                    src = self.input_proj[l](srcs[-1])
-                m = pixel_mask
-                mask = F.interpolate(m[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
-                pos_l = self.backbone.position_embedding(src, mask).to(src.dtype)
+                    src = self.input_proj[additional_level](srcs[-1])
+                mask = F.interpolate(pixel_mask[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
+                additional_position_embedding = self.backbone.position_embedding(src, mask).to(src.dtype)
                 srcs.append(src)
                 masks.append(mask)
-                poss.append(pos_l)
+                position_embeddings.append(additional_position_embedding)
 
-        if self.dn_number > 0 and labels is not None:
-            input_query_label, input_query_bbox, attn_mask, dn_meta = prepare_for_cdn(
+        if self.config.dn_number > 0 and labels is not None:
+            queries, query_reference_points, attn_mask, dn_meta = prepare_for_cdn(
                 dn_args=(
                     labels,
-                    self.dn_number,
-                    self.dn_label_noise_ratio,
-                    self.dn_box_noise_scale,
+                    self.config.dn_number,
+                    self.config.dn_label_noise_ratio,
+                    self.config.dn_box_noise_scale,
                 ),
                 training=self.training,
-                num_queries=self.num_queries,
-                num_classes=self.num_classes,
-                d_model=self.d_model,
+                num_queries=self.config.num_queries,
+                num_classes=self.config.num_classes,
+                d_model=self.config.d_model,
                 label_enc=self.label_enc,
                 device=device,
             )
         else:
-            input_query_bbox = input_query_label = attn_mask = dn_meta = None
+            queries = query_reference_points = attn_mask = dn_meta = None
 
         outputs_transformer_part = self.transformer(
-            srcs,
-            masks,
-            input_query_bbox,
-            poss,
-            input_query_label,
-            attn_mask,
+            pixel_values=srcs,
+            pixel_masks=masks,
+            pixel_position_embeddings=position_embeddings,
+            query_reference_points=query_reference_points,
+            queries=queries,
+            attn_mask=attn_mask,
             return_dict=return_dict,
             output_attentions=output_attentions,
         )
         if not return_dict:
-            hs, reference, hs_enc, ref_enc, init_box_proposal, encoder_states = (
+            (
+                hidden_states,
+                reference_points,
+                hidden_states_encoder,
+                reference_points_encoder,
+                init_box_proposal,
+                encoder_states,
+            ) = (
                 outputs_transformer_part[0],
                 outputs_transformer_part[1],
                 outputs_transformer_part[2],
@@ -2576,11 +2508,18 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
                 encoder_attentions = outputs_transformer_part[-2]
                 decoder_attentions = outputs_transformer_part[-1]
         else:
-            hs, reference, hs_enc, ref_enc, init_box_proposal, encoder_states = (
-                outputs_transformer_part["hs"],
-                outputs_transformer_part["references"],
-                outputs_transformer_part["hs_enc"],
-                outputs_transformer_part["ref_enc"],
+            (
+                hidden_states,
+                reference_points,
+                hidden_states_encoder,
+                reference_points_encoder,
+                init_box_proposal,
+                encoder_states,
+            ) = (
+                outputs_transformer_part["hidden_states"],
+                outputs_transformer_part["reference_points"],
+                outputs_transformer_part["hidden_states_encoder"],
+                outputs_transformer_part["reference_points_encoder"],
                 outputs_transformer_part["init_box_proposal"],
                 outputs_transformer_part["encoder_states"],
             )
@@ -2592,30 +2531,34 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
             return tuple(
                 v
                 for v in [
-                    hs[-1],
-                    hs,
-                    reference,
-                    hs_enc,
-                    ref_enc,
+                    hidden_states[-1],
+                    hidden_states,
+                    reference_points,
+                    hidden_states_encoder,
+                    reference_points_encoder,
                     init_box_proposal,
                     dn_meta,
-                    hs if output_hidden_states or self.output_hidden_states else None,
-                    (encoder_states if output_hidden_states or self.output_hidden_states else None),
+                    (hidden_states if output_hidden_states or self.config.output_hidden_states else None),
+                    (encoder_states if output_hidden_states or self.config.output_hidden_states else None),
                     encoder_attentions,
                     decoder_attentions,
                 ]
                 if v is not None
             )
         return DinoDetrModelOutput(
-            last_hidden_state=hs[-1],
-            hidden_states=hs,
-            references=reference,
-            encoder_last_hidden_state=hs_enc,
-            encoder_reference=ref_enc,
+            last_hidden_state=hidden_states[-1],
+            hidden_states=hidden_states,
+            references=reference_points,
+            encoder_last_hidden_state=hidden_states_encoder,
+            encoder_reference=reference_points_encoder,
             init_box_proposal=init_box_proposal,
             denoising_meta=dn_meta,
-            decoder_hidden_states=(hs if output_hidden_states or self.output_hidden_states else None),
-            encoder_hidden_states=(encoder_states if output_hidden_states or self.output_hidden_states else None),
+            decoder_hidden_states=(
+                hidden_states if output_hidden_states or self.config.output_hidden_states else None
+            ),
+            encoder_hidden_states=(
+                encoder_states if output_hidden_states or self.config.output_hidden_states else None
+            ),
             encoder_attentions=encoder_attentions,
             decoder_attentions=decoder_attentions,
         )
@@ -2783,16 +2726,16 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                 for layer_cls_embed, layer_hs in zip(self.model.transformer.decoder.class_embed, hs)
             ]
         )
-        if self.model.dn_number > 0 and dn_meta is not None:
+        if self.config.dn_number > 0 and dn_meta is not None:
             outputs_class, outputs_coord_list = dn_post_process(
                 outputs_class,
                 outputs_coord_list,
                 dn_meta,
-                self.model.aux_loss,
+                self.config.auxiliary_loss,
                 self._set_aux_loss,
             )
         out = {"logits": outputs_class[-1], "pred_boxes": outputs_coord_list[-1]}
-        if self.model.aux_loss:
+        if self.config.auxiliary_loss:
             out["aux_outputs"] = self._set_aux_loss(outputs_class, outputs_coord_list)
 
         # for encoder output
