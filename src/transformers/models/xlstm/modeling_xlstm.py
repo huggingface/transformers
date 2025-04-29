@@ -43,17 +43,10 @@ if is_xlstm_available():
     external_xlstm = True
 else:
     from abc import ABC, abstractmethod
-    from dataclasses import field
     from functools import partial
     from typing import Callable, Literal
 
     from .configuration_xlstm import (
-        BackendModeType,
-        ChunkwiseKernelType,
-        DtypeType,
-        SequenceKernelType,
-        StepKernelType,
-        WeightModeType,
         round_up_to_next_multiple_of,
     )
 
@@ -1425,6 +1418,15 @@ class xLSTMModel(xLSTMPreTrainedModel):
         self.blocks = nn.ModuleList([mLSTMBlock(config) for _ in range(config.num_blocks)])
 
         self.gradient_checkpointing = False
+        # actually unused, but needed in external integration
+        _ = (
+            config.add_out_norm,
+            config.tie_word_embeddings,
+            config.chunkwise_kernel,
+            config.sequence_kernel,
+            config.step_kernel,
+        )
+
         self.out_norm = RMSNorm(config.embedding_dim, eps=config.norm_eps)
         # Initialize weights and apply final processing
         self.post_init()
