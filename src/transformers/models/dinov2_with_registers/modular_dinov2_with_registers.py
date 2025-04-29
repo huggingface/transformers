@@ -344,7 +344,7 @@ class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
 
         cls_token = sequence_output[:, 0]
         # cls and register tokens should not be included in patch tokens variable
-        patch_tokens = sequence_output[:, 1 + self.config.num_register_tokens:]
+        patch_tokens = sequence_output[:, 1 + self.config.num_register_tokens :]
 
         linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
 
