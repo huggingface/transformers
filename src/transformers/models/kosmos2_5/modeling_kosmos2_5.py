@@ -885,7 +885,7 @@ class Kosmos2_5TextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Kosmos2_5TextBlock(nn.Module):
+class Kosmos2_5TextBlock(GradientCheckpointingLayer):
     def __init__(self, config: Kosmos2_5TextConfig, layer_idx: int):
         super().__init__()
         self.embed_dim = config.embed_dim
@@ -949,7 +949,7 @@ class Kosmos2_5TextBlock(nn.Module):
 
 
 # Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextTransformer with Kosmos2->Kosmos2_5
-class Kosmos2_5TextTransformer(GradientCheckpointingLayer):
+class Kosmos2_5TextTransformer(nn.Module):
     """
     Transformer decoder consisting of `config.layers` layers. Each layer is a [`Kosmos2_5TextBlock`].
     Here we doesn't have cross attention.
