@@ -915,13 +915,12 @@ class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
     def forward(**super_kwargs):
         """
         ```python
-        >>> from transformers import AutoImageProcessor, DFineForObjectDetection
-        >>> from PIL import Image
-        >>> import requests
         >>> import torch
+        >>> from transformers.image_utils import load_image
+        >>> from transformers import AutoImageProcessor, DFineForObjectDetection
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = load_image(url)
 
         >>> image_processor = AutoImageProcessor.from_pretrained("ustc-community/dfine_x_coco")
         >>> model = DFineForObjectDetection.from_pretrained("ustc-community/dfine_x_coco")
@@ -942,21 +941,19 @@ class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
 
         >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
-        ...     0
-        ... ]
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)
+        >>> result = results[0]  # first image in batch
 
-        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+        >>> for score, label, box in zip(result["scores"], result["labels"], result["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(
         ...         f"Detected {model.config.id2label[label.item()]} with confidence "
         ...         f"{round(score.item(), 3)} at location {box}"
         ...     )
-        Detected cat with confidence 0.96 [344.4865,  23.4047, 639.8372, 374.2650]
-        Detected cat with confidence 0.96 [11.7123,  53.5185, 316.6395, 472.3320]
-        Detected remote with confidence 0.95 [40.4605,  73.6995, 175.6157, 117.5686]
-        Detected sofa with confidence 0.92 [0.58968, 1.88410, 640.25000, 474.74000]
-        Detected remote with confidence 0.89 [333.4805,  77.0410, 370.7715, 187.2985]
+        Detected cat with confidence 0.958 at location [344.49, 23.4, 639.84, 374.27]
+        Detected cat with confidence 0.956 at location [11.71, 53.52, 316.64, 472.33]
+        Detected remote with confidence 0.947 at location [40.46, 73.7, 175.62, 117.57]
+        Detected sofa with confidence 0.918 at location [0.59, 1.88, 640.25, 474.74]
         ```
         """
         super().forward(**super_kwargs)

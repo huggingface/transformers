@@ -31,15 +31,13 @@ The original code can be found [here](https://github.com/Peterande/D-FINE).
 
 ## Usage tips 
 
-```py
+```python
 >>> import torch
->>> import requests
-
->>> from PIL import Image
+>>> from transformers.image_utils import load_image
 >>> from transformers import DFineForObjectDetection, AutoImageProcessor
 
 >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
->>> image = Image.open(requests.get(url, stream=True).raw)
+>>> image = load_image(url)
 
 >>> image_processor = AutoImageProcessor.from_pretrained("ustc-community/dfine_x_coco")
 >>> model = DFineForObjectDetection.from_pretrained("ustc-community/dfine_x_coco")
@@ -49,18 +47,19 @@ The original code can be found [here](https://github.com/Peterande/D-FINE).
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
 
->>> results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([(image.height, image.width)]), threshold=0.5)
+>>> results = image_processor.post_process_object_detection(outputs, target_sizes=[(image.height, image.width)], threshold=0.5)
 
 >>> for result in results:
 ...     for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
 ...         score, label = score.item(), label_id.item()
 ...         box = [round(i, 2) for i in box.tolist()]
 ...         print(f"{model.config.id2label[label]}: {score:.2f} {box}")
-cat: 0.96 [344.4865,  23.4047, 639.8372, 374.2650]
-cat: 0.96 [11.7123,  53.5185, 316.6395, 472.3320]
-remote: 0.95 [40.4605,  73.6995, 175.6157, 117.5686]
-sofa: 0.92 [0.58968, 1.88410, 640.25000, 474.74000]
-remote: 0.89 [333.4805,  77.0410, 370.7715, 187.2985]
+cat: 0.96 [344.49, 23.4, 639.84, 374.27]
+cat: 0.96 [11.71, 53.52, 316.64, 472.33]
+remote: 0.95 [40.46, 73.7, 175.62, 117.57]
+sofa: 0.92 [0.59, 1.88, 640.25, 474.74]
+remote: 0.89 [333.48, 77.04, 370.77, 187.3]
+```
 
 ## DFineConfig
 
