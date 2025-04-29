@@ -59,7 +59,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("donut-swin", "DonutFeatureExtractor"),
         ("dpt", "DPTFeatureExtractor"),
         ("encodec", "EncodecFeatureExtractor"),
-        ("xcodec2", "XCodec2FeatureExtractor"),
         ("flava", "FlavaFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
         ("granite_speech", "GraniteSpeechFeatureExtractor"),
@@ -113,6 +112,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("wavlm", "Wav2Vec2FeatureExtractor"),
         ("whisper", "WhisperFeatureExtractor"),
         ("xclip", "CLIPFeatureExtractor"),
+        ("xcodec2", "XCodec2FeatureExtractor"),
         ("yolos", "YolosFeatureExtractor"),
     ]
 )

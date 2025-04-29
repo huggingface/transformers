@@ -19,8 +19,8 @@ import argparse
 import torch
 
 from transformers import (
-    XCodec2Config,
     EncodecFeatureExtractor,
+    XCodec2Config,
     XCodec2Model,
     logging,
 )

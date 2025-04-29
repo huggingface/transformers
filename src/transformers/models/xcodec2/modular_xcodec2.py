@@ -1,46 +1,36 @@
-from typing import Callable, List, Optional, Tuple, Union;
+import math
+import random
+from contextlib import nullcontext
+from functools import partial, wraps
+from math import ceil
+from typing import List, Optional, Tuple
 
+import numpy as np
 import torch
-import torch.utils.checkpoint
-from torch import nn
-import torch
-from torch import Tensor, int32
-from torch import sin, sinc
-import torch.nn as nn
-from torch.nn import Parameter, Module
 import torch.distributed as dist
 import torch.nn.functional as F
-from functools import wraps, partial
-import math
-from math import ceil
-import numpy as np
-from torch.nn.utils import weight_norm, remove_weight_norm
-import random
+import torch.utils.checkpoint
+from torch import int32, nn, sin, sinc
 from torch.amp import autocast
-from .configuration_xcodec2 import XCodec2Config
-from typing import List, Tuple
-from contextlib import nullcontext
-from ...activations import ACT2FN
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from torch.nn import Module, Parameter
+from torch.nn.utils import weight_norm
+
 from ...cache_utils import Cache
-from ...processing_utils import Unpack
+from ...modeling_utils import PreTrainedModel
 from ...utils import is_torch_flex_attn_available, logging
-from ..auto.feature_extraction_auto import AutoFeatureExtractor
 from ..auto import AutoModel
+from ..auto.feature_extraction_auto import AutoFeatureExtractor
 from ..llama.modeling_llama import (
     LlamaAttention,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
     LlamaDecoderLayer,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
 )
 from .configuration_xcodec2 import XCodec2Config
 
-if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
 
-    from ...integrations.flex_attention import make_flex_block_causal_mask
+if is_torch_flex_attn_available():
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -49,26 +39,30 @@ logger = logging.get_logger(__name__)
 class XCodec2Attention(LlamaAttention):
     pass
 
+
 class XCodec2RMSNorm(LlamaRMSNorm):
     pass
+
 
 class XCodec2RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
+
 class XCodec2MLP(nn.Module):
-    def __init__(self, config: XCodec2Config): # Use your specific config
+    def __init__(self, config: XCodec2Config):  # Use your specific config
         super().__init__()
         dim = config.hidden_size
 
-        self.fc1 = nn.Linear(dim, 4*dim, bias=False) # Assuming no bias like original
-        self.silu = nn.SiLU() # Or ACT2FN[config.hidden_act] if using config activation
-        self.fc2 = nn.Linear(4*dim, dim, bias=False) # Assuming no bias
+        self.fc1 = nn.Linear(dim, 4 * dim, bias=False)  # Assuming no bias like original
+        self.silu = nn.SiLU()  # Or ACT2FN[config.hidden_act] if using config activation
+        self.fc2 = nn.Linear(4 * dim, dim, bias=False)  # Assuming no bias
 
     def forward(self, x):
         x = self.fc1(x)
         x = self.silu(x)
         x = self.fc2(x)
         return x
+
 
 class XCodec2DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: XCodec2Config, layer_idx: int):
@@ -79,28 +73,26 @@ class XCodec2DecoderLayer(LlamaDecoderLayer):
         self.input_layernorm = XCodec2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = XCodec2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-
     # Override forward to enforce non-causal attention
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None, # This is the mask PASSED TO the layer
+        attention_mask: Optional[torch.Tensor] = None,  # This is the mask PASSED TO the layer
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False, # Non-causal typically doesn't use KV cache
+        use_cache: Optional[bool] = False,  # Non-causal typically doesn't use KV cache
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs, # Catches potential FlashAttention kwargs etc.
+        **kwargs,  # Catches potential FlashAttention kwargs etc.
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-
         if use_cache:
             logger.warning_once("KV Caching (`use_cache=True`) is typically not used with non-causal attention.")
             # Depending on use case, you might want to force use_cache = False here
             # or ensure the caching mechanism handles non-causal correctly (unlikely with standard KV cache).
 
         residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states) # Use potentially overridden norm
+        hidden_states = self.input_layernorm(hidden_states)  # Use potentially overridden norm
 
         # --- Self Attention (using parent's LlamaAttention instance) ---
         # We need to pass an attention_mask to self.self_attn that is *NOT* causal.
@@ -113,22 +105,22 @@ class XCodec2DecoderLayer(LlamaDecoderLayer):
         # We create a mask that only accounts for padding if present.
         non_causal_attn_mask = None
         if attention_mask is not None:
-             # Check if the input mask handles padding (e.g., has 0s).
-             # This is a basic check; robust padding handling might need more.
-             if (attention_mask == 0).any():
-                 # Keep the original mask if it seems to handle padding.
-                 # WARNING: If this mask ALSO encodes causality, this won't work as intended.
-                 # A better approach might be to reconstruct the padding mask from input_ids
-                 # if available higher up, or assume the passed mask is ONLY for padding.
-                 non_causal_attn_mask = attention_mask
-             # If the mask exists but doesn't seem to have padding (all 1s),
-             # and we want non-causal, set it to None.
-             # else: non_causal_attn_mask = None # Already initialized to None
+            # Check if the input mask handles padding (e.g., has 0s).
+            # This is a basic check; robust padding handling might need more.
+            if (attention_mask == 0).any():
+                # Keep the original mask if it seems to handle padding.
+                # WARNING: If this mask ALSO encodes causality, this won't work as intended.
+                # A better approach might be to reconstruct the padding mask from input_ids
+                # if available higher up, or assume the passed mask is ONLY for padding.
+                non_causal_attn_mask = attention_mask
+            # If the mask exists but doesn't seem to have padding (all 1s),
+            # and we want non-causal, set it to None.
+            # else: non_causal_attn_mask = None # Already initialized to None
 
         # Call the LlamaAttention forward method
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=non_causal_attn_mask, # <<< Pass the non-causal mask
+            attention_mask=non_causal_attn_mask,  # <<< Pass the non-causal mask
             position_ids=position_ids,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
@@ -145,8 +137,8 @@ class XCodec2DecoderLayer(LlamaDecoderLayer):
 
         # --- Fully Connected ---
         residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states) # Use potentially overridden norm
-        hidden_states = self.mlp(hidden_states) # Use potentially overridden MLP
+        hidden_states = self.post_attention_layernorm(hidden_states)  # Use potentially overridden norm
+        hidden_states = self.mlp(hidden_states)  # Use potentially overridden MLP
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -158,11 +150,13 @@ class XCodec2DecoderLayer(LlamaDecoderLayer):
 
         return outputs
 
+
 def WNConv1d(*args, **kwargs):
     return weight_norm(nn.Conv1d(*args, **kwargs))
 
+
 class XCodec2SnakeBeta(nn.Module):
-    '''
+    """
     A modified Snake function which uses separate parameters for the magnitude of the periodic components
     Shape:
         - Input: (B, C, T)
@@ -177,9 +171,10 @@ class XCodec2SnakeBeta(nn.Module):
         >>> a1 = snakebeta(256)
         >>> x = torch.randn(256)
         >>> x = a1(x)
-    '''
+    """
+
     def __init__(self, in_features, alpha=1.0, alpha_trainable=True, alpha_logscale=False):
-        '''
+        """
         Initialization.
         INPUT:
             - in_features: shape of the input
@@ -188,16 +183,16 @@ class XCodec2SnakeBeta(nn.Module):
         alpha is initialized to 1 by default, higher values = higher-frequency.
         beta is initialized to 1 by default, higher values = higher-magnitude.
         alpha will be trained along with the rest of your model.
-        '''
+        """
         super(XCodec2SnakeBeta, self).__init__()
         self.in_features = in_features
 
         # initialize alpha
         self.alpha_logscale = alpha_logscale
-        if self.alpha_logscale: # log scale alphas initialized to zeros
+        if self.alpha_logscale:  # log scale alphas initialized to zeros
             self.alpha = Parameter(torch.zeros(in_features) * alpha)
             self.bias = Parameter(torch.zeros(in_features) * alpha)
-        else: # linear scale alphas initialized to ones
+        else:  # linear scale alphas initialized to ones
             self.alpha = Parameter(torch.ones(in_features) * alpha)
             self.bias = Parameter(torch.ones(in_features) * alpha)
 
@@ -207,12 +202,12 @@ class XCodec2SnakeBeta(nn.Module):
         self.no_div_by_zero = 0.000000001
 
     def forward(self, x):
-        '''
+        """
         Forward pass of the function.
         Applies the function to the input elementwise.
         SnakeBeta ∶= x + 1/b * sin^2 (xa)
-        '''
-        alpha = self.alpha.unsqueeze(0).unsqueeze(-1) # line up with x to [B, C, T]
+        """
+        alpha = self.alpha.unsqueeze(0).unsqueeze(-1)  # line up with x to [B, C, T]
         beta = self.bias.unsqueeze(0).unsqueeze(-1)
         if self.alpha_logscale:
             alpha = torch.exp(alpha)
@@ -221,24 +216,25 @@ class XCodec2SnakeBeta(nn.Module):
 
         return x
 
-def kaiser_sinc_filter1d(cutoff, half_width, kernel_size): # return filter [1,1,kernel_size]
-    even = (kernel_size % 2 == 0)
+
+def kaiser_sinc_filter1d(cutoff, half_width, kernel_size):  # return filter [1,1,kernel_size]
+    even = kernel_size % 2 == 0
     half_size = kernel_size // 2
 
-    #For kaiser window
+    # For kaiser window
     delta_f = 4 * half_width
     A = 2.285 * (half_size - 1) * math.pi * delta_f + 7.95
-    if A > 50.:
+    if A > 50.0:
         beta = 0.1102 * (A - 8.7)
-    elif A >= 21.:
-        beta = 0.5842 * (A - 21)**0.4 + 0.07886 * (A - 21.)
+    elif A >= 21.0:
+        beta = 0.5842 * (A - 21) ** 0.4 + 0.07886 * (A - 21.0)
     else:
-        beta = 0.
+        beta = 0.0
     window = torch.kaiser_window(kernel_size, beta=beta, periodic=False)
 
     # ratio = 0.5/cutoff -> 2 * cutoff = 1 / ratio
     if even:
-        time = (torch.arange(-half_size, half_size) + 0.5)
+        time = torch.arange(-half_size, half_size) + 0.5
     else:
         time = torch.arange(kernel_size) - half_size
     if cutoff == 0:
@@ -254,22 +250,24 @@ def kaiser_sinc_filter1d(cutoff, half_width, kernel_size): # return filter [1,1,
 
 
 class LowPassFilter1d(nn.Module):
-    def __init__(self,
-                 cutoff=0.5,
-                 half_width=0.6,
-                 stride: int = 1,
-                 padding: bool = True,
-                 padding_mode: str = 'replicate',
-                 kernel_size: int = 12):
+    def __init__(
+        self,
+        cutoff=0.5,
+        half_width=0.6,
+        stride: int = 1,
+        padding: bool = True,
+        padding_mode: str = "replicate",
+        kernel_size: int = 12,
+    ):
         # kernel_size should be even number for stylegan3 setup,
         # in this implementation, odd number is also possible.
         super().__init__()
-        if cutoff < -0.:
+        if cutoff < -0.0:
             raise ValueError("Minimum cutoff must be larger than zero.")
         if cutoff > 0.5:
             raise ValueError("A cutoff above 0.5 does not make sense.")
         self.kernel_size = kernel_size
-        self.even = (kernel_size % 2 == 0)
+        self.even = kernel_size % 2 == 0
         self.pad_left = kernel_size // 2 - int(self.even)
         self.pad_right = kernel_size // 2
         self.stride = stride
@@ -278,18 +276,17 @@ class LowPassFilter1d(nn.Module):
         filter = kaiser_sinc_filter1d(cutoff, half_width, kernel_size)
         self.register_buffer("filter", filter)
 
-    #input [B, C, T]
+    # input [B, C, T]
     def forward(self, x):
         _, C, _ = x.shape
 
         if self.padding:
-            x = F.pad(x, (self.pad_left, self.pad_right),
-                      mode=self.padding_mode)
-        out = F.conv1d(x, self.filter.expand(C, -1, -1),
-                       stride=self.stride, groups=C)
+            x = F.pad(x, (self.pad_left, self.pad_right), mode=self.padding_mode)
+        out = F.conv1d(x, self.filter.expand(C, -1, -1), stride=self.stride, groups=C)
 
         return out
-    
+
+
 class UpSample1d(nn.Module):
     def __init__(self, ratio=2, kernel_size=None):
         super().__init__()
@@ -299,19 +296,16 @@ class UpSample1d(nn.Module):
         self.pad = self.kernel_size // ratio - 1
         self.pad_left = self.pad * self.stride + (self.kernel_size - self.stride) // 2
         self.pad_right = self.pad * self.stride + (self.kernel_size - self.stride + 1) // 2
-        filter = kaiser_sinc_filter1d(cutoff=0.5 / ratio,
-                                      half_width=0.6 / ratio,
-                                      kernel_size=self.kernel_size)
+        filter = kaiser_sinc_filter1d(cutoff=0.5 / ratio, half_width=0.6 / ratio, kernel_size=self.kernel_size)
         self.register_buffer("filter", filter)
 
     # x: [B, C, T]
     def forward(self, x):
         _, C, _ = x.shape
 
-        x = F.pad(x, (self.pad, self.pad), mode='replicate')
-        x = self.ratio * F.conv_transpose1d(
-            x, self.filter.expand(C, -1, -1), stride=self.stride, groups=C)
-        x = x[..., self.pad_left:-self.pad_right]
+        x = F.pad(x, (self.pad, self.pad), mode="replicate")
+        x = self.ratio * F.conv_transpose1d(x, self.filter.expand(C, -1, -1), stride=self.stride, groups=C)
+        x = x[..., self.pad_left : -self.pad_right]
 
         return x
 
@@ -321,23 +315,20 @@ class DownSample1d(nn.Module):
         super().__init__()
         self.ratio = ratio
         self.kernel_size = int(6 * ratio // 2) * 2 if kernel_size is None else kernel_size
-        self.lowpass = LowPassFilter1d(cutoff=0.5 / ratio,
-                                       half_width=0.6 / ratio,
-                                       stride=ratio,
-                                       kernel_size=self.kernel_size)
+        self.lowpass = LowPassFilter1d(
+            cutoff=0.5 / ratio, half_width=0.6 / ratio, stride=ratio, kernel_size=self.kernel_size
+        )
 
     def forward(self, x):
         xx = self.lowpass(x)
 
         return xx
-    
+
+
 class Activation1d(nn.Module):
-    def __init__(self,
-                 activation,
-                 up_ratio: int = 2,
-                 down_ratio: int = 2,
-                 up_kernel_size: int = 12,
-                 down_kernel_size: int = 12):
+    def __init__(
+        self, activation, up_ratio: int = 2, down_ratio: int = 2, up_kernel_size: int = 12, down_kernel_size: int = 12
+    ):
         super().__init__()
         self.up_ratio = up_ratio
         self.down_ratio = down_ratio
@@ -353,6 +344,7 @@ class Activation1d(nn.Module):
 
         return x
 
+
 class ResidualUnit(nn.Module):
     def __init__(self, dim: int = 16, dilation: int = 1):
         super().__init__()
@@ -366,14 +358,15 @@ class ResidualUnit(nn.Module):
 
     def forward(self, x):
         return x + self.block(x)
-    
+
+
 class EncoderBlock(nn.Module):
-    def __init__(self, dim: int = 16, stride: int = 1, dilations = (1, 3, 9)):
+    def __init__(self, dim: int = 16, stride: int = 1, dilations=(1, 3, 9)):
         super().__init__()
         runits = [ResidualUnit(dim // 2, dilation=d) for d in dilations]
         self.block = nn.Sequential(
             *runits,
-            Activation1d(activation=XCodec2SnakeBeta(dim//2, alpha_logscale=True)),
+            Activation1d(activation=XCodec2SnakeBeta(dim // 2, alpha_logscale=True)),
             WNConv1d(
                 dim // 2,
                 dim,
@@ -385,47 +378,49 @@ class EncoderBlock(nn.Module):
 
     def forward(self, x):
         return self.block(x)
-    
+
+
 def init_weights(m):
     if isinstance(m, nn.Conv1d):
         nn.init.trunc_normal_(m.weight, std=0.02)
         nn.init.constant_(m.bias, 0)
 
+
 class CodecEncoder_Transformer(nn.Module):
-    def __init__(self,
-                ngf=48,
-                up_ratios=[2, 2, 4, 4, 5],
-                dilations=(1, 3, 9),
-                hidden_dim=1024,
-                depth=12,
-                heads=12,
-                pos_meb_dim=64,
-                ):
+    def __init__(
+        self,
+        ngf=48,
+        up_ratios=[2, 2, 4, 4, 5],
+        dilations=(1, 3, 9),
+        hidden_dim=1024,
+        depth=12,
+        heads=12,
+        pos_meb_dim=64,
+    ):
         super().__init__()
         self.hop_length = np.prod(up_ratios)
-        self.ngf =ngf
+        self.ngf = ngf
         self.up_ratios = up_ratios
- 
+
         d_model = ngf
         self.conv_blocks = [WNConv1d(1, d_model, kernel_size=7, padding=3)]
 
- 
-        for i, stride in enumerate(up_ratios): 
-            d_model *= 2 
+        for i, stride in enumerate(up_ratios):
+            d_model *= 2
             self.conv_blocks += [EncoderBlock(d_model, stride=stride, dilations=dilations)]
- 
+
         self.conv_blocks = nn.Sequential(*self.conv_blocks)
-        self.conv_final_block  = [
-        Activation1d(activation=XCodec2SnakeBeta(d_model, alpha_logscale=True)),
-        WNConv1d(d_model, hidden_dim, kernel_size=3, padding=1),
+        self.conv_final_block = [
+            Activation1d(activation=XCodec2SnakeBeta(d_model, alpha_logscale=True)),
+            WNConv1d(d_model, hidden_dim, kernel_size=3, padding=1),
         ]
         self.conv_final_block = nn.Sequential(*self.conv_final_block)
-        
+
         self.reset_parameters()
 
     def forward(self, x):
         x = self.conv_blocks(x)
-        x =  self.conv_final_block (x)
+        x = self.conv_final_block(x)
         x = x.permute(0, 2, 1)
         return x
 
@@ -459,27 +454,34 @@ class CodecEncoder_Transformer(nn.Module):
 def exists(val):
     return val is not None
 
+
 def first(l):
     return l[0]
+
 
 def default(val, d):
     return val if exists(val) else d
 
+
 def round_up_multiple(num, mult):
     return ceil(num / mult) * mult
 
+
 # distributed helpers
+
 
 def is_distributed():
     return dist.is_initialized() and dist.get_world_size() > 1
 
-def get_maybe_sync_seed(device, max_size = 10_000):
-    rand_int = torch.randint(0, max_size, (), device = device)
+
+def get_maybe_sync_seed(device, max_size=10_000):
+    rand_int = torch.randint(0, max_size, (), device=device)
 
     if is_distributed():
         dist.all_reduce(rand_int)
 
     return rand_int.item()
+
 
 class Backbone(nn.Module):
     """Base class for the generator's backbone. It preserves the same temporal resolution across all layers."""
@@ -495,17 +497,19 @@ class Backbone(nn.Module):
                     and H denotes the model dimension.
         """
         raise NotImplementedError("Subclasses must implement the forward method.")
-    
+
+
 def nonlinearity(x):
     # swish
     return x * torch.sigmoid(x)
 
+
 def Normalize(in_channels, num_groups=32):
     return torch.nn.GroupNorm(num_groups=num_groups, num_channels=in_channels, eps=1e-6, affine=True)
 
+
 class ResnetBlock(nn.Module):
-    def __init__(self, *, in_channels, out_channels=None, conv_shortcut=False,
-                 dropout, temb_channels=512):
+    def __init__(self, *, in_channels, out_channels=None, conv_shortcut=False, dropout, temb_channels=512):
         super().__init__()
         self.in_channels = in_channels
         out_channels = in_channels if out_channels is None else out_channels
@@ -513,36 +517,19 @@ class ResnetBlock(nn.Module):
         self.use_conv_shortcut = conv_shortcut
 
         self.norm1 = Normalize(in_channels)
-        self.conv1 = torch.nn.Conv1d(in_channels,
-                                     out_channels,
-                                     kernel_size=3,
-                                     stride=1,
-                                     padding=1)
+        self.conv1 = torch.nn.Conv1d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
         if temb_channels > 0:
-            self.temb_proj = torch.nn.Linear(temb_channels,
-                                             out_channels)
+            self.temb_proj = torch.nn.Linear(temb_channels, out_channels)
         self.norm2 = Normalize(out_channels)
         self.dropout = torch.nn.Dropout(dropout)
-        self.conv2 = torch.nn.Conv1d(out_channels,
-                                     out_channels,
-                                     kernel_size=3,
-                                     stride=1,
-                                     padding=1)
+        self.conv2 = torch.nn.Conv1d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         if self.in_channels != self.out_channels:
             if self.use_conv_shortcut:
-                self.conv_shortcut = torch.nn.Conv1d(in_channels,
-                                                     out_channels,
-                                                     kernel_size=3,
-                                                     stride=1,
-                                                     padding=1)
+                self.conv_shortcut = torch.nn.Conv1d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
             else:
-                self.nin_shortcut = torch.nn.Conv1d(in_channels,
-                                                    out_channels,
-                                                    kernel_size=1,
-                                                    stride=1,
-                                                    padding=0)
+                self.nin_shortcut = torch.nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
 
-    def forward(self, x, temb=None):            
+    def forward(self, x, temb=None):
         h = x
         h = self.norm1(h)
         h = nonlinearity(h)
@@ -563,7 +550,8 @@ class ResnetBlock(nn.Module):
                 x = self.nin_shortcut(x)
 
         return x + h
-    
+
+
 class VocosBackbone(Backbone):
     """
     Vocos backbone module built with ConvNeXt blocks. Supports additional conditioning with Adaptive Layer Normalization
@@ -580,7 +568,7 @@ class VocosBackbone(Backbone):
 
     def __init__(self, config: XCodec2Config):
         super().__init__()
-    
+
         self.embed = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=7, padding=3)
 
         self.temb_ch = 0
@@ -595,15 +583,20 @@ class VocosBackbone(Backbone):
 
         # Initialize rotary embeddings
         self.rotary_emb = XCodec2RotaryEmbedding(config=config)
-        
+
         # Create transformer layers
-        self.transformers = nn.ModuleList([
-            XCodec2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.transformers = nn.ModuleList(
+            [XCodec2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
         post_net: List[nn.Module] = [
-            ResnetBlock(in_channels=config.hidden_size, out_channels=config.hidden_size, temb_channels=self.temb_ch, dropout=dropout),
+            ResnetBlock(
+                in_channels=config.hidden_size,
+                out_channels=config.hidden_size,
+                temb_channels=self.temb_ch,
+                dropout=dropout,
+            ),
             ResnetBlock(in_channels=block_in, out_channels=block_in, temb_channels=self.temb_ch, dropout=dropout),
         ]
         self.post_net = nn.Sequential(*post_net)
@@ -637,7 +630,7 @@ class VocosBackbone(Backbone):
 
         return x
 
-    
+
 class FourierHead(nn.Module):
     """Base class for inverse fourier modules."""
 
@@ -651,6 +644,7 @@ class FourierHead(nn.Module):
             Tensor: Reconstructed time-domain audio signal of shape (B, T), where T is the length of the output signal.
         """
         raise NotImplementedError("Subclasses must implement the forward method.")
+
 
 class ISTFT(nn.Module):
     """
@@ -707,13 +701,19 @@ class ISTFT(nn.Module):
         # Overlap and Add
         output_size = (T - 1) * self.hop_length + self.win_length
         y = torch.nn.functional.fold(
-            ifft, output_size=(1, output_size), kernel_size=(1, self.win_length), stride=(1, self.hop_length),
+            ifft,
+            output_size=(1, output_size),
+            kernel_size=(1, self.win_length),
+            stride=(1, self.hop_length),
         )[:, 0, 0, pad:-pad]
 
         # Window envelope
         window_sq = self.window.square().expand(1, T, -1).transpose(1, 2)
         window_envelope = torch.nn.functional.fold(
-            window_sq, output_size=(1, output_size), kernel_size=(1, self.win_length), stride=(1, self.hop_length),
+            window_sq,
+            output_size=(1, output_size),
+            kernel_size=(1, self.win_length),
+            stride=(1, self.hop_length),
         ).squeeze()[pad:-pad]
 
         # Normalize
@@ -721,6 +721,7 @@ class ISTFT(nn.Module):
         y = y / window_envelope
 
         return y
+
 
 class ISTFTHead(FourierHead):
     """
@@ -751,7 +752,7 @@ class ISTFTHead(FourierHead):
         Returns:
             Tensor: Reconstructed time-domain audio signal of shape (B, T), where T is the length of the output signal.
         """
-        x_pred = self.out(x )
+        x_pred = self.out(x)
         # x_pred = x
         x_pred = x_pred.transpose(1, 2)
         mag, p = x_pred.chunk(2, dim=1)
@@ -762,17 +763,20 @@ class ISTFTHead(FourierHead):
         y = torch.sin(p)
         S = mag * (x + 1j * y)
         audio = self.istft(S)
-        return audio.unsqueeze(1),x_pred
+        return audio.unsqueeze(1), x_pred
+
 
 def round_ste(z):
     """Round with straight through gradients."""
     zhat = z.round()
     return z + (zhat - z).detach()
 
+
 def floor_ste(z):
     """Floor with straight through gradients."""
     zhat = z.floor()
     return z + (zhat - z).detach()
+
 
 def maybe(fn):
     @wraps(fn)
@@ -780,31 +784,33 @@ def maybe(fn):
         if not exists(x):
             return x
         return fn(x, *args, **kwargs)
+
     return inner
+
 
 class FSQ(Module):
     def __init__(
         self,
         levels: List[int],
         dim: int | None = None,
-        num_codebooks = 1,
+        num_codebooks=1,
         keep_num_codebooks_dim: bool | None = None,
         scale: float | None = None,
         allowed_dtypes: Tuple[torch.dtype, ...] = (torch.float32, torch.float64),
         channel_first: bool = False,
         projection_has_bias: bool = True,
-        return_indices = True,
-        force_quantization_f32 = True,
+        return_indices=True,
+        force_quantization_f32=True,
         preserve_symmetry: bool = False,
-        noise_dropout = 0.0,
+        noise_dropout=0.0,
     ):
         super().__init__()
 
         _levels = torch.tensor(levels, dtype=int32)
-        self.register_buffer("_levels", _levels, persistent = False)
+        self.register_buffer("_levels", _levels, persistent=False)
 
         _basis = torch.cumprod(torch.tensor([1] + levels[:-1]), dim=0, dtype=int32)
-        self.register_buffer("_basis", _basis, persistent = False)
+        self.register_buffer("_basis", _basis, persistent=False)
 
         self.scale = scale
 
@@ -827,8 +833,12 @@ class FSQ(Module):
         self.channel_first = channel_first
 
         has_projections = self.dim != effective_codebook_dim
-        self.project_in = nn.Linear(self.dim, effective_codebook_dim, bias = projection_has_bias) if has_projections else nn.Identity()
-        self.project_out = nn.Linear(effective_codebook_dim, self.dim, bias = projection_has_bias) if has_projections else nn.Identity()
+        self.project_in = (
+            nn.Linear(self.dim, effective_codebook_dim, bias=projection_has_bias) if has_projections else nn.Identity()
+        )
+        self.project_out = (
+            nn.Linear(effective_codebook_dim, self.dim, bias=projection_has_bias) if has_projections else nn.Identity()
+        )
 
         self.has_projections = has_projections
 
@@ -836,34 +846,40 @@ class FSQ(Module):
         if return_indices:
             self.codebook_size = self._levels.prod().item()
             implicit_codebook = self._indices_to_codes(torch.arange(self.codebook_size))
-            self.register_buffer("implicit_codebook", implicit_codebook, persistent = False)
+            self.register_buffer("implicit_codebook", implicit_codebook, persistent=False)
 
         self.allowed_dtypes = allowed_dtypes
         self.force_quantization_f32 = force_quantization_f32
 
     def bound(self, z, eps: float = 1e-3):
-        """ Bound `z`, an array of shape (..., d). """
+        """Bound `z`, an array of shape (..., d)."""
         half_l = (self._levels - 1) * (1 + eps) / 2
         offset = torch.where(self._levels % 2 == 0, 0.5, 0.0)
         shift = (offset / half_l).atanh()
         return (z + shift).tanh() * half_l - offset
 
     # symmetry-preserving and noise-approximated quantization, section 3.2 in https://arxiv.org/abs/2411.19842
-    
+
     def symmetry_preserving_bound(self, z):
         """
         QL(x) = 2 / (L - 1) * [(L - 1) * (tanh(x) + 1) / 2 + 0.5] - 1
         """
-        levels_minus_1 = (self._levels - 1)
+        levels_minus_1 = self._levels - 1
         scale = 2.0 / levels_minus_1
         bracket = (levels_minus_1 * (torch.tanh(z) + 1) / 2.0) + 0.5
         bracket = floor_ste(bracket)
         return scale * bracket - 1.0
 
     def quantize(self, z):
-        """ Quantizes z, returns quantized zhat, same shape as z. """
+        """Quantizes z, returns quantized zhat, same shape as z."""
 
-        shape, device, noise_dropout, preserve_symmetry, half_width = z.shape[0], z.device, self.noise_dropout, self.preserve_symmetry, (self._levels // 2)
+        _, _, noise_dropout, preserve_symmetry, half_width = (
+            z.shape[0],
+            z.device,
+            self.noise_dropout,
+            self.preserve_symmetry,
+            (self._levels // 2),
+        )
         bound_fn = self.symmetry_preserving_bound if preserve_symmetry else self.bound
 
         bounded_z = bound_fn(z)
@@ -871,7 +887,7 @@ class FSQ(Module):
         # determine where to add a random offset elementwise
         # if using noise dropout
 
-        if self.training and noise_dropout > 0.:
+        if self.training and noise_dropout > 0.0:
             offset_mask = torch.bernoulli(torch.full_like(bounded_z, noise_dropout)).bool()
             offset = torch.rand_like(bounded_z) - 0.5
             bounded_z = torch.where(offset_mask, bounded_z + offset, bounded_z)
@@ -881,7 +897,7 @@ class FSQ(Module):
     def _scale_and_shift(self, zhat_normalized):
         half_width = self._levels // 2
         return (zhat_normalized * half_width) + half_width
-    
+
     def _scale_and_shift_inverse(self, zhat):
         half_width = self._levels // 2
         return (zhat - half_width) / half_width
@@ -892,22 +908,20 @@ class FSQ(Module):
         return codes
 
     def codes_to_indices(self, zhat):
-        """ Converts a `code` to an index in the codebook. """
+        """Converts a `code` to an index in the codebook."""
         assert zhat.shape[-1] == self.codebook_dim
         zhat = self._scale_and_shift(zhat)
         return (zhat * self._basis).sum(dim=-1).to(int32)
 
     def indices_to_level_indices(self, indices):
-        """ Converts indices to indices at each level, perhaps needed for a transformer with factorized embeddings """
+        """Converts indices to indices at each level, perhaps needed for a transformer with factorized embeddings"""
         indices = indices.unsqueeze(-1)
         codes_non_centered = (indices // self._basis) % self._levels
         return codes_non_centered
 
     def indices_to_codes(self, indices):
-        """ Inverse of `codes_to_indices`. """
+        """Inverse of `codes_to_indices`."""
         assert exists(indices)
-
-        is_img_or_video = indices.ndim >= (3 + int(self.keep_num_codebooks_dim))
 
         codes = self._indices_to_codes(indices)
 
@@ -927,20 +941,20 @@ class FSQ(Module):
         c - number of codebook dim
         """
 
-        assert z.shape[-1] == self.dim, f'expected dimension of {self.dim} but found dimension of {z.shape[-1]}'
+        assert z.shape[-1] == self.dim, f"expected dimension of {self.dim} but found dimension of {z.shape[-1]}"
 
         z = self.project_in(z)
 
         # z = rearrange(z, 'b n (c d) -> b n c d', c = self.num_codebooks)
-        b, n, cd = z.shape          # (b, n, c·d)
+        b, n, cd = z.shape  # (b, n, c·d)
         c = self.num_codebooks
-        d = cd // c                 # infer the per-codebook dimension
+        d = cd // c  # infer the per-codebook dimension
 
-        z = z.view(b, n, c, d)      # now (b, n, c, d)
+        z = z.view(b, n, c, d)  # now (b, n, c, d)
         # whether to force quantization step to be full precision or not
 
         force_f32 = self.force_quantization_f32
-        quantization_context = partial(autocast, 'cuda', enabled = False) if force_f32 else nullcontext
+        quantization_context = partial(autocast, "cuda", enabled=False) if force_f32 else nullcontext
         with quantization_context():
             orig_dtype = z.dtype
 
@@ -964,27 +978,28 @@ class FSQ(Module):
 
         out = self.project_out(codes)
         if not self.keep_num_codebooks_dim and self.return_indices:
-            indices = maybe(lambda t, *_, **__: t.squeeze(-1))(indices)   # remove last dim
+            indices = maybe(lambda t, *_, **__: t.squeeze(-1))(indices)  # remove last dim
 
         # return quantized output and indices
 
         return out, indices
 
+
 class ResidualFSQ(Module):
-    """ Follows Algorithm 1. in https://arxiv.org/pdf/2107.03312.pdf """
+    """Follows Algorithm 1. in https://arxiv.org/pdf/2107.03312.pdf"""
 
     def __init__(
         self,
         *,
         levels: List[int],
         num_quantizers,
-        dim = None,
-        is_channel_first = False,
-        quantize_dropout = False,
-        quantize_dropout_cutoff_index = 0,
-        quantize_dropout_multiple_of = 1,
-        soft_clamp_input_value = None,
-        **kwargs
+        dim=None,
+        is_channel_first=False,
+        quantize_dropout=False,
+        quantize_dropout_cutoff_index=0,
+        quantize_dropout_multiple_of=1,
+        soft_clamp_input_value=None,
+        **kwargs,
     ):
         super().__init__()
         codebook_dim = len(levels)
@@ -1014,68 +1029,63 @@ class ResidualFSQ(Module):
         for ind in range(num_quantizers):
             scales.append((levels_tensor - 1) ** -ind)
 
-            fsq = FSQ(
-                levels = levels,
-                dim = codebook_dim,
-                **kwargs
-            )
+            fsq = FSQ(levels=levels, dim=codebook_dim, **kwargs)
 
             self.layers.append(fsq)
 
-        assert all([not fsq.has_projections for fsq in self.layers])
-
         self.codebook_size = self.layers[0].codebook_size
 
-        self.register_buffer('scales', torch.stack(scales), persistent = False)
+        self.register_buffer("scales", torch.stack(scales), persistent=False)
 
         self.quantize_dropout = quantize_dropout and num_quantizers > 1
 
         assert quantize_dropout_cutoff_index >= 0
 
         self.quantize_dropout_cutoff_index = quantize_dropout_cutoff_index
-        self.quantize_dropout_multiple_of = quantize_dropout_multiple_of  # encodec paper proposes structured dropout, believe this was set to 4
+        self.quantize_dropout_multiple_of = (
+            quantize_dropout_multiple_of  # encodec paper proposes structured dropout, believe this was set to 4
+        )
 
     @property
     def codebooks(self):
         codebooks = [layer.implicit_codebook for layer in self.layers]
-        codebooks = torch.stack(codebooks, dim = 0)
+        codebooks = torch.stack(codebooks, dim=0)
         return codebooks
 
     def get_codes_from_indices(self, indices):
-        batch, quantize_dim = indices.shape[0], indices.shape[-1]
+        _, quantize_dim = indices.shape[0], indices.shape[-1]
 
         # may also receive indices in the shape of 'b h w q' (accept_image_fmap)
         # indices_packed, ps = pack([indices], 'b * q') # Assuming pack is available
         # indices is (b, *spatial, q)   or already (b, n, q)
-        b, *spatial_dims, q = indices.shape          # 1 grab the sizes
-        indices_packed = indices.reshape(b, -1, q)   # 2️ flatten spatial -> n
+        b, *spatial_dims, q = indices.shape  # 1 grab the sizes
+        indices_packed = indices.reshape(b, -1, q)  # 2️ flatten spatial -> n
 
         # mimic the old `pack` return so later code can still 'unpack'
-        ps = (tuple(spatial_dims),)                  # same structure as before
+        ps = (tuple(spatial_dims),)  # same structure as before
 
         # because of quantize dropout, one can pass in indices that are coarse
         # and the network should be able to reconstruct
         if quantize_dim < self.num_quantizers:
-            assert self.quantize_dropout > 0., 'quantize dropout must be greater than 0 if you wish to reconstruct from a signal with less fine quantizations'
+            assert self.quantize_dropout > 0.0, (
+                "quantize dropout must be greater than 0 if you wish to reconstruct from a signal with less fine quantizations"
+            )
             # Pad missing quantizer indices with -1
-            indices_packed = F.pad(indices_packed, (0, self.num_quantizers - quantize_dim), value = -1)
+            indices_packed = F.pad(indices_packed, (0, self.num_quantizers - quantize_dim), value=-1)
 
         # take care of quantizer dropout
         mask = indices_packed == -1
-        indices_proc = indices_packed.masked_fill(mask, 0) # Use 0 as a dummy index
+        indices_proc = indices_packed.masked_fill(mask, 0)  # Use 0 as a dummy index
 
         # --- Replacement for get_at ---
         # Permute indices to have quantizer dim first: (b, n, q) -> (q, b, n)
-        indices_permuted = indices_proc.permute(2, 0, 1) # Shape: (q, b, n)
+        indices_permuted = indices_proc.permute(2, 0, 1)  # Shape: (q, b, n)
 
         # Gather codes for each quantizer
         # self.codebooks[qi] has shape (c, d)
         # indices_permuted[qi] has shape (b, n)
         # selected_codes_q will have shape (b, n, d)
-        selected_codes = [
-            self.codebooks[qi][indices_permuted[qi]]
-            for qi in range(self.num_quantizers)
-        ]
+        selected_codes = [self.codebooks[qi][indices_permuted[qi]] for qi in range(self.num_quantizers)]
 
         # Stack along the quantizer dimension: list of (b, n, d) -> (q, b, n, d)
         all_codes = torch.stack(selected_codes, dim=0)
@@ -1083,8 +1093,8 @@ class ResidualFSQ(Module):
 
         # mask out any codes that were dropout-ed
         # Permute mask to match all_codes: (b, n, q) -> (q, b, n) -> (q, b, n, 1)
-        mask_permuted = mask.permute(2, 0, 1).unsqueeze(-1) # Shape: (q, b, n, 1)
-        all_codes = all_codes.masked_fill(mask_permuted, 0.)
+        mask_permuted = mask.permute(2, 0, 1).unsqueeze(-1)  # Shape: (q, b, n, 1)
+        all_codes = all_codes.masked_fill(mask_permuted, 0.0)
 
         # scale the codes
         # Reshape scales for broadcasting: (q, d) -> (q, 1, 1, d)
@@ -1092,8 +1102,8 @@ class ResidualFSQ(Module):
         all_codes = all_codes * scales_reshaped
 
         # if (accept_image_fmap = True) then return shape (quantize, batch, height, width, dimension)
-        spatial_shape = tuple(ps[0])          # (h, w,  …)
-        q, b, _, d  = all_codes.shape
+        spatial_shape = tuple(ps[0])  # (h, w,  …)
+        q, b, _, d = all_codes.shape
 
         all_codes = all_codes.reshape(q, b, *spatial_shape, d)
         return all_codes
@@ -1103,12 +1113,7 @@ class ResidualFSQ(Module):
         codes_summed = torch.sum(codes, dim=0)
         return self.project_out(codes_summed)
 
-    def forward(
-        self,
-        x,
-        return_all_codes = False,
-        rand_quantize_dropout_fixed_seed = None
-    ):
+    def forward(self, x, return_all_codes=False, rand_quantize_dropout_fixed_seed=None):
         num_quant, quant_dropout_multiple_of, device = self.num_quantizers, self.quantize_dropout_multiple_of, x.device
 
         x = self.project_in(x)
@@ -1121,7 +1126,7 @@ class ResidualFSQ(Module):
 
         # ready some variables to be accumulated
 
-        quantized_out = 0.
+        quantized_out = 0.0
         residual = x
 
         all_indices = []
@@ -1132,7 +1137,6 @@ class ResidualFSQ(Module):
         # also prepare null indices
 
         if should_quantize_dropout:
-
             # check if seed is manually passed in
 
             if not exists(rand_quantize_dropout_fixed_seed):
@@ -1143,15 +1147,16 @@ class ResidualFSQ(Module):
             rand_quantize_dropout_index = rand.randrange(self.quantize_dropout_cutoff_index, num_quant)
 
             if quant_dropout_multiple_of != 1:
-                rand_quantize_dropout_index = round_up_multiple(rand_quantize_dropout_index + 1, quant_dropout_multiple_of) - 1
+                rand_quantize_dropout_index = (
+                    round_up_multiple(rand_quantize_dropout_index + 1, quant_dropout_multiple_of) - 1
+                )
 
-            null_indices = torch.full(x.shape[:2], -1., device = device, dtype = torch.long)
+            null_indices = torch.full(x.shape[:2], -1.0, device=device, dtype=torch.long)
 
         # go through the layers
 
-        with autocast('cuda', enabled = False):
+        with autocast("cuda", enabled=False):
             for quantizer_index, (layer, scale) in enumerate(zip(self.layers, self.scales)):
-
                 if should_quantize_dropout and quantizer_index > rand_quantize_dropout_index:
                     all_indices.append(null_indices)
                     continue
@@ -1171,7 +1176,7 @@ class ResidualFSQ(Module):
 
         # stack all indices
 
-        all_indices = torch.stack(all_indices, dim = -1)
+        all_indices = torch.stack(all_indices, dim=-1)
 
         ret = (quantized_out, all_indices)
 
@@ -1185,7 +1190,8 @@ class ResidualFSQ(Module):
         # will return all codes in shape (quantizer, batch, sequence length, codebook dimension)
 
         return (*ret, all_codes)
-    
+
+
 class CodecDecoderVocos(nn.Module):
     def __init__(
         self,
@@ -1198,7 +1204,9 @@ class CodecDecoderVocos(nn.Module):
 
         self.backbone = VocosBackbone(config=config)
 
-        self.head = ISTFTHead(dim=config.hidden_size, n_fft=self.hop_length * 4, hop_length=self.hop_length, padding="same")
+        self.head = ISTFTHead(
+            dim=config.hidden_size, n_fft=self.hop_length * 4, hop_length=self.hop_length, padding="same"
+        )
 
         self.reset_parameters()
 
@@ -1211,9 +1219,9 @@ class CodecDecoderVocos(nn.Module):
             q = q.permute(0, 2, 1)
             return x, q, None
         x = self.backbone(x)
-        x,_  = self.head(x)
- 
-        return x ,_
+        x, _ = self.head(x)
+
+        return x, _
 
     def vq2emb(self, vq):
         self.quantizer = self.quantizer.eval()
@@ -1226,7 +1234,7 @@ class CodecDecoderVocos(nn.Module):
         return embs
 
     def inference_vq(self, vq):
-        x = vq[None,:,:]
+        x = vq[None, :, :]
         x = self.model(x)
         return x
 
@@ -1234,11 +1242,10 @@ class CodecDecoderVocos(nn.Module):
         x, q, loss, perp = self.quantizer(x)
         x = self.model(x)
         return x, None
-    
+
     def inference(self, x):
         x = self.model(x)
         return x, None
-
 
     def remove_weight_norm(self):
         """Remove weight normalization module from all of the layers."""
@@ -1263,6 +1270,7 @@ class CodecDecoderVocos(nn.Module):
     def reset_parameters(self):
         self.apply(init_weights)
 
+
 class SemanticEncoder(nn.Module):
     def __init__(
         self,
@@ -1281,7 +1289,7 @@ class SemanticEncoder(nn.Module):
             kernel_size=kernel_size,
             stride=1,
             padding=(kernel_size - 1) // 2,
-            bias=False
+            bias=False,
         )
 
         # Residual blocks
@@ -1293,7 +1301,7 @@ class SemanticEncoder(nn.Module):
                 kernel_size=kernel_size,
                 stride=1,
                 padding=(kernel_size - 1) // 2,
-                bias=bias
+                bias=bias,
             ),
             nn.ReLU(inplace=True),
             nn.Conv1d(
@@ -1302,8 +1310,8 @@ class SemanticEncoder(nn.Module):
                 kernel_size=kernel_size,
                 stride=1,
                 padding=(kernel_size - 1) // 2,
-                bias=bias
-            )
+                bias=bias,
+            ),
         )
 
         # Final convolution, maps encode_channels to code_dim
@@ -1313,7 +1321,7 @@ class SemanticEncoder(nn.Module):
             kernel_size=kernel_size,
             stride=1,
             padding=(kernel_size - 1) // 2,
-            bias=False
+            bias=False,
         )
 
     def forward(self, x):
@@ -1326,10 +1334,11 @@ class SemanticEncoder(nn.Module):
         Returns:
             Tensor: Encoded tensor, shape (Batch, Code_dim, Length)
         """
-        x = self.initial_conv(x)           # (Batch, Encode_channels, Length)
-        x = self.residual_blocks(x) + x   # Residual connection
-        x = self.final_conv(x)             # (Batch, Code_dim, Length)
+        x = self.initial_conv(x)  # (Batch, Encode_channels, Length)
+        x = self.residual_blocks(x) + x  # Residual connection
+        x = self.final_conv(x)  # (Batch, Code_dim, Length)
         return x
+
 
 class XCodec2Model(PreTrainedModel):
     config_class = XCodec2Config
@@ -1424,7 +1433,9 @@ class XCodec2Model(PreTrainedModel):
         with torch.no_grad():
             # 1) Feature extraction
             input_features = self.feature_extractor(
-                input_waveform.squeeze(1).numpy(), sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+                input_waveform.squeeze(1).numpy(),
+                sampling_rate=self.feature_extractor.sampling_rate,
+                return_tensors="pt",
             ).input_features.to(self.device)  # [batch, frames, feat_dim]
 
             # 2) Semantic layer

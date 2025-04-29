@@ -1040,7 +1040,7 @@ class FSQ(Module):
     def quantize(self, z):
         """Quantizes z, returns quantized zhat, same shape as z."""
 
-        shape, device, noise_dropout, preserve_symmetry, half_width = (
+        _, _, noise_dropout, preserve_symmetry, half_width = (
             z.shape[0],
             z.device,
             self.noise_dropout,
@@ -1089,8 +1089,6 @@ class FSQ(Module):
     def indices_to_codes(self, indices):
         """Inverse of `codes_to_indices`."""
         assert exists(indices)
-
-        is_img_or_video = indices.ndim >= (3 + int(self.keep_num_codebooks_dim))
 
         codes = self._indices_to_codes(indices)
 
@@ -1222,8 +1220,6 @@ class ResidualFSQ(Module):
 
             self.layers.append(fsq)
 
-        assert all([not fsq.has_projections for fsq in self.layers])
-
         self.codebook_size = self.layers[0].codebook_size
 
         self.register_buffer("scales", torch.stack(scales), persistent=False)
@@ -1244,7 +1240,7 @@ class ResidualFSQ(Module):
         return codebooks
 
     def get_codes_from_indices(self, indices):
-        batch, quantize_dim = indices.shape[0], indices.shape[-1]
+        _, quantize_dim = indices.shape[0], indices.shape[-1]
 
         # may also receive indices in the shape of 'b h w q' (accept_image_fmap)
         # indices_packed, ps = pack([indices], 'b * q') # Assuming pack is available

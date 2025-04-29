@@ -14,11 +14,6 @@
 # limitations under the License.
 """X-codec model configuration"""
 
-import math
-from typing import Optional
-
-import numpy as np
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -159,7 +154,7 @@ class XCodec2Config(PretrainedConfig):
         codebook_dim: int = 16,
         max_position_embeddings: int = 64,
         rope_theta: float = 10000.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.semantic_hidden_size = semantic_hidden_size
@@ -188,4 +183,6 @@ class XCodec2Config(PretrainedConfig):
         self.codebook_dim = codebook_dim
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
+
+
 __all__ = ["XCodec2Config"]
