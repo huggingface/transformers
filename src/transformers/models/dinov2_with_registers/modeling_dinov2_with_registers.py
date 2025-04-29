@@ -773,11 +773,8 @@ class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedMod
         sequence_output = outputs[0]  # batch_size, sequence_length, hidden_size
 
         cls_token = sequence_output[:, 0]
-        # If the model has register tokens, we need to discard them from the patch tokens
-        num_tokens_to_discard = (
-            1 + self.config.num_register_tokens if hasattr(self.config, "num_register_tokens") else 1
-        )
-        patch_tokens = sequence_output[:, num_tokens_to_discard:]
+        # cls and register tokens should not be included in patch tokens variable
+        patch_tokens = sequence_output[:, 1 + self.config.num_register_tokens :]
 
         linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
 
