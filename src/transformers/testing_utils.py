@@ -2605,7 +2605,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
 
             while retry_count < max_attempts:
                 try:
-                    return unittest.skipUnless(_run_flaky_tests, "test is flaky")(test_func_ref(*args, **kwargs))
+                    return test_func_ref(*args, **kwargs)
 
                 except Exception as err:
                     logger.error(f"Test failed with {err} at try {retry_count}/{max_attempts}.")
@@ -2615,7 +2615,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
 
             return test_func_ref(*args, **kwargs)
 
-        return wrapper
+        return unittest.skipUnless(_run_flaky_tests, "test is flaky")(wrapper)
 
     return decorator
 
