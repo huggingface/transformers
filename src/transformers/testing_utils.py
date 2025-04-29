@@ -240,7 +240,7 @@ def parse_int_from_env(key, default=None):
 
 
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
-_run_flaky_tests = parse_flag_from_env("RUN_FLAKY", default=False)
+_run_flaky_tests = parse_flag_from_env("RUN_FLAKY", default=True)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)

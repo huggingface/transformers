@@ -1825,7 +1825,6 @@ class GenerationTesterMixin:
             self.assertListEqual(list(outputs.past_key_values.key_cache[0].shape), cache_shape)
 
     @pytest.mark.generate
-    @is_flaky()
     def test_generate_continue_from_past_key_values(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:

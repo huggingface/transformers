@@ -667,7 +667,6 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
     @pytest.mark.generate
-    @is_flaky()
     def test_generate_continue_from_past_key_values(self):
         """Overwrite because IDEFICS needs image attention mask to be also processed"""
 
