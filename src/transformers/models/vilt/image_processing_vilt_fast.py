@@ -112,10 +112,8 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
             if do_resize:
                 if isinstance(stacked_images, list):
                     stacked_images = torch.stack(stacked_images)
-
                 stacked_images = self.resize(stacked_images, size, interpolation, size_divisor)
             resized_images_grouped[shape] = stacked_images
-
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         # Group images by size for further processing
@@ -125,7 +123,6 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             if isinstance(stacked_images, list):
                 stacked_images = torch.stack(stacked_images)
-
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
@@ -226,7 +223,6 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
             # Convert list to tensor if needed
             if isinstance(stacked_images, list):
                 stacked_images = torch.stack(stacked_images)
-
             # Create mask template for efficient masking
             if return_tensors == "pt" and len(stacked_images) > 0:
                 device = stacked_images.device
