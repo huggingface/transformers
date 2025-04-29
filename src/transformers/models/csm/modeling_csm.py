@@ -640,7 +640,7 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
             if backbone_last_hidden_state is not None:
                 inputs_embeds[:, 0] = backbone_last_hidden_state
             else:
-                if input_ids_are_first_codebook and not torch.compiler.is_compiling():
+                if not torch.compiler.is_compiling() and input_ids_are_first_codebook:
                     logger.warning(
                         "When the first codebook token is provided, `backbone_last_hidden_state` should also be provided for correct inference."
                     )
