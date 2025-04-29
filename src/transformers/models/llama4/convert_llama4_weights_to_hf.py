@@ -258,7 +258,12 @@ def write_model(
     # compute additional params for weight conversion
     num_heads_per_shard = num_heads // num_shards
     dim_per_head = dim // num_heads
-    intermediate_size_mlp = compute_intermediate_size(dim, ffn_exp=params["ffn_exp"], multiple_of=params["multiple_of"], ffn_dim_multiplier=params["ffn_dim_multiplier"])
+    intermediate_size_mlp = compute_intermediate_size(
+        dim,
+        ffn_exp=params["ffn_exp"],
+        multiple_of=params["multiple_of"],
+        ffn_dim_multiplier=params["ffn_dim_multiplier"],
+    )
 
     num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
 
