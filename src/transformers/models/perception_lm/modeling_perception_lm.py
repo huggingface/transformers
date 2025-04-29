@@ -298,7 +298,7 @@ class PerceptionLMForConditionalGeneration(
 ):
     def __init__(self, config: PerceptionLMConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
+        # self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = PerceptionLMMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
@@ -363,28 +363,28 @@ class PerceptionLMForConditionalGeneration(
 
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
-        image_outputs = self.vision_tower(
-            pixel_values, output_hidden_states=True, **kwargs
-        )
+        # image_outputs = self.vision_tower(
+        #     pixel_values, output_hidden_states=True, **kwargs
+        # )
 
-        # If we have one vision feature layer, return the corresponding hidden states,
-        # otherwise, select the hidden states of each feature layer and concatenate them
-        if isinstance(vision_feature_layer, int):
-            selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-            if vision_feature_select_strategy == "default":
-                selected_image_feature = selected_image_feature[:, 1:]
-        else:
-            hs_pool = [
-                image_outputs.hidden_states[layer_idx]
-                for layer_idx in vision_feature_layer
-            ]
-            # For default; crop CLS from each hidden state in the hidden state pool
-            if vision_feature_select_strategy == "default":
-                hs_pool = [hs[:, 1:] for hs in hs_pool]
-            selected_image_feature = torch.cat(hs_pool, dim=-1)
+        # # If we have one vision feature layer, return the corresponding hidden states,
+        # # otherwise, select the hidden states of each feature layer and concatenate them
+        # if isinstance(vision_feature_layer, int):
+        #     selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+        #     if vision_feature_select_strategy == "default":
+        #         selected_image_feature = selected_image_feature[:, 1:]
+        # else:
+        #     hs_pool = [
+        #         image_outputs.hidden_states[layer_idx]
+        #         for layer_idx in vision_feature_layer
+        #     ]
+        #     # For default; crop CLS from each hidden state in the hidden state pool
+        #     if vision_feature_select_strategy == "default":
+        #         hs_pool = [hs[:, 1:] for hs in hs_pool]
+        #     selected_image_feature = torch.cat(hs_pool, dim=-1)
         image_features = torch.load(
             "/checkpoint/vision_encoder/smhu/debug/0/h_img_dump_0.pt"
-        ).to(selected_image_feature)
+        ).to(pixel_values.device).to(torch.bfloat16)
         image_features = self.multi_modal_projector(image_features)
         return image_features
 
