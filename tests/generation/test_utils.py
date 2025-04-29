@@ -134,7 +134,7 @@ VLM_CLASS_NAMES = [
     "mistral3",
     "chameleon",
     "internvl",
-    "qwen2_5_omni",
+    "qwen2_5omni",  # the file is named `qwen2_5_omni`, but the model class is `Qwen2_5Omni`
 ]
 
 
@@ -230,6 +230,7 @@ class GenerationTesterMixin:
             for key in [
                 "image_token_id",
                 "video_token_id",
+                "audio_token_id",
                 "vision_start_token_id",
                 "audio_start_token_id",
                 "audio_end_token_id",
@@ -1096,25 +1097,18 @@ class GenerationTesterMixin:
 
             # test output equality of low versus high memory
             model = model_class(config).to(torch_device).eval()
+            generate_kwargs = {
+                "top_k": 4,
+                "penalty_alpha": 0.6,
+                "max_new_tokens": self.max_new_tokens,
+                "use_cache": True,
+                "return_dict_in_generate": True,
+                "output_scores": True,
+            }
 
-            low_output = model.generate(
-                top_k=4,
-                penalty_alpha=0.6,
-                low_memory=True,
-                max_new_tokens=self.max_new_tokens,
-                **inputs_dict,
-                use_cache=True,
-            )
-
-            high_output = model.generate(
-                top_k=4,
-                penalty_alpha=0.6,
-                low_memory=False,
-                max_new_tokens=self.max_new_tokens,
-                **inputs_dict,
-                use_cache=True,
-            )
-            self.assertListEqual(low_output.tolist(), high_output.tolist())
+            low_output = model.generate(**inputs_dict, **generate_kwargs, low_memory=True)
+            high_output = model.generate(**inputs_dict, **generate_kwargs, low_memory=False)
+            self._check_similar_generate_outputs(low_output, high_output)
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
@@ -1862,22 +1856,29 @@ class GenerationTesterMixin:
 
             model = model_class(config).to(torch_device)
             model.eval()
-            model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
-            model.generation_config.forced_eos_token_id = None
-            model.generation_config.encoder_no_repeat_ngram_size = 0
-            model.generation_config.use_cache = True
 
             # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs)
             if "past_key_values" not in outputs:
                 self.skipTest(reason="This model doesn't return `past_key_values`")
 
+            generate_kwargs = {
+                "pad_token_id": -1,
+                "eos_token_id": -1,
+                "forced_eos_token_id": None,
+                "encoder_no_repeat_ngram_size": 0,
+                "use_cache": True,
+                "do_sample": False,
+                "return_dict_in_generate": True,
+                "output_scores": True,
+            }
+
             # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
-            outputs = model.generate(**inputs, do_sample=False, max_new_tokens=4, return_dict_in_generate=True)
+            outputs = model.generate(**inputs, **generate_kwargs, max_new_tokens=4)
 
             # Let's generate again, but passing the past key values in between (3 + 1 = 4 tokens). Note that the
             # inputs may need to be tweaked across `generate` calls (like the attention mask).
-            outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=3, return_dict_in_generate=True)
+            outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=3)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
             inputs["past_key_values"] = outputs_cached.past_key_values
@@ -1900,10 +1901,13 @@ class GenerationTesterMixin:
                         mode="constant",
                         value=1,
                     )
-            outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=1, return_dict_in_generate=True)
+            first_caches_scores = outputs_cached.scores
+            outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=1)
+            full_cached_scores = first_caches_scores + outputs_cached.scores
+            outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self.assertListEqual(outputs.sequences.tolist(), outputs_cached.sequences.tolist())
+            self._check_similar_generate_outputs(outputs, outputs_cached)
             for layer_idx in range(len(outputs_cached.past_key_values)):
                 for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
                     self.assertTrue(
@@ -1929,6 +1933,8 @@ class GenerationTesterMixin:
 
             if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder")
+            # TODO (joao, raushan): the correct line below is `if not hasattr(config.get_text_config(), "use_cache")`,
+            # but it breaks a few models. Fix and then apply `_check_similar_generate_outputs` pattern
             if not hasattr(config, "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
@@ -1988,32 +1994,6 @@ class GenerationTesterMixin:
                             cached_output.past_key_values[layer_idx][kv_idx],
                         )
                     )
-
-    @parameterized.expand([("offloaded",)])  # ("offloaded_static",) TODO: @raushan fixme in some models (eg T5)
-    @require_torch_accelerator
-    @pytest.mark.generate
-    def test_offloaded_cache_implementation(self, cache_implementation):
-        """Tests we can generate by indicating `cache_implementation` for each possible cache class"""
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_cache_class:
-                self.skipTest(reason="This model does not support the new cache format")
-
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-
-            model = model_class(config).to(torch_device).eval()
-            generation_kwargs = {
-                "max_new_tokens": 5,
-                "use_cache": True,
-                "cache_implementation": cache_implementation,
-            }
-
-            legacy_results = model.generate(**generation_kwargs, **inputs_dict)
-
-            # Most cache classes have their own tests except for some that are tested here
-            # The ones here do not need special treatment when passing `cache_implementation`
-            # and are not bound to specific models only
-            new_results = model.generate(**generation_kwargs, **inputs_dict)
-            self.assertListEqual(legacy_results.tolist(), new_results.tolist())
 
     @pytest.mark.generate
     def test_generate_with_static_cache(self):
@@ -2244,13 +2224,15 @@ class GenerationTesterMixin:
             # BLIP is the only exception with custom generate which call `self.lm.generate()`
             # We should avoid such calls in all subsequent multimodal models and try to make `generate()`
             # compatible with multimodality
+            compile_config = CompileConfig()
+            compile_config._compile_all_devices = True
             if "blip" in model.__class__.__name__.lower():
-                model.language_model.generation_config.compile_config._compile_all_devices = True
+                model.language_model.generation_config.compile_config = compile_config
                 if not has_defined_cache_implementation:
                     model.language_model.generation_config.cache_implementation = "static"
             else:
                 # force compilation (e.g. fast CI, CPU)
-                model.generation_config.compile_config._compile_all_devices = True
+                model.generation_config.compile_config = compile_config
                 if not has_defined_cache_implementation:
                     model.generation_config.cache_implementation = "static"
 
@@ -4017,6 +3999,34 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @pytest.mark.generate
     @require_torch_multi_gpu
+    def test_generate_multi_gpu_causal_mask(self):
+        """
+        Tests that cache position device doesn't clash with causal mask device when we are using multi-gpus.
+        In real life happens only when multimodal encoder size is big, so `embed_tokens` gets allocated to the next device.
+        The error will be triggered whenever a bacthed input is used, so that `causal_mask` is actually prepared instead of
+        being `None`.
+        """
+        # need to split manually as auto doesn't work well with unbalanced model
+        device_map = {
+            "visual": 0,
+            "model.embed_tokens": 1,
+            "model.layers.0": 1,
+            "model.layers.1": 1,
+            "model.rotary_emb": 1,
+            "model.norm.weight": 1,
+            "lm_head": 1,
+        }
+        model = AutoModelForImageTextToText.from_pretrained(
+            "hf-internal-testing/tiny-random-Qwen2VLForConditionalGeneration", device_map=device_map
+        )
+        processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-Qwen2VLForConditionalGeneration")
+
+        text = ["Hello world", "Today I went to the supermarket to buy"]
+        inputs = processor(text=text, padding=True, return_tensors="pt").to(torch_device)
+        _ = model.generate(**inputs, max_new_tokens=20)
+
+    @pytest.mark.generate
+    @require_torch_multi_gpu
     def test_init_static_cache_multi_gpu(self):
         """
         Tests if the static cache has been set correctly when we initialize it manually in a multi-gpu setup.
@@ -4905,6 +4915,37 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # If the generate doesn't infer the DECODER device map correctly, this will fail
         _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
+
+    @require_torch_gpu
+    def test_cpu_offload_doesnt_compile(self):
+        """Test that CPU offload doesn't trigger compilation"""
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        tokenized_inputs = tokenizer(["Hello world"], return_tensors="pt")
+        generate_kwargs = {"max_new_tokens": 3, "cache_implementation": "static"}
+
+        # Sanity check: if we don't specify a device map, the model will get compiled
+        model_gpu = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        input_ids = tokenized_inputs.input_ids.to(model_gpu.device)
+        _ = model_gpu.generate(input_ids, **generate_kwargs)
+        self.assertTrue(hasattr(model_gpu, "_compiled_call"))
+
+        # If we specify a device map, the model will not be compiled
+        # (as of April 2025, compiling with CPU offload results in a crash)
+        device_map = {
+            "model.embed_tokens": 0,
+            "model.layers.0": 0,
+            "model.layers.1": "cpu",
+            "model.norm": "cpu",
+            "lm_head": 0,
+        }
+        model_cpu = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map=device_map
+        )
+        input_ids = tokenized_inputs.input_ids.to(model_cpu.device)
+        _ = model_cpu.generate(input_ids, **generate_kwargs)
+        self.assertFalse(hasattr(model_cpu, "_compiled_call"))
 
 
 @require_torch

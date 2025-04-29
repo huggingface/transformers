@@ -346,16 +346,28 @@ def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
     return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
 
+def is_torch_accelerator_available():
+    if is_torch_available():
+        import torch
+
+        return hasattr(torch, "accelerator")
+
+    return False
+
+
 def is_torch_deterministic():
     """
     Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
     """
-    import torch
+    if is_torch_available():
+        import torch
 
-    if torch.get_deterministic_debug_mode() == 0:
-        return False
-    else:
-        return True
+        if torch.get_deterministic_debug_mode() == 0:
+            return False
+        else:
+            return True
+
+    return False
 
 
 def is_hadamard_available():
@@ -1382,6 +1394,16 @@ def is_rich_available():
     return _rich_available
 
 
+def check_torch_load_is_safe():
+    if not is_torch_greater_or_equal("2.6"):
+        raise ValueError(
+            "Due to a serious vulnerability issue in `torch.load`, even with `weights_only=True`, we now require users "
+            "to upgrade torch to at least v2.6 in order to use the function. This version restriction does not apply "
+            "when loading files with safetensors."
+            "\nSee the vulnerability report here https://nvd.nist.gov/vuln/detail/CVE-2025-32434"
+        )
+
+
 # docstyle-ignore
 AV_IMPORT_ERROR = """
 {0} requires the PyAv library but it was not found in your environment. You can install it with:
@@ -1713,14 +1735,14 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 LIBROSA_IMPORT_ERROR = """
-{0} requires thes librosa library. But that was not found in your environment. You can install them with pip:
+{0} requires the librosa library. But that was not found in your environment. You can install them with pip:
 `pip install librosa`
 Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 PRETTY_MIDI_IMPORT_ERROR = """
-{0} requires thes pretty_midi library. But that was not found in your environment. You can install them with pip:
+{0} requires the pretty_midi library. But that was not found in your environment. You can install them with pip:
 `pip install pretty_midi`
 Please note that you may need to restart your runtime after installation.
 """
@@ -1862,7 +1884,7 @@ class _LazyModule(ModuleType):
         module_file: str,
         import_structure: IMPORT_STRUCTURE_T,
         module_spec: Optional[importlib.machinery.ModuleSpec] = None,
-        extra_objects: Dict[str, object] = None,
+        extra_objects: Optional[Dict[str, object]] = None,
     ):
         super().__init__(name)
 
@@ -1882,7 +1904,7 @@ class _LazyModule(ModuleType):
                 #
                 # dict_keys(['models.nllb_moe.configuration_nllb_moe', 'models.sew_d.configuration_sew_d'])
                 #
-                # with this, we don't only want to be able to import these explicitely, we want to be able to import
+                # with this, we don't only want to be able to import these explicitly, we want to be able to import
                 # every intermediate module as well. Therefore, this is what is returned:
                 #
                 # {
@@ -2397,7 +2419,7 @@ def spread_import_structure(nested_import_structure):
 
 
 @lru_cache()
-def define_import_structure(module_path: str, prefix: str = None) -> IMPORT_STRUCTURE_T:
+def define_import_structure(module_path: str, prefix: Optional[str] = None) -> IMPORT_STRUCTURE_T:
     """
     This method takes a module_path as input and creates an import structure digestible by a _LazyModule.
 

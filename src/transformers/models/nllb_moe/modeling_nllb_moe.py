@@ -425,7 +425,7 @@ class NllbMoeSparseMLP(nn.Module):
         r"""
         The goal of this forward pass is to have the same number of operation as the equivalent `NllbMoeDenseActDense`
         (mlp) layer. This means that all of the hidden states should be processed at most twice ( since we are using a
-        top_2 gating mecanism). This means that we keep the complexity to O(batch_size x sequence_length x hidden_dim)
+        top_2 gating mechanism). This means that we keep the complexity to O(batch_size x sequence_length x hidden_dim)
         instead of O(num_experts x batch_size x sequence_length x hidden_dim).
 
         1- Get the `router_probs` from the `router`. The shape of the `router_mask` is `(batch_size X sequence_length,

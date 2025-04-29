@@ -108,7 +108,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     ):
         """
         Pan and Scan an image, by cropping into smaller images when the aspect ratio exceeds
-        minumum allowed ratio.
+        minimum allowed ratio.
 
         Args:
             image (`torch.Tensor`):

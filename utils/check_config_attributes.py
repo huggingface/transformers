@@ -105,6 +105,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     # used internally to calculate `mlp_dim`
     "SamVisionConfig": ["mlp_ratio"],
+    # used internally to calculate `mlp_dim`
+    "SamHQVisionConfig": ["mlp_ratio"],
     # For (head) training, but so far not implemented
     "ClapAudioConfig": ["num_classes"],
     # Not used, but providing useful information to users
@@ -180,6 +182,22 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_cost",
         "giou_loss_coefficient",
         "mask_loss_coefficient",
+    ],
+    "DFineConfig": [
+        "eos_coefficient",
+        "focal_loss_alpha",
+        "focal_loss_gamma",
+        "matcher_alpha",
+        "matcher_bbox_cost",
+        "matcher_class_cost",
+        "matcher_gamma",
+        "matcher_giou_cost",
+        "use_focal_loss",
+        "weight_loss_bbox",
+        "weight_loss_giou",
+        "weight_loss_vfl",
+        "weight_loss_fgl",
+        "weight_loss_ddf",
     ],
     "GroundingDinoConfig": [
         "bbox_cost",
