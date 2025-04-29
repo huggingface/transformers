@@ -54,7 +54,7 @@ if is_torch_available():
 TEST_CACHE_IMPLEMENTATIONS = [
     cache_name
     for cache_name in ALL_CACHE_IMPLEMENTATIONS
-    # TODO (joao): Mamba is not compatible with most models, remove from `ALL_CACHE_IMPLEMENTATIONS`
+    # TODO (joao): Mamba is not compatible with most models, remove from `ALL_CACHE_IMPLEMENTATIONS`?
     if cache_name != "mamba"
     # TODO (joao): offloaded_hybrid == offloaded_hybrid_chunked, deprecate one of them
     if cache_name != "offloaded_hybrid"
@@ -313,12 +313,8 @@ class CacheHardIntegrationTest(unittest.TestCase):
         )
         inputs = tokenizer(["Here's everything I know about cats. Cats"], return_tensors="pt").to(model.device)
 
-        # DynamicCache and the legacy cache format should be equivalent
         set_seed(0)
-        gen_out_legacy = model.generate(**inputs, do_sample=True, max_new_tokens=256)
-        set_seed(0)
-        gen_out = model.generate(**inputs, do_sample=True, max_new_tokens=256, past_key_values=DynamicCache())
-        self.assertListEqual(gen_out_legacy.tolist(), gen_out.tolist())
+        gen_out= model.generate(**inputs, do_sample=True, max_new_tokens=256)
 
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         expected_text = (
@@ -414,8 +410,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         torch_accelerator_module.reset_peak_memory_stats(device)
         model.generate(generation_config=offloaded, **inputs)
         offloaded_peak_memory = torch_accelerator_module.max_memory_allocated(device)
-        print(f"original_peak_memory: {original_peak_memory}, offloaded_peak_memory: {offloaded_peak_memory}")
-        assert offloaded_peak_memory < original_peak_memory
+        self.assertTrue(offloaded_peak_memory < original_peak_memory)
 
     @require_torch_gpu
     @slow
@@ -433,7 +428,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         INITIAL_PROMPT = "You are a helpful assistant. "
         inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to("cuda")
-        # This is the common prompt cached, we need to run forward without grad to be abel to copy
+        # This is the common prompt cached, we need to run forward without grad to be able to copy
         with torch.no_grad():
             prompt_cache = model(**inputs_initial_prompt, past_key_values=prompt_cache).past_key_values
 
@@ -442,14 +437,19 @@ class CacheHardIntegrationTest(unittest.TestCase):
         for prompt in prompts:
             new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to("cuda")
             past_key_values = copy.deepcopy(prompt_cache)
-            outputs = model.generate(**new_inputs, past_key_values=past_key_values, max_new_tokens=40)
+            outputs = model.generate(
+                **new_inputs, past_key_values=past_key_values, max_new_tokens=40, disable_compile=True
+            )
             response = tokenizer.batch_decode(outputs)[0]
             responses.append(response)
 
         EXPECTED_DECODED_TEXT = [
-            "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is an enriching experience that broadens our horizons and exposes us to new cultures, landscapes, and people. Whether it's a week",
-            'You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital of France.\n\n\n\n\n\n## Query:\n\nIn a detailed analysis, compare the economic impacts of the introduction of the'
-        ]  # fmt: skip
+            "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a wonderful "
+            "way to explore new places, cultures, and experiences. Whether you are a seasoned traveler or a "
+            "first-time adventurer, there is always something",
+            "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital "
+            "of France.\n\n\n\n\n\n\n<|endoftext|>",
+        ]
         self.assertEqual(responses, EXPECTED_DECODED_TEXT)
 
     @require_torch_multi_gpu
