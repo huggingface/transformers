@@ -380,7 +380,8 @@ class AutoFeatureExtractor:
                 feature_extractor_auto_map, pretrained_model_name_or_path, **kwargs
             )
             _ = kwargs.pop("code_revision", None)
-            feature_extractor_class.register_for_auto_class()
+            if os.path.isdir(pretrained_model_name_or_path):
+                feature_extractor_class.register_for_auto_class()
             return feature_extractor_class.from_dict(config_dict, **kwargs)
         elif feature_extractor_class is not None:
             return feature_extractor_class.from_dict(config_dict, **kwargs)
