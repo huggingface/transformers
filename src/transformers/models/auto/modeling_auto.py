@@ -106,6 +106,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("efficientnet", "EfficientNetModel"),
         ("electra", "ElectraModel"),
         ("encodec", "EncodecModel"),
+        ("xcodec2", "XCodec2Model"),
         ("ernie", "ErnieModel"),
         ("ernie_m", "ErnieMModel"),
         ("esm", "EsmModel"),
