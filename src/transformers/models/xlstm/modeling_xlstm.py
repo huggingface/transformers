@@ -1,4 +1,4 @@
-# Copyright 2024, 2025 NXAI GmbH. All rights reserved.
+# Copyright 2025 NXAI GmbH. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -894,9 +894,9 @@ else:
                     return_last_states = self.config.return_last_states
 
                 if self.config.mode == "train_with_padding":
-                    assert not return_last_states, (
-                        "return_last_states=True is not supported with train_with_padding mode."
-                    )
+                    assert (
+                        not return_last_states
+                    ), "return_last_states=True is not supported with train_with_padding mode."
 
                 return self._train_fn(
                     q=q,
@@ -1516,42 +1516,8 @@ class xLSTMModel(xLSTMPreTrainedModel):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.embedding_dim)
-        # use config explicitly to mitigate unused variable tests
-        if external_xlstm:
-            xlstm_block_config = xLSTMLargeConfig(
-                vocab_size=config.vocab_size,
-                embedding_dim=config.embedding_dim,
-                num_blocks=config.num_blocks,
-                num_heads=config.num_heads,
-                use_bias=config.use_bias,
-                add_out_norm=config.add_out_norm,
-                norm_eps=config.norm_eps,
-                norm_reduction_force_float32=config.norm_reduction_force_float32,
-                # mlstm_layer
-                qk_dim_factor=config.qk_dim_factor,
-                v_dim_factor=config.v_dim_factor,
-                # mlstm backend
-                chunkwise_kernel=config.chunkwise_kernel,
-                sequence_kernel=config.sequence_kernel,
-                step_kernel=config.step_kernel,
-                mode=config.mode,
-                chunk_size=config.chunk_size,
-                return_last_states=config.return_last_states,
-                autocast_kernel_dtype=config.autocast_kernel_dtype,
-                eps=config.eps,
-                inference_state_dtype=config.inference_state_dtype,
-                # feedforward
-                ffn_proj_factor=config.ffn_proj_factor,
-                ffn_round_up_to_multiple_of=config.ffn_round_up_to_multiple_of,
-                # capping
-                gate_soft_cap=config.gate_soft_cap,
-                output_logit_soft_cap=config.output_logit_soft_cap,
-                weight_mode=config.weight_mode,
-            )
-        else:
-            xlstm_block_config = config
 
-        self.blocks = nn.ModuleList([mLSTMBlock(xlstm_block_config) for _ in range(config.num_blocks)])
+        self.blocks = nn.ModuleList([mLSTMBlock(config) for _ in range(config.num_blocks)])
 
         self.gradient_checkpointing = False
         self.out_norm = RMSNorm(config.embedding_dim, eps=config.norm_eps)
