@@ -32,7 +32,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"(encoder\..*)linear1\.(weight|bias)": r"\1fc1.\2",
     r"(encoder\..*)linear2\.(weight|bias)": r"\1fc2.\2",
     r"backbone\.0\.body": r"backbone.conv_encoder.model",
-    r"^(.*)$": r"model.\1",  # Prepends "model." to any string
+    r"tgt_embed": r"content_query_embeddings",
+    r"^(.*)$": r"model.\1",
 }
 
 
