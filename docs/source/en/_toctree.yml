@@ -1017,6 +1017,8 @@
         title: Qwen2VL
       - local: model_doc/sam
         title: Segment Anything
+      - local: model_doc/sam_hq
+        title: Segment Anything High Quality
       - local: model_doc/shieldgemma2
         title: ShieldGemma2
       - local: model_doc/siglip
