@@ -114,6 +114,7 @@ class AutoConfigTest(unittest.TestCase):
         config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
         self.assertEqual(config.__class__.__name__, "NewModelConfig")
 
+        config._auto_class = "AutoConfig"
         # Test the dynamic module is loaded only once.
         reloaded_config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
         self.assertIs(config.__class__, reloaded_config.__class__)

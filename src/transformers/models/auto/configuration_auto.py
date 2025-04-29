@@ -15,6 +15,7 @@
 """Auto Config class."""
 
 import importlib
+import os
 import re
 import warnings
 from collections import OrderedDict
@@ -1161,7 +1162,8 @@ class AutoConfig:
             config_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
             )
-            config_class.register_for_auto_class()
+            if os.path.isdir(pretrained_model_name_or_path):
+                config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
             try:
