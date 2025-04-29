@@ -343,7 +343,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             mean_resizing=mean_resizing,
         )
 
-        self.config.vlm_config.vocab_size = model_embeds.num_embeddings
+        self.config.get_text_config().vocab_size = model_embeds.num_embeddings
         self.vlm.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
 
