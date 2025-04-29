@@ -16,12 +16,9 @@
 
 import unittest
 
-from transformers import AutoTokenizer, GraniteMoeHybridConfig, is_torch_available, set_seed
+from transformers import GraniteMoeHybridConfig, is_torch_available
 from transformers.testing_utils import (
-    require_read_token,
     require_torch,
-    require_torch_gpu,
-    slow,
     torch_device,
 )
 
@@ -178,8 +175,8 @@ class GraniteMoeHybridModelTester:
             attn_layer_indices = [x + 1 for x in range(0, self.num_hidden_layers, d)]
             self.layer_types =  ["mamba"] * self.num_hidden_layers
             for i in attn_layer_indices:
-                self.layer_types[i] = ["multihead_latent_attention"]
-
+                self.layer_types[i] = "attention"
+            self.attn_layer_indices = [x + 1 for x in range(0, self.num_hidden_layers, d)]
         
         return GraniteMoeHybridConfig(
             vocab_size=self.vocab_size,
@@ -380,6 +377,70 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    # TODO: when we add attention_outputs, overwrite the test like in bamba
+
+    def test_attention_outputs(self):
+        r"""
+        Overriding the test_attention_outputs test as hybrid state space models only output
+        attentions for the attention layers.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+
+        expected_num_attentions = self.model_tester.num_hidden_layers - len(self.model_tester.attn_layer_indices)
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), expected_num_attentions)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), expected_num_attentions)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            added_hidden_states = 1
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.attentions
+
+            self.assertEqual(len(self_attentions), expected_num_attentions)
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
+
 
 #TODO add integration tests - need a small model open sourced for it (ask Mayank and Shawn)
