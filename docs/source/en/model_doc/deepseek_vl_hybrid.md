@@ -17,11 +17,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# DeepseekVL
+# DeepseekVLHybrid
 
 ## Overview
 
-The DeepseekVL model was introduced in [DeepSeek-VL: Towards Real-World Vision-Language Understanding](https://arxiv.org/abs/2403.05525) by the DeepSeek AI team. It is a vision-language model (VLM) designed to process both text and images for generating contextually relevant responses. The model leverages [LLaMA](./llama) as its text encoder, while [SigLip](./siglip) is used for encoding images.
+The DeepseekVLHybrid model was introduced in [DeepSeek-VL: Towards Real-World Vision-Language Understanding](https://arxiv.org/abs/2403.05525) by the DeepSeek AI team. It is a vision-language model (VLM) designed to process both text and images for generating contextually relevant responses. The model leverages [LLaMA](./llama) as its text encoder, while [SigLip](./siglip) is used for encoding low-resolution images and [SAM (Segment Anything Model)](./sam) is incorporated to handle high-resolution image encoding, enhancing the model’s ability to process fine-grained visual details. DeepseekVLHybrid is a variant of DeepseekVL that uses [SAM (Segment Anything Model)](./sam) to handle high-resolution image encoding.
 
 The abstract from the original paper is the following:
 
@@ -139,24 +139,24 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
-## DeepseekVLConfig
+## DeepseekVLHybridConfig
 
-[[autodoc]] DeepseekVLConfig
+[[autodoc]] DeepseekVLHybridConfig
 
-## DeepseekVLProcessor
+## DeepseekVLHybridProcessor
 
-[[autodoc]] DeepseekVLProcessor
+[[autodoc]] DeepseekVLHybridProcessor
 
-## DeepseekVLImageProcessor
+## DeepseekVLHybridImageProcessor
 
-[[autodoc]] DeepseekVLImageProcessor
+[[autodoc]] DeepseekVLHybridImageProcessor
 
-## DeepseekVLModel
+## DeepseekVLHybridModel
 
-[[autodoc]] DeepseekVLModel
+[[autodoc]] DeepseekVLHybridModel
     - forward
 
-## DeepseekVLForConditionalGeneration
+## DeepseekVLHybridForConditionalGeneration
 
-[[autodoc]] DeepseekVLForConditionalGeneration
+[[autodoc]] DeepseekVLHybridForConditionalGeneration
     - forward

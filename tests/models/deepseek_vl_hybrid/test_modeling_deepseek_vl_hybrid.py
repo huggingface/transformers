@@ -12,16 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch DeepseekVL model."""
+"""Testing suite for the PyTorch DeepseekVLHybrid model."""
 
 import re
 import tempfile
 import unittest
 
 from transformers import (
-    DeepseekVLConfig,
-    DeepseekVLForConditionalGeneration,
-    DeepseekVLModel,
+    DeepseekVLHybridConfig,
+    DeepseekVLHybridForConditionalGeneration,
+    DeepseekVLHybridModel,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -39,7 +39,7 @@ if is_torch_available():
     import torch
 
 
-class DeepseekVLModelTester:
+class DeepseekVLHybridModelTester:
     def __init__(
         self,
         parent,
@@ -68,6 +68,17 @@ class DeepseekVLModelTester:
             "vision_use_head": False,
             "num_attention_heads": 4,
         },
+        high_res_vision_config={
+            "num_hidden_layers": 1,
+            "global_attn_indexes": [0],
+            "hidden_size": 16,
+            "intermediate_size": 37,
+            "mlp_dim": 24,
+            "output_channels": 4,
+            "image_size": 128,
+            "patch_size": 32,
+            "num_attention_heads": 4,
+        },
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -79,21 +90,25 @@ class DeepseekVLModelTester:
 
         self.text_config = text_config
         self.vision_config = vision_config
+        self.high_res_vision_config = high_res_vision_config
         self.vision_config["num_channels"] = self.num_channels
+        self.high_res_vision_config["num_channels"] = self.num_channels
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
         self.hidden_size = text_config["hidden_size"]
         self.num_attention_heads = text_config["num_attention_heads"]
+        self.high_res_image_size = high_res_vision_config["image_size"]
         self.image_size = vision_config["image_size"]
         self.num_image_tokens = vision_config["image_size"] // vision_config["patch_size"]
         self.pad_token_id = text_config["pad_token_id"]
         self.image_token_index = self.vocab_size - 1
 
     def get_config(self):
-        return DeepseekVLConfig(
+        return DeepseekVLHybridConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
+            high_res_vision_config=self.high_res_vision_config,
             image_token_index=self.image_token_index,
         )
 
@@ -111,25 +126,33 @@ class DeepseekVLModelTester:
                 self.image_size,
             ]
         )
+        high_res_pixel_values = floats_tensor(
+            [
+                self.batch_size,
+                self.num_channels,
+                self.high_res_image_size,
+                self.high_res_image_size,
+            ]
+        )
         # fill image_tokens
         input_ids[:, : self.num_image_tokens] = self.image_token_index
 
-        return config, input_ids, attention_mask, pixel_values
+        return config, input_ids, attention_mask, pixel_values, high_res_pixel_values
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, pixel_values = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "pixel_values": pixel_values}
+        config, input_ids, attention_mask, pixel_values, high_res_pixel_values = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "pixel_values": pixel_values, "high_res_pixel_values": high_res_pixel_values}
         return config, inputs_dict
 
 
 @require_torch
-class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (DeepseekVLModel, DeepseekVLForConditionalGeneration) if is_torch_available() else ()
+class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (DeepseekVLHybridModel, DeepseekVLHybridForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": DeepseekVLModel,
-            "image-text-to-text": DeepseekVLForConditionalGeneration,
+            "feature-extraction": DeepseekVLHybridModel,
+            "image-text-to-text": DeepseekVLHybridForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -139,8 +162,8 @@ class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = DeepseekVLModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DeepseekVLConfig, has_text_modality=False)
+        self.model_tester = DeepseekVLHybridModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=DeepseekVLHybridConfig, has_text_modality=False)
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):
@@ -156,6 +179,7 @@ class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             input_ids = inputs["input_ids"]
             del inputs["input_ids"]
             del inputs["pixel_values"]
+            del inputs["high_res_pixel_values"]
 
             wte = model.get_input_embeddings()
             inputs["inputs_embeds"] = wte(input_ids)
@@ -176,6 +200,7 @@ class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             input_ids = inputs["input_ids"]
             del inputs["input_ids"]
             del inputs["pixel_values"]
+            del inputs["high_res_pixel_values"]
 
             inputs_embeds = model.get_input_embeddings()(input_ids)
 
@@ -190,7 +215,6 @@ class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         pass
 
     @require_torch_sdpa
-    # Copied from tests.models.janus.test_modeling_janus.JanusVisionText2TextModelTest.test_sdpa_can_dispatch_composite_models
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -200,7 +224,10 @@ class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 model.save_pretrained(tmpdirname)
 
                 # Load the model with SDPA
-                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname,
+                    attn_implementation="sdpa",
+                )
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
                 # Load model with eager attention
@@ -210,24 +237,30 @@ class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
-            # SigLip has one shared cls attr for all models, so we assign both submodels heer
-            vision_attn = language_attn = "sdpa" if model._supports_sdpa else "eager"
-
-            if hasattr(model_sdpa, "vision_model") and hasattr(model_sdpa, "language_model"):
-                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
-                self.assertTrue(model_sdpa.language_model.config._attn_implementation == language_attn)
-                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
-
             self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
             self.assertTrue(model_eager.config._attn_implementation == "eager")
 
+            if hasattr(model_sdpa, "vision_model") and hasattr(model_sdpa, "high_res_vision_model") and hasattr(model_sdpa, "language_model"):
+                self.assertTrue(model_sdpa.language_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model_sdpa.high_res_vision_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.high_res_vision_model.config._attn_implementation == "eager")
+
             for name, submodule in model_eager.named_modules():
                 class_name = submodule.__class__.__name__
-                if any(re.finditer(r"Attention(?!Pool)", class_name)):
+                if (
+                    any(re.finditer(r"Attention(?!Pool)", class_name))
+                    and getattr(submodule, "config", None)
+                    and submodule.config._attn_implementation == "sdpa"
+                ):
                     self.assertTrue(submodule.config._attn_implementation == "eager")
 
             for name, submodule in model_sdpa.named_modules():
                 class_name = submodule.__class__.__name__
-                if any(re.finditer(r"Attention(?!Pool)", class_name)):
+                if (
+                    any(re.finditer(r"Attention(?!Pool)", class_name))
+                    and getattr(submodule, "config", None)
+                    and submodule.config._attn_implementation == "eager"
+                ):
                     self.assertTrue(submodule.config._attn_implementation == "sdpa")

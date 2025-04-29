@@ -25,9 +25,6 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 if is_vision_available():
     from transformers import DeepseekVLImageProcessor
 
-    if is_torchvision_available():
-        from transformers import DeepseekVLImageProcessorFast
-
 
 # Copied from tests.models.vit.test_image_processing_vit.ViTImageProcessingTester with ViT->DeepseekVL
 class DeepseekVLImageProcessingTester:
@@ -67,8 +64,10 @@ class DeepseekVLImageProcessingTester:
             "size": self.size,
         }
 
+    # Ignore copy
     def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
+        max_size = max(self.size["height"], self.size["width"])
+        return self.num_channels, max_size, max_size
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
@@ -86,8 +85,8 @@ class DeepseekVLImageProcessingTester:
 @require_vision
 # Copied from tests.models.vit.test_image_processing_vit.ViTImageProcessingTest with ViT->DeepseekVL
 class DeepseekVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    # Ignore copy
     image_processing_class = DeepseekVLImageProcessor if is_vision_available() else None
-    fast_image_processing_class = DeepseekVLImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()

@@ -693,6 +693,8 @@
         title: DAB-DETR
       - local: model_doc/deepseek_vl
         title: DeepseekVL
+      - local: model_doc/deepseek_vl_hybrid
+        title: DeepseekVLHybrid
       - local: model_doc/deformable_detr
         title: Deformable DETR
       - local: model_doc/deit

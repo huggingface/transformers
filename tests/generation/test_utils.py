@@ -130,7 +130,8 @@ VLM_CLASS_NAMES = [
     "qwen2_5_vl",
     "ayavision",
     "janus",
-    "deepseekvl",  # the file is named `deepseek_vl`, but the model class is `DeepseekVL`
+    "deepseekvl",       # the file is named `deepseek_vl`, but the model class is `DeepseekVL`
+    "deepseekvlhybrid", # the file is named `deepseek_vl_hybrid`, but the model class is `DeepseekVLHybrid`
     "gemma3",
     "mistral3",
     "chameleon",

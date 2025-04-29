@@ -1200,6 +1200,9 @@ class SamPreTrainedModel(PreTrainedModel):
             if module.use_rel_pos:
                 module.rel_pos_h.data.zero_()
                 module.rel_pos_w.data.zero_()
+        elif isinstance(module, SamVisionEncoder):
+            if module.pos_embed is not None:
+                module.pos_embed.data.zero_()
 
 
 SAM_START_DOCSTRING = r"""
