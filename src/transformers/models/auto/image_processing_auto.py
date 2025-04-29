@@ -176,6 +176,7 @@ else:
             ("xclip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("yolos", ("YolosImageProcessor", "YolosImageProcessorFast")),
             ("zoedepth", ("ZoeDepthImageProcessor", "ZoeDepthImageProcessorFast")),
+            ("perception_lm", ("PerceptionLMImageProcessorFast",)),
         ]
     )
 
@@ -477,6 +478,7 @@ class AutoImageProcessor:
                 raise initial_exception
 
         image_processor_type = config_dict.get("image_processor_type", None)
+        print("image_processor_type", image_processor_type)
         image_processor_auto_map = None
         if "AutoImageProcessor" in config_dict.get("auto_map", {}):
             image_processor_auto_map = config_dict["auto_map"]["AutoImageProcessor"]
@@ -597,7 +599,8 @@ class AutoImageProcessor:
                     raise ValueError(
                         "This image processor cannot be instantiated. Please make sure you have `Pillow` installed."
                     )
-
+        print("config type", type(config))
+        print("config", config)
         raise ValueError(
             f"Unrecognized image processor in {pretrained_model_name_or_path}. Should have a "
             f"`image_processor_type` key in its {IMAGE_PROCESSOR_NAME} of {CONFIG_NAME}, or one of the following "
