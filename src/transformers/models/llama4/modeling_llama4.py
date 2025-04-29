@@ -24,7 +24,7 @@ import torch.nn.functional as F
 from transformers.models.llama4.configuration_llama4 import Llama4VisionConfig
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, HybridChunkedCache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, HybridChunkedCache
 from ...generation import GenerationMixin
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
