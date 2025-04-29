@@ -89,7 +89,6 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
-        crop_size: SizeDict,
         size_divisor: Optional[int],
         do_pad: bool,
         do_rescale: bool,
@@ -153,7 +152,6 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"] = None,
         size_divisor: Optional[int] = None,
-        **kwargs,
     ) -> "torch.Tensor":
         """
         Resize an image or batch of images to specified size.
