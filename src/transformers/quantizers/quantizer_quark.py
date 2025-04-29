@@ -119,7 +119,7 @@ class QuarkHfQuantizer(HfQuantizer):
             if config.get_text_config() is not None:
                text_plan = config.get_text_config().base_model_tp_plan
 
-            # modify exsiting play
+            # modify existing play
             text_plan_cp = {}
             for key in text_plan:
                 text_plan_cp[key+".weight"] =  text_plan[key]
