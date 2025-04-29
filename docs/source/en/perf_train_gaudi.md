@@ -19,5 +19,5 @@ The Intel Gaudi AI accelerator family currently includes three product generatio
 
 [`TrainingArguments`], [`Trainer`] and [`Pipeline`] detect and set the backend device to `hpu` if an Intel Gaudi device is available. No additional changes are required to enable training and inference on your device.
 
-> [!NOTE]
+> [!TIP]
 > For Gaudi-optimized model implementations for training and inference with Transformers, we recommend that you use [Optimum for Intel Gaudi](https://huggingface.co/docs/optimum/main/en/habana/index).
