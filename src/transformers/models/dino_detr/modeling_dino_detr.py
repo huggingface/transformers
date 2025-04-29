@@ -1527,14 +1527,11 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         else:
             self.layers = []
             del encoder_layer
-
         self.num_queries = config.num_queries
         self.num_encoder_layers = config.num_encoder_layers
         self.norm = norm
         self.d_model = config.d_model
-
         self.enc_layer_dropout_prob = config.enc_layer_dropout_prob
-
         self.two_stage_type = config.two_stage_type
         if config.two_stage_type in ["enceachlayer", "enclayer1"]:
             _proj_layer = nn.Linear(config.d_model, config.d_model)
@@ -1722,24 +1719,17 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         self.norm = norm
         self.num_feature_levels = config.num_feature_levels
         self.use_detached_boxes_dec_out = config.use_detached_boxes_dec_out
-
         self.ref_point_head = DinoDetrMLPPredictionHead(
             config.query_dim // 2 * config.d_model, config.d_model, config.d_model, 2
         )
         self.query_pos_sine_scale = None
-
         self.bbox_embed = None
         self.class_embed = None
-
         self.d_model = config.d_model
         self.ref_anchor_head = None
-
         self.decoder_query_perturber = decoder_query_perturber
-
         self.dec_layer_number = config.dec_layer_number
-
         self.dec_layer_dropout_prob = config.dec_layer_dropout_prob
-
         self.rm_detach = config.rm_detach
 
         self.post_init()
@@ -1871,49 +1861,6 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
 
 class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
     def __init__(self, config):
-        """
-        d_model=256,
-        nhead=8,
-        num_queries=300,
-        num_encoder_layers=6,
-        num_unicoder_layers=0,
-        num_decoder_layers=6,
-        dim_feedforward=2048,
-        dropout=0.0,
-        activation="relu",
-        normalize_before=False,
-        query_dim=4,
-        num_patterns=0,
-        # for deformable encoder
-        num_feature_levels=1,
-        enc_n_points=4,
-        dec_n_points=4,
-        # init query
-        learnable_tgt_init=False,
-        decoder_query_perturber=None,
-        add_channel_attention=False,
-        add_pos_value=False,
-        random_refpoints_xy=False,
-        # two stage
-        two_stage_type="no",  # ['no', 'standard', 'early', 'combine', 'enceachlayer', 'enclayer1']
-        two_stage_pat_embed=0,
-        two_stage_add_query_num=0,
-        two_stage_learn_wh=False,
-        two_stage_keep_all_tokens=False,
-        # evo of #anchors
-        dec_layer_number=None,
-        rm_enc_query_scale=True,
-        rm_self_attn_layers=None,
-        key_aware_type=None,
-        # layer share
-        # for detach
-        rm_detach=None,
-        decoder_sa_type="ca",
-        module_seq=["sa", "ca", "ffn"],
-        # for dn
-        embed_init_tgt=False,
-        use_detached_boxes_dec_out=False,
-        """
         super().__init__(config)
         if config.decoder_layer_noise:
             self.decoder_query_perturber = DinoDetrRandomBoxPerturber(
@@ -1926,21 +1873,13 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             self.decoder_query_perturber = None
 
         self.num_feature_levels = config.num_feature_levels
-        self.num_encoder_layers = config.num_encoder_layers
-        self.num_unicoder_layers = config.num_unicoder_layers
-        self.num_decoder_layers = config.num_decoder_layers
         self.two_stage_keep_all_tokens = config.two_stage_keep_all_tokens
         self.num_queries = config.num_queries
         self.random_refpoints_xy = config.random_refpoints_xy
-        self.use_detached_boxes_dec_out = config.use_detached_boxes_dec_out
-        self.decoder_sa_type = config.decoder_sa_type
-
         encoder_layer = DinoDetrEncoderLayer(config)
         encoder_norm = nn.LayerNorm(config.d_model) if config.normalize_before else None
         self.encoder = DinoDetrEncoder(encoder_layer, encoder_norm, config)
-
         decoder_layer = DinoDetrDecoderLayer(config)
-
         decoder_norm = nn.LayerNorm(config.d_model)
         self.decoder = DinoDetrDecoder(
             decoder_layer=decoder_layer,
@@ -1948,27 +1887,19 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             decoder_query_perturber=self.decoder_query_perturber,
             config=config,
         )
-
         self.d_model = config.d_model
-        self.num_heads = config.num_heads
-        self.dec_layers = config.num_decoder_layers
-        self.num_queries = config.num_queries  # useful for single stage model only
         self.num_patterns = config.num_patterns
-
         if config.num_feature_levels > 1:
-            if self.num_encoder_layers > 0:
+            if config.num_encoder_layers > 0:
                 self.level_embed = nn.Parameter(torch.Tensor(config.num_feature_levels, config.d_model))
             else:
                 self.level_embed = None
-
-        self.learnable_tgt_init = config.learnable_tgt_init
         self.embed_init_tgt = config.embed_init_tgt
         if (config.two_stage_type != "no" and config.embed_init_tgt) or (config.two_stage_type == "no"):
-            self.tgt_embed = nn.Embedding(self.num_queries, config.d_model)
-            nn.init.normal_(self.tgt_embed.weight.data)
+            self.content_query_embeddings = nn.Embedding(self.num_queries, config.d_model)
+            nn.init.normal_(self.content_query_embeddings.weight.data)
         else:
-            self.tgt_embed = None
-
+            self.content_query_embeddings = None
         # for two stage
         self.two_stage_type = config.two_stage_type
         self.two_stage_pat_embed = config.two_stage_pat_embed
@@ -1984,7 +1915,7 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
                 nn.init.normal_(self.pat_embed_for_2stage)
 
             if config.two_stage_add_query_num > 0:
-                self.tgt_embed = nn.Embedding(self.two_stage_add_query_num, config.d_model)
+                self.content_query_embeddings = nn.Embedding(self.two_stage_add_query_num, config.d_model)
 
             if config.two_stage_learn_wh:
                 self.two_stage_wh_embedding = nn.Embedding(1, 2)
@@ -1993,16 +1924,8 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
 
         if config.two_stage_type == "no":
             self.init_ref_points(config.num_queries)  # init self.refpoint_embed
-
         self.enc_out_class_embed = None
         self.enc_out_bbox_embed = None
-
-        # evolution of anchors
-        self.dec_layer_number = config.dec_layer_number
-
-        # self._reset_parameters()
-
-        self.rm_self_attn_layers = config.rm_self_attn_layers
         if config.rm_self_attn_layers is not None:
             print("Removing the self-attn in {} decoder layers".format(config.rm_self_attn_layers))
             for lid, dec_layer in enumerate(self.decoder.layers):
@@ -2025,89 +1948,89 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             nn.init.constant_(self.two_stage_wh_embedding.weight, math.log(0.05 / (1 - 0.05)))
 
     def get_valid_ratio(self, mask):
-        _, H, W = mask.shape
+        _, height, width = mask.shape
         valid_H = torch.sum(mask[:, :, 0], 1)
         valid_W = torch.sum(mask[:, 0, :], 1)
-        valid_ratio_h = valid_H.float() / H
-        valid_ratio_w = valid_W.float() / W
+        valid_ratio_h = valid_H.float() / height
+        valid_ratio_w = valid_W.float() / width
         valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
         return valid_ratio
 
     def init_ref_points(self, use_num_queries):
-        self.refpoint_embed = nn.Embedding(use_num_queries, 4)
+        self.content_query_reference_points = nn.Embedding(use_num_queries, 4)
 
         if self.random_refpoints_xy:
-            self.refpoint_embed.weight.data[:, :2].uniform_(0, 1)
-            self.refpoint_embed.weight.data[:, :2] = inverse_sigmoid(self.refpoint_embed.weight.data[:, :2])
-            self.refpoint_embed.weight.data[:, :2].requires_grad = False
+            self.content_query_reference_points.weight.data[:, :2].uniform_(0, 1)
+            self.content_query_reference_points.weight.data[:, :2] = inverse_sigmoid(
+                self.content_query_reference_points.weight.data[:, :2]
+            )
+            self.content_query_reference_points.weight.data[:, :2].requires_grad = False
 
     def forward(
         self,
-        srcs,
-        masks,
-        refpoint_embed,
-        pos_embeds,
-        tgt,
+        pixel_values,
+        pixel_masks,
+        query_reference_points,
+        query_positional_embeddings,
+        queries,
         attn_mask=None,
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
     ):
         """
         Input:
-            - srcs: List of multi features [bs, ci, hi, wi]
-            - masks: List of multi masks [bs, hi, wi]
-            - refpoint_embed: [bs, num_dn, 4]. None in infer
-            - pos_embeds: List of multi pos embeds [bs, ci, hi, wi]
-            - tgt: [bs, num_dn, d_model]. None in infer
+            - pixel_values: List of multi features [batch_size, ci, hi, wi]
+            - pixel_masks: List of multi pixel_masks [batch_size, hi, wi]
+            - query_reference_points: [batch_size, num_dn, 4]. None in infer
+            - query_positional_embeddings: List of multi pos embeds [batch_size, ci, hi, wi]
+            - queries: [batch_size, num_dn, d_model]. None in infer
 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         encoder_attentions = None
         decoder_attentions = None
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        # prepare input for encoder
+
+        # Prepare input for encoder
         src_flatten = []
         mask_flatten = []
-        lvl_pos_embed_flatten = []
+        level_pos_embed_flatten = []
         spatial_shapes_list = []
-        for lvl, (src, mask, pos_embed) in enumerate(zip(srcs, masks, pos_embeds)):
-            bs, c, h, w = src.shape
-            spatial_shape = (h, w)
+        for level, (src, mask, pos_embed) in enumerate(zip(pixel_values, pixel_masks, query_positional_embeddings)):
+            batch_size, c, height, width = src.shape
+            spatial_shape = (height, width)
             spatial_shapes_list.append(spatial_shape)
 
-            src = src.flatten(2).transpose(1, 2)  # bs, hw, c
-            mask = mask.flatten(1)  # bs, hw
-            pos_embed = pos_embed.flatten(2).transpose(1, 2)  # bs, hw, c
+            src = src.flatten(2).transpose(1, 2)
+            mask = mask.flatten(1)
+            pos_embed = pos_embed.flatten(2).transpose(1, 2)
             if self.num_feature_levels > 1 and self.level_embed is not None:
-                lvl_pos_embed = pos_embed + self.level_embed[lvl].view(1, 1, -1)
+                level_pos_embed = pos_embed + self.level_embed[level].view(1, 1, -1)
             else:
-                lvl_pos_embed = pos_embed
-            lvl_pos_embed_flatten.append(lvl_pos_embed)
+                level_pos_embed = pos_embed
+            level_pos_embed_flatten.append(level_pos_embed)
             src_flatten.append(src)
             mask_flatten.append(mask)
-        src_flatten = torch.cat(src_flatten, 1)  # bs, \sum{hxw}, c
-        mask_flatten = torch.cat(mask_flatten, 1)  # bs, \sum{hxw}
-        lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)  # bs, \sum{hxw}, c
+        src_flatten = torch.cat(src_flatten, 1)
+        mask_flatten = torch.cat(mask_flatten, 1)
+        level_pos_embed_flatten = torch.cat(level_pos_embed_flatten, 1)
         spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=src_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-        valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
+        valid_ratios = torch.stack([self.get_valid_ratio(m) for m in pixel_masks], 1)
 
-        # two stage
-        enc_topk_proposals = enc_refpoint_embed = None
+        encoder_topk_proposals = encoder_query_reference_points = None
 
-        #########################################################
         # Begin Encoder
-        #########################################################
         outputs_encoder_part = self.encoder(
             input_embeddings=src_flatten,
-            position_embeddings=lvl_pos_embed_flatten,
+            position_embeddings=level_pos_embed_flatten,
             level_start_index=level_start_index,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
             valid_ratios=valid_ratios,
             key_padding_mask=mask_flatten,
-            ref_token_index=enc_topk_proposals,  # bs, nq
-            ref_token_coord=enc_refpoint_embed,  # bs, nq, 4
+            ref_token_index=encoder_topk_proposals,
+            ref_token_coord=encoder_query_reference_points,
             return_dict=return_dict,
             output_attentions=output_attentions,
         )
@@ -2140,15 +2063,7 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             if output_attentions:
                 encoder_attentions = outputs_encoder_part["attentions"]
 
-        #########################################################
-        # End Encoder
-        # - memory: bs, \sum{hw}, c
-        # - mask_flatten: bs, \sum{hw}
-        # - lvl_pos_embed_flatten: bs, \sum{hw}, c
-        # - enc_intermediate_output: None or (nenc+1, bs, nq, c) or (nenc, bs, nq, c)
-        # - enc_intermediate_refpoints: None or (nenc+1, bs, nq, c) or (nenc, bs, nq, c)
-        #########################################################
-
+        # Prepare queries
         mask_flatten = ~mask_flatten
         if self.two_stage_type == "standard":
             if self.two_stage_learn_wh:
@@ -2161,89 +2076,85 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             output_memory = self.enc_output_norm(self.enc_output(output_memory))
 
             if self.two_stage_pat_embed > 0:
-                bs, nhw, _ = output_memory.shape
-                # output_memory: bs, n, 256; self.pat_embed_for_2stage: k, 256
+                batch_size, nhw, _ = output_memory.shape
                 output_memory = output_memory.repeat(1, self.two_stage_pat_embed, 1)
                 _pats = self.pat_embed_for_2stage.repeat_interleave(nhw, 0)
                 output_memory = output_memory + _pats
                 output_proposals = output_proposals.repeat(1, self.two_stage_pat_embed, 1)
 
             if self.two_stage_add_query_num > 0:
-                output_memory = torch.cat((output_memory, tgt), dim=1)
-                output_proposals = torch.cat((output_proposals, refpoint_embed), dim=1)
+                output_memory = torch.cat((output_memory, queries), dim=1)
+                output_proposals = torch.cat((output_proposals, query_reference_points), dim=1)
 
             enc_outputs_class_unselected = self.enc_out_class_embed(output_memory)
-            enc_outputs_coord_unselected = (
-                self.enc_out_bbox_embed(output_memory) + output_proposals
-            )  # (bs, \sum{hw}, 4) unsigmoid
+            enc_outputs_coord_unselected = self.enc_out_bbox_embed(output_memory) + output_proposals
             topk = self.num_queries
-            topk_proposals = torch.topk(enc_outputs_class_unselected.max(-1)[0], topk, dim=1)[1]  # bs, nq
+            topk_proposals = torch.topk(enc_outputs_class_unselected.max(-1)[0], topk, dim=1)[1]
 
-            # gather boxes
-            refpoint_embed_undetach = torch.gather(
+            query_reference_points_undetach = torch.gather(
                 enc_outputs_coord_unselected,
                 1,
                 topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
-            )  # unsigmoid
-            refpoint_embed_ = refpoint_embed_undetach.detach()
+            )
+            content_query_reference_points = query_reference_points_undetach.detach()
             init_box_proposal = torch.gather(
                 output_proposals, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)
-            ).sigmoid()  # sigmoid
+            ).sigmoid()
 
-            # gather tgt
-            tgt_undetach = torch.gather(
+            queries_undetach = torch.gather(
                 output_memory,
                 1,
                 topk_proposals.unsqueeze(-1).repeat(1, 1, self.d_model),
             )
             if self.embed_init_tgt:
-                tgt_ = self.tgt_embed.weight[:, None, :].repeat(1, bs, 1).transpose(0, 1)  # nq, bs, d_model
+                content_queries = (
+                    self.content_query_embeddings.weight[:, None, :].repeat(1, batch_size, 1).transpose(0, 1)
+                )
             else:
-                tgt_ = tgt_undetach.detach()
+                content_queries = queries_undetach.detach()
 
-            if refpoint_embed is not None:
-                refpoint_embed = torch.cat([refpoint_embed, refpoint_embed_], dim=1)
-                tgt = torch.cat([tgt, tgt_], dim=1)
+            if query_reference_points is not None:
+                query_reference_points = torch.cat([query_reference_points, content_query_reference_points], dim=1)
+                queries = torch.cat([queries, content_queries], dim=1)
             else:
-                refpoint_embed, tgt = refpoint_embed_, tgt_
+                query_reference_points, queries = (
+                    content_query_reference_points,
+                    content_queries,
+                )
 
         elif self.two_stage_type == "no":
-            tgt_ = self.tgt_embed.weight[:, None, :].repeat(1, bs, 1).transpose(0, 1)  # nq, bs, d_model
-            refpoint_embed_ = self.refpoint_embed.weight[:, None, :].repeat(1, bs, 1).transpose(0, 1)  # nq, bs, 4
+            content_queries = self.content_query_embeddings.weight[:, None, :].repeat(1, batch_size, 1).transpose(0, 1)
+            content_query_reference_points = (
+                self.content_query_reference_points.weight[:, None, :].repeat(1, batch_size, 1).transpose(0, 1)
+            )
 
-            if refpoint_embed is not None:
-                refpoint_embed = torch.cat([refpoint_embed, refpoint_embed_], dim=1)
-                tgt = torch.cat([tgt, tgt_], dim=1)
+            if query_reference_points is not None:
+                query_reference_points = torch.cat([query_reference_points, content_query_reference_points], dim=1)
+                queries = torch.cat([queries, content_queries], dim=1)
             else:
-                refpoint_embed, tgt = refpoint_embed_, tgt_
+                query_reference_points, queries = (
+                    content_query_reference_points,
+                    content_queries,
+                )
 
             if self.num_patterns > 0:
-                tgt_embed = tgt.repeat(1, self.num_patterns, 1)
-                refpoint_embed = refpoint_embed.repeat(1, self.num_patterns, 1)
-                tgt_pat = self.patterns.weight[None, :, :].repeat_interleave(
-                    self.num_queries, 1
-                )  # 1, n_q*n_pat, d_model
-                tgt = tgt_embed + tgt_pat
+                queries_embed = queries.repeat(1, self.num_patterns, 1)
+                query_reference_points = query_reference_points.repeat(1, self.num_patterns, 1)
+                queries_patterns = self.patterns.weight[None, :, :].repeat_interleave(self.num_queries, 1)
+                queries = queries_embed + queries_patterns
 
-            init_box_proposal = refpoint_embed_.sigmoid()
+            init_box_proposal = content_query_reference_points.sigmoid()
 
         else:
             raise NotImplementedError("unknown two_stage_type {}".format(self.two_stage_type))
-        #########################################################
-        # End preparing tgt
-        # - tgt: bs, NQ, d_model
-        # - refpoint_embed(unsigmoid): bs, NQ, d_model
-        #########################################################
 
-        #########################################################
-        # Begin Decoder
-        #########################################################
+        # Decoder
         outputs_decoder_part = self.decoder(
-            queries=tgt.transpose(0, 1),
+            queries=queries.transpose(0, 1),
             memory=memory.transpose(0, 1),
             self_attn_mask=attn_mask,
             memory_key_padding_mask=mask_flatten,
-            refpoints_unsigmoid=refpoint_embed.transpose(0, 1),
+            refpoints_unsigmoid=query_reference_points.transpose(0, 1),
             level_start_index=level_start_index,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
@@ -2262,15 +2173,8 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             )
             if output_attentions:
                 decoder_attentions = outputs_decoder_part["attentions"]
-        #########################################################
-        # End Decoder
-        # hs: n_dec, bs, nq, d_model
-        # references: n_dec+1, bs, nq, query_dim
-        #########################################################
 
-        #########################################################
-        # Begin postprocess
-        #########################################################
+        # Postprocess
         if self.two_stage_type == "standard":
             if self.two_stage_keep_all_tokens:
                 hs_enc = output_memory.unsqueeze(0)
@@ -2278,15 +2182,10 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
                 init_box_proposal = output_proposals
 
             else:
-                hs_enc = tgt_undetach.unsqueeze(0)
-                ref_enc = refpoint_embed_undetach.sigmoid().unsqueeze(0)
+                hs_enc = queries_undetach.unsqueeze(0)
+                ref_enc = query_reference_points_undetach.sigmoid().unsqueeze(0)
         else:
             hs_enc = ref_enc = None
-        #########################################################
-        # End postprocess
-        # hs_enc: (n_enc+1, bs, nq, d_model) or (1, bs, nq, d_model) or (n_enc, bs, nq, d_model) or None
-        # ref_enc: (n_enc+1, bs, nq, query_dim) or (1, bs, nq, query_dim) or (n_enc, bs, nq, d_model) or None
-        #########################################################
 
         if not return_dict:
             return tuple(
@@ -2313,11 +2212,6 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
             encoder_attentions=encoder_attentions,
             decoder_attentions=decoder_attentions,
         )
-        # hs: (n_dec, bs, nq, d_model)
-        # references: sigmoid coordinates. (n_dec+1, bs, bq, 4)
-        # hs_enc: (n_enc+1, bs, nq, d_model) or (1, bs, nq, d_model) or None
-        # ref_enc: sigmoid coordinates. \
-        #           (n_enc+1, bs, nq, query_dim) or (1, bs, nq, query_dim) or None
 
 
 DINO_DETR_START_DOCSTRING = r"""
@@ -2502,13 +2396,13 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
 
         if config.dec_pred_bbox_embed_share:
-            self.bbox_embed = _get_clones(self.bbox_embed, self.transformer.num_decoder_layers, layer_share=True)
+            self.bbox_embed = _get_clones(self.bbox_embed, config.num_decoder_layers, layer_share=True)
         else:
-            self.bbox_embed = [copy.deepcopy(self.bbox_embed) for _ in range(self.transformer.num_decoder_layers)]
+            self.bbox_embed = [copy.deepcopy(self.bbox_embed) for _ in range(config.num_decoder_layers)]
         if config.dec_pred_class_embed_share:
-            self.class_embed = _get_clones(self.class_embed, self.transformer.num_decoder_layers, layer_share=True)
+            self.class_embed = _get_clones(self.class_embed, config.num_decoder_layers, layer_share=True)
         else:
-            self.class_embed = [copy.deepcopy(self.class_embed) for _ in range(self.transformer.num_decoder_layers)]
+            self.class_embed = [copy.deepcopy(self.class_embed) for _ in range(config.num_decoder_layers)]
         self.transformer.decoder.bbox_embed = self.bbox_embed
         self.transformer.decoder.class_embed = self.class_embed
 
