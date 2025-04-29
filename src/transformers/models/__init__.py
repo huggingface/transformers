@@ -71,6 +71,7 @@ if TYPE_CHECKING:
     from .csm import *
     from .ctrl import *
     from .cvt import *
+    from .d_fine import *
     from .dab_detr import *
     from .dac import *
     from .data2vec import *
@@ -134,6 +135,7 @@ if TYPE_CHECKING:
     from .groupvit import *
     from .helium import *
     from .herbert import *
+    from .hgnet_v2 import *
     from .hiera import *
     from .hubert import *
     from .ibert import *
@@ -255,6 +257,7 @@ if TYPE_CHECKING:
     from .rt_detr_v2 import *
     from .rwkv import *
     from .sam import *
+    from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .segformer import *
