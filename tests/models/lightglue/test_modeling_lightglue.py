@@ -301,16 +301,12 @@ def prepare_imgs():
 class LightGlueModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            AutoImageProcessor.from_pretrained("stevenbucaille/lightglue_superpoint")
-            if is_vision_available()
-            else None
-        )
+        return AutoImageProcessor.from_pretrained("ETH-CVG/lightglue_superpoint") if is_vision_available() else None
 
     @slow
     def test_inference(self):
         model = LightGlueForKeypointMatching.from_pretrained(
-            "stevenbucaille/lightglue_superpoint", attn_implementation="eager"
+            "ETH-CVG/lightglue_superpoint", attn_implementation="eager"
         ).to(torch_device)
         preprocessor = self.default_image_processor
         images = prepare_imgs()
@@ -387,7 +383,7 @@ class LightGlueModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_without_early_stop(self):
         model = LightGlueForKeypointMatching.from_pretrained(
-            "stevenbucaille/lightglue_superpoint", attn_implementation="eager", depth_confidence=1.0
+            "ETH-CVG/lightglue_superpoint", attn_implementation="eager", depth_confidence=1.0
         ).to(torch_device)
         preprocessor = self.default_image_processor
         images = prepare_imgs()
@@ -476,7 +472,7 @@ class LightGlueModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_without_early_stop_and_keypoint_pruning(self):
         model = LightGlueForKeypointMatching.from_pretrained(
-            "stevenbucaille/lightglue_superpoint",
+            "ETH-CVG/lightglue_superpoint",
             attn_implementation="eager",
             depth_confidence=1.0,
             width_confidence=1.0,
