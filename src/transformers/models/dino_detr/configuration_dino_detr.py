@@ -232,12 +232,17 @@ class DinoDetrConfig(PretrainedConfig):
     ):
         # We default to values which were previously hard-coded in the model. This enables configurability of the config
         # while keeping the default behavior the same.
-        if use_timm_backbone and backbone_kwargs is None:
-            backbone_kwargs = {}
+        if use_timm_backbone:
+            if backbone_kwargs is None:
+                backbone_kwargs = {}
             if dilation:
                 backbone_kwargs["output_stride"] = 16
-            backbone_kwargs["out_indices"] = [2, 3, 4] if num_feature_levels > 1 else [4]
+            if "out_indices" not in backbone_kwargs:
+                backbone_kwargs["out_indices"] = (
+                    list(range(num_feature_levels + 1))[-3:] if num_feature_levels > 1 else [num_feature_levels]
+                )
             backbone_kwargs["in_chans"] = num_channels
+
         # Backwards compatibility
         elif not use_timm_backbone and backbone in (None, "resnet50"):
             if backbone_config is None:
@@ -312,6 +317,8 @@ class DinoDetrConfig(PretrainedConfig):
         elif int(fix_refpoints_hw) == -2:
             assert random_refpoints_xy
         assert query_dim in [2, 4], "Query_dim should be 2/4 but {}".format(query_dim)
+        if use_timm_backbone and backbone_kwargs is not None:
+            assert backbone_kwargs["in_chans"] == num_channels
 
         self.d_model = d_model
         self.num_feature_levels = num_feature_levels

@@ -192,6 +192,7 @@ def multi_scale_deformable_attention(
     return output.transpose(1, 2).contiguous()
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->DinoDetr
 class DinoDetrMultiscaleDeformableAttention(nn.Module):
     """
     Multiscale deformable attention as proposed in Deformable DETR.
@@ -700,6 +701,7 @@ def replace_batch_norm(model):
             replace_batch_norm(module)
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrConvEncoder with DeformableDetr->DinoDetr
 class DinoDetrConvEncoder(nn.Module):
     """
     Convolutional backbone, using either the AutoBackbone API or one from the timm library.
@@ -784,9 +786,6 @@ class DinoDetrConvModel(nn.Module):
         super().__init__()
         self.conv_encoder = conv_encoder
         self.position_embedding = position_embedding
-        # return_interm_indices = [1, 2, 3]  # [[0,1,2,3], [1,2,3], [3]]
-        # return_interm_indices = conv_encoder.out_indices
-        # num_channels_all = [256, 512, 1024, 2048]
         num_channels_all = conv_encoder.intermediate_channel_sizes
         self.num_channels = num_channels_all
 
@@ -799,21 +798,6 @@ class DinoDetrConvModel(nn.Module):
             pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
 
         return out, pos
-
-
-class DinoDetrMLP(nn.Module):
-    """Very simple multi-layer perceptron (also called FFN)"""
-
-    def __init__(self, input_dim, d_model, output_dim, num_layers):
-        super().__init__()
-        self.num_layers = num_layers
-        h = [d_model] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
-
-    def forward(self, x):
-        for i, layer in enumerate(self.layers):
-            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
-        return x
 
 
 def prepare_for_cdn(dn_args, training, num_queries, num_classes, d_model, label_enc, device):
@@ -985,29 +969,28 @@ class DinoDetrPositionEmbeddingSineHW(nn.Module):
             scale = 2 * math.pi
         self.scale = scale
 
-    def forward(self, x, mask):
-        not_mask = mask
-        y_embed = not_mask.cumsum(1, dtype=torch.float32)
-        x_embed = not_mask.cumsum(2, dtype=torch.float32)
+    def forward(self, pixel_values, pixel_mask):
+        y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
+        x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
 
         if self.normalize:
             eps = 1e-6
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_tx = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
+        dim_tx = torch.arange(self.num_pos_feats, dtype=torch.float32, device=pixel_values.device)
         dim_tx = self.temperatureW ** (2 * (dim_tx // 2) / self.num_pos_feats)
         pos_x = x_embed[:, :, :, None] / dim_tx
 
-        dim_ty = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
+        dim_ty = torch.arange(self.num_pos_feats, dtype=torch.float32, device=pixel_values.device)
         dim_ty = self.temperatureH ** (2 * (dim_ty // 2) / self.num_pos_feats)
         pos_y = y_embed[:, :, :, None] / dim_ty
 
         pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+        position_embeddings = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
 
-        return pos
+        return position_embeddings
 
 
 class DinoDetrPositionEmbeddingLearned(nn.Module):
@@ -1025,42 +1008,42 @@ class DinoDetrPositionEmbeddingLearned(nn.Module):
         nn.init.uniform_(self.row_embed.weight)
         nn.init.uniform_(self.col_embed.weight)
 
-    def forward(self, x, mask):
-        h, w = x.shape[-2:]
-        i = torch.arange(w, device=x.device)
-        j = torch.arange(h, device=x.device)
-        x_emb = self.col_embed(i)
-        y_emb = self.row_embed(j)
-        pos = (
+    def forward(self, pixel_values, pixel_mask):
+        height, width = pixel_values.shape[-2:]
+        width_indices = torch.arange(width, device=pixel_values.device)
+        height_indices = torch.arange(height, device=pixel_values.device)
+        x_embeddings = self.col_embed(width_indices)
+        y_embeddings = self.row_embed(height_indices)
+        position_embeddings = (
             torch.cat(
                 [
-                    x_emb.unsqueeze(0).repeat(h, 1, 1),
-                    y_emb.unsqueeze(1).repeat(1, w, 1),
+                    x_embeddings.unsqueeze(0).repeat(height, 1, 1),
+                    y_embeddings.unsqueeze(1).repeat(1, width, 1),
                 ],
                 dim=-1,
             )
             .permute(2, 0, 1)
             .unsqueeze(0)
-            .repeat(x.shape[0], 1, 1, 1)
+            .repeat(pixel_values.shape[0], 1, 1, 1)
         )
-        return pos
+        return position_embeddings
 
 
 def build_position_encoding(config):
     N_steps = config.d_model // 2
     if config.position_embedding_type in ("SineHW"):
-        position_embedding = DinoDetrPositionEmbeddingSineHW(
+        position_embeddings = DinoDetrPositionEmbeddingSineHW(
             N_steps,
             temperatureH=config.pe_temperatureH,
             temperatureW=config.pe_temperatureW,
             normalize=True,
         )
     elif config.position_embedding_type in ("Learned"):
-        position_embedding = DinoDetrPositionEmbeddingLearned(N_steps)
+        position_embeddings = DinoDetrPositionEmbeddingLearned(N_steps)
     else:
         raise ValueError(f"not supported {config.position_embedding}")
 
-    return position_embedding
+    return position_embeddings
 
 
 def _get_activation_fn(activation, d_model=256, batch_dim=0):
@@ -1079,32 +1062,32 @@ def _get_activation_fn(activation, d_model=256, batch_dim=0):
     raise RuntimeError(f"activation should be relu/gelu/glu/prelu/selu, not {activation}.")
 
 
-def gen_sineembed_for_position(pos_tensor, d_model):
-    # n_query, bs, _ = pos_tensor.size()
+def gen_sineembed_for_position(reference_points, d_model):
+    # n_query, bs, _ = reference_points.size()
     # sineembed_tensor = torch.zeros(n_query, bs, 256)
     scale = 2 * math.pi
-    dim_t = torch.arange(d_model / 2, dtype=torch.float32, device=pos_tensor.device)
+    dim_t = torch.arange(d_model / 2, dtype=torch.float32, device=reference_points.device)
     dim_t = 10000 ** (2 * (dim_t // 2) / (d_model / 2))
-    x_embed = pos_tensor[:, :, 0] * scale
-    y_embed = pos_tensor[:, :, 1] * scale
+    x_embed = reference_points[:, :, 0] * scale
+    y_embed = reference_points[:, :, 1] * scale
     pos_x = x_embed[:, :, None] / dim_t
     pos_y = y_embed[:, :, None] / dim_t
     pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
     pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
-    if pos_tensor.size(-1) == 2:
+    if reference_points.size(-1) == 2:
         pos = torch.cat((pos_y, pos_x), dim=2)
-    elif pos_tensor.size(-1) == 4:
-        w_embed = pos_tensor[:, :, 2] * scale
+    elif reference_points.size(-1) == 4:
+        w_embed = reference_points[:, :, 2] * scale
         pos_w = w_embed[:, :, None] / dim_t
         pos_w = torch.stack((pos_w[:, :, 0::2].sin(), pos_w[:, :, 1::2].cos()), dim=3).flatten(2)
 
-        h_embed = pos_tensor[:, :, 3] * scale
+        h_embed = reference_points[:, :, 3] * scale
         pos_h = h_embed[:, :, None] / dim_t
         pos_h = torch.stack((pos_h[:, :, 0::2].sin(), pos_h[:, :, 1::2].cos()), dim=3).flatten(2)
 
         pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
     else:
-        raise ValueError("Unknown pos_tensor shape(-1):{}".format(pos_tensor.size(-1)))
+        raise ValueError("Unknown reference_points shape(-1):{}".format(reference_points.size(-1)))
     return pos
 
 
@@ -1119,31 +1102,33 @@ def gen_encoder_output_proposals(memory: Tensor, memory_padding_mask: Tensor, sp
         - output_memory: bs, \sum{hw}, d_model
         - output_proposals: bs, \sum{hw}, 4
     """
-    N_, S_, C_ = memory.shape
+    batch_size, _, _ = memory.shape
     proposals = []
-    _cur = 0
-    for lvl, (H_, W_) in enumerate(spatial_shapes):
-        mask_flatten_ = memory_padding_mask[:, _cur : (_cur + H_ * W_)].view(N_, H_, W_, 1)
-        valid_H = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
-        valid_W = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
+    current_height_width_prod = 0
+    for level, (height, width) in enumerate(spatial_shapes):
+        mask_flatten_ = memory_padding_mask[
+            :, current_height_width_prod : (current_height_width_prod + height * width)
+        ].view(batch_size, height, width, 1)
+        valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
+        valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
         grid_y, grid_x = torch.meshgrid(
-            torch.linspace(0, H_ - 1, H_, dtype=torch.float32, device=memory.device),
-            torch.linspace(0, W_ - 1, W_, dtype=torch.float32, device=memory.device),
+            torch.linspace(0, height - 1, height, dtype=torch.float32, device=memory.device),
+            torch.linspace(0, width - 1, width, dtype=torch.float32, device=memory.device),
         )
-        grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)  # H_, W_, 2
+        grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)  # height, width, 2
 
-        scale = torch.cat([valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], 1).view(N_, 1, 1, 2)
-        grid = (grid.unsqueeze(0).expand(N_, -1, -1, -1) + 0.5) / scale
+        scale = torch.cat([valid_width.unsqueeze(-1), valid_height.unsqueeze(-1)], 1).view(batch_size, 1, 1, 2)
+        grid = (grid.unsqueeze(0).expand(batch_size, -1, -1, -1) + 0.5) / scale
 
         if learnedwh is not None:
-            wh = torch.ones_like(grid) * learnedwh.sigmoid() * (2.0**lvl)
+            wh = torch.ones_like(grid) * learnedwh.sigmoid() * (2.0**level)
         else:
-            wh = torch.ones_like(grid) * 0.05 * (2.0**lvl)
+            wh = torch.ones_like(grid) * 0.05 * (2.0**level)
 
-        proposal = torch.cat((grid, wh), -1).view(N_, -1, 4)
+        proposal = torch.cat((grid, wh), -1).view(batch_size, -1, 4)
         proposals.append(proposal)
-        _cur += H_ * W_
+        current_height_width_prod += height * width
 
     output_proposals = torch.cat(proposals, 1)
     output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
@@ -1354,173 +1339,150 @@ class DinoDetrDecoderLayer(nn.Module):
     def with_pos_embed(tensor, pos):
         return tensor if pos is None else tensor + pos
 
-    def forward_ffn(self, tgt):
-        tgt2 = self.linear2(self.dropout3(self.activation(self.linear1(tgt))))
-        tgt = tgt + self.dropout4(tgt2)
-        tgt = self.norm3(tgt)
-        return tgt
+    def forward_ffn(self, pixel_values):
+        transformed_values = self.linear2(self.dropout3(self.activation(self.linear1(pixel_values))))
+        output = pixel_values + self.dropout4(transformed_values)
+        output = self.norm3(output)
+        return output
 
     def forward_sa(
         self,
-        # for tgt
-        tgt: Optional[Tensor],  # nq, bs, d_model
-        tgt_query_pos: Optional[Tensor] = None,  # pos for query. MLP(Sine(pos))
-        tgt_query_sine_embed: Optional[Tensor] = None,  # pos for query. Sine(pos)
-        tgt_key_padding_mask: Optional[Tensor] = None,
-        tgt_reference_points: Optional[Tensor] = None,  # nq, bs, 4
+        # for queries
+        queries: Optional[Tensor],  # nq, bs, d_model
+        query_position_embeddings: Optional[Tensor] = None,  # pos for query. MLP(Sine(pos))
+        query_reference_points: Optional[Tensor] = None,  # nq, bs, 4
         # for memory
         memory: Optional[Tensor] = None,  # hw, bs, d_model
         memory_key_padding_mask: Optional[Tensor] = None,
         memory_level_start_index: Optional[Tensor] = None,  # num_levels
         memory_spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
         memory_spatial_shapes_list: Optional[Tensor] = None,  # bs, num_levels, 2
-        memory_pos: Optional[Tensor] = None,  # pos for memory
         # sa
         self_attn_mask: Optional[Tensor] = None,  # mask used for self-attention
-        cross_attn_mask: Optional[Tensor] = None,  # mask used for cross-attention
     ):
         # self attention
         attn_weights = None
         if self.self_attn is not None:
             if self.decoder_sa_type == "sa":
-                q = k = self.with_pos_embed(tgt, tgt_query_pos)
-                tgt2, attn_weights = self.self_attn(q, k, tgt, attn_mask=self_attn_mask)
-                tgt = tgt + self.dropout2(tgt2)
-                tgt = self.norm2(tgt)
+                q = k = self.with_pos_embed(queries, query_position_embeddings)
+                transformed_queries, attn_weights = self.self_attn(q, k, queries, attn_mask=self_attn_mask)
+                queries = queries + self.dropout2(transformed_queries)
+                queries = self.norm2(queries)
             elif self.decoder_sa_type == "ca_label":
-                bs = tgt.shape[1]
+                bs = queries.shape[1]
                 k = v = self.label_embedding.weight[:, None, :].repeat(1, bs, 1)
-                tgt2, attn_weights = self.self_attn(tgt, k, v, attn_mask=self_attn_mask)
-                tgt = tgt + self.dropout2(tgt2)
-                tgt = self.norm2(tgt)
+                transformed_queries, attn_weights = self.self_attn(queries, k, v, attn_mask=self_attn_mask)
+                queries = queries + self.dropout2(transformed_queries)
+                queries = self.norm2(queries)
             elif self.decoder_sa_type == "ca_content":
-                tgt2, attn_weights = self.self_attn(
-                    hidden_states=self.with_pos_embed(tgt, tgt_query_pos).transpose(0, 1),
-                    reference_point=tgt_reference_points.transpose(0, 1).contiguous(),
+                transformed_queries, attn_weights = self.self_attn(
+                    hidden_states=self.with_pos_embed(queries, query_position_embeddings).transpose(0, 1),
+                    reference_point=query_reference_points.transpose(0, 1).contiguous(),
                     encoder_hidden_states=memory.transpose(0, 1),
                     spatial_shapes=memory_spatial_shapes,
                     spatial_shapes_list=memory_spatial_shapes_list,
                     level_start_index=memory_level_start_index,
                     encoder_attention_mask=memory_key_padding_mask,
                 )
-                tgt2 = tgt2.transpose(0, 1)
-                tgt = tgt + self.dropout2(tgt2)
-                tgt = self.norm2(tgt)
+                transformed_queries = transformed_queries.transpose(0, 1)
+                queries = queries + self.dropout2(transformed_queries)
+                queries = self.norm2(queries)
             else:
                 raise NotImplementedError("Unknown decoder_sa_type {}".format(self.decoder_sa_type))
 
-        return tgt, attn_weights
+        return queries, attn_weights
 
     def forward_ca(
         self,
-        # for tgt
-        tgt: Optional[Tensor],  # nq, bs, d_model
-        tgt_query_pos: Optional[Tensor] = None,  # pos for query. MLP(Sine(pos))
-        tgt_query_sine_embed: Optional[Tensor] = None,  # pos for query. Sine(pos)
-        tgt_key_padding_mask: Optional[Tensor] = None,
-        tgt_reference_points: Optional[Tensor] = None,  # nq, bs, 4
+        # for queries
+        queries: Optional[Tensor],  # nq, bs, d_model
+        query_position_embeddings: Optional[Tensor] = None,  # pos for query. MLP(Sine(pos))
+        query_reference_points: Optional[Tensor] = None,  # nq, bs, 4
         # for memory
         memory: Optional[Tensor] = None,  # hw, bs, d_model
         memory_key_padding_mask: Optional[Tensor] = None,
         memory_level_start_index: Optional[Tensor] = None,  # num_levels
         memory_spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
         memory_spatial_shapes_list: Optional[Tensor] = None,  # bs, num_levels, 2
-        memory_pos: Optional[Tensor] = None,  # pos for memory
-        # sa
-        self_attn_mask: Optional[Tensor] = None,  # mask used for self-attention
-        cross_attn_mask: Optional[Tensor] = None,  # mask used for cross-attention
     ):
         # cross attention
         if self.key_aware_type is not None:
             if self.key_aware_type == "mean":
-                tgt = tgt + memory.mean(0, keepdim=True)
+                queries = queries + memory.mean(0, keepdim=True)
             elif self.key_aware_type == "proj_mean":
-                tgt = tgt + self.key_aware_proj(memory).mean(0, keepdim=True)
+                queries = queries + self.key_aware_proj(memory).mean(0, keepdim=True)
             else:
                 raise NotImplementedError("Unknown key_aware_type: {}".format(self.key_aware_type))
-        tgt2, attn_weights = self.cross_attn(
-            hidden_states=self.with_pos_embed(tgt, tgt_query_pos).transpose(0, 1),
-            reference_points=tgt_reference_points.transpose(0, 1).contiguous(),
+        transformed_queries, attn_weights = self.cross_attn(
+            hidden_states=self.with_pos_embed(queries, query_position_embeddings).transpose(0, 1),
+            reference_points=query_reference_points.transpose(0, 1).contiguous(),
             encoder_hidden_states=memory.transpose(0, 1),
             spatial_shapes=memory_spatial_shapes,
             spatial_shapes_list=memory_spatial_shapes_list,
             level_start_index=memory_level_start_index,
             encoder_attention_mask=memory_key_padding_mask,
         )
-        tgt2 = tgt2.transpose(0, 1)
-        tgt = tgt + self.dropout1(tgt2)
-        tgt = self.norm1(tgt)
+        transformed_queries = transformed_queries.transpose(0, 1)
+        queries = queries + self.dropout1(transformed_queries)
+        queries = self.norm1(queries)
 
-        return tgt, attn_weights
+        return queries, attn_weights
 
     def forward(
         self,
-        # for tgt
-        tgt: Optional[Tensor],  # nq, bs, d_model
-        tgt_query_pos: Optional[Tensor] = None,  # pos for query. MLP(Sine(pos))
-        tgt_query_sine_embed: Optional[Tensor] = None,  # pos for query. Sine(pos)
-        tgt_key_padding_mask: Optional[Tensor] = None,
-        tgt_reference_points: Optional[Tensor] = None,  # nq, bs, 4
+        # for queries
+        queries: Optional[Tensor],  # nq, bs, d_model
+        query_position_embeddings: Optional[Tensor] = None,  # pos for query. MLP(Sine(pos))
+        query_reference_points: Optional[Tensor] = None,  # nq, bs, 4
         # for memory
         memory: Optional[Tensor] = None,  # hw, bs, d_model
         memory_key_padding_mask: Optional[Tensor] = None,
         memory_level_start_index: Optional[Tensor] = None,  # num_levels
         memory_spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
         memory_spatial_shapes_list: Optional[Tensor] = None,  # bs, num_levels, 2
-        memory_pos: Optional[Tensor] = None,  # pos for memory
         # sa
         self_attn_mask: Optional[Tensor] = None,  # mask used for self-attention
-        cross_attn_mask: Optional[Tensor] = None,  # mask used for cross-attention
         output_attentions: Optional[bool] = None,
     ):
         attn_weights_total = ()
         for funcname in self.module_seq:
             if funcname == "ffn":
-                tgt = self.forward_ffn(tgt)
+                queries = self.forward_ffn(queries)
             elif funcname == "ca":
-                tgt, attn_weights = self.forward_ca(
-                    tgt,
-                    tgt_query_pos,
-                    tgt_query_sine_embed,
-                    tgt_key_padding_mask,
-                    tgt_reference_points,
-                    memory,
-                    memory_key_padding_mask,
-                    memory_level_start_index,
-                    memory_spatial_shapes,
-                    memory_spatial_shapes_list,
-                    memory_pos,
-                    self_attn_mask,
-                    cross_attn_mask,
+                queries, attn_weights = self.forward_ca(
+                    queries=queries,
+                    query_position_embeddings=query_position_embeddings,
+                    query_reference_points=query_reference_points,
+                    memory=memory,
+                    memory_key_padding_mask=memory_key_padding_mask,
+                    memory_level_start_index=memory_level_start_index,
+                    memory_spatial_shapes=memory_spatial_shapes,
+                    memory_spatial_shapes_list=memory_spatial_shapes_list,
                 )
                 attn_weights_total += (attn_weights,)
             elif funcname == "sa":
-                tgt, attn_weights = self.forward_sa(
-                    tgt,
-                    tgt_query_pos,
-                    tgt_query_sine_embed,
-                    tgt_key_padding_mask,
-                    tgt_reference_points,
-                    memory,
-                    memory_key_padding_mask,
-                    memory_level_start_index,
-                    memory_spatial_shapes,
-                    memory_pos,
-                    self_attn_mask,
-                    cross_attn_mask,
+                queries, attn_weights = self.forward_sa(
+                    queries=queries,
+                    query_position_embeddings=query_position_embeddings,
+                    query_reference_points=query_reference_points,
+                    memory=memory,
+                    memory_key_padding_mask=memory_key_padding_mask,
+                    memory_level_start_index=memory_level_start_index,
+                    memory_spatial_shapes=memory_spatial_shapes,
+                    self_attn_mask=self_attn_mask,
                 )
                 attn_weights_total += (attn_weights,)
             else:
                 raise ValueError("unknown funcname {}".format(funcname))
 
-        outputs = (tgt,)
+        outputs = (queries,)
         if output_attentions:
             outputs += (attn_weights_total,)
 
         return outputs
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead
+# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead with Detr->DinoDetr
 class DinoDetrMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
@@ -1593,13 +1555,13 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
     @staticmethod
     def get_reference_points(spatial_shapes, valid_ratios, device):
         reference_points_list = []
-        for lvl, (H_, W_) in enumerate(spatial_shapes):
+        for level, (height, width) in enumerate(spatial_shapes):
             ref_y, ref_x = torch.meshgrid(
-                torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
-                torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device),
+                torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
+                torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
             )
-            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * H_)
-            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * W_)
+            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, level, 1] * height)
+            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, level, 0] * width)
             ref = torch.stack((ref_x, ref_y), -1)
             reference_points_list.append(ref)
         reference_points = torch.cat(reference_points_list, 1)
@@ -1608,8 +1570,8 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
 
     def forward(
         self,
-        src: Tensor,
-        pos: Tensor,
+        input_embeddings: Tensor,
+        position_embeddings: Tensor,
         spatial_shapes: Tensor,
         spatial_shapes_list: List,
         level_start_index: Tensor,
@@ -1622,8 +1584,8 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
     ):
         """
         Input:
-            - src: [bs, sum(hi*wi), 256]
-            - pos: pos embed for src. [bs, sum(hi*wi), 256]
+            - input_embeds: [bs, sum(hi*wi), 256]
+            - position_embeddings: pos embed for input_embeds. [bs, sum(hi*wi), 256]
             - spatial_shapes: h,w of each level [num_level, 2]
             - level_start_index: [num_level] start point of level in sum(hi*wi).
             - valid_ratios: [bs, num_level, 2]
@@ -1640,10 +1602,10 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         all_self_attns = () if output_attentions else None
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        output = src
+        output = input_embeddings
         # preparation and reshape
         if self.num_encoder_layers > 0:
-            reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=src.device)
+            reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=input_embeddings.device)
 
         intermediate_output = []
         intermediate_ref = []
@@ -1665,7 +1627,7 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
             if not dropflag:
                 output_layer = layer(
                     hidden_states=output,
-                    position_embeddings=pos,
+                    position_embeddings=position_embeddings,
                     reference_points=reference_points,
                     spatial_shapes=spatial_shapes,
                     spatial_shapes_list=spatial_shapes_list,
@@ -1761,7 +1723,9 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         self.num_feature_levels = config.num_feature_levels
         self.use_detached_boxes_dec_out = config.use_detached_boxes_dec_out
 
-        self.ref_point_head = DinoDetrMLP(config.query_dim // 2 * config.d_model, config.d_model, config.d_model, 2)
+        self.ref_point_head = DinoDetrMLPPredictionHead(
+            config.query_dim // 2 * config.d_model, config.d_model, config.d_model, 2
+        )
         self.query_pos_sine_scale = None
 
         self.bbox_embed = None
@@ -1782,13 +1746,10 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
 
     def forward(
         self,
-        tgt,
+        queries,
         memory,
-        tgt_mask: Optional[Tensor] = None,
-        memory_mask: Optional[Tensor] = None,
-        tgt_key_padding_mask: Optional[Tensor] = None,
+        self_attn_mask: Optional[Tensor] = None,
         memory_key_padding_mask: Optional[Tensor] = None,
-        pos: Optional[Tensor] = None,
         refpoints_unsigmoid: Optional[Tensor] = None,  # num_queries, bs, 2
         # for memory
         level_start_index: Optional[Tensor] = None,  # num_levels
@@ -1810,7 +1771,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         all_attns = () if output_attentions else None
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output = tgt
+        output = queries
 
         intermediate = [output]
         reference_points = refpoints_unsigmoid.sigmoid()
@@ -1844,19 +1805,15 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
                     dropflag = True
             if not dropflag:
                 output_layer = layer(
-                    tgt=output,
-                    tgt_query_pos=query_pos,
-                    tgt_query_sine_embed=query_sine_embed,
-                    tgt_key_padding_mask=tgt_key_padding_mask,
-                    tgt_reference_points=reference_points_input,
+                    queries=output,
+                    query_position_embeddings=query_pos,
+                    query_reference_points=reference_points_input,
                     memory=memory,
                     memory_key_padding_mask=memory_key_padding_mask,
                     memory_level_start_index=level_start_index,
                     memory_spatial_shapes=spatial_shapes,
                     memory_spatial_shapes_list=spatial_shapes_list,
-                    memory_pos=pos,
-                    self_attn_mask=tgt_mask,
-                    cross_attn_mask=memory_mask,
+                    self_attn_mask=self_attn_mask,
                     output_attentions=output_attentions,
                 )
                 output = output_layer[0]
@@ -1865,16 +1822,14 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
 
             # iter update
             if self.bbox_embed is not None:
-                reference_before_sigmoid = inverse_sigmoid(reference_points)
-                delta_unsig = self.bbox_embed[layer_id](output)
-                outputs_unsig = delta_unsig + reference_before_sigmoid
-                new_reference_points = outputs_unsig.sigmoid()
+                new_reference_points_unsigmoid = self.bbox_embed[layer_id](output) + inverse_sigmoid(reference_points)
+                new_reference_points = new_reference_points_unsigmoid.sigmoid()
 
                 # select # ref points
                 if self.dec_layer_number is not None and layer_id != self.num_decoder_layers - 1:
-                    nq_now = new_reference_points.shape[0]
+                    new_reference_points_number = new_reference_points.shape[0]
                     select_number = self.dec_layer_number[layer_id + 1]
-                    if nq_now != select_number:
+                    if new_reference_points_number != select_number:
                         class_unselected = self.class_embed[layer_id](output)  # nq, bs, 91
                         topk_proposals = torch.topk(class_unselected.max(-1)[0], select_number, dim=0)[1]  # new_nq, bs
                         new_reference_points = torch.gather(
@@ -1894,7 +1849,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
 
             intermediate.append(self.norm(output))
             if self.dec_layer_number is not None and layer_id != self.num_decoder_layers - 1:
-                if nq_now != select_number:
+                if new_reference_points_number != select_number:
                     output = torch.gather(
                         output,
                         0,
@@ -2144,8 +2099,8 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         # Begin Encoder
         #########################################################
         outputs_encoder_part = self.encoder(
-            src_flatten,
-            pos=lvl_pos_embed_flatten,
+            input_embeddings=src_flatten,
+            position_embeddings=lvl_pos_embed_flatten,
             level_start_index=level_start_index,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
@@ -2284,16 +2239,15 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         # Begin Decoder
         #########################################################
         outputs_decoder_part = self.decoder(
-            tgt=tgt.transpose(0, 1),
+            queries=tgt.transpose(0, 1),
             memory=memory.transpose(0, 1),
+            self_attn_mask=attn_mask,
             memory_key_padding_mask=mask_flatten,
-            pos=lvl_pos_embed_flatten.transpose(0, 1),
             refpoints_unsigmoid=refpoint_embed.transpose(0, 1),
             level_start_index=level_start_index,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
             valid_ratios=valid_ratios,
-            tgt_mask=attn_mask,
             return_dict=return_dict,
             output_attentions=output_attentions,
         )
@@ -2539,7 +2493,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         self.dec_pred_bbox_embed_share = config.dec_pred_bbox_embed_share
         # prepare class & box embed
         self.class_embed = nn.Linear(config.d_model, config.num_classes)
-        self.bbox_embed = DinoDetrMLP(d_model, d_model, 4, 3)
+        self.bbox_embed = DinoDetrMLPPredictionHead(d_model, d_model, 4, 3)
         # init the two embed layers
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
