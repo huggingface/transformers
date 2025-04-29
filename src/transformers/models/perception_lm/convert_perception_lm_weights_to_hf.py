@@ -35,10 +35,11 @@ from transformers.convert_slow_tokenizer import TikTokenConverter
 from transformers.models.perception_lm.configuration_perception_lm import (
     PerceptionLMConfig,
 )
+from transformers.models.perception_lm.image_processing_perception_lm_fast import PerceptionLMImageProcessorFast
 from transformers.models.perception_lm.modeling_perception_lm import (
     PerceptionLMForConditionalGeneration,
 )
-
+from transformers.models.perception_lm.processing_perception_lm import PerceptionLMProcessor
 
 
 try:
@@ -426,12 +427,33 @@ class Llama3Converter(TikTokenConverter):
     ):
         super().__init__(vocab_file, additional_special_tokens=special_tokens, **kwargs)
         tokenizer = self.converted()
-        model_id = "meta-llama/Llama-3.2-1B-Instruct"
-        revision = "e9f8effbab1cbdc515c11ee6e098e3d5a9f51e14"
-        from transformers import AutoTokenizer
 
-        t = AutoTokenizer.from_pretrained(model_id, revision=revision)
-        additional_kwargs = {"chat_template": t.chat_template}
+        chat_template = (
+            "{{- bos_token }}"
+            "{%- if messages[0]['role'] == 'system' -%}"
+            "    {%- set system_message = messages[0]['content']|trim %}\n"
+            "    {%- set messages = messages[1:] %}\n"
+            "{%- else %}"
+            "    {%- set system_message = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.' %}"
+            "{%- endif %}"
+            "{{- '<|start_header_id|>system<|end_header_id|>\\n\\n' }}"
+            "{{- system_message }}"
+            "{{- '<|eot_id|>' }}"
+            "{%- for message in messages %}"
+            "{{- '<|start_header_id|>' + message['role'] + '<|end_header_id|>\\n\\n' }}"
+            "{%- for content in message['content'] | selectattr('type', 'equalto', 'image') %}"
+            "{{ '<|image|>' }}"
+            "{%- endfor %}"
+            "{%- for content in message['content'] | selectattr('type', 'equalto', 'text') %}"
+            "{{- content['text'] | trim }}"
+            "{%- endfor %}"
+            "{{'<|eot_id|>' }}"
+            "{%- endfor %}"
+            "{%- if add_generation_prompt %}"
+            "{{- '<|start_header_id|>assistant<|end_header_id|>\\n\\n' }}"
+            "{%- endif %}"
+        )
+        additional_kwargs = {"chat_template": chat_template}
 
         self.converted_tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
@@ -470,27 +492,54 @@ def write_tokenizer(
     tokenizer_path,
     input_tokenizer_path,
     special_tokens=None,
-    context_length=11520,
+    params=None,
     push_to_hub=False,
 ):
     print("Converting the tokenizer.")
     tokenizer_class = (
         LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
     )
+    context_length = params["model"]["max_seqlen"]
     tokenizer = Llama3Converter(
         input_tokenizer_path,
         special_tokens,
         context_length,
     ).converted_tokenizer
+    tokenizer.image_token = "<|image|>"
+    tokenizer.image_token_id = tokenizer.encode("<|image|>", add_special_tokens=False)[
+        0
+    ]
+
+    processor_config = {
+        "image_token": "<|image|>",
+        "pooling_ratio": params["model"]["pooling_ratio"],
+        "patch_size": params["model"]["vision_model"]["patch_size"],
+        "processor_class": "PerceptionLMProcessor",
+    }
+
+    preprocessor_config = {
+        "image_processor_type": "PerceptionLMImageProcessorFast",
+        "vision_input_type": params["data"]["vision_input_type"],
+        "image_res": params["model"]["vision_model"]["image_size"],
+        "max_num_tiles": params["data"]["max_num_tiles"],
+        "normalize_img": True,
+    }
+
+    image_preprocessor = PerceptionLMImageProcessorFast(**preprocessor_config)
+    processor = PerceptionLMProcessor(
+        image_processor=image_preprocessor,
+        tokenizer=tokenizer,
+        **processor_config,
+    )
 
     if push_to_hub:
         print(
             f"Pushing a {tokenizer_class.__name__} to the Hub repo - {tokenizer_path}."
         )
-        tokenizer.push_to_hub(tokenizer_path, private=True, use_temp_dir=True)
+        processor.push_to_hub(tokenizer_path, private=True, use_temp_dir=True)
     else:
         print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
-        tokenizer.save_pretrained(tokenizer_path)
+        processor.save_pretrained(tokenizer_path)
     return tokenizer
 
 
@@ -540,16 +589,15 @@ def main():
         args.output_dir,
         spm_path,
         special_tokens=args.special_tokens,
-        context_length=params["model"]["max_seqlen"],
+        params=params,
         push_to_hub=args.push_to_hub,
     )
     vocab_size = len(tokenizer)
-    image_token_id = tokenizer.encode("<|image|>", add_special_tokens=False)[0]
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
         params=params,
-        image_token_id=image_token_id,
+        image_token_id=tokenizer.image_token_id,
         safe_serialization=args.safe_serialization,
         vocab_size=vocab_size,
         num_shards=args.num_shards,
