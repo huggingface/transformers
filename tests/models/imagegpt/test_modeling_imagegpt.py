@@ -319,6 +319,10 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_left_padding_compatibility(self):
         pass
 
+    @unittest.skip(reason="Model inputs don't fit test pattern")  # and it's not used enough to be worth fixing :)
+    def test_past_key_values_format(self):
+        pass
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():

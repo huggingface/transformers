@@ -59,7 +59,7 @@ model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
 )
 processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
 
-conversation = [
+conversations = [
     {
         "role": "system",
         "content": [
@@ -115,7 +115,7 @@ model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
 )
 processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
 
-conversation = [
+conversations = [
     {
         "role": "system",
         "content": [
