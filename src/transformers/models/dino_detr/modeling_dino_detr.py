@@ -2652,8 +2652,9 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
 
-        dn_meta = None
-        # First, sent images through DETR base model to obtain encoder + decoder outputs
+        denoising_meta = None
+
+        # Apply base model to inputs
         outputs_model_part = self.model(
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
@@ -2662,13 +2663,14 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )
+
         if not return_dict:
             (
                 last_hidden_state,
-                hs,
-                reference,
-                hs_enc,
-                ref_enc,
+                hidden_states,
+                reference_points,
+                hidden_states_encoder,
+                reference_points_encoder,
                 init_box_proposal,
             ) = (
                 outputs_model_part[0],
@@ -2679,7 +2681,7 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                 outputs_model_part[5],
             )
             if self.training:
-                dn_meta = outputs_model_part[6]
+                denoising_meta = outputs_model_part[6]
             if self.training and (output_hidden_states or self.model.output_hidden_states):
                 decoder_hidden_states = outputs_model_part[7]
                 encoder_hidden_states = outputs_model_part[8]
@@ -2692,13 +2694,13 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
 
         else:
             last_hidden_state = outputs_model_part.last_hidden_state
-            hs = outputs_model_part.hidden_states[1:]
-            reference = outputs_model_part.references
-            hs_enc = outputs_model_part.encoder_last_hidden_state
-            ref_enc = outputs_model_part.encoder_reference
+            hidden_states = outputs_model_part.hidden_states[1:]
+            reference_points = outputs_model_part.references
+            hidden_states_encoder = outputs_model_part.encoder_last_hidden_state
+            reference_points_encoder = outputs_model_part.encoder_reference
             init_box_proposal = outputs_model_part.init_box_proposal
             if self.training:
-                dn_meta = outputs_model_part.denoising_meta
+                denoising_meta = outputs_model_part.denoising_meta
             if output_hidden_states or self.model.output_hidden_states:
                 decoder_hidden_states = outputs_model_part.decoder_hidden_states
                 encoder_hidden_states = outputs_model_part.encoder_hidden_states
@@ -2706,43 +2708,68 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                 encoder_attentions = outputs_model_part.encoder_attentions
                 decoder_attentions = outputs_model_part.decoder_attentions
 
-        # In case num object=0
-        hs[0] += self.model.label_enc.weight[0, 0] * 0.0
-        # deformable-detr-like anchor update
-        # reference_before_sigmoid = inverse_sigmoid(reference[:-1]) # n_dec, bs, nq, 4
+        # Convert hidden states to bounding boxes
+        hidden_states[0] += self.model.label_enc.weight[0, 0] * 0.0
         outputs_coord_list = []
-        for _, (layer_ref_sig, layer_bbox_embed, layer_hs) in enumerate(
-            zip(reference[:-1], self.model.transformer.decoder.bbox_embed, hs)
+        for _, (
+            layer_reference_points_sigmoid,
+            layer_bbox_embed,
+            layer_hidden_states,
+        ) in enumerate(
+            zip(
+                reference_points[:-1],
+                self.model.transformer.decoder.bbox_embed,
+                hidden_states,
+            )
         ):
-            layer_delta_unsig = layer_bbox_embed(layer_hs)
-            layer_outputs_unsig = layer_delta_unsig + inverse_sigmoid(layer_ref_sig)
-            layer_outputs_unsig = layer_outputs_unsig.sigmoid()
-            outputs_coord_list.append(layer_outputs_unsig)
+            layer_outputs_unsigmoid = layer_bbox_embed(layer_hidden_states) + inverse_sigmoid(
+                layer_reference_points_sigmoid
+            )
+            outputs_coord_list.append(layer_outputs_unsigmoid.sigmoid())
         outputs_coord_list = torch.stack(outputs_coord_list)
 
         outputs_class = torch.stack(
             [
-                layer_cls_embed(layer_hs)
-                for layer_cls_embed, layer_hs in zip(self.model.transformer.decoder.class_embed, hs)
+                layer_cls_embed(layer_hidden_states)
+                for layer_cls_embed, layer_hidden_states in zip(
+                    self.model.transformer.decoder.class_embed, hidden_states
+                )
             ]
         )
-        if self.config.dn_number > 0 and dn_meta is not None:
+
+        # Apply post processing and compute loss
+        if self.config.dn_number > 0 and denoising_meta is not None:
             outputs_class, outputs_coord_list = dn_post_process(
                 outputs_class,
                 outputs_coord_list,
-                dn_meta,
+                denoising_meta,
                 self.config.auxiliary_loss,
                 self._set_aux_loss,
             )
-        out = {"logits": outputs_class[-1], "pred_boxes": outputs_coord_list[-1]}
-        if self.config.auxiliary_loss:
-            out["aux_outputs"] = self._set_aux_loss(outputs_class, outputs_coord_list)
 
-        # for encoder output
-        if hs_enc is not None:
-            # prepare intermediate outputs
-            interm_coord = ref_enc[-1]
-            interm_class = self.model.transformer.enc_out_class_embed(hs_enc[-1])
+        if self.config.auxiliary_loss:
+            out_aux_loss = self._set_aux_loss(outputs_class, outputs_coord_list)
+
+        loss, loss_dict, auxiliary_outputs = None, None, None
+        if labels is not None:
+            loss, loss_dict, auxiliary_outputs = self.loss_function(
+                outputs_class[-1],
+                labels,
+                self.device,
+                outputs_coord_list[-1],
+                denoising_meta,
+                self.config,
+                outputs_class,
+                outputs_coord_list,
+            )
+
+        # Remove?
+        out = {}
+        # Prepare encoder output
+        if hidden_states_encoder is not None:
+            # Prepare intermediate outputs
+            interm_coord = reference_points_encoder[-1]
+            interm_class = self.model.transformer.enc_out_class_embed(hidden_states_encoder[-1])
             out["interm_outputs"] = {
                 "logits": interm_class,
                 "pred_boxes": interm_coord,
@@ -2752,8 +2779,8 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                 "pred_boxes": init_box_proposal,
             }
 
-            # prepare enc outputs
-            if hs_enc.shape[0] > 1:
+            # Prepare enc outputs
+            if hidden_states_encoder.shape[0] > 1:
                 enc_outputs_coord = []
                 enc_outputs_class = []
                 for layer_id, (
@@ -2765,8 +2792,8 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                     zip(
                         self.enc_bbox_embed,
                         self.enc_class_embed,
-                        hs_enc[:-1],
-                        ref_enc[:-1],
+                        hidden_states_encoder[:-1],
+                        reference_points_encoder[:-1],
                     )
                 ):
                     layer_enc_delta_unsig = layer_box_embed(layer_hs_enc)
@@ -2780,39 +2807,22 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                 out["enc_outputs"] = [
                     {"logits": a, "pred_boxes": b} for a, b in zip(enc_outputs_class, enc_outputs_coord)
                 ]
-
-        out["denoising_meta"] = dn_meta
-
-        loss, loss_dict, auxiliary_outputs = None, None, None
-        if labels is not None:
-            loss, loss_dict, auxiliary_outputs = self.loss_function(
-                out["logits"],  #
-                labels,
-                self.device,
-                out["pred_boxes"],  # out["pred_boxes"],
-                dn_meta,
-                self.config,
-                outputs_class,
-                outputs_coord_list,
-            )
-
-        out["loss"] = loss
-        out["loss_dict"] = loss_dict
+        # End remove
 
         if not return_dict:
             return tuple(
                 v
                 for v in [
                     last_hidden_state,
-                    reference[-1],
-                    hs_enc,
-                    ref_enc,
+                    reference_points[-1],
+                    hidden_states_encoder,
+                    reference_points_encoder,
                     loss,
                     loss_dict,
-                    out["logits"],
-                    out["pred_boxes"],
-                    out["aux_outputs"],
-                    out["denoising_meta"],
+                    outputs_class[-1],
+                    outputs_coord_list[-1],
+                    out_aux_loss,
+                    denoising_meta,
                     (encoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None),
                     (decoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None),
                     encoder_attentions,
@@ -2822,15 +2832,15 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
             )
         dict_outputs = DinoDetrObjectDetectionOutput(
             last_hidden_state=last_hidden_state,
-            reference=reference[-1],
-            encoder_last_hidden_state=hs_enc,
-            encoder_reference=ref_enc,
+            reference=reference_points[-1],
+            encoder_last_hidden_state=hidden_states_encoder,
+            encoder_reference=reference_points_encoder,
             loss=loss,
             loss_dict=loss_dict,
-            logits=out["logits"],
-            pred_boxes=out["pred_boxes"],
-            auxiliary_outputs=out["aux_outputs"],
-            denoising_meta=out["denoising_meta"],
+            logits=outputs_class[-1],
+            pred_boxes=outputs_coord_list[-1],
+            auxiliary_outputs=out_aux_loss,
+            denoising_meta=denoising_meta,
             encoder_hidden_states=(
                 encoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None
             ),
