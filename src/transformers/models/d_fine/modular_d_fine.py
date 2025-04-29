@@ -613,8 +613,6 @@ class DFineDecoderLayer(RTDetrDecoderLayer):
 
 class DFinePreTrainedModel(RTDetrPreTrainedModel):
     def _init_weights(self, module):
-        """Initalize the weights"""
-
         # initialize linear layer bias value according to a given probability value.
         if isinstance(module, (DFineForObjectDetection, DFineDecoder)):
             if module.class_embed is not None:

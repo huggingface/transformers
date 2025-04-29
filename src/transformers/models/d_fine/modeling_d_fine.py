@@ -987,8 +987,7 @@ class DFinePreTrainedModel(PreTrainedModel):
     _no_split_modules = [r"DFineHybridEncoder", r"DFineDecoderLayer"]
 
     def _init_weights(self, module):
-        """Initalize the weights"""
-
+        """Initialize the weights"""
         # initialize linear layer bias value according to a given probability value.
         if isinstance(module, (DFineForObjectDetection, DFineDecoder)):
             if module.class_embed is not None:
