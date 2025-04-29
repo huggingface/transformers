@@ -430,7 +430,7 @@ def _compute_2d_rope_parameters(
     device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
     **rope_kwargs,
-) -> Tuple["torch.Tensor", float]:
+) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies according to the original RoPE implementation
     Args:
