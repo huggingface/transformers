@@ -85,7 +85,7 @@ class ColQwen2Config(PretrainedConfig):
         super().__init__(**kwargs)
 
     def get_text_config(self, decoder=False) -> PretrainedConfig:
-        return self.vlm_config
+        return self.vlm_config.get_text_config(decoder=decoder)
 
 
 __all__ = ["ColQwen2Config"]
