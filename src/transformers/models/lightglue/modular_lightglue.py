@@ -27,7 +27,8 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from ..auto import CONFIG_MAPPING
 from ..auto.modeling_auto import AutoModelForKeypointDetection
-from ..llama.modeling_llama import LlamaAttention, apply_rotary_pos_emb, eager_attention_forward
+from ..cohere.modeling_cohere import apply_rotary_pos_emb
+from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 
 
 if TYPE_CHECKING:
@@ -263,12 +264,6 @@ class LightGluePositionalEncoder(nn.Module):
         embeddings = (cosines, sines)
         output = (embeddings, projected_keypoints) if output_hidden_states else (embeddings,)
         return output
-
-
-def rotate_half(x: torch.Tensor) -> torch.Tensor:
-    x1 = x[..., ::2]
-    x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).flatten(start_dim=-2)
 
 
 class LightGlueAttention(LlamaAttention):

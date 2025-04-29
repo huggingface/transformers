@@ -102,6 +102,14 @@ class LightGluePositionalEncoder(nn.Module):
         return output
 
 
+def rotate_half(x):
+    # Split and rotate. Note that this function is different from e.g. Llama.
+    x1 = x[..., ::2]
+    x2 = x[..., 1::2]
+    rot_x = torch.stack([-x2, x1], dim=-1).flatten(-2)
+    return rot_x
+
+
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -122,11 +130,14 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
+    dtype = q.dtype
+    q = q.float()
+    k = k.float()
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+    return q_embed.to(dtype=dtype), k_embed.to(dtype=dtype)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -165,12 +176,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-def rotate_half(x: torch.Tensor) -> torch.Tensor:
-    x1 = x[..., ::2]
-    x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).flatten(start_dim=-2)
 
 
 class LightGlueAttention(nn.Module):
