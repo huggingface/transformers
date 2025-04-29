@@ -34,11 +34,9 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    infer_channel_dimension_format,
     is_torch_tensor,
     make_list_of_images,
     pil_torch_interpolation_mapping,
-    to_numpy_array,
     validate_kwargs,
 )
 from ...processing_utils import Unpack
@@ -147,27 +145,23 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
     ):
         """Preprocesses a single segmentation map."""
         processed_segmentation_maps = []
-        added_dimension = False  # we will assume that the batch of maps will all either have added dims or not
         for segmentation_map in segmentation_maps:
-            segmentation_map = to_numpy_array(segmentation_map)
-            # Add an axis to the segmentation maps for transformations.
+            segmentation_map = self._process_image(
+                segmentation_map, do_convert_rgb=False, input_data_format=ChannelDimension.FIRST
+            )
+
             if segmentation_map.ndim == 2:
                 segmentation_map = segmentation_map[None, ...]
-                added_dimension = True
-                input_data_format = ChannelDimension.FIRST
-            else:
-                added_dimension = False
-                if input_data_format is None:
-                    input_data_format = infer_channel_dimension_format(segmentation_map, num_channels=1)
 
-            processed_segmentation_maps.append(torch.tensor(segmentation_map))
+            processed_segmentation_maps.append(segmentation_map)
 
         kwargs["do_normalize"] = False
         kwargs["do_rescale"] = False
         kwargs["input_data_format"] = ChannelDimension.FIRST
         processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
-        if added_dimension:
-            processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
+
+        processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
+
         processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
         return processed_segmentation_maps
 
