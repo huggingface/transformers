@@ -24,6 +24,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.generic import can_return_tuple
 from ..auto import CONFIG_MAPPING
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
@@ -935,6 +936,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
             all_attentions,
         )
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(LIGHTGLUE_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -942,7 +944,6 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, LightGlueKeypointMatchingOutput]:
         loss = None
         if labels is not None:
@@ -952,7 +953,6 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values.ndim != 5 or pixel_values.size(1) != 2:
             raise ValueError("Input must be a 5D tensor of shape (batch_size, 2, num_channels, height, width)")
@@ -979,12 +979,6 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
-        if not return_dict:
-            return tuple(
-                v
-                for v in [matches, matching_scores, keypoints, prune, mask, hidden_states, attentions]
-                if v is not None
-            )
 
         return LightGlueKeypointMatchingOutput(
             loss=loss,
