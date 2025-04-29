@@ -47,7 +47,7 @@ pipeline = pipeline(
     torch_dtype=torch.float16,
     device=0
 )
-pipeline("Plants create [MASK] through a process known as photosynthesis.")
+pipeline("Plants create <mask> through a process known as photosynthesis.")
 
 ```
 </hfoption>
