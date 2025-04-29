@@ -49,6 +49,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bigbird_pegasus", "BigBirdPegasusModel"),
         ("biogpt", "BioGptModel"),
         ("bit", "BitModel"),
+        ("bitnet", "BitNetModel"),
         ("blenderbot", "BlenderbotModel"),
         ("blenderbot-small", "BlenderbotSmallModel"),
         ("blip", "BlipModel"),
@@ -257,6 +258,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("rwkv", "RwkvModel"),
         ("sam", "SamModel"),
         ("sam2", "Sam2Model"),
+        ("sam_hq", "SamHQModel"),
+        ("sam_hq_vision_model", "SamHQVisionModel"),
         ("sam_vision_model", "SamVisionModel"),
         ("seamless_m4t", "SeamlessM4TModel"),
         ("seamless_m4t_v2", "SeamlessM4Tv2Model"),
@@ -516,6 +519,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("big_bird", "BigBirdForCausalLM"),
         ("bigbird_pegasus", "BigBirdPegasusForCausalLM"),
         ("biogpt", "BioGptForCausalLM"),
+        ("bitnet", "BitNetForCausalLM"),
         ("blenderbot", "BlenderbotForCausalLM"),
         ("blenderbot-small", "BlenderbotSmallForCausalLM"),
         ("bloom", "BloomForCausalLM"),
@@ -1492,6 +1496,12 @@ MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
     [
         ("sam", "SamModel"),
         ("sam2", "Sam2Model"),
+    ]
+)
+
+MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
+    [
+        ("sam_hq", "SamHQModel"),
     ]
 )
 

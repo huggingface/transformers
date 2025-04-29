@@ -149,7 +149,7 @@ _deps = [
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
-    "pytest>=7.2.0,<8.0.0",
+    "pytest>=7.2.0",
     "pytest-asyncio",
     "pytest-rerunfailures",
     "pytest-timeout",

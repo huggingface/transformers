@@ -1103,7 +1103,7 @@ class ProcessorTesterMixin:
             signature.parameters.get("videos") is not None
             and signature.parameters["videos"].annotation == inspect._empty
         ):
-            self.skipTest(f"{self.processor_class} does not suport video inputs")
+            self.skipTest(f"{self.processor_class} does not support video inputs")
 
         if "feature_extractor" not in self.processor_class.attributes:
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")

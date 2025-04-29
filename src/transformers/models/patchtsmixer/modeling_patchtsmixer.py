@@ -816,7 +816,7 @@ class PatchTSMixerPretrainHead(nn.Module):
 def random_masking(
     inputs: torch.Tensor,
     mask_ratio: float,
-    unmasked_channel_indices: list = None,
+    unmasked_channel_indices: Optional[list] = None,
     channel_consistent_masking: bool = False,
     mask_value: int = 0,
 ):
@@ -875,7 +875,7 @@ def random_masking(
 def forecast_masking(
     inputs: torch.Tensor,
     num_forecast_mask_patches: Union[list, int],
-    unmasked_channel_indices: list = None,
+    unmasked_channel_indices: Optional[list] = None,
     mask_value: int = 0,
 ):
     """Forecast masking that masks the last K patches where K is from the num_forecast_mask_patches.
@@ -1807,7 +1807,7 @@ class PatchTSMixerForTimeSeriesClassificationOutput(ModelOutput):
 
     Args:
         prediction_outputs (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
-            Prediction output from the classfication head.
+            Prediction output from the classification head.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
             Backbone embeddings before passing through the head.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):

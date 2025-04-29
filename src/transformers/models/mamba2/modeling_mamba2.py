@@ -274,7 +274,7 @@ class Mamba2Mixer(nn.Module):
             projection_size,
             bias=config.use_bias,
         )
-        # selective projection used to make dt, B and C input dependant
+        # selective projection used to make dt, B and C input dependent
 
         # time step projection (discretization)
         # instantiate once and copy inv_dt in init_weights of PretrainedModel
@@ -1032,7 +1032,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ):
-        # Overwitten -- uses `cache_params` as opposed to `past_key_values`
+        # Overwritten -- uses `cache_params` as opposed to `past_key_values`
 
         if use_cache:
             # `cache_position` should have been initialized in `generate`

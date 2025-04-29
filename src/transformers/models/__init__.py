@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from .bigbird_pegasus import *
     from .biogpt import *
     from .bit import *
+    from .bitnet import *
     from .blenderbot import *
     from .blenderbot_small import *
     from .blip import *
@@ -254,6 +255,7 @@ if TYPE_CHECKING:
     from .rwkv import *
     from .sam import *
     from .sam2 import *
+    from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .segformer import *
