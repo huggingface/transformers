@@ -40,7 +40,6 @@ UNROLL_KWARGS_CLASSES = {
     "ImageProcessorFast",
 }
 
-OPTIONAL_STRING = r", *optional*"
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
 
@@ -729,33 +728,34 @@ def add_intro_docstring(func, class_name, parent_class=None, indent_level=0):
     return intro_docstring
 
 
-def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint=None):
+def _get_model_info(func, parent_class):
     """
-    Wrapper that automatically generates docstring using ARG_TO_DOC.
+    Extract model information from a function or its parent class.
+
+    Args:
+        func (`function`): The function to extract information from
+        parent_class (`class`): Optional parent class of the function
     """
     # import here to avoid circular import
     from transformers.models import auto as auto_module
 
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        return func(*args, **kwargs)
-
-    # Use inspect to retrieve the method's signature
-    sig = inspect.signature(func)
-    indent_level = get_indent_level(func)
-
-    # Get other info on the method
+    # Get model name from either parent class or function
     if parent_class is not None:
         model_name_lowercase = get_model_name(parent_class)
     else:
         model_name_lowercase = get_model_name(func)
+
+    # Normalize model name if needed
     if model_name_lowercase and model_name_lowercase not in getattr(
         getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
         PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
     ):
         model_name_lowercase = model_name_lowercase.replace("_", "-")
 
+    # Get class name from function's qualified name
     class_name = func.__qualname__.split(".")[0]
+
+    # Get config class for the model
     if model_name_lowercase is None:
         config_class = None
     else:
@@ -767,88 +767,128 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
         except KeyError:
             config_class = "ModelConfig"
             print(f"🚨 Config not found for {model_name_lowercase}, will use `ModelConfig` in the docs")
-    func_documentation = func.__doc__
 
-    # Add intro to the docstring before args description if needed
-    if custom_intro is not None:
-        intro_docstring = set_min_indent(custom_intro, indent_level + 4)
+    return model_name_lowercase, class_name, config_class
+
+
+def _process_parameter_type(param, param_name, func):
+    """
+    Process and format a parameter's type annotation.
+
+    Args:
+        param (`inspect.Parameter`): The parameter from the function signature
+        param_name (`str`): The name of the parameter
+        func (`function`): The function the parameter belongs to
+    """
+    optional = False
+    if param.annotation != inspect.Parameter.empty:
+        param_type = param.annotation
+        if "typing" in str(param_type):
+            param_type = "".join(str(param_type).split("typing.")).replace("transformers.", "~")
+        elif hasattr(param_type, "__module__"):
+            param_type = f"{param_type.__module__.replace('transformers.', '~').replace('builtins', '')}.{param.annotation.__name__}"
+            if param_type[0] == ".":
+                param_type = param_type[1:]
+        else:
+            print(
+                f"🚨 {param_type} for {param_name} of {func.__qualname__} in file {func.__code__.co_filename} has an invalid type"
+            )
+        if "ForwardRef" in param_type:
+            param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
+        if "Optional" in param_type:
+            param_type = re.sub(r"Optional\[(.*?)\]", r"\1", param_type)
+            optional = True
     else:
-        intro_docstring = add_intro_docstring(
-            func, class_name=class_name, parent_class=parent_class, indent_level=indent_level
-        )
-    docstring = intro_docstring
+        param_type = ""
 
-    docstring += set_min_indent("Args:\n", indent_level + 4)
-    undocumented_parameters = []
-    documented_params = {}
-    documented_kwargs = {}
+    return param_type, optional
 
-    # ------ Args section ------
 
-    if func_documentation is not None:
-        documented_params, func_documentation = parse_docstring(func_documentation)
-        if model_name_lowercase is not None:
-            documented_params = format_args_docstring(documented_params, model_name_lowercase)
+def _get_parameter_info(param_name, documented_params, source_args_dict, param_type, optional):
+    """
+    Get parameter documentation details from the appropriate source.
+    Tensor shape, optional status and description are taken from the custom docstring in priority if available.
+    Type is taken from the function signature first, then from the custom docstring if missing from the signature
+
+    Args:
+        param_name (`str`): Name of the parameter
+        documented_params (`dict`): Dictionary of documented parameters (manually specified in the docstring)
+        source_args_dict (`dict`): Default source args dictionary to use if not in documented_params
+        param_type (`str`): Current parameter type (may be updated)
+        optional (`bool`): Whether the parameter is optional (may be updated)
+    """
+    description = None
+    shape = None
+    shape_string = ""
+    is_documented = True
+
+    if param_name in documented_params:
+        # Parameter is documented in the function's docstring
+        if param_type == "" and documented_params[param_name].get("type", None) is not None:
+            param_type = documented_params[param_name]["type"]
+        optional = documented_params[param_name]["optional"]
+        shape = documented_params[param_name]["shape"]
+        shape_string = shape if shape else ""
+        description = f":{documented_params[param_name]['description']}\n"
+    elif param_name in source_args_dict:
+        # Parameter is documented in ModelArgs or ImageProcessorArgs
+        indented_doc = source_args_dict[param_name]
+        pre_doc = indented_doc.split(":\n")[0]
+        shape = parse_shape(pre_doc)
+        shape_string = shape if shape else ""
+        description = ":\n" + ":\n".join(indented_doc.split(":\n")[1:])
+    else:
+        # Parameter is not documented
+        is_documented = False
+    optional_string = r", *optional*" if optional else ""
+
+    return param_type, optional_string, shape_string, description, is_documented
+
+
+def _process_regular_parameters(sig, func, class_name, documented_params, indent_level, undocumented_parameters):
+    """
+    Process all regular parameters (not kwargs parameters) from the function signature.
+
+    Args:
+        sig (`inspect.Signature`): Function signature
+        func (`function`): Function the parameters belong to
+        class_name (`str`): Name of the class
+        documented_params (`dict`): Dictionary of parameters that are already documented
+        indent_level (`int`): Indentation level
+        undocumented_parameters (`list`): List to append undocumented parameters to
+    """
+    docstring = ""
+    source_args_dict = source_args_doc([ModelArgs, ImageProcessorArgs])
+
     for param_name, param in sig.parameters.items():
+        # Skip parameters that should be ignored
         if (
             param_name in ARGS_TO_IGNORE
             or param.kind == inspect.Parameter.VAR_POSITIONAL
             or param.kind == inspect.Parameter.VAR_KEYWORD
         ):
             continue
-        shape = None
-        optional = False
-        optional_string = ""
-        shape_string = ""
-        if param.annotation != inspect.Parameter.empty:
-            param_type = param.annotation
-            if "typing" in str(param_type):
-                param_type = "".join(str(param_type).split("typing.")).replace("transformers.", "~")
-            elif hasattr(param_type, "__module__"):
-                param_type = f"{param_type.__module__.replace('transformers.', '~').replace('builtins', '')}.{param.annotation.__name__}"
-                if param_type[0] == ".":
-                    param_type = param_type[1:]
-            else:
-                print(
-                    f"🚨 {param_type} for {param_name} of {func.__qualname__} in file {func.__code__.co_filename} has an invalid type"
-                )
-            if "ForwardRef" in param_type:
-                param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
-            if "Optional" in param_type:
-                param_type = re.sub(r"Optional\[(.*?)\]", r"\1", param_type)
-                optional = True
-                optional_string = OPTIONAL_STRING
-        else:
-            param_type = ""
 
-        # Check if the parameter has a default value (considered optional)
+        # Process parameter type and optional status
+        param_type, optional = _process_parameter_type(param, param_name, func)
+
+        # Check for default value
         param_default = ""
         if param.default != inspect._empty and param.default is not None:
             param_default = f", defaults to `{str(param.default)}`"
 
-        if param_name in documented_params:
-            if param_type == "" and documented_params[param_name].get("type", None) is not None:
-                param_type = documented_params[param_name]["type"]
-            optional = documented_params[param_name]["optional"]
-            optional_string = OPTIONAL_STRING if optional else ""
-            shape = documented_params[param_name]["shape"]
-            shape_string = shape if shape else ""
-            if param_type == "":
-                print(f"🚨 {param_name} for {func.__qualname__} of {class_name} has no type")
-            docstring += set_min_indent(
-                f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}):{documented_params[param_name]['description']}\n",
-                indent_level + 8,
-            )
-        elif param_name in (source_args_dict := source_args_doc([ModelArgs, ImageProcessorArgs])):
-            indented_doc = source_args_dict[param_name]
-            pre_doc = indented_doc.split(":\n")[0]
-            shape = parse_shape(pre_doc)
-            shape_string = shape if shape else ""
-            indented_doc = ":\n" + ":\n".join(indented_doc.split(":\n")[1:])
+        param_type, optional_string, shape_string, description, is_documented = _get_parameter_info(
+            param_name, documented_params, source_args_dict, param_type, optional
+        )
+
+        if is_documented:
+            # Check if type is missing
             if param_type == "":
                 print(f"🚨 {param_name} for {func.__qualname__} in file {func.__code__.co_filename} has no type")
+
+            # Format the parameter docstring
             docstring += set_min_indent(
-                f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}){indented_doc}",
+                f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}){description}",
                 indent_level + 8,
             )
         else:
@@ -856,14 +896,34 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
                 f"🚨 `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
             )
 
+    return docstring
+
+
+def _process_kwargs_parameters(
+    sig, func, parent_class, model_name_lowercase, documented_kwargs, indent_level, undocumented_parameters
+):
+    """
+    Process **kwargs parameters if needed.
+
+    Args:
+        sig (`inspect.Signature`): Function signature
+        func (`function`): Function the parameters belong to
+        parent_class (`class`): Parent class of the function
+        model_name_lowercase (`str`): Lowercase model name
+        documented_kwargs (`dict`): Dictionary of kwargs that are already documented
+        indent_level (`int`): Indentation level
+        undocumented_parameters (`list`): List to append undocumented parameters to
+    """
+    docstring = ""
+    source_args_dict = source_args_doc(ImageProcessorArgs)
+
     # Check if we need to add typed kwargs description to the docstring
     unroll_kwargs = func.__name__ in UNROLL_KWARGS_METHODS
-    if not unroll_kwargs:
+    if not unroll_kwargs and parent_class is not None:
         # Check if the function has a parent class with unroll kwargs
-        if parent_class is not None:
-            unroll_kwargs = any(
-                unroll_kwargs_class in parent_class.__name__ for unroll_kwargs_class in UNROLL_KWARGS_CLASSES
-            )
+        unroll_kwargs = any(
+            unroll_kwargs_class in parent_class.__name__ for unroll_kwargs_class in UNROLL_KWARGS_CLASSES
+        )
 
     if unroll_kwargs:
         # get all unpackable "kwargs" parameters
@@ -876,13 +936,20 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
             # If kwargs not typed, skip
             if kwarg_param.annotation == inspect.Parameter.empty:
                 continue
+
+            # Extract documentation for kwargs
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
             if kwargs_documentation is not None:
                 documented_kwargs, _ = parse_docstring(kwargs_documentation)
                 if model_name_lowercase is not None:
                     documented_kwargs = format_args_docstring(documented_kwargs, model_name_lowercase)
-            for param_name, param_type in kwarg_param.annotation.__args__[0].__annotations__.items():
-                param_type = str(param_type)
+
+            # Process each kwarg parameter
+            for param_name, param_type_annotation in kwarg_param.annotation.__args__[0].__annotations__.items():
+                param_type = str(param_type_annotation)
+                optional = False
+
+                # Process parameter type
                 if "typing" in param_type:
                     param_type = "".join(param_type.split("typing.")).replace("transformers.", "~")
                 else:
@@ -892,44 +959,96 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
                 if "Optional" in param_type:
                     param_type = re.sub(r"Optional\[(.*?)\]", r"\1", param_type)
                     optional = True
-                    optional_string = OPTIONAL_STRING
-                else:
-                    optional = False
-                    optional_string = ""
-                # Check if the parameter has a default value (considered optional)
-                # is_optional = param.default != inspect.Parameter.empty
+
+                # Check for default value
                 param_default = ""
                 if parent_class is not None:
                     param_default = str(getattr(parent_class, param_name, ""))
                     param_default = f", defaults to `{param_default}`" if param_default != "" else ""
 
-                if param_name in documented_kwargs:
-                    if param_type == "" and documented_kwargs[param_name].get("type", None) is not None:
-                        param_type = documented_kwargs[param_name]["type"]
-                        optional = documented_kwargs[param_name]["optional"]
-                        optional_string = OPTIONAL_STRING if optional else ""
-                        shape = documented_kwargs[param_name]["shape"]
-                        shape_string = shape if shape else ""
+                param_type, optional_string, shape_string, description, is_documented = _get_parameter_info(
+                    param_name, documented_kwargs, source_args_dict, param_type, optional
+                )
+
+                if is_documented:
+                    # Check if type is missing
+                    if param_type == "":
+                        print(
+                            f"🚨 {param_name} for {kwarg_param.annotation.__args__[0].__qualname__} in file {func.__code__.co_filename} has no type"
+                        )
+
+                    # Format the parameter docstring
                     docstring += set_min_indent(
-                        f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}):{documented_kwargs[param_name]['description']}\n",
-                        indent_level + 8,
-                    )
-                elif param_name in (source_args_dict := source_args_doc(ImageProcessorArgs)):
-                    indented_doc = source_args_dict[param_name]
-                    pre_doc = indented_doc.split(":\n")[0]
-                    shape = parse_shape(pre_doc)
-                    shape_string = shape if shape else ""
-                    indented_doc = ":\n" + ":\n".join(indented_doc.split(":\n")[1:])
-                    docstring += set_min_indent(
-                        f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}){indented_doc}",
+                        f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}){description}",
                         indent_level + 8,
                     )
                 else:
                     undocumented_parameters.append(
-                        f"🚨 `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
+                        f"🚨 `{param_name}` is part of {kwarg_param.annotation.__args__[0].__qualname__}, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
                     )
 
-    # ------ Returns section ------
+    return docstring
+
+
+def _process_parameters_section(
+    func_documentation, sig, func, class_name, model_name_lowercase, parent_class, indent_level
+):
+    """
+    Process the parameters section of the docstring.
+
+    Args:
+        func_documentation (`str`): Existing function documentation (manually specified in the docstring)
+        sig (`inspect.Signature`): Function signature
+        func (`function`): Function the parameters belong to
+        class_name (`str`): Name of the class the function belongs to
+        model_name_lowercase (`str`): Lowercase model name
+        parent_class (`class`): Parent class of the function (if any)
+        indent_level (`int`): Indentation level
+    """
+    # Start Args section
+    docstring = set_min_indent("Args:\n", indent_level + 4)
+    undocumented_parameters = []
+    documented_params = {}
+    documented_kwargs = {}
+
+    # Parse existing docstring if available
+    if func_documentation is not None:
+        documented_params, func_documentation = parse_docstring(func_documentation)
+        if model_name_lowercase is not None:
+            documented_params = format_args_docstring(documented_params, model_name_lowercase)
+
+    # Process regular parameters
+    param_docstring = _process_regular_parameters(
+        sig, func, class_name, documented_params, indent_level, undocumented_parameters
+    )
+    docstring += param_docstring
+
+    # Process **kwargs parameters if needed
+    kwargs_docstring = _process_kwargs_parameters(
+        sig, func, parent_class, model_name_lowercase, documented_kwargs, indent_level, undocumented_parameters
+    )
+    docstring += kwargs_docstring
+
+    # Report undocumented parameters
+    if len(undocumented_parameters) > 0:
+        print("\n".join(undocumented_parameters))
+
+    return docstring
+
+
+def _process_returns_section(func_documentation, sig, config_class, indent_level):
+    """
+    Process the returns section of the docstring.
+
+    Args:
+        func_documentation (`str`): Existing function documentation (manually specified in the docstring)
+        sig (`inspect.Signature`): Function signature
+        config_class (`str`): Config class for the model
+        indent_level (`int`): Indentation level
+    """
+    return_docstring = ""
+
+    # Extract returns section from existing docstring if available
     if (
         func_documentation is not None
         and (match_start := re.search(r"(?m)^([ \t]*)(?=Return)", func_documentation)) is not None
@@ -941,23 +1060,50 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
         else:
             return_docstring = func_documentation[match_start.start() :]
             func_documentation = ""
-        docstring += set_min_indent(return_docstring, indent_level + 4)
-
+        return_docstring = set_min_indent(return_docstring, indent_level + 4)
+    # Otherwise, generate return docstring from return annotation if available
     elif sig.return_annotation is not None and sig.return_annotation != inspect._empty:
         add_intro, return_annotation = contains_type(sig.return_annotation, ModelOutput)
         return_docstring = _prepare_output_docstrings(return_annotation, config_class, add_intro=add_intro)
         return_docstring = return_docstring.replace("typing.", "")
-        docstring += set_min_indent(return_docstring, indent_level + 4)
+        return_docstring = set_min_indent(return_docstring, indent_level + 4)
 
-    # ------ Example section ------
+    return return_docstring, func_documentation
 
-    if func_documentation is not None and "Example" in func_documentation:
-        docstring += func_documentation
+
+def _process_example_section(
+    func_documentation, func, parent_class, class_name, model_name_lowercase, config_class, checkpoint, indent_level
+):
+    """
+    Process the example section of the docstring.
+
+    Args:
+        func_documentation (`str`): Existing function documentation (manually specified in the docstring)
+        func (`function`): Function being processed
+        parent_class (`class`): Parent class of the function
+        class_name (`str`): Name of the class
+        model_name_lowercase (`str`): Lowercase model name
+        config_class (`str`): Config class for the model
+        checkpoint: Checkpoint to use in examples
+        indent_level (`int`): Indentation level
+    """
+    # Import here to avoid circular import
+    from transformers.models import auto as auto_module
+
+    example_docstring = ""
+
+    # Use existing example section if available
+
+    if func_documentation is not None and (match := re.search(r"(?m)^([ \t]*)(?=Example)", func_documentation)):
+        example_docstring = func_documentation[match.start() :]
+        example_docstring = "\n" + set_min_indent(example_docstring, indent_level + 4)
     # No examples for __init__ methods or if the class is not a model
     elif parent_class is None and model_name_lowercase is not None:
         task = rf"({'|'.join(PT_SAMPLE_DOCSTRINGS.keys())})"
         model_task = re.search(task, class_name)
         CONFIG_MAPPING = auto_module.configuration_auto.CONFIG_MAPPING
+
+        # Get checkpoint example
         if (checkpoint_example := checkpoint) is None:
             try:
                 checkpoint_example = get_checkpoint_from_config_class(CONFIG_MAPPING[model_name_lowercase])
@@ -965,6 +1111,7 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
                 # skip example if no checkpoint found
                 checkpoint_example = None
 
+        # Add example based on model task
         if model_task is not None:
             if checkpoint_example is not None:
                 example_annotation = ""
@@ -978,7 +1125,7 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
                     qa_target_end_index=15,
                     mask="<mask>",
                 )
-                docstring += set_min_indent(example_annotation, indent_level + 4)
+                example_docstring = set_min_indent(example_annotation, indent_level + 4)
             else:
                 print(
                     f"🚨 No checkpoint found for {class_name}.{func.__name__}. Please add a `checkpoint` arg to `auto_docstring` or add one in {config_class}'s docstring"
@@ -997,11 +1144,60 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
                         qa_target_start_index=14,
                         qa_target_end_index=15,
                     )
-                    docstring += set_min_indent(example_annotation, indent_level + 4)
+                    example_docstring = set_min_indent(example_annotation, indent_level + 4)
                     break
 
-    if len(undocumented_parameters) > 0:
-        print("\n".join(undocumented_parameters))
+    return example_docstring
+
+
+def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint=None):
+    """
+    Wrapper that automatically generates docstring.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+
+    # Use inspect to retrieve the method's signature
+    sig = inspect.signature(func)
+    indent_level = get_indent_level(func)
+
+    # Get model information
+    model_name_lowercase, class_name, config_class = _get_model_info(func, parent_class)
+    func_documentation = func.__doc__
+
+    # Add intro to the docstring before args description if needed
+    if custom_intro is not None:
+        docstring = set_min_indent(custom_intro, indent_level + 4)
+    else:
+        docstring = add_intro_docstring(
+            func, class_name=class_name, parent_class=parent_class, indent_level=indent_level
+        )
+
+    # Process Parameters section
+    docstring += _process_parameters_section(
+        func_documentation, sig, func, class_name, model_name_lowercase, parent_class, indent_level
+    )
+
+    # Process Returns section
+    return_docstring, func_documentation = _process_returns_section(
+        func_documentation, sig, config_class, indent_level
+    )
+    docstring += return_docstring
+
+    # Process Example section
+    example_docstring = _process_example_section(
+        func_documentation,
+        func,
+        parent_class,
+        class_name,
+        model_name_lowercase,
+        config_class,
+        checkpoint,
+        indent_level,
+    )
+    docstring += example_docstring
 
     # Assign the dynamically generated docstring to the wrapper function
     wrapper.__doc__ = docstring

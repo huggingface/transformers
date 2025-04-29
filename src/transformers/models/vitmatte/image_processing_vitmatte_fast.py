@@ -92,6 +92,10 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
         trimaps: list["torch.Tensor"],
         **kwargs: Unpack[VitMatteFastImageProcessorKwargs],
     ) -> BatchFeature:
+        """
+        trimaps (`list[torch.Tensor]`):
+            The trimaps to preprocess.
+        """
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
