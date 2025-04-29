@@ -38,7 +38,6 @@ jobs:
             - run: if [ "$(cat elapsed.txt)" == "" ]; then echo 60 > elapsed.txt; fi
             - run: cat elapsed.txt
             - run: if [ "$(cat elapsed.txt)" -lt "30" ]; then echo "PR is just opened, wait some actions from GitHub"; sleep 30; fi
-            - run: 'if grep -q "\"draft\": true," github.txt; then echo "draft mode, skip test!"; circleci-agent step halt; fi'
             - run: uv pip install -U -e .
             - run: echo 'export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)"' >> "$BASH_ENV" && source "$BASH_ENV"
             - run: mkdir -p test_preparation
