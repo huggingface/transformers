@@ -1694,10 +1694,14 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
                 next_decoder_cache = layer_outputs[2 if output_attentions else 1]
 
             if output_attentions:
-                all_self_attns += (layer_outputs[1],)
+                if layer_outputs[1] is not None:
+                    # append attentions only of attention layers. Mamba layers return `None` as the attention weights
+                    all_self_attns += (layer_outputs[1],)
 
             if output_router_logits:
-                all_router_logits += (layer_outputs[-1],)
+                if layer_outputs[-1] is not None:
+                    # append router logits only of expert layers. Regular MLP layers return `None` as the router logits
+                    all_router_logits += (layer_outputs[-1],)
 
         hidden_states = self.norm(hidden_states)
 
