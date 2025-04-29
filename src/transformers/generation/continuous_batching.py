@@ -124,7 +124,6 @@ class PagedAttentionCache(Cache):
             self.key_cache.append(torch.zeros(cache_shape, dtype=self.dtype, device=layer_device))
             self.value_cache.append(torch.zeros(cache_shape, dtype=self.dtype, device=layer_device))
 
-        self._lock = threading.Lock()
         self._free_blocks = deque(range(num_blocks))
         # Maps request_id to list of block numbers used by that request
         self._block_tables: Dict[str, List[int]] = {}
@@ -145,27 +144,23 @@ class PagedAttentionCache(Cache):
 
     def free_blocks(self, request_id: str) -> None:
         """Frees all blocks associated with a request_id."""
-        with self._lock:
-            if request_id in self._block_tables:
-                blocks_to_free = self._block_tables.pop(request_id)
-                self._free_blocks.extend(blocks_to_free)  # Add back to the deque
-            else:
-                logger.warning(f"Attempted to free blocks for non-existent request_id: {request_id}")
+        if request_id in self._block_tables:
+            blocks_to_free = self._block_tables.pop(request_id)
+            self._free_blocks.extend(blocks_to_free)  # Add back to the deque
+        else:
+            logger.warning(f"Attempted to free blocks for non-existent request_id: {request_id}")
 
     def get_num_free_blocks(self) -> int:
-        with self._lock:
-            return len(self._free_blocks)
+        return len(self._free_blocks)
 
     def get_block_table(self, request_id: str) -> List[int]:
-        with self._lock:
-            return self._block_tables.get(request_id, [])
+        return self._block_tables.get(request_id, [])
 
     def _get_physical_indices(self, request_id: str, logical_indices: List[int]) -> List[int]:
         """Maps logical sequence indices to physical cache indices using the block table."""
-        with self._lock:
-            block_table = self._block_tables.get(request_id)
-            if not block_table:
-                raise ValueError(f"No block table found for request {request_id}")
+        block_table = self._block_tables.get(request_id)
+        if not block_table:
+            raise ValueError(f"No block table found for request {request_id}")
 
         physical_indices = []
         for idx in logical_indices:
@@ -669,6 +664,7 @@ class ContinuousBatchProcessor:
 
         return selected_requests
 
+    # TODO: use tensors direclty instead of lists
     def prepare_next_batch(self):
         """Prepares tensors and metadata for the next model forward pass."""
         self._get_new_requests()
@@ -1103,8 +1099,6 @@ class ContinuousBatchingManager:
                         )
                 except Exception as e:
                     logger.error(f"Model forward pass failed: {e}", exc_info=True)
-                    # How to handle? Mark involved requests as failed? Stop manager?
-                    # Mark requests in the failed batch as failed
                     failed_ids = batch_processor.requests_to_process_next
                     for req_id in failed_ids:
                         if req_id in batch_processor.active_requests:

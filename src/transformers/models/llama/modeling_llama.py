@@ -197,31 +197,37 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    cache = kwargs.pop("cache")
-    cumulative_seqlens_k = kwargs.pop("cumulative_seqlens_k")
-    cumulative_seqlens_q = kwargs.pop("cumulative_seqlens_q")
-    key, value = cache.update(key, value, module.layer_idx, cumulative_seqlens_k, **kwargs)
-    attention_mask_ = torch.full(
-            [1, 1, query.shape[2],key.shape[2]+1], torch.finfo(query.dtype).min, device=query.device, dtype=query.dtype
-    )
-    cuq = cumulative_seqlens_q
-    cuk = cumulative_seqlens_k
-    for i in range(len(cuk) - 1):
-        attention_mask_[..., cuq[i] : cuq[i + 1], cuk[i] : cuk[i + 1]] = 0
+    cache = kwargs.pop("cache", None)
+    if cache is not None:
+        cumulative_seqlens_q = kwargs.pop("cumulative_seqlens_q")
+        cumulative_seqlens_k = kwargs.pop("cumulative_seqlens_k")
+        key, value = cache.update(key, value, module.layer_idx, cumulative_seqlens_k, **kwargs)
+        attention_mask_ = torch.full(
+                [1, 1, query.shape[2],key.shape[2]+1], torch.finfo(query.dtype).min, device=query.device, dtype=query.dtype
+        )
+        cuq = cumulative_seqlens_q
+        cuk = cumulative_seqlens_k
+        # if module.layer_idx  == 0:
+        #     print("bob")
+        for i in range(len(cuk) - 1):
+            attention_mask_[..., cuq[i] : cuq[i + 1], cuk[i] : cuk[i + 1]] = 0
 
-    if attention_mask.shape == attention_mask_.shape:
-        attention_mask_.masked_fill_(attention_mask!=0, torch.finfo(query.dtype).min)
+        if attention_mask.shape == attention_mask_.shape:
+            attention_mask_.masked_fill_(attention_mask!=0, torch.finfo(query.dtype).min)
+        attention_mask = attention_mask_
 
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        attention_mask_ = attention_mask_[:, :, :, : key_states.shape[2]]
-        attn_weights = attn_weights + attention_mask_
+        causal_mask = attention_mask[:, :, :, : key_states.shape[2]]
+        attn_weights = attn_weights + causal_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    if cache is not None:
+        attn_weights = attn_weights.masked_fill(causal_mask!=0, 0)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 

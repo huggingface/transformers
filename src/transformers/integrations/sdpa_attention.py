@@ -24,32 +24,35 @@ def sdpa_attention_forward(
     dropout: float = 0.0,
     scaling: Optional[float] = None,
     is_causal: Optional[bool] = None,
-    cache=None,
-    cumulative_seqlens_q=None,
-    cumulative_seqlens_k=None,
     **kwargs,
 ) -> Tuple[torch.Tensor, None]:
-    key, value = cache.update(key, value, module.layer_idx, cumulative_seqlens_k, **kwargs)
-    attention_mask_ = torch.full(
-        [1, 1, query.shape[2], key.shape[2] + 1], torch.finfo(query.dtype).min, device=query.device, dtype=query.dtype
-    )
-    attention_mask_[0, 0, cumulative_seqlens_q[0], 0 : cumulative_seqlens_k[0]] = 0
-    for i in range(1, len(cumulative_seqlens_k)):
-        attention_mask_[
-            ...,
-            cumulative_seqlens_q[i - 1] : cumulative_seqlens_q[i],
-            cumulative_seqlens_k[i - 1] : cumulative_seqlens_k[i],
-        ] = 0
-    attention_mask_[..., cumulative_seqlens_q[i] :, cumulative_seqlens_k[i] :] = 0
+    cache = kwargs.pop("cache", None)
+    if cache is not None:
+        cumulative_seqlens_q = kwargs.pop("cumulative_seqlens_q")
+        cumulative_seqlens_k = kwargs.pop("cumulative_seqlens_k")
+        key, value = cache.update(key, value, module.layer_idx, cumulative_seqlens_k, **kwargs)
+        attention_mask_ = torch.full(
+            [1, 1, query.shape[2], key.shape[2] + 1], torch.finfo(query.dtype).min, device=query.device, dtype=query.dtype
+        )
+        for i in range(len(cumulative_seqlens_k) - 1):
+            attention_mask_[
+                ...,
+                cumulative_seqlens_q[i] : cumulative_seqlens_q[i + 1],
+                cumulative_seqlens_k[i] : cumulative_seqlens_k[i + 1],
+            ] = 0
 
-    if attention_mask.shape == attention_mask_.shape:
-        attention_mask_.masked_fill_(attention_mask != 0, torch.finfo(query.dtype).min)
+        if attention_mask.shape == attention_mask_.shape:
+            attention_mask_.masked_fill_(attention_mask != 0, torch.finfo(query.dtype).min)
+
+        causal_mask = attention_mask_
+    else:
+        causal_mask = attention_mask
+
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
         value = repeat_kv(value, module.num_key_value_groups)
 
-    causal_mask = attention_mask_
-    if attention_mask is not None and causal_mask.ndim == 4:
+    if causal_mask is not None and causal_mask.ndim == 4:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
     # SDPA with memory-efficient backend is bugged with non-contiguous inputs and custom attn_mask for some torch versions
