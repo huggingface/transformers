@@ -129,7 +129,7 @@ class CircleCIJob:
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
         # Do not run tests decorated by @is_flaky on pull requests
-        COMMON_ENV_VARIABLES['RUN_FLAKY'] = os.environ.get("CIRCLE_PULL_REQUEST", "") == ""
+        env['RUN_FLAKY'] = os.environ.get("CIRCLE_PULL_REQUEST", "") == ""
         env.update(self.additional_env)
 
         job = {
