@@ -1466,6 +1466,10 @@ class ModularFileMapper(ModuleMapper):
                 suffix = common_partial_suffix(class_name, modeling_bases[0])
                 if len(suffix) > 0 and suffix[0].isupper():
                     cased_model_name = class_name.replace(suffix, "")
+                    # If both the old model and new model share the last part of their name, is is detected as a common
+                    # suffix, but it should not be the case -> use the full name in this case
+                    if len(cased_model_name) < len(cased_default_name) and cased_default_name in class_name:
+                        cased_model_name = cased_default_name
                 prefix_model_name_mapping[filename].update([cased_model_name])
 
         # Check if we found multiple prefixes for some modeling files
@@ -1761,6 +1765,17 @@ if __name__ == "__main__":
         args.files_to_parse = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
     if args.files_to_parse == ["examples"]:
         args.files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
+    else:
+        for i, model_name in enumerate(args.files_to_parse):
+            if os.sep not in model_name:
+                full_path = os.path.join("src", "transformers", "models", model_name, f"modular_{model_name}.py")
+                # If it does not exist, try in the examples section
+                if not os.path.isfile(full_path):
+                    full_path = os.path.join("examples", "modular-transformers", f"modular_{model_name}.py")
+                # We did not find it anywhere
+                if not os.path.isfile(full_path):
+                    raise ValueError(f"Cannot find a modular file for {model_name}. Please provide the full path.")
+                args.files_to_parse[i] = full_path
 
     priority_list, _ = find_priority_list(args.files_to_parse)
     assert len(priority_list) == len(args.files_to_parse), "Some files will not be converted"
