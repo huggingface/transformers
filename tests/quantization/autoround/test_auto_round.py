@@ -152,7 +152,7 @@ class AutoRoundTest(unittest.TestCase):
 
     def test_convert_from_gptq(self):
         """
-        Simple test that checks if auto-round work properly wth gptq format
+        Simple test that checks if auto-round work properly with gptq format
         """
         model_name = "ybelkada/opt-125m-gptq-4bit"
 
@@ -170,7 +170,7 @@ class AutoRoundTest(unittest.TestCase):
     @require_intel_extension_for_pytorch
     def test_convert_from_awq_cpu(self):
         """
-        Simple test that checks if auto-round work properly wth awq format
+        Simple test that checks if auto-round work properly with awq format
         """
         model_name = "casperhansen/opt-125m-awq"
 
@@ -187,7 +187,7 @@ class AutoRoundTest(unittest.TestCase):
 
     def test_mixed_bits(self):
         """
-        Simple test that checks if auto-round work properly wth mixed bits
+        Simple test that checks if auto-round work properly with mixed bits
         """
         model_name = "facebook/opt-125m"
         model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto")
