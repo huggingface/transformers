@@ -2487,6 +2487,7 @@ class GenerationTesterMixin:
             "bamba",
             "ctrl",
             "fsmt",
+            "granitemoehybrid",
             "gptbigcode",
             "mega",
             "reformer",
