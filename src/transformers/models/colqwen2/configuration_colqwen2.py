@@ -41,7 +41,8 @@ class ColQwen2Config(PretrainedConfig):
             Configuration of the VLM backbone model.
         embedding_dim (`int`, *optional*, defaults to 128):
             Dimension of the multi-vector embeddings produced by the model.
-
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     Example:
 
     ```python
@@ -59,6 +60,7 @@ class ColQwen2Config(PretrainedConfig):
         self,
         vlm_config=None,
         embedding_dim: int = 128,
+        initializer_range: float = 0.02,
         **kwargs,
     ):
         if vlm_config is None:
@@ -82,6 +84,7 @@ class ColQwen2Config(PretrainedConfig):
 
         self.vlm_config = vlm_config
         self.embedding_dim = embedding_dim
+        self.initializer_range = initializer_range
         super().__init__(**kwargs)
 
     def get_text_config(self, decoder=False) -> PretrainedConfig:

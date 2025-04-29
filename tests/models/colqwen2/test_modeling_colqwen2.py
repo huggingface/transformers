@@ -93,6 +93,7 @@ class ColQwen2ForRetrievalModelTester:
             "vocab_size": 99,
         },
         embedding_dim=32,
+        initializer_range=0.02,
     ):
         self.parent = parent
         self.ignore_index = ignore_index
@@ -127,13 +128,15 @@ class ColQwen2ForRetrievalModelTester:
         self.encoder_seq_length = self.seq_length
         self.use_cache = use_cache
 
-        self.embedding_dim = embedding_dim
         self.vlm_config = vlm_config
+        self.embedding_dim = embedding_dim
+        self.initializer_range = initializer_range
 
     def get_config(self):
         return ColQwen2Config(
             vlm_config=self.vlm_config,
             embedding_dim=self.embedding_dim,
+            initializer_range=self.initializer_range,
         )
 
     def prepare_config_and_inputs(self):
