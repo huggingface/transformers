@@ -206,7 +206,7 @@ class GraniteMoeHybridModelTester:
             mla_key_value_comp_size=self.mla_key_value_comp_size,
         )
 
-    def create_and_check_model(self, config, input_ids, input_mask):
+    def create_and_check_model(self, config, input_ids, input_mask, token_labels):
         model = GraniteMoeHybridModel(config=config)
         model.to(torch_device)
         model.eval()
