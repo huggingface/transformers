@@ -88,7 +88,7 @@ def _scale_boxes(boxes, target_sizes):
     else:
         raise ValueError("`target_sizes` must be a list, tuple or torch.Tensor")
 
-    # for owlv2 image is padded to max size unlike owlvit, thats why we have to scale boxes to max size
+    # for owlv2 image is padded to max size unlike owlvit, that's why we have to scale boxes to max size
     max_size = torch.max(image_height, image_width)
 
     scale_factor = torch.stack([max_size, max_size, max_size, max_size], dim=1)
@@ -248,7 +248,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         rescale_factor: Union[int, float] = 1 / 255,
         do_pad: bool = True,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
@@ -371,7 +371,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_pad: Optional[bool] = None,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,

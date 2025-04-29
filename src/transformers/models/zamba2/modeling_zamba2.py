@@ -571,7 +571,7 @@ class Zamba2MambaMixer(nn.Module):
             projection_size,
             bias=config.add_bias_linear,
         )
-        # selective projection used to make dt, B and C input dependant
+        # selective projection used to make dt, B and C input dependent
 
         # time step projection (discretization)
         # instantiate once and copy inv_dt in init_weights of PretrainedModel
@@ -1719,7 +1719,7 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
         use_cache=True,
         **kwargs,
     ):
-        # Overwitten -- has a unique cache type, `Zamba2HybridDynamicCache`
+        # Overwritten -- has a unique cache type, `Zamba2HybridDynamicCache`
 
         empty_past_kv = past_key_values is None
 
