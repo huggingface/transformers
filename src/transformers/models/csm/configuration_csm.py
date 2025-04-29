@@ -59,7 +59,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
             `num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32):
+        max_position_embeddings (`int`, *optional*, defaults to 33):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -148,7 +148,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         num_attention_heads=8,
         num_key_value_heads=2,
         hidden_act="silu",
-        max_position_embeddings=32,
+        max_position_embeddings=33,
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
