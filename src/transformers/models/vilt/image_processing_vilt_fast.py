@@ -130,12 +130,13 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         # Handle padding if required
         data = {}
         if do_pad:
-            data = self._pad_batch(processed_images, return_tensors)
+            pixel_values, pixel_mask = self._pad_batch(processed_images, return_tensors)
+            data = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
         else:
             # If no padding, just return the processed images
             if return_tensors == "pt":
                 processed_images = torch.stack(processed_images)
-            data["pixel_values"] = processed_images
+            data = {"pixel_values": processed_images}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
@@ -197,7 +198,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         return_tensors: Optional[Union[str, TensorType]],
-    ) -> dict:
+    ) -> tuple:
         """
         Pad a batch of images to the same size based on the maximum dimensions.
 
@@ -206,7 +207,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
             return_tensors (`str` or `TensorType`, *optional*): The type of tensors to return.
 
         Returns:
-            `dict`: Dictionary containing padded images and pixel masks.
+            `tuple`: Tuple containing padded images and pixel masks.
         """
         # Calculate global maximum dimensions across all images
         max_size = get_max_height_width(images)
@@ -257,7 +258,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
             padded_images = torch.stack(padded_images)
             pixel_masks = torch.stack(pixel_masks)
 
-        return {"pixel_values": padded_images, "pixel_mask": pixel_masks}
+        return padded_images, pixel_masks
 
 
 __all__ = ["ViltImageProcessorFast"]
