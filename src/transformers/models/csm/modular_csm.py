@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
@@ -463,10 +462,6 @@ class CsmCodebooksHead(nn.Module):
         super().__init__()
         self.num_codebooks = num_codebooks
         self.weight = nn.Parameter(torch.empty(self.num_codebooks - 1, hidden_size, vocab_size))
-
-    def reset_parameters(self):
-        for i in range(self.num_codebooks - 1):
-            nn.init.kaiming_uniform_(self.weight[i], a=math.sqrt(5))
 
     def forward(self, hidden_states, position_ids):
         if position_ids is None:
