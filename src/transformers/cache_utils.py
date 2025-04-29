@@ -2288,14 +2288,6 @@ class xLSTMCache:
             for layer in self.rnn_state
         }
 
-    def update_rnn_state(self, layer_idx: int, new_rnn_state: tuple[torch.Tensor, torch.Tensor, torch.Tensor]):
-        self.rnn_state[layer_idx] = tuple(
-            new_rnn_state[0].to(self.rnn_state[layer_idx][0].device),
-            new_rnn_state[1].to(self.rnn_state[layer_idx][0].device),
-            new_rnn_state[2].to(self.rnn_state[layer_idx][0].device),
-        )
-        return self.rnn_state[layer_idx]
-
 
 class OffloadedStaticCache(StaticCache):
     """
