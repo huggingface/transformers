@@ -554,7 +554,7 @@ class GenerationMixin:
 
         # 6. Create 4D attention mask is we are using a compilable cache (important for performant compiled forward
         # pass)
-        if past_key_values.is_compilable and attention_mask.ndim == 2:
+        if past_key_values.is_compileable and attention_mask.ndim == 2:
             if model_inputs["inputs_embeds"] is not None:
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
             else:
