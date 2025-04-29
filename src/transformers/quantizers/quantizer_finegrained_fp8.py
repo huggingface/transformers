@@ -194,7 +194,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                         not_missing_keys.append(missing)
         return [k for k in missing_keys if k not in not_missing_keys]
 
-
     def update_tp_plan(self, config):
         if "Qwen3" in config.__class__.__name__:
             print(config.__class__.__name__)
@@ -216,9 +215,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 "layers.*.mlp.down_proj.weight_scale_inv": "local_rowwise",
                 "layers.*.mlp": "gather",
             }
-            
+
             config.base_model_tp_plan = text_plan
-            
+
             return config
 
     def is_serializable(self, safe_serialization=None):
