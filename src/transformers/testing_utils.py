@@ -70,6 +70,7 @@ from .utils import (
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
+    is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
     is_bitsandbytes_multi_backend_available,
@@ -1295,6 +1296,13 @@ def require_auto_awq(test_case):
     Decorator for auto_awq dependency
     """
     return unittest.skipUnless(is_auto_awq_available(), "test requires autoawq")(test_case)
+
+
+def require_auto_round(test_case):
+    """
+    Decorator for auto_round dependency
+    """
+    return unittest.skipUnless(is_auto_round_available(), "test requires autoround")(test_case)
 
 
 def require_optimum_quanto(test_case):
@@ -2656,7 +2664,7 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
 def run_first(test_case):
     """
     Decorator marking a test with order(1). When pytest-order plugin is installed, tests marked with this decorator
-    are garanteed to run first.
+    are guaranteed to run first.
 
     This is especially useful in some test settings like on a Gaudi instance where a Gaudi device can only be used by a
     single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device

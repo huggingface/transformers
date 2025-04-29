@@ -15,11 +15,11 @@
 # limitations under the License.
 from typing import Optional, Tuple, Union
 
-import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, logging
@@ -43,7 +43,7 @@ class Glm4MLP(Phi3MLP):
     pass
 
 
-class Glm4DecoderLayer(nn.Module):
+class Glm4DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Glm4Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

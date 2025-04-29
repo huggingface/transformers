@@ -850,7 +850,7 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
 
         return results
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple[int, int]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None):
         """
         Converts the output of [`ConditionalDetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 

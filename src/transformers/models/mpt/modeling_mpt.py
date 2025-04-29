@@ -69,7 +69,7 @@ def build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max=8, device=
 
 class MptAttention(nn.Module):
     """Multi-head self attention.
-    Using torch or triton attention implemetation enables user to also use additive bias.
+    Using torch or triton attention implementation enables user to also use additive bias.
     """
 
     def __init__(self, config: MptConfig):

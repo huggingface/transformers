@@ -167,6 +167,8 @@
     title: Quantization concepts
   - local: quantization/aqlm
     title: AQLM
+  - local: quantization/auto_round
+    title: AutoRound
   - local: quantization/awq
     title: AWQ
   - local: quantization/bitnet
@@ -383,6 +385,8 @@
         title: BigBirdPegasus
       - local: model_doc/biogpt
         title: BioGpt
+      - local: model_doc/bitnet
+        title: BitNet
       - local: model_doc/blenderbot
         title: Blenderbot
       - local: model_doc/blenderbot-small
@@ -491,8 +495,6 @@
         title: GraniteMoe
       - local: model_doc/granitemoeshared
         title: GraniteMoeShared
-      - local: model_doc/granitevision
-        title: GraniteVision
       - local: model_doc/helium
         title: Helium
       - local: model_doc/herbert
@@ -513,8 +515,6 @@
         title: Llama2
       - local: model_doc/llama3
         title: Llama3
-      - local: model_doc/llama4
-        title: Llama4
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -543,8 +543,6 @@
         title: MegatronGPT2
       - local: model_doc/mistral
         title: Mistral
-      - local: model_doc/mistral3
-        title: Mistral3
       - local: model_doc/mixtral
         title: Mixtral
       - local: model_doc/mluke
@@ -595,8 +593,6 @@
         title: Phi
       - local: model_doc/phi3
         title: Phi-3
-      - local: model_doc/phi4_multimodal
-        title: Phi4 Multimodal
       - local: model_doc/phimoe
         title: PhiMoE
       - local: model_doc/phobert
@@ -939,6 +935,8 @@
         title: GIT
       - local: model_doc/got_ocr2
         title: GOT-OCR2
+      - local: model_doc/granitevision
+        title: GraniteVision
       - local: model_doc/grounding-dino
         title: Grounding DINO
       - local: model_doc/groupvit
@@ -969,6 +967,8 @@
         title: LayoutXLM
       - local: model_doc/lilt
         title: LiLT
+      - local: model_doc/llama4
+        title: Llama4
       - local: model_doc/llava
         title: Llava
       - local: model_doc/llava_next
@@ -983,6 +983,8 @@
         title: MatCha
       - local: model_doc/mgp-str
         title: MGP-STR
+      - local: model_doc/mistral3
+        title: Mistral3
       - local: model_doc/mllama
         title: mllama
       - local: model_doc/nougat
@@ -999,6 +1001,8 @@
         title: PaliGemma
       - local: model_doc/perceiver
         title: Perceiver
+      - local: model_doc/phi4_multimodal
+        title: Phi4 Multimodal
       - local: model_doc/pix2struct
         title: Pix2Struct
       - local: model_doc/pixtral
@@ -1013,6 +1017,8 @@
         title: Qwen2VL
       - local: model_doc/sam
         title: Segment Anything
+      - local: model_doc/sam_hq
+        title: Segment Anything High Quality
       - local: model_doc/shieldgemma2
         title: ShieldGemma2
       - local: model_doc/siglip
