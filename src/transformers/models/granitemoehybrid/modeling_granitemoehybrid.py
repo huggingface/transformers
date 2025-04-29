@@ -1395,6 +1395,7 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
+        std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -1408,6 +1409,11 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, GraniteMoeHybridParallelExperts):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        # Initialize Mamba convolutional modules
+        if isinstance(module, (nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
 
 class GraniteMoeHybridRotaryEmbedding(nn.Module):

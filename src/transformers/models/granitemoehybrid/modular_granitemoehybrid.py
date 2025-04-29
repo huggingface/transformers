@@ -29,7 +29,7 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedPreTrainedModel,
     GraniteMoeSharedAttention,
     GraniteMoeSharedFlashAttention2,
-    GraniteMoeSharedSdpaAttention
+    GraniteMoeSharedSdpaAttention,
 )
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
@@ -202,6 +202,15 @@ class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     config_class = GraniteMoeHybridConfig
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
     _is_stateful = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        super()._init_weights()
+        # Initialize Mamba convolutional modules
+        if isinstance(module, (nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
 
 GRANITEMOEHYBRID_INPUTS_DOCSTRING = r"""
