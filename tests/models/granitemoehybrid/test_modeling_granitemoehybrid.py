@@ -258,26 +258,22 @@ class GraniteMoeHybridModelTester:
         config,
         input_ids,
         input_mask,
-        encoder_hidden_states,
-        encoder_attention_mask,
+        token_labels,
     ):
         config.is_decoder = True
-        # config.add_cross_attention = True
         model = GraniteMoeHybridForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
         # needs cache to be initialized, similar to Bamba models
         past_key_values = HybridMambaAttentionDynamicCache(
-            self.config, input_ids.shape[0], self.dtype, device=self.device
+            config, input_ids.shape[0], model.dtype, device=model.device
         )
 
         # first forward pass
         outputs = model(
             input_ids,
             attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=True,
         )
@@ -294,17 +290,16 @@ class GraniteMoeHybridModelTester:
         output_from_no_past = model(
             next_input_ids,
             attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             output_hidden_states=True,
         )["hidden_states"][0]
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             output_hidden_states=True,
+            cache_position=torch.arange(
+                input_ids.shape[1], input_ids.shape[1] + next_tokens.shape[1], device=model.device
+            ),
         )["hidden_states"][0]
 
         # select random slice
