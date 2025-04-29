@@ -1532,6 +1532,84 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
                 self.depth_decoder.model.embed_tokens,
             )
 
+    def _merge_input_ids_with_input_values(
+        self, input_ids=None, input_values=None, input_values_mask=None, labels=None
+    ):
+        if input_ids is None and input_values is None:
+            return None
+
+        inputs_embeds = self.embed_text_tokens(input_ids)
+
+        if input_values is not None:
+            # =======================================
+            # TODO: @eustlb, this should be batched !!!
+            # but requires making sure batched inference of the codec model works as intended
+            audio_batch_list = [
+                input_values_batch[:, : input_values_mask_batch.sum(-1)]
+                for input_values_batch, input_values_mask_batch in zip(input_values, input_values_mask)
+            ]
+            audio_tokens_list = []
+            for audio_batch in audio_batch_list:
+                codec_outputs = self.codec_model.encode(audio_batch.unsqueeze(0))
+                codebook_ids = codec_outputs.audio_codes.transpose(1, -1)
+                audio_tokens_list.append(codebook_ids[0])
+
+            max_audio_frames = max(el.shape[0] for el in audio_tokens_list)
+            batched_audio_token_ids = torch.stack(
+                [nn.functional.pad(el, (0, 0, 0, max_audio_frames - el.shape[0])) for el in audio_tokens_list]
+            )
+            # =======================================
+
+            audio_embeds = self.backbone_model.embed_tokens(batched_audio_token_ids)
+
+            # batched_audio_codes is a tensor of shape (batch_size, max_audio_frames, num_codebooks)
+            # We need to:
+            # 1. Select only the valid frames for each audio (excluding padding frames)
+            # 2. Embed such frames and place then to their sequence corresponding idxs
+            audio_token_id = self.config.audio_token_id
+            audio_token_mask = input_ids == audio_token_id
+
+            # retreive the number of audio tokens for each audio from the input_ids
+            change_idxs = (audio_token_mask[:, 1:] != audio_token_mask[:, :-1]).nonzero(as_tuple=True)[-1]
+            num_audio_tokens = change_idxs.diff()
+            num_audio_tokens = torch.stack([num_audio_tokens[i] for i in range(0, len(num_audio_tokens), 2)])
+
+            frames_mask = torch.arange(max_audio_frames, device=batched_audio_token_ids.device).expand(
+                len(num_audio_tokens), -1
+            ) < num_audio_tokens.unsqueeze(-1)
+            frames_mask = frames_mask.flatten()
+
+            audio_token_idxs = audio_token_mask.nonzero(as_tuple=True)
+            inputs_embeds[audio_token_idxs[0], audio_token_idxs[1]] = audio_embeds.view(-1, audio_embeds.shape[-1])[
+                frames_mask
+            ]
+
+            # same for the audio eos token
+            audio_eos_frame_ids = (
+                torch.ones((1, 1, self.config.num_codebooks), device=input_ids.device, dtype=torch.long)
+                * self.config.codebook_eos_token_id
+            )
+            audio_eos_embeds = self.backbone_model.embed_tokens(audio_eos_frame_ids).squeeze(1)
+
+            audio_eos_token_mask = input_ids == self.config.audio_eos_token_id
+            audio_eos_token_idxs = audio_eos_token_mask.nonzero(as_tuple=True)
+            inputs_embeds[audio_eos_token_idxs[0], audio_eos_token_idxs[1]] = audio_eos_embeds.repeat(
+                audio_eos_token_idxs[0].shape[0], 1
+            )
+
+            # if the labels are provided, we need to expand the labels to (batch_size, seq_length, num_codebooks)
+            if labels is not None:
+                labels_expanded = labels.unsqueeze(-1).repeat(1, 1, self.config.num_codebooks)
+                labels_expanded[audio_token_idxs[0], audio_token_idxs[1]] = batched_audio_token_ids.view(
+                    -1, self.config.num_codebooks
+                )[frames_mask]
+                # mask depth decoder
+                depth_decoder_ignore_frames_idxs = (labels == -101).nonzero(as_tuple=True)
+                labels_expanded[depth_decoder_ignore_frames_idxs[0], depth_decoder_ignore_frames_idxs[1], 1:] = -100
+                labels = labels_expanded
+
+        return {"inputs_embeds": inputs_embeds, "labels": labels}
+
     @staticmethod
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
@@ -1825,84 +1903,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
             else:
                 kept_criteria.append(criterion)
         return kept_criteria
-
-    def _merge_input_ids_with_input_values(
-        self, input_ids=None, input_values=None, input_values_mask=None, labels=None
-    ):
-        if input_ids is None and input_values is None:
-            return None
-
-        inputs_embeds = self.embed_text_tokens(input_ids)
-
-        if input_values is not None:
-            # =======================================
-            # TODO: @eustlb, this should be batched !!!
-            # but requires making sure batched inference of the codec model works as intended
-            audio_batch_list = [
-                input_values_batch[:, : input_values_mask_batch.sum(-1)]
-                for input_values_batch, input_values_mask_batch in zip(input_values, input_values_mask)
-            ]
-            audio_tokens_list = []
-            for audio_batch in audio_batch_list:
-                codec_outputs = self.codec_model.encode(audio_batch.unsqueeze(0))
-                codebook_ids = codec_outputs.audio_codes.transpose(1, -1)
-                audio_tokens_list.append(codebook_ids[0])
-
-            max_audio_frames = max(el.shape[0] for el in audio_tokens_list)
-            batched_audio_token_ids = torch.stack(
-                [nn.functional.pad(el, (0, 0, 0, max_audio_frames - el.shape[0])) for el in audio_tokens_list]
-            )
-            # =======================================
-
-            audio_embeds = self.backbone_model.embed_tokens(batched_audio_token_ids)
-
-            # batched_audio_codes is a tensor of shape (batch_size, max_audio_frames, num_codebooks)
-            # We need to:
-            # 1. Select only the valid frames for each audio (excluding padding frames)
-            # 2. Embed such frames and place then to their sequence corresponding idxs
-            audio_token_id = self.config.audio_token_id
-            audio_token_mask = input_ids == audio_token_id
-
-            # retreive the number of audio tokens for each audio from the input_ids
-            change_idxs = (audio_token_mask[:, 1:] != audio_token_mask[:, :-1]).nonzero(as_tuple=True)[-1]
-            num_audio_tokens = change_idxs.diff()
-            num_audio_tokens = torch.stack([num_audio_tokens[i] for i in range(0, len(num_audio_tokens), 2)])
-
-            frames_mask = torch.arange(max_audio_frames, device=batched_audio_token_ids.device).expand(
-                len(num_audio_tokens), -1
-            ) < num_audio_tokens.unsqueeze(-1)
-            frames_mask = frames_mask.flatten()
-
-            audio_token_idxs = audio_token_mask.nonzero(as_tuple=True)
-            inputs_embeds[audio_token_idxs[0], audio_token_idxs[1]] = audio_embeds.view(-1, audio_embeds.shape[-1])[
-                frames_mask
-            ]
-
-            # same for the audio eos token
-            audio_eos_frame_ids = (
-                torch.ones((1, 1, self.config.num_codebooks), device=input_ids.device, dtype=torch.long)
-                * self.config.codebook_eos_token_id
-            )
-            audio_eos_embeds = self.backbone_model.embed_tokens(audio_eos_frame_ids).squeeze(1)
-
-            audio_eos_token_mask = input_ids == self.config.audio_eos_token_id
-            audio_eos_token_idxs = audio_eos_token_mask.nonzero(as_tuple=True)
-            inputs_embeds[audio_eos_token_idxs[0], audio_eos_token_idxs[1]] = audio_eos_embeds.repeat(
-                audio_eos_token_idxs[0].shape[0], 1
-            )
-
-            # if the labels are provided, we need to expand the labels to (batch_size, seq_length, num_codebooks)
-            if labels is not None:
-                labels_expanded = labels.unsqueeze(-1).repeat(1, 1, self.config.num_codebooks)
-                labels_expanded[audio_token_idxs[0], audio_token_idxs[1]] = batched_audio_token_ids.view(
-                    -1, self.config.num_codebooks
-                )[frames_mask]
-                # mask depth decoder
-                depth_decoder_ignore_frames_idxs = (labels == -101).nonzero(as_tuple=True)
-                labels_expanded[depth_decoder_ignore_frames_idxs[0], depth_decoder_ignore_frames_idxs[1], 1:] = -100
-                labels = labels_expanded
-
-        return {"inputs_embeds": inputs_embeds, "labels": labels}
 
     def _prepare_generation_config(
         self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Dict
