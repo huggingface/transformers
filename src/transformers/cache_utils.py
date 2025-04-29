@@ -359,7 +359,7 @@ class DynamicCache(Cache):
         ```
     """
 
-    def __init__(self, _distributed_cache_data: Optional[Iterable] = None) -> None:
+    def __init__(self, _distributed_cache_data: Iterable = None) -> None:
         super().__init__()
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         self.key_cache: List[torch.Tensor] = []
@@ -1672,6 +1672,9 @@ class HybridCache(Cache):
                 "sliding window attention, please check if there is a `sliding_window` field in the model "
                 "config and it's not set to None."
             )
+        self.config = config
+        self.device = device
+        self.layer_device_map = layer_device_map
         self.max_cache_len = max_cache_len
         self.max_batch_size = max_batch_size
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
@@ -1685,9 +1688,7 @@ class HybridCache(Cache):
         )
 
         layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2  # 2 is for BC
-        self.is_sliding = torch.tensor(
-            [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)], dtype=torch.bool
-        )
+        self.is_sliding = [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)]
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         global_cache_shape = (self.max_batch_size, self.num_key_value_heads, max_cache_len, self.head_dim)
@@ -1697,7 +1698,7 @@ class HybridCache(Cache):
             min(config.sliding_window, max_cache_len),
             self.head_dim,
         )
-        device = torch.device(device) if device is not None else None
+        device = torch.device(device) if device is not None and isinstance(device, str) else None
         for i in range(config.num_hidden_layers):
             if layer_device_map is not None:
                 layer_device = layer_device_map[i]
@@ -1800,7 +1801,7 @@ class HybridCache(Cache):
                 "`get_seq_length` on `HybridCache` may get inconsistent results depending on the layer index. "
                 "Using the `layer_idx` argument is not supported."
             )
-        return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
+        return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum().item()
 
     def reset(self):
         """Resets the cache values while preserving the objects"""
@@ -1808,6 +1809,73 @@ class HybridCache(Cache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
+
+
+def _get_flat_dict_for_hybrid_cache(hybrid_cache: HybridCache):
+    return {
+        "config": getattr(hybrid_cache, "config"),
+        "device": str(getattr(hybrid_cache, "device")) if getattr(hybrid_cache, "device", None) is not None else None,
+        "layer_device_map": getattr(hybrid_cache, "layer_device_map"),
+        "key_cache": getattr(hybrid_cache, "key_cache"),
+        "value_cache": getattr(hybrid_cache, "value_cache"),
+        "max_batch_size": getattr(hybrid_cache, "max_batch_size"),
+        "max_cache_len": getattr(hybrid_cache, "max_cache_len"),
+        "_dtype": str(getattr(hybrid_cache, "_dtype")) if getattr(hybrid_cache, "_dtype", None) is not None else None,
+    }
+
+
+def _flatten_hybrid_cache(
+    hybrid_cache: HybridCache,
+):
+    """Flattens HybridCache into flat list of tensors for `torch.export.export` to consume"""
+    if not isinstance(hybrid_cache, HybridCache):
+        raise RuntimeError("This pytree flattening function should only be applied to HybridCache")
+
+    if not is_torch_greater_or_equal("2.7"):
+        logger.warning_once(
+            "HybridCache + torch.export is tested on torch 2.7.0+ and may not work on earlier versions."
+        )
+
+    return torch.utils._pytree._dict_flatten(_get_flat_dict_for_hybrid_cache(hybrid_cache))
+
+
+def _flatten_with_keys_hybrid_cache(hybrid_cache: HybridCache):
+    return torch.utils._pytree._dict_flatten_with_keys(_get_flat_dict_for_hybrid_cache(hybrid_cache))
+
+
+def _unflatten_hybrid_cache(
+    values,
+    context: torch.utils._pytree.Context,
+):
+    dictionary = torch.utils._pytree._dict_unflatten(values, context)
+    hybrid_cache = HybridCache(
+        dictionary["config"],
+        dictionary["max_batch_size"],
+        dictionary["max_cache_len"],
+        torch.device(dictionary["device"]) if dictionary["device"] is not None else None,
+        getattr(torch, dictionary["_dtype"][len("torch.") :]) if dictionary["_dtype"] is not None else None,
+        dictionary["layer_device_map"],
+    )
+
+    hybrid_cache.key_cache = dictionary["key_cache"]
+    hybrid_cache.value_cache = dictionary["value_cache"]
+    return hybrid_cache
+
+
+def _flatten_hybrid_cache_for_fx(hybrid_cache, spec):
+    return torch.utils._pytree.tree_flatten(_get_flat_dict_for_hybrid_cache(hybrid_cache))[0]
+
+
+if is_torch_greater_or_equal("2.3"):
+    torch.utils._pytree.register_pytree_node(
+        HybridCache,
+        _flatten_hybrid_cache,
+        _unflatten_hybrid_cache,
+        serialized_type_name=f"{HybridCache.__module__}.{HybridCache.__name__}",
+        flatten_with_keys_fn=_flatten_with_keys_hybrid_cache,
+    )
+    # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
+    torch.fx._pytree.register_pytree_flatten_spec(HybridCache, _flatten_hybrid_cache_for_fx)
 
 
 class HybridChunkedCache(Cache):
@@ -1919,7 +1987,7 @@ class HybridChunkedCache(Cache):
             full_key_states = torch.cat((k_out[:, :, 1:, :], key_states), dim=-2)
             full_value_states = torch.cat((v_out[:, :, 1:, :], value_states), dim=-2)
             # Fast decoding path -> here as the effective size is still sliding window, it is extremely important
-            # to return `self.key_cache[layer_idx]` and `self.value_cache[layer_idx]`, as they have the fixed address
+            # to return `self.key_cache[layer_idx]` and `self.value_cache[layer_idx]`, as they have the fixed adress
             # in memory (the values are the same as the full states, but not the address!!)
             if key_states.shape[-2] == 1:
                 self.key_cache[layer_idx].copy_(full_key_states)
@@ -1998,7 +2066,7 @@ class HybridChunkedCache(Cache):
             )
         if len(self.key_cache) == 0:
             return 0
-        return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
+        return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum().item()
 
     def reset(self):
         """Resets the cache values while preserving the objects"""
@@ -2031,7 +2099,7 @@ class OffloadedHybridCache(HybridChunkedCache):
         self.active_device_layer = 0
 
     def initialise_cache_layer(self, layer_idx, key_states):
-        """Overridden to use the correct device if offloaded layer (and pin memory)."""
+        """Overriden to use the correct device if offloaded layer (and pin memory)."""
         if len(self.key_cache) > layer_idx:
             return
 
@@ -2243,7 +2311,7 @@ class OffloadedStaticCache(StaticCache):
             The device to offload to. Defaults to CPU.
         layer_device_map (`Dict[int, Union[str, torch.device, int]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
-            and the model is split between different gpus. You can know which layers mapped to which device by
+            and the model is splitted between differents gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
 
     Example:

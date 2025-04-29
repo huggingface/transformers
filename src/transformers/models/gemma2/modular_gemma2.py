@@ -20,6 +20,8 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 
+from transformers.pytorch_utils import is_torch_greater_or_equal
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache, StaticCache
 from ...configuration_utils import PretrainedConfig
@@ -200,6 +202,13 @@ class Gemma2Config(PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.cache_implementation = cache_implementation
+
+    def __hash__(self):
+        return hash(tuple(sorted(self.__dict__.items())))
+
+
+if is_torch_greater_or_equal("2.7"):
+    torch.utils._pytree.register_constant(Gemma2Config)
 
 
 class Gemma2RMSNorm(GemmaRMSNorm):
