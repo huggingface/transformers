@@ -112,8 +112,8 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
             if do_resize:
                 if isinstance(stacked_images, list):
                     stacked_images = torch.stack(stacked_images)
-                stacked_images = self._resize(stacked_images, size, interpolation, size_divisor)
 
+                stacked_images = self.resize(stacked_images, size, interpolation, size_divisor)
             resized_images_grouped[shape] = stacked_images
 
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
@@ -146,7 +146,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def _resize(
+    def resize(
         self,
         images: "torch.Tensor",
         size: SizeDict,
