@@ -16,6 +16,7 @@
 import unittest
 
 import numpy as np
+import torch
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
@@ -164,3 +165,23 @@ class ViltImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
         self.assertEqual(image_processor.size, {"shortest_edge": 42})
+
+    def test_slow_fast_equivalence(self):
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict, do_pad=True)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict, do_pad=True)
+
+        slow_outputs = image_processor_slow(image_inputs, return_tensors="pt")
+        slow_pixel_values = slow_outputs.pixel_values
+        slow_pixel_mask = slow_outputs.pixel_mask
+
+        fast_outputs = image_processor_fast(image_inputs, return_tensors="pt")
+        fast_pixel_values = fast_outputs.pixel_values
+        fast_pixel_mask = fast_outputs.pixel_mask
+
+        self.assertEqual(slow_pixel_values.shape, fast_pixel_values.shape)
+        self.assertTrue(torch.allclose(slow_pixel_values, fast_pixel_values, atol=1e-2))
+
+        self.assertEqual(slow_pixel_mask.shape, fast_pixel_mask.shape)
+        self.assertTrue(torch.equal(slow_pixel_mask, fast_pixel_mask))
