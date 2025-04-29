@@ -90,6 +90,8 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
         crop_size: SizeDict,
+        size_divisor: Optional[int],
+        do_pad: bool,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -103,9 +105,6 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
 
         This method overrides the base class method to include padding and pixel mask generation.
         """
-        size_divisor = kwargs.get("size_divisor", self.size_divisor)
-        do_pad = kwargs.get("do_pad", self.do_pad)
-
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images)
         resized_images_grouped = {}
