@@ -8,10 +8,18 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
 
 
+_TEST_PROMPTS = [
+    "Describe a fruit that is of orange color and round. It is a sweet fruit and a great source of Vitamine C. The fruit I'm thinking of is an",
+    "A man is a walking his dog down the street, and a the turn he sees",
+    "A plane is flying high in the sky, out of the window are clouds and mountains. Where could the plane be located?",
+    "Please fill in the form to",
+    "For safety reasons, the train is stopped in the middle of the",
+]
+
 # --- Common Setup ---
-# model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", attn_implementation="sdpa", torch_dtype=torch.float16, device_map="auto")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", attn_implementation="eager", torch_dtype=torch.float16, device_map="auto")
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16)
+# model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", attn_implementation="sdpa", torch_dtype=torch.float16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", attn_implementation="eager", torch_dtype=torch.float16, device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", torch_dtype=torch.float16, padding_side="left")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -43,9 +51,10 @@ def tokenize_function(examples):
     # Truncate to avoid overly long prompts exceeding max context length
     return tokenizer(examples["text"], truncation=True, max_length=512)
 
-tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
-# Extract input_ids for the simple batch
-simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
+# tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
+# simple_batch_inputs = [item["input_ids"] for item in tokenized_test_prompts]
+tokenized_test_prompts = tokenizer(_TEST_PROMPTS, truncation=True, max_length=512)
+simple_batch_inputs = [item for item in tokenized_test_prompts["input_ids"]]
 
 
 # --- Example 1: Simple Version using generate_batch ---
@@ -61,19 +70,67 @@ batch_outputs = model.generate_batch(
 )
 end_time_simple = time.time()
 
+print(f"generation config: {generation_config}")
+
 print(f"\nSimple batch generation took: {end_time_simple - start_time_simple:.2f} seconds")
 
 # Decode and print results
 print("\nResults from simple generate_batch:")
 for i, output_ids in enumerate(batch_outputs):
-    input_text = tokenizer.decode(simple_batch_inputs[i], skip_special_tokens=True)
-    output_text = tokenizer.decode(output_ids, skip_special_tokens=True)
+    input_text = tokenizer.decode(simple_batch_inputs[i], skip_special_tokens=False)
+    output_text = tokenizer.decode(output_ids, skip_special_tokens=False)
     print("-" * 20)
     print(f"Result for Request {i}:")
-    # print(f"  Input:  {input_text[:100]}...") # Optional: print input
+    # print(f"  Input:  {input_text}")
     print(f"  Output: {output_text}")
 print("-" * 20)
 print("--- Finished Simple Batch Generation Example ---\n\n")
+
+outputs = []
+
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", attn_implementation="eager", torch_dtype=torch.float16, device_map="auto")
+
+print("--- Running Simple Generation for comparison ---")
+# tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
+# simple_inputs = [torch.tensor(item["input_ids"], device=device) for item in tokenized_test_prompts]
+tokenized_test_prompts = tokenizer(_TEST_PROMPTS, truncation=True, max_length=512)
+simple_inputs = [torch.tensor(item, device=device) for item in tokenized_test_prompts["input_ids"]]
+
+
+padded_inputs = tokenizer.pad({"input_ids": [item for item in tokenized_test_prompts["input_ids"]]}, return_tensors="pt").to(device)
+
+
+start_time_simple = time.time()
+outputs = model.generate(
+    **padded_inputs,
+    generation_config=generation_config,
+    do_sample=False,
+)
+end_time_simple = time.time()
+
+print(f"generation config: {generation_config}")
+
+print(f"\nSimple generation took: {end_time_simple - start_time_simple:.2f} seconds")
+
+print("\nResults from simple generate:")
+for i, output_ids in enumerate(outputs):
+    input_text = tokenizer.decode(simple_inputs[i], skip_special_tokens=False)
+    # The output_ids from batch generation include the input tokens, skip them for decoding
+    # We need to know the length of the input to slice the output correctly
+    input_length = len(simple_inputs[i])
+    # Slice the output ids to get only the generated part
+    generated_ids = output_ids[input_length:]
+    output_text = tokenizer.decode(generated_ids, skip_special_tokens=False)
+    print("-" * 20)
+    print(f"Result for Request {i}:")
+    # print(f"  Input:  {input_text}")
+    print(f"  Output: {output_text}")
+print("-" * 20)
+
+print("--- Finished Simple Generation Example ---\n\n")
+
+import sys
+sys.exit(0)
 
 # --- Example 2: Involved Performant Version using ContinuousBatchingManager ---
 print("--- Running Involved Continuous Batching Example ---")
@@ -98,97 +155,52 @@ submitted_requests = {}
 results = {}
 start_time_involved = time.time() # Start timing before submission
 
-# 3. Thread to add requests
-def add_requests_thread():
-    print("Starting request submission thread...")
-    for i, req_data in enumerate(requests_data):
-        try:
-            # Add other generation params per request if needed, e.g., max_new_tokens
-            req_id = manager.add_request(req_data["input_ids"], request_id=f"req_{i}")
-            submitted_requests[req_id] = {"input": tokenizer.decode(req_data["input_ids"])}
-            print(f"Submitted request {req_id}")
-            time.sleep(0.1) # Simulate requests arriving over time
-        except Exception as e:
-            print(f"Failed to submit request {i}: {e}")
-            # Handle submission failure if needed
-    print(f"Finished submitting {len(submitted_requests)} requests.")
-
-# 4. Main thread (or another thread) to retrieve results
-def retrieve_results():
-    print("Starting results retrieval...")
-    finished_count = 0
-    while finished_count < len(submitted_requests):
-        try:
-            result = manager.get_result(timeout=1.0) # Wait for 1 second
-            if result:
-                req_id = result["request_id"]
-                if req_id in submitted_requests:
-                    results[req_id] = result
-                    finished_count += 1
-                    output_text = tokenizer.decode(result["output_ids"], skip_special_tokens=True)
-                    print("-" * 20)
-                    print(f"Result for {req_id} (Status: {result['status']}):")
-                    # print(f"  Input:  {submitted_requests[req_id]['input'][:100]}...") # Optional: print input
-                    print(f"  Output: {output_text}")
-                    print("-" * 20)
-                else:
-                    print(f"Received result for unknown request ID: {req_id}")
-            # Add a small sleep if no result to prevent busy-waiting if timeout=0 used
-            # time.sleep(0.01)
-        except queue.Empty:
-            # Timeout occurred, check if the manager is still running
-            # Accessing _generation_thread directly is internal, consider adding a is_running() method to manager
-            if not manager.is_running():
-                 print("Manager thread stopped, but not all results received. Exiting retrieval.")
-                 break
-            continue # Continue waiting
-        except Exception as e:
-             print(f"Error retrieving results: {e}")
-             # Decide if retrieval should stop on error
-             break
-    print(f"Finished retrieving {finished_count} results.")
-    end_time_involved = time.time() # End timing after retrieval loop
-    print(f"\nInvolved continuous batching took: {end_time_involved - start_time_involved:.2f} seconds (includes submission delays)")
+for i, req_data in enumerate(requests_data):
+    try:
+        req_id = manager.add_request(req_data["input_ids"], request_id=f"req_{i}")
+        submitted_requests[req_id] = {"input": tokenizer.decode(req_data["input_ids"])}
+        print(f"Submitted request {req_id}")
+    except Exception as e:
+        print(f"Failed to submit request {i}: {e}")
 
 
-# Start the submission thread
-submit_thread = threading.Thread(target=add_requests_thread)
-submit_thread.start()
+# 3. Retrieve results
+finished_count = 0
+while finished_count < len(submitted_requests):
+    try:
+        result = manager.get_result(timeout=1.0)
+        if result:
+            req_id = result["request_id"]
+            finished_count += 1
+            results[req_id] = result
+            output_text = tokenizer.decode(result["output_ids"], skip_special_tokens=True)
+            print("-" * 20)
+            print(f"Result for {req_id} (Status: {result['status']}):")
+            # print(f"  Input:  {submitted_requests[req_id]['input'][:100]}...") # Optional: print input
+            print(f"  Output: {output_text}")
+            print("-" * 20)
+    except queue.Empty:
+        if not manager.is_running():
+            print("Manager thread stopped, but not all results received. Exiting retrieval.")
+            break
+    except Exception as e:
+        print(f"Error retrieving results: {e}")
 
-# Retrieve results in the main thread
-retrieve_results()
+end_time_involved = time.time() # End timing after retrieval loop
+print(f"\nInvolved continuous batching took: {end_time_involved - start_time_involved:.2f} seconds (includes submission delays)")
 
-# Wait for submission thread to finish (optional, retrieve_results loop handles waiting for results)
-submit_thread.join()
+print(f"Total submitted: {len(submitted_requests)}")
+print(f"Total results received: {len(results)}")
 
-# 5. Stop the manager
 print("Stopping the manager...")
 manager.stop()
 manager.join(timeout=10) # Wait for the thread to exit
 
 print("Manager stopped.")
 
-# Final check for any missed results (if stop was called early)
-print("Checking for any remaining results in queue...")
-while True:
-    try:
-        result = manager.get_result(timeout=1.0)
-        if result:
-             req_id = result["request_id"]
-             if req_id not in results: # Avoid printing duplicates
-                 results[req_id] = result
-                 print(f"Found remaining result for {req_id}: {tokenizer.decode(result['output_ids'])}")
-        else:
-            break # Queue is empty
-    except queue.Empty:
-        break
-
-print(f"Total submitted: {len(submitted_requests)}")
-print(f"Total results received: {len(results)}")
-
 # You can now process the `results` dictionary which contains
 # {"request_id": ..., "output_ids": ..., "status": ...} for each finished request.
 
-print("--- Finished Involved Continuous Batching Example ---")
+print("--- Finished Advanced Continuous Batching Example ---")
 
 
