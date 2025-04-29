@@ -38,7 +38,7 @@ from .configuration_xlstm import xLSTMConfig
 
 
 if is_xlstm_available():
-    from xlstm.xlstm_large.model import RMSNorm, mLSTMBlock, mLSTMStateType, soft_cap, xLSTMLargeConfig
+    from xlstm.xlstm_large.model import RMSNorm, mLSTMBlock, mLSTMStateType, soft_cap
 
     external_xlstm = True
 else:
