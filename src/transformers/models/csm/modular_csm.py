@@ -27,7 +27,6 @@ from ...generation.logits_process import (
 )
 from ...generation.stopping_criteria import MaxLengthCriteria, StoppingCriteriaList
 from ...generation.utils import GenerateNonBeamOutput
-from ...loss.loss_utils import fixed_cross_entropy
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -43,7 +42,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from ..llama.modeling_llama import (
     KwargsForCausalLM,
@@ -562,7 +560,9 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
         loss = None
         if labels is not None:
             shift_labels = labels[..., 1:].contiguous()
-            loss = self.loss_function(logits=logits, labels=None, vocab_size=self.config.vocab_size, shift_labels=shift_labels, **kwargs)
+            loss = self.loss_function(
+                logits=logits, labels=None, vocab_size=self.config.vocab_size, shift_labels=shift_labels, **kwargs
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -570,54 +570,6 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-        )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids: torch.LongTensor,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ):
-        model_inputs = GenerationMixin.prepare_inputs_for_generation(
-            input_ids=input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
-            **kwargs,
-        )
-
-        is_first_generation_step = cache_position[0] == 0
-        if is_first_generation_step:
-            # adds place holder in position 0 that will be replaced by the backbone_last_hidden_state
-            model_inputs["input_ids"] = nn.functional.pad(model_inputs["input_ids"], (1, 0), value=0)
-
-            cache_position = model_inputs["cache_position"]
-            position_ids = model_inputs.get("position_ids", None)
-            attention_mask = model_inputs.get("attention_mask", None)
-            # we are going to concat backbone_last_hidden_state so we need to update accordingly
-            model_inputs["cache_position"] = nn.functional.pad(cache_position, (0, 1), value=cache_position[-1] + 1)
-
-            if position_ids is not None:
-                model_inputs["position_ids"] = torch.cat([position_ids, position_ids[:, -1:] + 1], dim=-1)
-
-            if attention_mask is not None:
-                model_inputs["attention_mask"] = nn.functional.pad(attention_mask, (1, 0), value=1)
-
-        return model_inputs
-
-    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False):
-        is_first_generation_step = model_kwargs["cache_position"][0] == 0
-        if is_first_generation_step:
-            cache_position = model_kwargs["cache_position"]
-            model_kwargs["cache_position"] = nn.functional.pad(cache_position, (0, 1), value=cache_position[-1] + 1)
-            model_kwargs["attention_mask"] = nn.functional.pad(model_kwargs["attention_mask"], (1, 0), value=1)
-
-        return GenerationMixin._update_model_kwargs_for_generation(
-            outputs, model_kwargs, is_encoder_decoder=is_encoder_decoder
         )
 
 
@@ -1077,9 +1029,7 @@ class CsmForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
             )
 
         # keep track of which sequences are already finished
-        # *************** Csm specific ***************
         batch_size, cur_len = input_ids.shape[:2]
-        # ============================================
 
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
@@ -1167,11 +1117,13 @@ class CsmForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
             # *************** Csm specific ***************
             # infer the depth decoder
             first_codebook_ids = next_tokens[:, None]
+            # adds place holder in position 0 that will be replaced by the backbone_last_hidden_state
+            depth_decoder_input_ids = nn.functional.pad(first_codebook_ids, (1, 0), value=0)
             backbone_last_hidden_state = outputs.hidden_states[-1][:, -1, :]
 
             torch.compiler.cudagraph_mark_step_begin()
             depth_decoder_outputs = self.depth_decoder.generate(
-                input_ids=first_codebook_ids,
+                input_ids=depth_decoder_input_ids,
                 backbone_last_hidden_state=backbone_last_hidden_state,
                 generation_config=depth_decoder_generation_config,
             )
@@ -1180,6 +1132,8 @@ class CsmForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
                 if isinstance(depth_decoder_outputs, torch.Tensor)
                 else depth_decoder_outputs.sequences
             )
+            # remove the place holder in position 0
+            codebook_ids = codebook_ids[:, 1:]
             next_tokens = codebook_ids
             # ============================================
 
