@@ -25,6 +25,7 @@ from transformers import (
     AutoFeatureExtractor,
     AutoTokenizer,
     CsmConfig,
+    CsmDepthDecoderConfig,
     CsmForConditionalGeneration,
     CsmProcessor,
     MimiModel,
@@ -88,8 +89,50 @@ def write_model(
     codec_model = MimiModel.from_pretrained(codec_model_path_or_repo)
     codec_model.config._attn_implementation_autoset = False
 
+    # prepare rope scaling args: the model uses originally
+    # 1 - for the depth decoder
+    # rope_theta=500000,
+    # rope_scaling={
+    # 	"factor": 32.0,
+    # 	"high_freq_factor": 4.0,
+    # 	"low_freq_factor": 1.0,
+    # 	"original_max_position_embeddings": 8192,
+    # 	"rope_type": "llama3",
+    # },
+    # 2 - for the backbone
+    # rope_theta=500000,
+    # rope_scaling={
+    # 	"factor": 32.0,
+    # 	"high_freq_factor": 4.0,
+    # 	"low_freq_factor": 1.0,
+    # 	"original_max_position_embeddings": 8192,
+    # 	"rope_type": "llama3",
+    # },
+    #
+    # Yet we want to use max_position_embeddings=32, resp. 2048
+    # This will throw warning as we would have original_max_position_embeddings >= max_position_embeddings
+    # Therefore, we convert values to equivalent ones
+
+    depth_decoder_config = CsmDepthDecoderConfig(
+        rope_scaling={
+            "factor": 32.0,
+            "high_freq_factor": 0.0078125,
+            "low_freq_factor": 0.001953125,
+            "original_max_position_embeddings": 16,
+            "rope_type": "llama3",
+        },
+    )
+
     config = CsmConfig(
         codec_config=codec_model.config,
+        depth_decoder_config=depth_decoder_config,
+        rope_scaling={
+            "factor": 32.0,
+            "high_freq_factor": 0.5,
+            "low_freq_factor": 0.125,
+            "original_max_position_embeddings": 1024,
+            "rope_type": "llama3",
+        },
     )
 
     params = {

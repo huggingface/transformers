@@ -76,7 +76,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
             End of stream token id.
         rope_theta (`float`, *optional*, defaults to 500000):
             The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*, defaults to `{'factor': 32.0, 'high_freq_factor': 0.0078125, 'low_freq_factor': 0.001953125, 'original_max_position_embeddings': 16, 'rope_type': 'llama3'}`):
+        rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
             accordingly.
@@ -156,13 +156,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         bos_token_id=None,
         eos_token_id=None,
         rope_theta=500000,
-        rope_scaling={
-            "factor": 32.0,
-            "high_freq_factor": 0.0078125,
-            "low_freq_factor": 0.001953125,
-            "original_max_position_embeddings": 16,
-            "rope_type": "llama3",
-        },
+        rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
@@ -393,13 +387,7 @@ class CsmConfig(PretrainedConfig):
         audio_token_id=128002,
         audio_eos_token_id=128003,
         rope_theta=500000,
-        rope_scaling={
-            "factor": 32.0,
-            "high_freq_factor": 0.5,
-            "low_freq_factor": 0.125,
-            "original_max_position_embeddings": 1024,
-            "rope_type": "llama3",
-        },
+        rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
