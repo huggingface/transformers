@@ -142,13 +142,20 @@ class DeepseekVLHybridModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, attention_mask, pixel_values, high_res_pixel_values = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "pixel_values": pixel_values, "high_res_pixel_values": high_res_pixel_values}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "pixel_values": pixel_values,
+            "high_res_pixel_values": high_res_pixel_values,
+        }
         return config, inputs_dict
 
 
 @require_torch
 class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (DeepseekVLHybridModel, DeepseekVLHybridForConditionalGeneration) if is_torch_available() else ()
+    all_model_classes = (
+        (DeepseekVLHybridModel, DeepseekVLHybridForConditionalGeneration) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
         {
             "feature-extraction": DeepseekVLHybridModel,
@@ -240,7 +247,11 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
             self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
             self.assertTrue(model_eager.config._attn_implementation == "eager")
 
-            if hasattr(model_sdpa, "vision_model") and hasattr(model_sdpa, "high_res_vision_model") and hasattr(model_sdpa, "language_model"):
+            if (
+                hasattr(model_sdpa, "vision_model")
+                and hasattr(model_sdpa, "high_res_vision_model")
+                and hasattr(model_sdpa, "language_model")
+            ):
                 self.assertTrue(model_sdpa.language_model.config._attn_implementation == "sdpa")
                 self.assertTrue(model_sdpa.vision_model.config._attn_implementation == "sdpa")
                 self.assertTrue(model_sdpa.high_res_vision_model.config._attn_implementation == "sdpa")

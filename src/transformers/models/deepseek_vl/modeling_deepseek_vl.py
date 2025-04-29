@@ -17,18 +17,18 @@ from typing import List, Optional, Tuple, Union
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
 from ...utils import (
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     can_return_tuple,
     is_torch_available,
     logging,
     replace_return_docstrings,
-    add_code_sample_docstrings,
 )
 from ..auto import AutoModel
 from .configuration_deepseek_vl import DeepseekVLConfig

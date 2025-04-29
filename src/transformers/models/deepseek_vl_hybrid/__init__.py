@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_deepseek_vl_hybrid import *
-    from .image_processing_deepseek_vl_hybrid import *
     from .image_processing_deepseek_vl_fast_hybrid import *
+    from .image_processing_deepseek_vl_hybrid import *
     from .modeling_deepseek_vl_hybrid import *
     from .processing_deepseek_vl_hybrid import *
 else:

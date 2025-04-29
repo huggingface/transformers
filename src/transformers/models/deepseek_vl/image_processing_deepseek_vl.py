@@ -292,9 +292,7 @@ class DeepseekVLImageProcessor(BaseImageProcessor):
         all_images = []
         for image in images:
             if do_resize:
-                image = self.resize(
-                    image=image, size=size, resample=resample, input_data_format=input_data_format
-                )
+                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
             if do_rescale:
                 image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
             if do_normalize:

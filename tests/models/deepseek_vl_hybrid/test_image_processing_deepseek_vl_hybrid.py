@@ -15,6 +15,7 @@
 
 
 import unittest
+
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
@@ -28,6 +29,7 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
+
     from transformers import DeepseekVLHybridImageProcessor
 
 
@@ -103,17 +105,17 @@ class DeepseekVLHybridImageProcessingTester:
 class DeepseekVLHybridImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = DeepseekVLHybridImageProcessor if is_vision_available() else None
 
-    # Copied from tests.models.vit.test_image_processing_vit.ViTImageProcessingTest with ViT->DeepseekVLHybrid
+    # Copied from tests.models.vit.test_image_processing_vit.ViTImageProcessingTester.setUp with ViT->DeepseekVLHybrid
     def setUp(self):
         super().setUp()
         self.image_processor_tester = DeepseekVLHybridImageProcessingTester(self)
 
-    # Copied from tests.models.vit.test_image_processing_vit.ViTImageProcessingTest with ViT->DeepseekVLHybrid
     @property
+    # Copied from tests.models.vit.test_image_processing_vit.ViTImageProcessingTester.image_processor_dict with ViT->DeepseekVLHybrid
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
-    # Copied from tests.models.vit.test_image_processing_vit.ViTImageProcessingTest with ViT->DeepseekVLHybrid
+    # Copied from tests.models.vit.test_image_processing_vit.ViTImageProcessingTester.test_image_processor_from_dict_with_kwargs
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
@@ -145,12 +147,16 @@ class DeepseekVLHybridImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").high_res_pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape(
+                [image_inputs[0]]
+            )
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").high_res_pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape(
+                image_inputs
+            )
             self.assertEqual(
                 tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
             )
@@ -166,12 +172,16 @@ class DeepseekVLHybridImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").high_res_pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape(
+                [image_inputs[0]]
+            )
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").high_res_pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape(
+                image_inputs
+            )
             self.assertEqual(
                 tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
             )
@@ -188,11 +198,15 @@ class DeepseekVLHybridImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").high_res_pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape(
+                [image_inputs[0]]
+            )
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
-            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processor_tester.expected_output_high_res_image_shape(
+                image_inputs
+            )
             encoded_images = image_processing(image_inputs, return_tensors="pt").high_res_pixel_values
             self.assertEqual(
                 tuple(encoded_images.shape),

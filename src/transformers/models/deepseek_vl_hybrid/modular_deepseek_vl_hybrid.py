@@ -15,25 +15,21 @@
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
+import torch
+import torch.nn as nn
+
 from ...cache_utils import Cache
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    DefaultFastImageProcessorKwargs,
     BatchFeature,
     get_size_dict,
 )
-from ...image_transforms import convert_to_rgb, to_channel_dimension_format, group_images_by_shape, reorder_images
+from ...image_transforms import convert_to_rgb, to_channel_dimension_format
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
-    validate_kwargs,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    SizeDict,
     infer_channel_dimension_format,
     is_scaled_image,
     make_flat_list_of_images,
@@ -47,7 +43,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import Unpack
 from ...tokenization_utils_base import (
     PreTokenizedInput,
     TextInput,
@@ -55,32 +51,20 @@ from ...tokenization_utils_base import (
 from ...utils import (
     LossKwargs,
     TensorType,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     filter_out_non_signature_kwargs,
-    is_vision_available,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
-    replace_return_docstrings,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..deepseek_vl.configuration_deepseek_vl import DeepseekVLConfig
 from ..deepseek_vl.image_processing_deepseek_vl import DeepseekVLImageProcessor
-from ..deepseek_vl.processing_deepseek_vl import DeepseekVLProcessorKwargs, DeepseekVLProcessor
 from ..deepseek_vl.modeling_deepseek_vl import (
     DeepseekVLForConditionalGeneration,
     DeepseekVLModel,
     DeepseekVLPreTrainedModel,
 )
-from ..sam.modeling_sam import SamLayerNorm, SamVisionNeck
+from ..deepseek_vl.processing_deepseek_vl import DeepseekVLProcessor, DeepseekVLProcessorKwargs
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
-
-
-import torch
-import torch.nn as nn
+from ..sam.modeling_sam import SamLayerNorm, SamVisionNeck
 
 
 logger = logging.get_logger(__name__)
@@ -130,10 +114,18 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
 
     def __init__(
         self,
+        text_config: AutoConfig = None,
+        vision_config: AutoConfig = None,
         high_res_vision_config: AutoConfig = None,
-        **super_kwargs,
+        image_token_id: int = 100015,
+        **kwargs,
     ):
-        super().__init__(**super_kwargs)
+        super().__init__(
+            text_config=text_config,
+            vision_config=vision_config,
+            image_token_id=image_token_id,
+            **kwargs,
+        )
 
         if high_res_vision_config is None:
             high_res_vision_config = {}
@@ -627,12 +619,20 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
 
     def __init__(
         self,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        do_resize: bool = True,
+        size: Dict[str, int] = None,
         high_res_size: Dict[str, int] = None,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        high_res_resample: PILImageResampling = PILImageResampling.BICUBIC,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         high_res_image_mean: Optional[Union[float, List[float]]] = None,
         high_res_image_std: Optional[Union[float, List[float]]] = None,
-        high_res_resample: PILImageResampling = PILImageResampling.BICUBIC,
-        **super_kwargs,
+        do_convert_rgb: bool = None,
+        **kwargs,
     ) -> None:
         high_res_size = high_res_size if high_res_size is not None else {"height": 1024, "width": 1024}
         high_res_size = get_size_dict(high_res_size, default_to_square=True)
@@ -644,7 +644,18 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         self.resample = resample
         self.high_res_resample = high_res_resample
 
-        super().__init__(**super_kwargs)
+        super().__init__(
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_convert_rgb=do_convert_rgb,
+            **kwargs,
+        )
 
         self.background_color = tuple([int(x * 255) for x in self.high_res_image_mean])
 
@@ -795,9 +806,7 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
                 )
 
             if do_rescale:
-                image = self.rescale(
-                    image=image, scale=rescale_factor, input_data_format=input_data_format
-                )
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
                 high_res_image = self.rescale(
                     image=high_res_image, scale=rescale_factor, input_data_format=input_data_format
                 )

@@ -68,8 +68,8 @@ class DeepseekVLHybridConfig(PretrainedConfig):
         self,
         text_config: AutoConfig = None,
         vision_config: AutoConfig = None,
-        image_token_id: int = 100015,
         high_res_vision_config: AutoConfig = None,
+        image_token_id: int = 100015,
         **kwargs,
     ):
         super().__init__(**kwargs)
