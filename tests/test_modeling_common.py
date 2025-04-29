@@ -3886,7 +3886,7 @@ class ModelTesterMixin:
         elif device_type == "rocm" and major < 9:
             self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
         elif device_type not in ["cuda", "rocm", "xpu"]:
-            self.skipTest(reason="This test requires a Nvidia or AMD GPU or an Intel XPU")
+            self.skipTest(reason="This test requires a Nvidia or AMD GPU, or an Intel XPU")
 
         torch.compiler.reset()
 
