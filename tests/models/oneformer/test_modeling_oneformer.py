@@ -268,7 +268,9 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @is_flaky  # The `attention_mask` computed with `< 0.5` in `OneFormerTransformerDecoder.forward_prediction_heads` is sensitive to input values.
+    @is_flaky(
+        description="The `attention_mask` computed with `< 0.5` in `OneFormerTransformerDecoder.forward_prediction_heads` is sensitive to input values."
+    )
     def test_batching_equivalence(self):
         super().test_batching_equivalence()
 

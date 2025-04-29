@@ -258,7 +258,7 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
-    @is_flaky
+    @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         # adding only flaky decorator here and call the parent test method
         return getattr(ModelTesterMixin, self._testMethodName)(self)

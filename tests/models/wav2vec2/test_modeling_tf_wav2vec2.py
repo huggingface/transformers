@@ -398,7 +398,7 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_loss(*config_and_inputs)
 
-    @is_flaky
+    @is_flaky()
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)

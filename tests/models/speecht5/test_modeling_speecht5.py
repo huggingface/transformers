@@ -723,7 +723,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @is_flaky  # Flaky for some input configurations.
+    @is_flaky(max_attempts=5, description="Flaky for some input configurations.")
     def test_past_key_values_format(self):
         super().test_past_key_values_format()
 

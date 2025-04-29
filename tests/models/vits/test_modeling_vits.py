@@ -174,11 +174,11 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     # TODO: @ydshieh
-    @is_flaky  # torch 2.2.0 gives `Timeout >120.0s`
+    @is_flaky(description="torch 2.2.0 gives `Timeout >120.0s`")
     def test_pipeline_feature_extraction(self):
         super().test_pipeline_feature_extraction()
 
-    @is_flaky  # torch 2.2.0 gives `Timeout >120.0s`
+    @is_flaky(description="torch 2.2.0 gives `Timeout >120.0s`")
     def test_pipeline_feature_extraction_fp16(self):
         super().test_pipeline_feature_extraction_fp16()
 
@@ -221,7 +221,10 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_batching_equivalence(self):
         pass
 
-    @is_flaky  # Weight initialisation for the VITS conv layers sometimes exceeds the kaiming normal range"
+    @is_flaky(
+        max_attempts=3,
+        description="Weight initialisation for the VITS conv layers sometimes exceeds the kaiming normal range",
+    )
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

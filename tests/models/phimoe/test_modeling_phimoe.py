@@ -335,7 +335,7 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
     @parameterized.expand([("longrope",)])
-    @is_flaky  # TODO (joao): unify rope tests in the mixin
+    @is_flaky()  # TODO (joao): unify rope tests in the mixin
     def test_model_rope_scaling_short_long_factor(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         n_factors = config.hidden_size // config.num_key_value_heads // 2

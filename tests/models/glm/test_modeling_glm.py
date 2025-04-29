@@ -264,7 +264,7 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @is_flaky
+    @is_flaky()
     def test_custom_4d_attention_mask(self):
         """Overwrite the common test to use atol=1e-3 instead of 1e-4. Can still rarely fail, thus flaky."""
         for model_class in self.all_generative_model_classes:

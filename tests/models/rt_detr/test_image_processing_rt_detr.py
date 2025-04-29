@@ -435,6 +435,8 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # verify size
         torch.testing.assert_close(encoding_cpu["labels"][0]["size"], encoding_gpu["labels"][0]["size"].to("cpu"))
 
-    @is_flaky  # Still flaky with a failing ratio of ~0.6% after #36240"
+    @is_flaky(
+        description="Still flaky with a failing ratio of ~0.6% after #36240",
+    )
     def test_fast_is_faster_than_slow(self):
         super().test_fast_is_faster_than_slow()

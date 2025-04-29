@@ -137,7 +137,7 @@ class NemotronModelTest(GemmaModelTest):
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
-    @is_flaky
+    @is_flaky()
     @slow
     def test_flash_attn_2_equivalence(self):
         for model_class in self.all_model_classes:
