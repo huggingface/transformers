@@ -31,7 +31,6 @@ import os
 
 os.environ["HF_ENABLE_PARALLEL_LOADING"] = "true"
 
-import multiprocessing
 from transformers import pipeline
 
 model = pipeline(task="text-generation", model="facebook/opt-30b", device_map="auto")
@@ -39,9 +38,9 @@ model = pipeline(task="text-generation", model="facebook/opt-30b", device_map="a
 
 ## HF_PARALLEL_LOADING_WORKERS
 
-Determines how many child processes should be used when parallel loading is enabled. Default is `8`. 
+Determines how many threads should be used when parallel loading is enabled. Default is `8`. 
 
-If the number of files that are being loaded is less than the number of child processes specified, the number that is actually spawned will be equal to the number of files.
+If the number of files that are being loaded is less than the number of threads specified, the number that is actually spawned will be equal to the number of files.
 
 e.g. If you specify 8 workers, and there are only 2 files, only 2 workers will be spawned.
 
@@ -53,7 +52,6 @@ import os
 os.environ["HF_ENABLE_PARALLEL_LOADING"] = "true"
 os.environ["HF_PARALLEL_LOADING_WORKERS"] = "4"
 
-import multiprocessing
 from transformers import pipeline
 
 model = pipeline(task="text-generation", model="facebook/opt-30b", device_map="auto")
