@@ -201,6 +201,7 @@ GRANITEMOEHYBRID_START_DOCSTRING = r"""
 class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     config_class = GraniteMoeHybridConfig
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
+    _is_stateful = True
 
 
 GRANITEMOEHYBRID_INPUTS_DOCSTRING = r"""
