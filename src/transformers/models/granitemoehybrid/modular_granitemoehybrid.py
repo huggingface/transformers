@@ -19,38 +19,39 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache
+from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from ..bamba.configuration_bamba import BambaConfig
 from ..bamba.modeling_bamba import BambaMixer, HybridMambaAttentionDynamicCache
 from ..granitemoeshared.modeling_granitemoeshared import (
+    GraniteMoeSharedAttention,
     GraniteMoeSharedDecoderLayer,
+    GraniteMoeSharedFlashAttention2,
+    GraniteMoeSharedForCausalLM,
     GraniteMoeSharedMLP,
     GraniteMoeSharedModel,
-    GraniteMoeSharedForCausalLM,
     GraniteMoeSharedPreTrainedModel,
-    GraniteMoeSharedAttention,
-    GraniteMoeSharedFlashAttention2,
     GraniteMoeSharedSdpaAttention,
 )
-from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
-from ...utils import (
-    add_start_docstrings, 
-    add_start_docstrings_to_model_forward,
-    logging
-)
+
 
 logger = logging.get_logger(__name__)
+
 
 class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
 
+
 class GraniteMoeHybridFlashAttention2(GraniteMoeSharedFlashAttention2):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+
 class GraniteMoeHybridSdpaAttention(GraniteMoeSharedSdpaAttention):
     pass
+
 
 GRANITEMOEHYBRID_ATTENTION_CLASSES = {
     "eager": GraniteMoeHybridAttention,
@@ -58,17 +59,17 @@ GRANITEMOEHYBRID_ATTENTION_CLASSES = {
     "sdpa": GraniteMoeHybridSdpaAttention,
 }
 
+
 class GraniteMoeHybridMambaLayer(BambaMixer):
-     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
-        super().__init__(
-            BambaConfig(config),
-            layer_idx
-        )
+    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
+        super().__init__(BambaConfig(config), layer_idx)
+
 
 class GraniteMoeHybridMLP(GraniteMoeSharedMLP):
     def __init__(self, config: GraniteMoeHybridConfig):
         super().__init__(config)
-        
+
+
 class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -133,7 +134,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
                 cache_params=past_key_value,
                 attention_mask=attention_mask,
             )
-        elif self.layer_type == "attention": 
+        elif self.layer_type == "attention":
             hidden_states, self_attn_weights, _ = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -305,7 +306,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         self.layers = nn.ModuleList(
             [GraniteMoeHybridDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-    
+
     @add_start_docstrings_to_model_forward(GRANITEMOEHYBRID_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -504,15 +505,16 @@ class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
                 "cache_position": cache_position,
             }
         )
-        return model_inputs 
+        return model_inputs
 
     def _supports_default_dynamic_cache(self) -> bool:
         """
-        Function overwritten as this class uses its own `HybridMambaAttentionDynamicCache` 
+        Function overwritten as this class uses its own `HybridMambaAttentionDynamicCache`
         and do not need to initialize the Cache in advance in order to save memory
         (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
         for `HybridMambaAttentionDynamicCache`).
         """
         return False
+
 
 __all__ = ["GraniteMoeHybridForCausalLM", "GraniteMoeHybridModel", "GraniteMoeHybridPreTrainedModel"]

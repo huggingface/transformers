@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """GraniteMoeHybrid model configuration"""
+
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
@@ -101,16 +102,29 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxialiary loss coefficient
         shared_intermediate_size (`int`, *optional*, defaults to 0): intermediate size for shared experts. 0 implies
             no shared experts.
-        #TODO : ADD REMAINING 
+        #TODO : Add the following.
+        normalization_function=None,
+        position_embedding_type="nope",
+        init_method="mup",
+        layer_types=None,
+        mamba_n_heads=128,
+        mamba_n_groups=1,
+        mamba_d_state=256,
+        mamba_d_head="auto",
+        mamba_d_conv=4,
+        mamba_expand=2,
+        mamba_chunk_size=256,
+        mamba_conv_bias=True,
+        mamba_proj_bias=False,
+        logits_to_keep=1,
+
 
     ```python
-    >>> from transformers import GraniteMoeSharedModel, GraniteMoeSharedConfig
+    >>> from transformers import GraniteMoeHybridModel, GraniteMoeHybridConfig
 
-    >>> # Initializing a GraniteMoeShared granitemoe-3b style configuration
-    >>> configuration = GraniteMoeSharedConfig()
+    >>> # Initializing a GraniteMoeHybrid config
+    >>> configuration = GraniteMoeHybridConfig()
 
-    >>> # Initializing a model from the granitemoe-7b style configuration
-    >>> model = GraniteMoeSharedModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -140,11 +154,11 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
+        attention_dropout=0.0,
         embedding_multiplier=1.0,
         logits_scaling=1.0,
         residual_multiplier=1.0,
         attention_multiplier=1.0,
-        attention_dropout=0.0,
         num_local_experts=8,
         num_experts_per_tok=2,
         output_router_logits=False,
@@ -237,10 +251,11 @@ class GraniteMoeHybridConfig(PretrainedConfig):
 
         if self.position_embedding_type == "rope":
             rope_config_validation(self)
-    
+
     # overwrite the function to use in `HybridMambaAttentionDynamicCache`
     @property
     def layers_block_type(self):
         return self.layer_types if self.layer_types else ["mamba"] * self.num_hidden_layers
+
 
 __all__ = ["GraniteMoeHybridConfig"]

@@ -175,7 +175,7 @@ class GraniteMoeHybridAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        if position_embeddings == None:
+        if position_embeddings is None:
             cos = None
             sin = None
         else:
@@ -261,7 +261,7 @@ class GraniteMoeHybridFlashAttention2(GraniteMoeHybridAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        if position_embeddings == None:
+        if position_embeddings is None:
             cos = None
             sin = None
         else:
@@ -379,7 +379,7 @@ class GraniteMoeHybridSdpaAttention(GraniteMoeHybridAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        if position_embeddings == None:
+        if position_embeddings is None:
             cos = None
             sin = None
         else:
