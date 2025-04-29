@@ -203,7 +203,6 @@ class TorchAoHfQuantizer(HfQuantizer):
             return False
 
         param_device = kwargs.pop("param_device", None)
-        print("modules to not convert:", self.modules_to_not_convert)
         # check if the param_name is not in self.modules_to_not_convert
         if any((key + "." in param_name) or (key == param_name) for key in self.modules_to_not_convert):
             return False
