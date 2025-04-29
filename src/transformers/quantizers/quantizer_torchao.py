@@ -189,7 +189,6 @@ class TorchAoHfQuantizer(HfQuantizer):
             input_emb = model.get_input_embeddings()
             input_emb_names = [name for name, module in model.named_modules() if id(module) == id(input_emb)]
             self.modules_to_not_convert = [x for x in self.modules_to_not_convert if x not in input_emb_names]
-        print(self.modules_to_not_convert)
         return
 
     def check_quantized_param(
