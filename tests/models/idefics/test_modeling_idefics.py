@@ -22,6 +22,7 @@ from parameterized import parameterized
 from transformers import BitsAndBytesConfig, IdeficsConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     TestCasePlus,
+    is_flaky,
     require_bitsandbytes,
     require_torch,
     require_vision,
