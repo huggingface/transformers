@@ -785,7 +785,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             sequence_length=sequence_length,
             target_length=max(full_cache_length, attention_chunk_size),
             dtype=dtype,
-            device=device,
+            device=cache_position.device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
