@@ -130,7 +130,6 @@ def merge_2d_padding_mask_into_4d_mask(padding_mask: Optional[torch.Tensor], cau
         padding_mask = padding_mask.to(device=causal_mask.device, dtype=torch.bool)
         causal_mask[:, :, :, :padding_mask.shape[-1]] *= padding_mask[:, None, None, :]
     return causal_mask
-        
 
 
 def flash_attention_mask(attention_mask: Optional[torch.Tensor]):
