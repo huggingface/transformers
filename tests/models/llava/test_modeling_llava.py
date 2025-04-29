@@ -184,13 +184,6 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         )
 
     def test_config(self):
-        # overwritten from `tests/test_configuration_common.py::ConfigTester` after #36077
-        # TODO: avoid overwritten once there is a better fix for #36077
-        def check_config_can_be_init_without_params():
-            config = self.config_tester.config_class()
-            self.config_tester.parent.assertIsNotNone(config)
-
-        self.config_tester.check_config_can_be_init_without_params = check_config_can_be_init_without_params
         self.config_tester.run_common_tests()
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
@@ -307,10 +300,6 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
         pass
 
     @unittest.skip(
@@ -564,8 +553,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # image = Image.open(requests.get(url, stream=True).raw)
         inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(model.device)
         generate_ids = model.generate(**inputs, max_new_tokens=500)
-        ouptut = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        print(ouptut)
+        output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        print(output)
 
         # fmt: off
         EXPECTED_GENERATION = """
@@ -584,7 +573,7 @@ These descriptions provide a detailed overview of the content and atmosphere of 
 """
         # fmt: on
         # check that both inputs are handled correctly and generate the same output
-        self.assertEqual(ouptut, EXPECTED_GENERATION)
+        self.assertEqual(output, EXPECTED_GENERATION)
 
     @slow
     @require_bitsandbytes

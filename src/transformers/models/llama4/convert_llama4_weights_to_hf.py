@@ -90,7 +90,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -239,7 +239,7 @@ def write_model(
 
     config_kwargs = {}
     if params["use_scaled_rope"]:
-        # some constans from original code
+        # some constants from original code
         rope_scaling = {
             "rope_type": "llama3",
             "factor": 8.0,
@@ -286,10 +286,9 @@ def write_model(
         tie_word_embeddings=False,  # Constant set to False
         torch_dtype=torch_dtype,
         for_llm_compressor=_OFFLINE_QUANT_COMPATIBLE,
-        no_rope_layers=no_rope_layer_interval,
         **config_kwargs,
     )
-    # default vision config frmo params
+    # default vision config from params
 
     vision_params = params["vision_args"]
     vision_dim = vision_params["dim"]

@@ -1,5 +1,4 @@
 <!--Copyright 2024 The HuggingFace Team. All rights reserved.
-
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
 
@@ -9,76 +8,134 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
-
 -->
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # ColPali
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[ColPali](https://huggingface.co/papers/2407.01449) is a model designed to retrieve documents by analyzing their visual features. Unlike traditional systems that rely heavily on text extraction and OCR, ColPali treats each page as an image. It uses [Paligemma-3B](./paligemma) to capture not only text, but also the layout, tables, charts, and other visual elements to create detailed embeddings. This offers a more comprehensive understanding of documents and enables more efficient and accurate retrieval.
 
-## Overview
+You can find all the original ColPali checkpoints under the [ColPali](https://huggingface.co/collections/vidore/hf-native-colvision-models-6755d68fc60a8553acaa96f7) collection.
 
-The *ColPali* model was proposed in [ColPali: Efficient Document Retrieval with Vision Language Models](https://doi.org/10.48550/arXiv.2407.01449) by **Manuel Faysse***, **Hugues Sibille***, **Tony Wu***, Bilel Omrani, Gautier Viaud, Céline Hudelot, Pierre Colombo (* denotes equal contribution). Work lead by ILLUIN Technology.
+> [!TIP]
+> Click on the ColPali models in the right sidebar for more examples of how to use ColPali for image retrieval.
 
-In our proposed *ColPali* approach, we leverage VLMs to construct efficient multi-vector embeddings directly from document images (“screenshots”) for document retrieval. We train the model to maximize the similarity between these document embeddings and the corresponding query embeddings, using the late interaction method introduced in ColBERT.
+<hfoptions id="usage">
+<hfoption id="image retrieval">
 
-Using *ColPali* removes the need for potentially complex and brittle layout recognition and OCR pipelines with a single model that can take into account both the textual and visual content (layout, charts, etc.) of a document.
-
-## Resources
-
-- The *ColPali* arXiv paper can be found [here](https://doi.org/10.48550/arXiv.2407.01449). 📄
-- The official blog post detailing ColPali can be found [here](https://huggingface.co/blog/manu/colpali). 📝
-- The original model implementation code for the ColPali model and for the `colpali-engine` package can be found [here](https://github.com/illuin-tech/colpali). 🌎
-- Cookbooks for learning to use the transformers-native version of *ColPali*, fine-tuning, and similarity maps generation can be found [here](https://github.com/tonywu71/colpali-cookbooks). 📚
-
-This model was contributed by [@tonywu71](https://huggingface.co/tonywu71) and [@yonigozlan](https://huggingface.co/yonigozlan).
-
-## Usage
-
-This example demonstrates how to use *ColPali* to embed both queries and images, calculate their similarity scores, and identify the most relevant matches. For a specific query, you can retrieve the top-k most similar images by selecting the ones with the highest similarity scores.
-
-```python
+```py
+import requests
 import torch
 from PIL import Image
-
 from transformers import ColPaliForRetrieval, ColPaliProcessor
 
-model_name = "vidore/colpali-v1.2-hf"
-
+# Load model (bfloat16 support is limited; fallback to float32 if needed)
 model = ColPaliForRetrieval.from_pretrained(
-    model_name,
-    torch_dtype=torch.bfloat16,
-    device_map="cuda:0",  # or "mps" if on Apple Silicon
+    "vidore/colpali-v1.2-hf",
+    torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+    device_map="auto",  # "cpu", "cuda", or "mps" for Apple Silicon
 ).eval()
 
 processor = ColPaliProcessor.from_pretrained(model_name)
 
-# Your inputs (replace dummy images with screenshots of your documents)
+url1 = "https://upload.wikimedia.org/wikipedia/commons/8/89/US-original-Declaration-1776.jpg"
+url2 = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Romeoandjuliet1597.jpg/500px-Romeoandjuliet1597.jpg"
+
 images = [
-    Image.new("RGB", (32, 32), color="white"),
-    Image.new("RGB", (16, 16), color="black"),
+    Image.open(requests.get(url1, stream=True).raw),
+    Image.open(requests.get(url2, stream=True).raw),
 ]
+
 queries = [
-    "What is the organizational structure for our R&D department?",
-    "Can you provide a breakdown of last year’s financial performance?",
+    "Who printed the edition of Romeo and Juliet?",
+    "When was the United States Declaration of Independence proclaimed?",
 ]
 
 # Process the inputs
-batch_images = processor(images=images).to(model.device)
-batch_queries = processor(text=queries).to(model.device)
+inputs_images = processor(images=images, return_tensors="pt").to(model.device)
+inputs_text = processor(text=queries, return_tensors="pt").to(model.device)
 
 # Forward pass
 with torch.no_grad():
-    image_embeddings = model(**batch_images).embeddings
-    query_embeddings = model(**batch_queries).embeddings
+    image_embeddings = model(**inputs_images).embeddings
+    query_embeddings = model(**inputs_text).embeddings
 
-# Score the queries against the images
 scores = processor.score_retrieval(query_embeddings, image_embeddings)
+
+print("Retrieval scores (query x image):")
+print(scores)
 ```
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes.md) to quantize the weights to int4.
+
+```py
+import requests
+import torch
+from PIL import Image
+from transformers import ColPaliForRetrieval, ColPaliProcessor
+from transformers import BitsAndBytesConfig
+
+# 4-bit quantization configuration
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.float16,
+)
+
+model_name = "vidore/colpali-v1.2-hf"
+
+# Load model 
+model = ColPaliForRetrieval.from_pretrained(
+    model_name,
+    quantization_config=bnb_config,
+    device_map="cuda"
+).eval()
+
+processor = ColPaliProcessor.from_pretrained(model_name)
+
+url1 = "https://upload.wikimedia.org/wikipedia/commons/8/89/US-original-Declaration-1776.jpg"
+url2 = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Romeoandjuliet1597.jpg/500px-Romeoandjuliet1597.jpg"
+
+images = [
+    Image.open(requests.get(url1, stream=True).raw),
+    Image.open(requests.get(url2, stream=True).raw),
+]
+
+queries = [
+    "Who printed the edition of Romeo and Juliet?",
+    "When was the United States Declaration of Independence proclaimed?",
+]
+
+# Process the inputs
+inputs_images = processor(images=images, return_tensors="pt").to(model.device)
+inputs_text = processor(text=queries, return_tensors="pt").to(model.device)
+
+# Forward pass
+with torch.no_grad():
+    image_embeddings = model(**inputs_images).embeddings
+    query_embeddings = model(**inputs_text).embeddings
+
+scores = processor.score_retrieval(query_embeddings, image_embeddings)
+
+print("Retrieval scores (query x image):")
+print(scores)
+```
+
+## Notes
+
+- [`~ColPaliProcessor.score_retrieval`] returns a 2D tensor where the first dimension is the number of queries and the second dimension is the number of images. A higher score indicates more similarity between the query and image.
 
 ## ColPaliConfig
 

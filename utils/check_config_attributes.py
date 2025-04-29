@@ -105,6 +105,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     # used internally to calculate `mlp_dim`
     "SamVisionConfig": ["mlp_ratio"],
+    # used internally to calculate `mlp_dim`
+    "SamHQVisionConfig": ["mlp_ratio"],
     # For (head) training, but so far not implemented
     "ClapAudioConfig": ["num_classes"],
     # Not used, but providing useful information to users
@@ -180,6 +182,22 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_cost",
         "giou_loss_coefficient",
         "mask_loss_coefficient",
+    ],
+    "DFineConfig": [
+        "eos_coefficient",
+        "focal_loss_alpha",
+        "focal_loss_gamma",
+        "matcher_alpha",
+        "matcher_bbox_cost",
+        "matcher_class_cost",
+        "matcher_gamma",
+        "matcher_giou_cost",
+        "use_focal_loss",
+        "weight_loss_bbox",
+        "weight_loss_giou",
+        "weight_loss_vfl",
+        "weight_loss_fgl",
+        "weight_loss_ddf",
     ],
     "GroundingDinoConfig": [
         "bbox_cost",
@@ -327,17 +345,6 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
                 is not None
             ):
                 attribute_used = True
-            # `SequenceSummary` is called with `SequenceSummary(config)`
-            elif attribute in [
-                "summary_type",
-                "summary_use_proj",
-                "summary_activation",
-                "summary_last_dropout",
-                "summary_proj_to_labels",
-                "summary_first_dropout",
-            ]:
-                if "SequenceSummary" in modeling_source:
-                    attribute_used = True
             if attribute_used:
                 break
         if attribute_used:
@@ -345,16 +352,18 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
 
     # common and important attributes, even if they do not always appear in the modeling files
     attributes_to_allow = [
+        "initializer_range",
         "bos_index",
         "eos_index",
         "pad_index",
         "unk_index",
         "mask_index",
-        "image_token_index",  # for VLMs
-        "video_token_index",
+        "image_token_id",  # for VLMs
+        "video_token_id",
         "image_seq_length",
         "video_seq_length",
         "image_size",
+        "text_config",  # may appear as `get_text_config()`
         "use_cache",
         "out_features",
         "out_indices",

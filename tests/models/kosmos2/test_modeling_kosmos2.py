@@ -28,6 +28,7 @@ from transformers import AutoModelForImageTextToText, AutoProcessor, Kosmos2Conf
 from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2TextConfig, Kosmos2VisionConfig
 from transformers.testing_utils import (
     IS_ROCM_SYSTEM,
+    IS_XPU_SYSTEM,
     require_torch,
     require_vision,
     slow,
@@ -655,7 +656,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         processed_text = processed_text[0]
         final_text, entities = final_text_with_entities[0]
 
-        atol = 1e-4 if IS_ROCM_SYSTEM else 1e-5
+        atol = 1e-4 if (IS_ROCM_SYSTEM or IS_XPU_SYSTEM) else 1e-5
 
         np.testing.assert_allclose(
             torch.concat(scores[1:4])[:3, :3].to("cpu").numpy(),

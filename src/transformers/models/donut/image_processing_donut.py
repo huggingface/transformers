@@ -20,6 +20,7 @@ import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
+    convert_to_rgb,
     get_resize_output_image_size,
     pad,
     resize,
@@ -40,7 +41,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
-from ...utils.import_utils import is_vision_available
+from ...utils.import_utils import is_vision_available, requires
 
 
 logger = logging.get_logger(__name__)
@@ -50,6 +51,7 @@ if is_vision_available():
     import PIL
 
 
+@requires(backends=("vision",))
 class DonutImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Donut image processor.
@@ -70,7 +72,7 @@ class DonutImageProcessor(BaseImageProcessor):
             Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image. If `random_padding` is set to `True` in `preprocess`, each image is padded with a
-            random amont of padding on each size, up to the largest image size in the batch. Otherwise, all images are
+            random amount of padding on each size, up to the largest image size in the batch. Otherwise, all images are
             padded to the largest image size in the batch.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
@@ -92,7 +94,7 @@ class DonutImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_thumbnail: bool = True,
         do_align_long_axis: bool = False,
@@ -150,10 +152,21 @@ class DonutImageProcessor(BaseImageProcessor):
         input_height, input_width = get_image_size(image, channel_dim=input_data_format)
         output_height, output_width = size["height"], size["width"]
 
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(image)
+
+        if input_data_format == ChannelDimension.LAST:
+            rot_axes = (0, 1)
+        elif input_data_format == ChannelDimension.FIRST:
+            rot_axes = (1, 2)
+        else:
+            raise ValueError(f"Unsupported data format: {input_data_format}")
+
         if (output_width < output_height and input_width > input_height) or (
             output_width > output_height and input_width < input_height
         ):
-            image = np.rot90(image, 3)
+            image = np.rot90(image, 3, axes=rot_axes)
 
         if data_format is not None:
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
@@ -300,7 +313,7 @@ class DonutImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_thumbnail: Optional[bool] = None,
         do_align_long_axis: Optional[bool] = None,
@@ -336,7 +349,7 @@ class DonutImageProcessor(BaseImageProcessor):
                 Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
                 Whether to pad the image. If `random_padding` is set to `True`, each image is padded with a random
-                amont of padding on each size, up to the largest image size in the batch. Otherwise, all images are
+                amount of padding on each size, up to the largest image size in the batch. Otherwise, all images are
                 padded to the largest image size in the batch.
             random_padding (`bool`, *optional*, defaults to `self.random_padding`):
                 Whether to use random padding when padding the image. If `True`, each image in the batch with be padded
@@ -405,6 +418,8 @@ class DonutImageProcessor(BaseImageProcessor):
             size=size,
             resample=resample,
         )
+
+        images = [convert_to_rgb(image) for image in images]
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]

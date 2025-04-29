@@ -50,7 +50,7 @@ class FbgemmFp8Linear(torch.nn.Linear):
         # x_quantized and x_scale are not necessarily on the same device as x, this is an issue.
         # https://github.com/pytorch/FBGEMM/blob/e08af8539c391437f447173863df0f3f6f6f1855/fbgemm_gpu/experimental/gen_ai/src/quantize/quantize.cu#L1237C3-L1237C45
         x_quantized, x_scale = torch.ops.fbgemm.quantize_fp8_per_row(
-            x.view(-1, x.shape[-1]), scale_ub=self.input_scale_ub
+            x.view(-1, x.shape[-1]).contiguous(), scale_ub=self.input_scale_ub
         )
         # moving x_quantized, x_scale here creates glibberish output ... However, if we move the output, it works
         # x_quantized, x_scale = x_quantized.to(x.device), x_scale.to(x.device)
@@ -167,7 +167,7 @@ def _replace_with_fbgemm_fp8_linear(
     """
     Private method that wraps the recursion for module replacement.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
 
     import re
@@ -196,7 +196,7 @@ def _replace_with_fbgemm_fp8_linear(
 
                     # Force requires grad to False to avoid unexpected errors
                     model._modules[name].requires_grad_(False)
-                # set non persistant buffer outside of init_empty_weights
+                # set non persistent buffer outside of init_empty_weights
                 model._modules[name].input_scale_ub = torch.tensor(
                     [quantization_config.activation_scale_ub],
                     dtype=torch.float,
@@ -207,9 +207,6 @@ def _replace_with_fbgemm_fp8_linear(
                 (key + "." in current_key_name_str) or (key == current_key_name_str) for key in modules_to_not_convert
             ):
                 with init_empty_weights(include_buffers=True):
-                    tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".gate_up_proj_scale")] = tp_plan[
-                        re.sub(r"\d+", "*", current_key_name_str + ".gate_up_proj")
-                    ]
                     tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj_scale")] = None
                     model._modules[name] = FbgemmFp8Llama4TextExperts(
                         config.text_config,

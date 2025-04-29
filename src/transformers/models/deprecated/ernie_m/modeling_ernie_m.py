@@ -1045,3 +1045,14 @@ class ErnieMForInformationExtraction(ErnieMPreTrainedModel):
             hidden_states=result.hidden_states,
             attentions=result.attentions,
         )
+
+
+__all__ = [
+    "ErnieMForMultipleChoice",
+    "ErnieMForQuestionAnswering",
+    "ErnieMForSequenceClassification",
+    "ErnieMForTokenClassification",
+    "ErnieMModel",
+    "ErnieMPreTrainedModel",
+    "ErnieMForInformationExtraction",
+]

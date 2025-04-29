@@ -1682,3 +1682,16 @@ class NezhaForQuestionAnswering(NezhaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "NezhaForNextSentencePrediction",
+    "NezhaForMaskedLM",
+    "NezhaForPreTraining",
+    "NezhaForMultipleChoice",
+    "NezhaForQuestionAnswering",
+    "NezhaForSequenceClassification",
+    "NezhaForTokenClassification",
+    "NezhaModel",
+    "NezhaPreTrainedModel",
+]

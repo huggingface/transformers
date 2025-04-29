@@ -74,6 +74,7 @@ from transformers.utils import (
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    check_torch_load_is_safe,
 )
 from transformers.utils.import_utils import (
     is_flash_attn_2_available,
@@ -81,7 +82,6 @@ from transformers.utils.import_utils import (
     is_tf_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
-    is_torchdynamo_available,
 )
 
 
@@ -761,6 +761,7 @@ class ModelUtilsTest(TestCasePlus):
                     # Note: pickle adds some junk so the weight of the file can end up being slightly bigger than
                     # the size asked for (since we count parameters)
                     if size >= max_size_int + 50000:
+                        check_torch_load_is_safe()
                         state_dict = torch.load(shard_file, weights_only=True)
                         self.assertEqual(len(state_dict), 1)
 
@@ -1504,8 +1505,6 @@ class ModelUtilsTest(TestCasePlus):
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
             self.assertIn("You may ignore this warning if your `pad_token_id`", cl.out)
 
-        if not is_torchdynamo_available():
-            self.skipTest(reason="torchdynamo is not available")
         with self.subTest("Ensure that the warning code is skipped when compiling with torchdynamo."):
             logger.warning_once.cache_clear()
             from torch._dynamo import config, testing

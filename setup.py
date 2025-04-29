@@ -112,7 +112,6 @@ _deps = [
     "fastapi",
     "filelock",
     "flax>=0.4.1,<=0.7.0",
-    "fsspec<2023.10.0",
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
@@ -130,7 +129,7 @@ _deps = [
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
-    "kernels>=0.3.2,<0.4",
+    "kernels>=0.4.4,<0.5",
     "librosa",
     "natten>=0.14.6,<0.15.0",
     "nltk<=3.8.1",
@@ -150,7 +149,7 @@ _deps = [
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
-    "pytest>=7.2.0,<8.0.0",
+    "pytest>=7.2.0",
     "pytest-asyncio",
     "pytest-rerunfailures",
     "pytest-timeout",
@@ -164,6 +163,9 @@ _deps = [
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff==0.11.2",
+    # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
+    # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
+    # `Trainer` tests (see references to `run_translation.py`).
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "safetensors>=0.4.3",
@@ -187,7 +189,7 @@ _deps = [
     "tiktoken",
     "timm<=1.0.11",
     "tokenizers>=0.21,<0.22",
-    "torch>=2.1",
+    "torch>=2.1,<2.7",  # Installing torch 2.7 results in slower compiled LLMs. Pinned while we investigate.
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -345,7 +347,6 @@ extras["testing"] = (
         "evaluate",
         "pytest-timeout",
         "ruff",
-        "sacrebleu",
         "rouge-score",
         "nltk",
         "GitPython",
@@ -355,6 +356,7 @@ extras["testing"] = (
         "tensorboard",
         "pydantic",
         "sentencepiece",
+        "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
     )
     + extras["retrieval"]
     + extras["modelcreation"]
@@ -429,10 +431,6 @@ extras["torchhub"] = deps_list(
     "torch",
     "tokenizers",
     "tqdm",
-)
-
-extras["agents"] = deps_list(
-    "diffusers", "accelerate", "datasets", "torch", "sentencepiece", "opencv-python", "Pillow"
 )
 
 extras["benchmark"] = deps_list("optimum-benchmark")
