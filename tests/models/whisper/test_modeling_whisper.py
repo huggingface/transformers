@@ -104,7 +104,7 @@ if is_torch_available():
             self.begin_index = begin_index
 
         def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-            # we don't want to randomely sample timestamp tokens
+            # we don't want to randomly sample timestamp tokens
             if input_ids.shape[-1] != self.begin_index:
                 scores[:, self.timestamp_begin :] = -float("inf")
 
@@ -562,7 +562,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @parameterized.expand([("offloaded",)])
     @pytest.mark.generate
-    @unittest.skip(reason="Whisper doesnt work with offloaded cache implementation yet")
+    @unittest.skip(reason="Whisper doesn't work with offloaded cache implementation yet")
     def test_offloaded_cache_implementation(self, cache_implementation):
         pass
 

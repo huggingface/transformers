@@ -423,7 +423,7 @@ class ModernBertUnpaddedRotaryEmbedding(RotaryEmbedding):
         """
         max_seqlen: if max_seqlen, device, and dtype are provided, we precompute the cos_sin_cache
             up to max_seqlen. If the max_seqlen, device, or dtype during training/inference differ,
-            the cos_sin_cache wll be recomputed during the forward pass.
+            the cos_sin_cache will be recomputed during the forward pass.
         """
         super().__init__(dim=dim, base=base, pos_idx_in_fp32=True, device=device, interleaved=False)
         self.max_seqlen = max_seqlen
