@@ -102,8 +102,8 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxialiary loss coefficient
         shared_intermediate_size (`int`, *optional*, defaults to 0): intermediate size for shared experts. 0 implies
             no shared experts.
-        position_embedding_type (`str`): positional embedding type to be used.
-            # TODO - probably should pass `None` instead of "nope" and add explanation of what that means.
+        position_embedding_type (`str`, *optional*, defaults to None): Positional embedding
+            type to be used; defaults to None. Allowed options: `[None, "rope"]`
         layer_types (`List`): list of strins to be used as layer types.
             Allowed choices: "mamba", "attention".
         mamba_n_heads (`int`, *optional*, defaults to 128):
@@ -172,7 +172,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         shared_intermediate_size=0,
-        position_embedding_type="nope",
+        position_embedding_type=None,
         # layer types should be a List of str
         layer_types=None,
         # took defaults from bamba config
@@ -254,6 +254,8 @@ class GraniteMoeHybridConfig(PretrainedConfig):
 
         if self.position_embedding_type == "rope":
             rope_config_validation(self)
+        elif self.position_embedding_type is not None:
+            raise ValueError("Position embedding type must be `rope` or None!")
 
     # overwrite the function to use in `HybridMambaAttentionDynamicCache`
     @property
