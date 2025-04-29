@@ -375,29 +375,19 @@ class CsmDepthDecoderModel(LlamaModel):
             device = inputs_embeds.device if inputs_embeds is not None else input_ids.device
             cache_position = torch.arange(past_seen_tokens, past_seen_tokens + inputs_seq_length, device=device)
 
-        position_ids = cache_position.unsqueeze(0)
-
         if inputs_embeds is None:
-            codebook_idxs = torch.clamp(position_ids - 1, min=0)
+            codebook_idxs = torch.clamp(cache_position - 1, min=0)
             offset = codebook_idxs * self.vocab_size
             inputs_embeds = self.embed_tokens(input_ids + offset)
-            input_ids_are_first_codebook = position_ids[0, 0] == 0
 
+            input_ids_are_first_codebook = cache_position[0] == 0
             if backbone_last_hidden_state is not None:
-                # Only update the embedding if the first codebook token is present
-                mask = input_ids_are_first_codebook.to(inputs_embeds.dtype)
-                inputs_embeds[:, 0] = (1 - mask) * inputs_embeds[:, 0] + mask * backbone_last_hidden_state
+                inputs_embeds[:, 0] = backbone_last_hidden_state
             else:
-                if torch.compiler.is_compiling():
-                    torch._assert(
-                        not input_ids_are_first_codebook,
-                        "backbone_last_hidden_state must be provided when first codebook token is used.",
+                if not torch.compiler.is_compiling() and input_ids_are_first_codebook:
+                    logger.warning(
+                        "When the first codebook token is provided, `backbone_last_hidden_state` should also be provided for correct inference."
                     )
-                else:
-                    if input_ids_are_first_codebook:
-                        logger.warning(
-                            "When the first codebook token is provided, the backbone last hidden state should also be provided for correct inference."
-                        )
 
         inputs_embeds = self.inputs_embeds_projector(inputs_embeds)
 
@@ -408,6 +398,7 @@ class CsmDepthDecoderModel(LlamaModel):
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
+        position_ids = cache_position.unsqueeze(0)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # decoder layers
@@ -455,12 +446,12 @@ class CsmCodebooksHead(nn.Module):
         self.num_codebooks = num_codebooks
         self.weight = nn.Parameter(torch.empty(self.num_codebooks - 1, hidden_size, vocab_size))
 
-    def forward(self, hidden_states, position_ids):
-        if position_ids is None:
+    def forward(self, hidden_states, cache_position):
+        if cache_position is None:
             seq_length = hidden_states.shape[1]
             codebook_weight = self.weight[torch.arange(seq_length)]
         else:
-            codebook_idxs = position_ids - 1
+            codebook_idxs = cache_position.unsqueeze(0) - 1
             codebook_weight = self.weight[codebook_idxs]
 
         hidden_states = torch.matmul(hidden_states.unsqueeze(2), codebook_weight)
@@ -491,6 +482,28 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         raise AttributeError("Not needed for Csm")
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.LongTensor,
+        past_key_values: Optional[Cache] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids, past_key_values, attention_mask, inputs_embeds, cache_position, **kwargs
+        )
+
+        is_first_generation_step = model_inputs["cache_position"][0] == 0
+        if not is_first_generation_step:
+            model_inputs.pop("backbone_last_hidden_state")
+
+        # csm depth decoder does not use position_ids
+        model_inputs.pop("position_ids")
+
+        return model_inputs
 
     @can_return_tuple
     @add_start_docstrings_to_model_forward(CSM_DEPTH_DECODER_INPUTS_DOCSTRING)
@@ -559,7 +572,7 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
         else:
             slice_indices = logits_to_keep
 
-        logits = self.codebooks_head(hidden_states[:, slice_indices, :], position_ids[:, slice_indices])
+        logits = self.codebooks_head(hidden_states[:, slice_indices, :], cache_position[slice_indices])
         logits = logits.contiguous()
 
         loss = None
