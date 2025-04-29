@@ -364,7 +364,7 @@ class Gemma2DecoderLayer(nn.Module):
                 # In case we are beyond the sliding window, we need to correctly offset the mask slicing
                 offset = cache_position[-1] - effective_seq_len + 1
                 # Should only be used when beyond the sliding window (i.e. offset > 0)
-                offset = max(0, offset)
+                offset = torch.clamp(offset, min=0)
                 # equivalent to: `attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]`,
                 # but without data-dependent slicing (i.e. torch.compile friendly)
                 mask_indexes = torch.arange(
@@ -540,7 +540,7 @@ class Gemma2Model(GemmaModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: HybridCache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         # Flash Attention currently doesn't support static cache but Gemma2 work only with static cache.
         # So we will pass in attention mask as is in any case, not only when ther's padding. Then we'll use its shape

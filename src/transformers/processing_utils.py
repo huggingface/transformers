@@ -761,7 +761,7 @@ class ProcessorMixin(PushToHubMixin):
         resolved_additional_chat_template_files = {}
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_processor_file = pretrained_model_name_or_path
-            # cant't load chat-template when given a file as pretrained_model_name_or_path
+            # can't load chat-template when given a file as pretrained_model_name_or_path
             resolved_chat_template_file = None
             resolved_raw_chat_template_file = None
             is_local = True
