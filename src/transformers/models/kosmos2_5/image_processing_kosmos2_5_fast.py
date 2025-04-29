@@ -269,7 +269,7 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
             rows.extend([n_rows] * n_of_stacked_images)
             cols.extend([n_columns] * n_of_stacked_images)
             # create attention mask in numpy
-            attention_masks.extend(list((f.sum(axis=-1) != 0).to(dtype=torch.float32)))
+            attention_masks.extend(list((patches.sum(axis=-1) != 0).to(dtype=torch.float32)))
             processed_image_patches_grouped[shape] = list(patches)
             for x in processed_image_patches_grouped[shape]:
                 current_index += 1
