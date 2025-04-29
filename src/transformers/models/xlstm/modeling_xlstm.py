@@ -563,49 +563,6 @@ else:
         else:
             return matH
 
-    @dataclass
-    class mLSTMBackendConfig:
-        # These names are not used in the huggingface implementation but appear for compatibility reasons.
-        chunkwise_kernel: ChunkwiseKernelType = "chunkwise--native_autograd"
-        """The chunkwise kernel to use for chunkwise parallel processing of the sequence.
-        This kernel is used for training.
-        Also supports fully parallel (i.e. quadratic) backends for comparison.
-        """
-        sequence_kernel: SequenceKernelType = "native_sequence_native"
-        """The sequence kernel to use for processing sequneces step-by-step.
-        Used only for parts of the prefill sequence in inference mode.
-        """
-        step_kernel: StepKernelType = "native"
-        """The step kernel to use for processing a single step.
-        Used for generation in inference mode.
-        """
-
-        mode: BackendModeType = "train"
-        """The mode of operation for the backend. Determines how the `forward` method behaves.
-        """
-        chunk_size: int = 64
-        """The chunk size of the chunkwise kernel.
-        If the mode is 'train_with_padding', this is the inputs are padded to multiples of this size.
-        """
-        return_last_states: bool = True
-        """Whether to return the last states of the sequence in training mode.
-        Inference mode always returns the last states.
-        """
-        autocast_kernel_dtype: DtypeType = "bfloat16"
-        """The dtype to use for autocast behavior in the kernel.
-        If autocast is enabled all inputs are cast to this dtype before the kernel is called.
-        """
-        eps: float = 1e-6
-        """Epsilon value for numerical stability in the kernel."""
-        inference_state_dtype: DtypeType = "float32"
-        """The dtype to use for the state tensors in inference mode."""
-
-        def __post_init__(self):
-            if self.return_last_states and "parallel" in self.chunkwise_kernel:
-                raise ValueError("return_last_states=True is not supported with parallel kernels.")
-            if self.return_last_states and self.mode == "train_with_padding":
-                raise ValueError("return_last_states=True is not supported with train_with_padding mode.")
-
     def wrap_chunkwise_pad_zeros(
         mlstm_chunkwise_kernel: Callable,
         q: torch.Tensor,  # (B, NH, S, DHQK)
@@ -815,9 +772,9 @@ else:
         This module wraps the mLSTM kernels and provides a high-level interface for training and inference.
         """
 
-        config_class = mLSTMBackendConfig
+        config_class = xLSTMConfig
 
-        def __init__(self, config: mLSTMBackendConfig):
+        def __init__(self, config: xLSTMConfig):
             super().__init__()
             self.config = config
             self.chunkwise_kernel_fn = mlstm_chunkwise_native_autograd
@@ -894,9 +851,9 @@ else:
                     return_last_states = self.config.return_last_states
 
                 if self.config.mode == "train_with_padding":
-                    assert (
-                        not return_last_states
-                    ), "return_last_states=True is not supported with train_with_padding mode."
+                    assert not return_last_states, (
+                        "return_last_states=True is not supported with train_with_padding mode."
+                    )
 
                 return self._train_fn(
                     q=q,
@@ -1140,37 +1097,8 @@ else:
             y = self.proj_down(x)
             return y
 
-    @dataclass
-    class mLSTMLayerConfig:
-        embedding_dim: int
-        """Embedding dimension of the model."""
-        num_heads: int
-        """Number of heads."""
-        use_bias: bool = False
-        """Whether to use bias in linear layers."""
-        norm_eps: float = 1e-6
-        """Epsilon value for numerical stability in the normalization layers."""
-        norm_reduction_force_float32: bool = True
-        """Whether to force float32 reductions in the normalization layers."""
-
-        qk_dim_factor: float = 0.5
-        """The factor to determine the dimension of the query and key tensors."""
-        v_dim_factor: float = 1.0
-        """The factor to determine the dimension of the value tensor."""
-        gate_soft_cap: float = 15.0
-        """Soft cap value for the gates."""
-
-        mlstm_backend: mLSTMBackendConfig = field(default_factory=mLSTMBackendConfig)
-        """Configuration of the mLSTM backend."""
-
-        weight_mode: WeightModeType = "single"
-        """The weight mode to use for the mLSTM layer.
-        Mode 'single' uses separate weights for the query, key, value, and gates.
-        Mode 'fused' uses a single weight matrix for the query, key, value, and output gates.
-        """
-
     class mLSTMLayer(nn.Module):
-        def __init__(self, config: mLSTMLayerConfig):
+        def __init__(self, config: xLSTMConfig):
             super().__init__()
             self.config = config
 
@@ -1222,7 +1150,7 @@ else:
                 )
 
             self.ogate_act_fn = nn.Sigmoid()
-            self.mlstm_backend = mLSTMBackend(config=self.config.mlstm_backend)
+            self.mlstm_backend = mLSTMBackend(config=self.config)
 
             self.multihead_norm = MultiHeadLayerNorm(
                 num_heads=self.config.num_heads,
@@ -1314,30 +1242,7 @@ else:
                 use_bias=config.use_bias,
                 force_float32_reductions=config.norm_reduction_force_float32,
             )
-            self.mlstm_layer = mLSTMLayer(
-                mLSTMLayerConfig(
-                    embedding_dim=config.embedding_dim,
-                    num_heads=config.num_heads,
-                    use_bias=config.use_bias,
-                    norm_eps=config.norm_eps,
-                    norm_reduction_force_float32=config.norm_reduction_force_float32,
-                    qk_dim_factor=config.qk_dim_factor,
-                    v_dim_factor=config.v_dim_factor,
-                    gate_soft_cap=config.gate_soft_cap,
-                    weight_mode=config.weight_mode,
-                    mlstm_backend=mLSTMBackendConfig(
-                        chunkwise_kernel=config.chunkwise_kernel,
-                        sequence_kernel=config.sequence_kernel,
-                        step_kernel=config.step_kernel,
-                        mode=config.mode,
-                        chunk_size=config.chunk_size,
-                        return_last_states=config.return_last_states,
-                        autocast_kernel_dtype=config.autocast_kernel_dtype,
-                        eps=config.eps,
-                        inference_state_dtype=config.inference_state_dtype,
-                    ),
-                )
-            )
+            self.mlstm_layer = mLSTMLayer(config)
             self.norm_ffn = RMSNorm(
                 num_features=config.embedding_dim,
                 eps=config.norm_eps,
