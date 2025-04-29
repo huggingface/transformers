@@ -199,12 +199,12 @@ if is_datasets_available():
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
+    import torch_xla.runtime as xr
     from torch_xla import __version__ as XLA_VERSION
 
     IS_XLA_FSDPV2_POST_2_2 = version.parse(XLA_VERSION) >= version.parse(XLA_FSDPV2_MIN_VERSION)
     if IS_XLA_FSDPV2_POST_2_2:
         import torch_xla.distributed.spmd as xs
-        import torch_xla.runtime as xr
 else:
     IS_XLA_FSDPV2_POST_2_2 = False
 
@@ -1042,7 +1042,7 @@ class Trainer:
         if self.args.use_legacy_prediction_loop:
             if is_torch_xla_available():
                 return SequentialDistributedSampler(
-                    eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
+                    eval_dataset, num_replicas=xr.world_size(), rank=xr.global_ordinal()
                 )
             elif is_sagemaker_mp_enabled():
                 return SequentialDistributedSampler(
