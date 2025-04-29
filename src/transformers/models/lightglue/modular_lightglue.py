@@ -349,7 +349,7 @@ class LightGlueAttentionBlock(nn.Module):
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]], Optional[torch.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
-        attention_outputs = self.attention(
+        message, attention_probs = self.attention(
             hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
@@ -357,14 +357,12 @@ class LightGlueAttentionBlock(nn.Module):
             encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
         )
-        message = attention_outputs[0]
         intermediate_states = torch.cat([hidden_states, message], dim=-1)
         output_states = self.mlp(intermediate_states)
         hidden_states = hidden_states + output_states
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (intermediate_states, output_states)
-        attention_probs = attention_outputs[1:] if output_attentions else None
 
         outputs = (hidden_states, all_hidden_states, attention_probs)
         return outputs
@@ -391,15 +389,13 @@ class LightGlueTransformerLayer(nn.Module):
             all_hidden_states = all_hidden_states + (descriptors,)
 
         batch_size, num_keypoints, descriptor_dim = descriptors.shape
-        self_attention_output = self.self_attention_block(
+        self_attention_descriptors, self_attention_hidden_states, self_attentions = self.self_attention_block(
             descriptors,
             position_embeddings=keypoints,
             attention_mask=attention_mask,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )
-
-        descriptors = self_attention_output[0]
 
         # Reshape hidden_states to group by image_pairs :
         #   (batch_size, num_keypoints, descriptor_dim) -> (batch_size, 2, num_keypoints, descriptor_dim)
@@ -408,7 +404,7 @@ class LightGlueTransformerLayer(nn.Module):
         # Reshape back to original shape :
         #   (batch_size, 2, num_keypoints, descriptor_dim) -> (batch_size, num_keypoints, descriptor_dim)
         encoder_hidden_states = (
-            descriptors.reshape(-1, 2, num_keypoints, descriptor_dim)
+            self_attention_descriptors.reshape(-1, 2, num_keypoints, descriptor_dim)
             .flip(1)
             .reshape(batch_size, num_keypoints, descriptor_dim)
         )
@@ -419,26 +415,25 @@ class LightGlueTransformerLayer(nn.Module):
             else None
         )
 
-        cross_attention_output = self.cross_attention_block(
-            descriptors,
+        descriptors, cross_attention_hidden_states, cross_attentions = self.cross_attention_block(
+            self_attention_descriptors,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )
 
-        descriptors = cross_attention_output[0]
         if output_hidden_states:
             all_hidden_states = (
                 all_hidden_states
-                + (self_attention_output[0].reshape(batch_size, num_keypoints, descriptor_dim),)
-                + self_attention_output[1]
-                + (cross_attention_output[0].reshape(batch_size, num_keypoints, descriptor_dim),)
-                + cross_attention_output[1]
+                + (self_attention_descriptors.reshape(batch_size, num_keypoints, descriptor_dim),)
+                + self_attention_hidden_states
+                + (descriptors.reshape(batch_size, num_keypoints, descriptor_dim),)
+                + cross_attention_hidden_states
             )
 
         if output_attentions:
-            all_attentions = all_attentions + self_attention_output[2] + cross_attention_output[2]
+            all_attentions = all_attentions + (self_attentions,) + (cross_attentions,)
 
         return descriptors, all_hidden_states, all_attentions
 
