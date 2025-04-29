@@ -711,6 +711,7 @@ class Dinov2ForImageClassification(Dinov2PreTrainedModel):
     def __init__(self, config: Dinov2Config) -> None:
         super().__init__(config)
 
+        self.config = config
         self.num_labels = config.num_labels
         self.dinov2 = Dinov2Model(config)
 

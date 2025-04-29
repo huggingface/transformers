@@ -727,6 +727,7 @@ class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedMod
     def __init__(self, config: Dinov2WithRegistersConfig) -> None:
         super().__init__(config)
 
+        self.config = config
         self.num_labels = config.num_labels
         self.dinov2_with_registers = Dinov2WithRegistersModel(config)
 
