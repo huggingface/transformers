@@ -360,7 +360,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
     def setUp(self):
         self.model_tester = GraniteMoeHybridModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GraniteMoeHybridConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=GraniteMoeHybridConfig, hidden_size=64)
 
     def test_config(self):
         self.config_tester.run_common_tests()
