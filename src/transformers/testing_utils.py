@@ -2945,10 +2945,10 @@ def _device_agnostic_dispatch(device: str, dispatch_table: dict[str, Callable], 
 
     fn = dispatch_table[device]
 
-    # Some device agnostic functions return values. Need to guard against `None`
-    # instead at user level.
-    if fn is None:
-        return None
+    # Some device agnostic functions return values or None, will return then directly.
+    if not callable(fn):
+        return fn
+
     return fn(*args, **kwargs)
 
 
