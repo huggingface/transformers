@@ -2,21 +2,6 @@ from typing import Optional, Union
 
 import torch
 
-
-def flash_attention_mask(attention_mask: Optional[torch.Tensor]):
-    """
-    Create the attention mask necesary to use FA2. Since FA2 is un-padded by definition, here we simply return
-    `None` if the mask is fully causal, or we return the 2D mask which will then be used to extract the seq_lens.
-
-    Args:
-        attention_mask (`torch.Tensor`, , *optional*):
-            A 2D attention mask of shape `(batch_size, key_value_length)`.
-    """
-    if attention_mask is not None and (attention_mask == 0.0).any():
-        return attention_mask
-    return None
-
-
 def create_4d_causal_mask(
     batch_size: int,
     kv_length: int,
@@ -108,21 +93,40 @@ def create_4d_causal_mask(
     ```
 
     """
+    if sliding_window is not None and chunk_size is not None:
+        raise ValueError("`sliding_window` and `chunk_size` are mutually exclusive for mask creation")
+
     kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)
+    reshaped_cache_position = cache_position.view(-1, 1)
+
     # Simplest and most efficient way to obtain a causal mask
-    causal_mask = kv_arange <= cache_position.view(-1, 1)
+    causal_mask = kv_arange <= reshaped_cache_position
     # If using sliding window, add the sliding mask
     if sliding_window is not None:
-        sliding_mask_overlay = kv_arange > cache_position.view(-1, 1) - sliding_window
+        sliding_mask_overlay = kv_arange > reshaped_cache_position - sliding_window
         causal_mask *= sliding_mask_overlay
     # If using chunk attention, add the chunked mask
     elif chunk_size is not None:
-        chunked_mask_overlay = kv_arange // chunk_size == cache_position.view(-1, 1) // chunk_size
+        chunked_mask_overlay = kv_arange // chunk_size == reshaped_cache_position // chunk_size
         causal_mask *= chunked_mask_overlay
 
     # Make it 4D
     causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
     return causal_mask
+
+
+def flash_attention_mask(attention_mask: Optional[torch.Tensor]):
+    """
+    Create the attention mask necesary to use FA2. Since FA2 is un-padded by definition, here we simply return
+    `None` if the mask is fully causal, or we return the 2D mask which will then be used to extract the seq_lens.
+
+    Args:
+        attention_mask (`torch.Tensor`, , *optional*):
+            A 2D attention mask of shape `(batch_size, key_value_length)`.
+    """
+    if attention_mask is not None and (attention_mask == 0.0).any():
+        return attention_mask
+    return None
 
 
 def _update_causal_mask(
