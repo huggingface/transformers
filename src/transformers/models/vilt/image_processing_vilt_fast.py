@@ -221,36 +221,25 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
                 device = stacked_images.device
                 mask_template = torch.zeros(max_size, dtype=torch.int64, device=device)
 
-            # Process each image in the group
-            padded_images = []
-            pixel_masks = []
+            original_size = stacked_images.shape[-2:]
+            needs_padding = original_size[0] != max_size[0] or original_size[1] != max_size[1]
 
-            for image in stacked_images:
-                original_size = image.shape[-2:]
-                needs_padding = original_size[0] != max_size[0] or original_size[1] != max_size[1]
+            if needs_padding:
+                padding_bottom = max_size[0] - original_size[0]
+                padding_right = max_size[1] - original_size[1]
+                padding = [0, 0, padding_right, padding_bottom]
 
-                if needs_padding:
-                    padding_bottom = max_size[0] - original_size[0]
-                    padding_right = max_size[1] - original_size[1]
-                    padding = [0, 0, padding_right, padding_bottom]
-
-                    # Pad the image
-                    padded_image = F.pad(image, padding, fill=0)
-
-                    # Create pixel mask (1 for valid pixels, 0 for padding)
-                    pixel_mask = mask_template.clone()
-                    pixel_mask[: original_size[0], : original_size[1]].fill_(1)
-                else:
-                    padded_image = image
-                    pixel_mask = torch.ones(max_size, dtype=torch.int64, device=image.device)
-
-                padded_images.append(padded_image)
-                pixel_masks.append(pixel_mask)
-
-            # Stack for this group if tensors are requested
-            if return_tensors == "pt" and padded_images:
-                padded_images = torch.stack(padded_images)
-                pixel_masks = torch.stack(pixel_masks)
+                padded_images = F.pad(stacked_images, padding, fill=0)
+                pixel_mask = mask_template.clone()
+                pixel_mask[: original_size[0], : original_size[1]].fill_(1)
+                pixel_masks = pixel_mask.unsqueeze(0).repeat(stacked_images.shape[0], 1, 1)
+            else:
+                padded_images = stacked_images
+                pixel_masks = torch.ones(
+                    (stacked_images.shape[0], max_size[0], max_size[1]),
+                    dtype=torch.int64,
+                    device=stacked_images.device,
+                )
 
             # Store processed group
             processed_grouped[shape] = (padded_images, pixel_masks)
