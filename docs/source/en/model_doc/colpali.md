@@ -108,7 +108,7 @@ model = ColPaliForRetrieval.from_pretrained(
     model_name,
     quantization_config=bnb_config,
     device_map="cuda",
-).eval()
+)
 
 processor = ColPaliProcessor.from_pretrained(model_name)
 
