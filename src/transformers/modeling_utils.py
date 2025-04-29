@@ -21,7 +21,6 @@ import importlib.metadata
 import inspect
 import itertools
 import json
-import multiprocessing
 import os
 import re
 import shutil
@@ -29,6 +28,7 @@ import tempfile
 import warnings
 from collections import defaultdict
 from collections.abc import MutableMapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -836,18 +836,6 @@ def _load_state_dict_into_meta_model(
 
     return disk_offload_index, cpu_offload_index
 
-def resolve_state_dict_tensor_refs(model_to_load, state_dict, expected_keys):
-    state_dict_tensor_refs = {}
-
-    for full_tensor_name in state_dict.keys():
-        if full_tensor_name not in expected_keys:
-            continue
-
-        module, tensor_name = get_module_from_name(model_to_load, full_tensor_name)
-
-        state_dict_tensor_refs[full_tensor_name] = getattr(module, tensor_name)
-
-    return state_dict_tensor_refs
 
 # This function is in global scope so it's picklable for multiprocessing
 def load_shard_file(args):
@@ -871,12 +859,12 @@ def load_shard_file(args):
         is_offloaded_safetensors,
         keep_in_fp32_regex,
         unexpected_keys,
-        device_mesh
-    )   = args
+        device_mesh,
+    ) = args
 
     # Skip the load for shards that only contain disk-offloaded weights
     if shard_file in disk_only_shard_files:
-        return [], disk_offload_index, cpu_offload_index, {}
+        return [], disk_offload_index, cpu_offload_index
 
     map_location = "cpu"
     if (
@@ -928,14 +916,13 @@ def load_shard_file(args):
             unexpected_keys=unexpected_keys,
             device_mesh=device_mesh,
         )
-    # We now figure out what in the state dict changed and store the module used for each layer, this will contain the device
-    # information we need in order to resolve all of the layers after multiprocessing which we write back to the original model_to_load meta model
-    state_dict_tensor_refs = resolve_state_dict_tensor_refs(model_to_load, state_dict, expected_keys)
 
-    # force memory release if loading multiple shards, to avoid having 2 state dicts in memory in next loop
+    # force memory release to avoid having multiple state dicts in memory as shards are processed
     del state_dict
+    gc.collect()
 
-    return error_msgs, disk_offload_index, cpu_offload_index, state_dict_tensor_refs
+    return error_msgs, disk_offload_index, cpu_offload_index
+
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
     if variant is not None:
@@ -2651,9 +2638,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             total_decoder_name="",
             total_encoder_name="",
         ):
-            assert isinstance(decoder_pointer, nn.Module) and isinstance(encoder_pointer, nn.Module), (
-                f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
-            )
+            assert isinstance(decoder_pointer, nn.Module) and isinstance(
+                encoder_pointer, nn.Module
+            ), f"{decoder_pointer} and {encoder_pointer} have to be of type nn.Module"
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
@@ -2667,9 +2654,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             encoder_modules = encoder_pointer._modules
             decoder_modules = decoder_pointer._modules
             if len(decoder_modules) > 0:
-                assert len(encoder_modules) > 0, (
-                    f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
-                )
+                assert (
+                    len(encoder_modules) > 0
+                ), f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
 
                 all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules.keys()}
                 encoder_layer_pos = 0
@@ -4995,9 +4982,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             cpu_offload_folder = tempfile.mkdtemp()
             cpu_offload_index = {}
 
-        # For nice tqdm bars
-        if checkpoint_files is not None and len(checkpoint_files) > 1:
-            checkpoint_files = logging.tqdm(checkpoint_files, desc="Loading checkpoint shards")
         # To be able to iterate, even if we don't use it if the state_dict is already provided
         elif state_dict is not None:
             checkpoint_files = [""]
@@ -5034,7 +5018,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 is_offloaded_safetensors,
                 keep_in_fp32_regex,
                 unexpected_keys,
-                device_mesh
+                device_mesh,
             )
             for shard_file in checkpoint_files
         ]
@@ -5043,67 +5027,35 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # Use multiprocessing Pool for parallel execution, off by default
         if json.loads(os.environ.get("HF_ENABLE_PARALLEL_LOADING", "false")) and not is_deepspeed_zero3_enabled():
-            original_start_method = multiprocessing.get_start_method(allow_none=True)
+            num_workers = json.loads(os.environ.get("HF_PARALLEL_LOADING_WORKERS", "8"))
 
-            try:
-                # CUDA requires the start method to be spawn, fork creates multiple copies of the cuda runtime, which throws
-                multiprocessing.set_start_method("spawn", force=True)
+            # Do not spawn anymore workers than you need
+            num_workers = min(len(args_list), num_workers)
 
-                num_workers = json.loads(os.environ.get("HF_PARALLEL_LOADING_WORKERS", "8"))
+            logger.info(f"Loading model weights in parallel with {num_workers} workers...")
 
-                # Do not spawn anymore workers than you need
-                num_workers = min(len(args_list), num_workers)
+            # with multiprocessing.Pool(processes=num_workers) as pool:
+            with ThreadPoolExecutor(max_workers=num_workers) as executor:
+                with logging.tqdm(total=len(args_list), desc="Loading checkpoint shards") as pbar:
+                    futures = [executor.submit(load_shard_file, arg) for arg in args_list]
+                    for future in as_completed(futures):
+                        result = future.result()
+                        (
+                            _error_msgs,
+                            disk_offload_index,
+                            cpu_offload_index,
+                        ) = result
 
-                logger.info(f"Loading model weights in parallel with {num_workers} workers...")
-                state_dict_tensor_refs_list = []
+                        error_msgs += _error_msgs
 
-                with multiprocessing.Pool(processes=num_workers) as pool:
-                    # For nice tqdm bars
-                    with logging.tqdm(total=len(args_list), desc="Loading checkpoint shards") as pbar:
-                        # NOTE order does not matter, layers that changed per shard are unique and can be reassigned to the orignal meta model
-                        for result in pool.imap_unordered(load_shard_file, args_list):
-                            (
-                                _error_msgs,
-                                disk_offload_index,
-                                cpu_offload_index,
-                                state_dict_tensor_refs,
-                            ) = result
-
-                            error_msgs += _error_msgs
-
-                            state_dict_tensor_refs_list.append(state_dict_tensor_refs)
-
-                            pbar.update(1)
-
-                # We now update each layer of the meta model with the tensor module refs that were set to specific devices in the copy of the meta model for each worker
-                # We are transferring that state into the orginal ref (model_to_load) here
-                # This is required because model_to_load is pickled when using multiprocessing, which means the ref to model_to_load is different for each worker, so you only get some of the state with respect to the loaded tensors
-                # You could in theory return each worker's copy of the model and use .named_parameters(), and .named_buffers(), but this appears to be more robust
-                # in that all you have to care about are the names of the layers in the state dict, as long as the logic that lead to the creation of the state_dict is correct, this will also be correct
-                for state_dict_tensor_refs in state_dict_tensor_refs_list:
-                    for full_tensor_name, tensor in state_dict_tensor_refs.items():
-                        module, tensor_name = get_module_from_name(model_to_load, full_tensor_name)
-                        setattr(module, tensor_name, tensor)
-
-                del state_dict_tensor_refs_list
-                gc.collect()
-            finally:
-                # Restore the start method to prevent side effects for other code that may be running
-                multiprocessing.set_start_method(original_start_method, force=True)
-
+                        pbar.update(1)
         else:
             if len(args_list) > 1:
-                # For nice tqdm bars
                 args_list = logging.tqdm(args_list, desc="Loading checkpoint shards")
 
             for args in args_list:
-                _error_msgs, disk_offload_index, cpu_offload_index, state_dict_tensor_refs = (
-                    load_shard_file(args)
-                )
+                _error_msgs, disk_offload_index, cpu_offload_index = load_shard_file(args)
                 error_msgs += _error_msgs
-
-                del state_dict_tensor_refs
-                gc.collect()
 
         # Adjust offloaded weights name and save if needed
         if disk_offload_index is not None and len(disk_offload_index) > 0:
@@ -5648,9 +5600,9 @@ class PoolerEndLogits(nn.Module):
         Returns:
             `torch.FloatTensor`: The end logits for SQuAD.
         """
-        assert start_states is not None or start_positions is not None, (
-            "One of start_states, start_positions should be not None"
-        )
+        assert (
+            start_states is not None or start_positions is not None
+        ), "One of start_states, start_positions should be not None"
         if start_positions is not None:
             slen, hsz = hidden_states.shape[-2:]
             start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
@@ -5720,9 +5672,9 @@ class PoolerAnswerClass(nn.Module):
         """
         # No dependency on end_feature so that we can obtain one single `cls_logits` for each sample.
         hsz = hidden_states.shape[-1]
-        assert start_states is not None or start_positions is not None, (
-            "One of start_states, start_positions should be not None"
-        )
+        assert (
+            start_states is not None or start_positions is not None
+        ), "One of start_states, start_positions should be not None"
         if start_positions is not None:
             start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
             start_states = hidden_states.gather(-2, start_positions).squeeze(-2)  # shape (bsz, hsz)
