@@ -27,6 +27,7 @@ from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -566,7 +567,7 @@ class Kosmos2_5VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Kosmos2_5VisionLayer(nn.Module):
+class Kosmos2_5VisionLayer(GradientCheckpointingLayer):
     def __init__(self, config: Kosmos2_5VisionConfig) -> None:
         super().__init__()
         self.config = config
@@ -646,16 +647,7 @@ class Kosmos2_5VisionEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, attention_mask, output_attentions, **flash_attn_kwargs)
-
+            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions, **flash_attn_kwargs)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -957,7 +949,7 @@ class Kosmos2_5TextBlock(nn.Module):
 
 
 # Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextTransformer with Kosmos2->Kosmos2_5
-class Kosmos2_5TextTransformer(nn.Module):
+class Kosmos2_5TextTransformer(GradientCheckpointingLayer):
     """
     Transformer decoder consisting of `config.layers` layers. Each layer is a [`Kosmos2_5TextBlock`].
     Here we doesn't have cross attention.
@@ -1205,21 +1197,15 @@ class Kosmos2_5TextTransformer(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    **flash_attn_kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                **flash_attn_kwargs,
+            )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
