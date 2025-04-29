@@ -1266,7 +1266,7 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
                 config=config, layer_idx=layer_idx
             )
         else:
-            raise ValueError("\n Invalid layer type \n")
+            raise ValueError(f"Expected layer type in ['attention', 'mamba'], got {self.layer_type}")
         self.layer_type = config.layers_block_type[layer_idx]
 
     def forward(
@@ -1329,7 +1329,7 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
                 **kwargs,
             )
         else:
-            raise ValueError("\n unrecognized layer type")
+            raise ValueError(f"Expected layer type in ['attention', 'mamba'], got {self.layer_type}")
 
         hidden_states = residual + hidden_states * self.residual_multiplier
 
@@ -1359,7 +1359,6 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
         return outputs
 
 
-# TO DO update docstring
 GRANITEMOEHYBRID_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1551,7 +1550,8 @@ GRANITEMOEHYBRID_INPUTS_DOCSTRING = r"""
 )
 class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GraniteMoeDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers.
+    Each layer is a [`GraniteMoeHybridDecoderLayer`]
 
     Args:
         config: GraniteMoeHybridConfig
@@ -1628,8 +1628,8 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         ## overwritten because `HybridMambaAttentionDynamicCache` is needed
         if use_cache and past_key_values is None:
             logger.warning_once(
-                "GraniteMoeHybrid requires an initialized `HybridMambaAttentionDynamicCache` to return a cache. None was "
-                "provided, so no cache will be returned."
+                "GraniteMoeHybrid requires an initialized `HybridMambaAttentionDynamicCache` to return a cache. "
+                "Because one was not provided, no cache will be returned."
             )
 
         if cache_position is None:
