@@ -62,7 +62,7 @@ class SegGptEncoderOutput(ModelOutput):
         intermediate_hidden_states (`Tuple[torch.FloatTensor]`, *optional*, returned when `config.intermediate_hidden_state_indices` is set):
             Tuple of `torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`.
             Each element in the Tuple corresponds to the output of the layer specified in `config.intermediate_hidden_state_indices`.
-            Additionaly, each feature passes through a LayerNorm.
+            Additionally, each feature passes through a LayerNorm.
     """
 
     last_hidden_state: torch.FloatTensor
