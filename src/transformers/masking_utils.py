@@ -256,7 +256,7 @@ def create_4d_causal_mask(
 
     # Make it 4D
     causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
-    return AttentionMask.from_tensor(causal_mask)
+    return causal_mask
 
 
 def flash_attention_mask(attention_mask: Optional[torch.Tensor]):
