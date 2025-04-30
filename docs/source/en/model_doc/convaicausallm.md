@@ -1,0 +1,124 @@
+---
+language: hi
+library_name: transformers
+tags:
+  - text-generation
+  - hindi
+  - causal-lm
+  - convaicausallm
+license: apache-2.0 # Assuming Apache 2.0 based on standard Hugging Face practice, confirm if different
+pipeline_tag: text-generation
+model_name: ConvaiCausalLM
+datasets:
+  - internal_hindi_corpus # Placeholder, replace if a public dataset was used
+base_model: null # Indicate it's trained from scratch or its specific base if applicable
+---
+
+# ConvaiCausalLM
+
+## Overview
+
+ConvaiCausalLM is a decoder-only transformer model developed by Convai Innovations, specifically pre-trained for Hindi causal language modeling. It is designed to generate coherent and contextually relevant Hindi text.
+
+The reference checkpoint for this model can be found on the Hugging Face Hub at [convaiinnovations/hindi-causal-lm](https://huggingface.co/convaiinnovations/hindi-causal-lm).
+
+This model was contributed by [NandhaKishorM](https://huggingface.co/NandhaKishorM).
+
+## Model Description
+
+ConvaiCausalLM is a causal language model based on the transformer architecture. Key architectural features include:
+
+-   **Decoder-Only:** Like GPT-style models, it predicts the next token based on the preceding sequence.
+-   **Pre-Layer Normalization:** Uses layer normalization *before* the self-attention and feed-forward modules, similar to Llama. Uses standard `torch.nn.LayerNorm`.
+-   **No RoPE:** Unlike models like Llama or Mistral, ConvaiCausalLM does **not** use Rotary Positional Embeddings (RoPE). It relies on standard learned positional information implicitly handled by the token order and causal attention mask.
+-   **Grouped Query Attention (GQA):** Employs GQA to balance computational efficiency and model quality. The reference checkpoint uses 16 attention heads and 4 key-value heads.
+-   **MLP Activation:** Uses the SiLU (SwiGLU) activation function in the feed-forward MLP layers.
+-   **Vocabulary:** Trained with a SentencePiece tokenizer with a vocabulary size of 16,000 tokens.
+
+## Usage Examples
+
+You can use `ConvaiCausalLM` for Hindi text generation tasks.
+
+First, ensure you have the necessary libraries installed and potentially the custom model code registered if you are not using a version of `transformers` where this model is already merged.
+
+```python
+# pip install transformers sentencepiece torch accelerate # Add accelerate for faster loading/inference
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+
+# Specify the model checkpoint
+model_name = "convaiinnovations/hindi-causal-lm"
+# Specify the tokenizer (might be the same or different, check model card)
+tokenizer_name = "convaiinnovations/hindi-embedding-foundational-model" # Or use model_name if tokenizer is there
+
+# Set device (GPU if available, otherwise CPU)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Load tokenizer and model
+tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+model = AutoModelForCausalLM.from_pretrained(model_name)
+model.to(device)
+
+# --- Text Generation Example ---
+prompt_hindi = "भारत की राजधानी क्या है?" # "What is the capital of India?"
+
+# Tokenize the prompt
+inputs = tokenizer(prompt_hindi, return_tensors="pt").to(device)
+
+# Generate text continuation
+# Adjust generation parameters as needed (temperature, top_k, top_p, etc.)
+outputs = model.generate(
+    **inputs,
+    max_new_tokens=60,
+    temperature=0.7,
+    top_k=50,
+    top_p=0.9,
+    do_sample=True,
+    pad_token_id=tokenizer.eos_token_id # Use EOS token for padding during generation
+)
+
+# Decode the generated sequence
+generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+print("--- Generation Example ---")
+print(f"Prompt: {prompt_hindi}")
+print(f"Generated Text: {generated_text}")
+# Example output might be: भारत की राजधानी क्या है? भारत की राजधानी नई दिल्ली है। यह यमुना नदी के किनारे स्थित है और देश का राजनीतिक, सांस्कृतिक और वाणिज्यिक केंद्र है।
+
+# --- Basic Tokenization Example ---
+text_to_tokenize = "यह मॉडल हिंदी भाषा के लिए प्रशिक्षित है।"
+tokens = tokenizer.tokenize(text_to_tokenize)
+encoded = tokenizer.encode(text_to_tokenize)
+decoded = tokenizer.decode(encoded)
+
+print("\n--- Tokenization Example ---")
+print(f"Original: {text_to_tokenize}")
+print(f"Tokens: {tokens}")
+print(f"Encoded IDs: {encoded}")
+print(f"Decoded: {decoded}")
+```
+
+*Note: If you are running this code locally using a clone of the `transformers` repository where `ConvaiCausalLM` has not yet been merged into the main release, you might need to ensure the custom code is registered. This typically happens automatically if the model files are placed correctly within the `src/transformers/models` directory.*
+
+## Resources
+
+-   Model Hub page: [convaiinnovations/hindi-causal-lm](https://huggingface.co/convaiinnovations/hindi-causal-lm)
+-   Original training code/details (if available link here).
+-   Related paper (if available link here).
+
+## ConvaiCausalLMConfig
+
+[[autogenerated]] ConvaiCausalLMConfig
+
+## ConvaiCausalLMModel
+
+[[autogenerated]] ConvaiCausalLMModel
+
+## ConvaiCausalLMForCausalLM
+
+[[autogenerated]] ConvaiCausalLMForCausalLM
+
+## ConvaiCausalLMTokenizer
+
+[[autogenerated]] ConvaiCausalLMTokenizer
