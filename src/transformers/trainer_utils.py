@@ -362,13 +362,13 @@ class HPSearchBackend(ExplicitEnum):
 
 def is_main_process(local_rank):
     """
-    Whether or not the current process is the local process, based on `xm.get_ordinal()` (for TPUs) first, then on
+    Whether or not the current process is the local process, based on `xr.global_ordinal()` (for TPUs) first, then on
     `local_rank`.
     """
     if is_torch_xla_available():
-        import torch_xla.core.xla_model as xm
+        import torch_xla.runtime as xr
 
-        return xm.get_ordinal() == 0
+        return xr.global_ordinal() == 0
     return local_rank in [-1, 0]
 
 
@@ -377,9 +377,9 @@ def total_processes_number(local_rank):
     Return the number of processes launched in parallel. Works with `torch.distributed` and TPUs.
     """
     if is_torch_xla_available():
-        import torch_xla.core.xla_model as xm
+        import torch_xla.runtime as xr
 
-        return xm.xrt_world_size()
+        return xr.world_size()
     elif local_rank != -1 and is_torch_available():
         import torch
 
@@ -792,7 +792,7 @@ def number_of_arguments(func):
 
 
 def find_executable_batch_size(
-    function: callable = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+    function: Optional[callable] = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
 ):
     """
     Args:

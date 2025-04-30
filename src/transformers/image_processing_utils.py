@@ -209,7 +209,7 @@ def convert_to_size_dict(
 
 
 def get_size_dict(
-    size: Union[int, Iterable[int], dict[str, int]] = None,
+    size: Optional[Union[int, Iterable[int], dict[str, int]]] = None,
     max_size: Optional[int] = None,
     height_width_order: bool = True,
     default_to_square: bool = True,

@@ -1440,6 +1440,9 @@ class ProcessorMixin(PushToHubMixin):
                 if value is not None and not isinstance(value, dict):
                     processed_kwargs[kwarg_type][key] = value
 
+        # Pass unprocessed custom kwargs
+        processed_kwargs["template_kwargs"].update(kwargs)
+
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
         ):
