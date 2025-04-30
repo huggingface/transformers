@@ -39,7 +39,7 @@ import torch
 from transformers import pipeline
 
 pipeline = pipeline(
-    "text-generation", 
+    "text-generation",
     model="tiiuae/falcon-mamba-7b-instruct",
     torch_dtype=torch.bfloat16,
     device=0
@@ -73,10 +73,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
-transformers-cli chat --model_name_or_path tiiuae/falcon-mamba-7b-instruct --torch_dtype auto --device 0
+transformers chat tiiuae/falcon-mamba-7b-instruct --torch_dtype auto --device 0
 ```
 
 </hfoption>
