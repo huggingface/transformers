@@ -3494,9 +3494,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
             for name, tensor in state_dict.items():
+                if isinstance(tensor, torch.distributed.tensor.DTensor):
+                    use_dtensor = True
+                    tensor = tensor.to_local()
                 # Sometimes in the state_dict we have non-tensor objects.
                 # e.g. in bitsandbytes we have some `str` objects in the state_dict
-                if isinstance(tensor, torch.Tensor):
+                elif isinstance(tensor, torch.Tensor):
                     ptrs[id_tensor_storage(tensor)].append(name)
                 else:
                     # In the non-tensor case, fall back to the pointer of the object itself
@@ -3631,6 +3634,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 shard = shard_state_dict
                 del shard_state_dict
                 gc.collect()
+
+            # dtensor -> tensor
+            for name, tensor in shard.items():
+                if isinstance(tensor, torch.distributed.tensor.DTensor):
+                    shard[name] = tensor.to_local()
 
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
