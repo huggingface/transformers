@@ -761,8 +761,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         self.rope_theta = config.rope_theta
 
         self.position_embedding_type = config.position_embedding_type
-        if self.position_embedding_type == "rope":
-            self.rotary_emb = GraniteMoeRotaryEmbedding(config)
+        self.rotary_emb = GraniteMoeRotaryEmbedding(config) if self.position_embedding_type == "rope" else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -835,7 +834,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
 
         position_embeddings = None
         # create position embeddings to be shared across the decoder layers
-        if self.position_embedding_type == "rope":
+        if self.rotary_emb is not None:
             position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # decoder layers

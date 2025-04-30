@@ -364,7 +364,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
         position_embeddings = None
         # create position embeddings to be shared across the decoder layers
-        if self.position_embedding_type == "rope":
+        if self.rotary_emb is not None:
             position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # decoder layers

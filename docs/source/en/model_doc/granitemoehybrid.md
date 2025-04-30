@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# GraniteMoeShared
+# GraniteMoeHybrid
 
 ## Overview
 
