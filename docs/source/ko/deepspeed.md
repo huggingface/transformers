@@ -44,7 +44,7 @@ pip install deepspeed
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
+<hfoption id="Transformers">
 
 ```bash
 pip install transformers[deepspeed]
