@@ -77,7 +77,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers">
 
 ```bash
-transformers-cli chat --model_name_or_path meta-llama/Llama-2-7b-chat-hf --torch_dtype auto --attn_implementation flash_attention_2
+transformers chat meta-llama/Llama-2-7b-chat-hf --torch_dtype auto --attn_implementation flash_attention_2
 ```
 
 </hfoption>
@@ -175,4 +175,3 @@ visualizer("Plants create energy through a process known as")
 
 [[autodoc]] LlamaForSequenceClassification
     - forward
-
