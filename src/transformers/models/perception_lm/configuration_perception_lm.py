@@ -20,6 +20,19 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 logger = logging.get_logger(__name__)
 
+class PerceptionEncoderConfig(PretrainedConfig):
+    image_size: int = 448
+    patch_size: int = 14
+    width: int = 1024
+    layers: int = 23
+    heads: int = 16
+    use_cls_token: bool = True
+    use_abs_posemb: bool = True
+    ls_init_value: float = 0.1
+    drop_path: float = 0.1
+    mlp_ratio: float = 4.0
+    use_ln_post: bool = False
+    pool_type: str = "none"
 
 class PerceptionLMConfig(PretrainedConfig):
     r"""
@@ -107,22 +120,11 @@ class PerceptionLMConfig(PretrainedConfig):
         self.vision_feature_layer = vision_feature_layer
 
         if isinstance(vision_config, dict):
-            vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
-            )
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
+            vision_config = PerceptionEncoderConfig(**vision_config)
+        elif isinstance(vision_config, PerceptionEncoderConfig):
+            vision_config = vision_config
         elif vision_config is None:
-            vision_config = CONFIG_MAPPING["clip_vision_model"](
-                intermediate_size=4096,
-                hidden_size=1024,
-                patch_size=14,
-                image_size=336,
-                num_hidden_layers=24,
-                num_attention_heads=16,
-                vocab_size=32000,
-                projection_dim=768,
-            )
-
+            vision_config = PerceptionEncoderConfig()
         self.vision_config = vision_config
 
         if isinstance(text_config, dict):

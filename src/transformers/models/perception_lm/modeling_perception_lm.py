@@ -35,8 +35,9 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from timm.models.pe import PE
 from ..auto import AutoModel, AutoModelForCausalLM
-from .configuration_perception_lm import PerceptionLMConfig
+from .configuration_perception_lm import PerceptionLMConfig, PerceptionEncoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -46,6 +47,34 @@ _CONFIG_FOR_DOC = "PerceptionLMConfig"
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/Perception-LM-1B"
 
+
+class PerceptionEncoder(PE):
+    def __init__(self, config: PerceptionEncoderConfig):
+        assert config.pool_type == "none"
+        self.use_cls_token = config.use_cls_token
+        # Converting configs to timm PE args
+        super().__init__(
+            img_size=config.image_size,
+            patch_size=config.patch_size,
+            width=config.width,
+            layers=config.layers,
+            heads=config.heads,
+            mlp_ratio=config.mlp_ratio,
+            use_cls_token=config.use_cls_token,
+            use_abs_posemb=config.use_abs_posemb,
+            use_ln_post=config.use_ln_post,
+            ls_init_value=config.ls_init_value,
+            output_dim=config.width,
+            use_attn_pool=False,
+            use_proj=False,
+        )
+    
+    def forward(self, x):
+        x = super().forward(x)
+        if self.use_cls_token:
+            return x[:, 1:, :]
+        else:
+            return x
 
 @dataclass
 # Copied from transformers.models.llava.modeling_llava.LlavaCausalLMOutputWithPast with Llava->PerceptionLM
@@ -132,7 +161,7 @@ class AdaptiveAvgPooling(nn.Module):
 class PerceptionLMMultiModalProjector(nn.Module):
     def __init__(self, config: PerceptionLMConfig):
         super().__init__()
-        input_size = config.vision_config.hidden_size
+        input_size = config.vision_config.width
         output_size = config.text_config.hidden_size
         self.projector = nn.Sequential(
             nn.Linear(
@@ -298,7 +327,7 @@ class PerceptionLMForConditionalGeneration(
 ):
     def __init__(self, config: PerceptionLMConfig):
         super().__init__(config)
-        # self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.vision_model = PerceptionEncoder(config.vision_config)
 
         self.multi_modal_projector = PerceptionLMMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
@@ -363,29 +392,13 @@ class PerceptionLMForConditionalGeneration(
 
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
-        # image_outputs = self.vision_tower(
-        #     pixel_values, output_hidden_states=True, **kwargs
-        # )
-
-        # # If we have one vision feature layer, return the corresponding hidden states,
-        # # otherwise, select the hidden states of each feature layer and concatenate them
-        # if isinstance(vision_feature_layer, int):
-        #     selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        #     if vision_feature_select_strategy == "default":
-        #         selected_image_feature = selected_image_feature[:, 1:]
-        # else:
-        #     hs_pool = [
-        #         image_outputs.hidden_states[layer_idx]
-        #         for layer_idx in vision_feature_layer
-        #     ]
-        #     # For default; crop CLS from each hidden state in the hidden state pool
-        #     if vision_feature_select_strategy == "default":
-        #         hs_pool = [hs[:, 1:] for hs in hs_pool]
-        #     selected_image_feature = torch.cat(hs_pool, dim=-1)
-        image_features = torch.load(
-            "/checkpoint/vision_encoder/smhu/debug/0/h_img_dump_0.pt"
-        ).to(pixel_values.device).to(torch.bfloat16)
-        image_features = self.multi_modal_projector(image_features)
+        print("pixel_values shape: ", pixel_values.shape)
+        image_outputs = self.vision_model(pixel_values[0])
+        # image_features = torch.load(
+        #     "/checkpoint/vision_encoder/smhu/debug/0/h_img_dump_0.pt"
+        # ).to(pixel_values.device).to(torch.bfloat16)
+        print("image_outputs shape: ", image_outputs.shape)
+        image_features = self.multi_modal_projector(image_outputs)
         return image_features
 
     @add_start_docstrings_to_model_forward(PERCEPTION_LM_INPUTS_DOCSTRING)
@@ -489,7 +502,7 @@ class PerceptionLMForConditionalGeneration(
 
         if pixel_values is not None:
             image_features = self.get_image_features(
-                pixel_values=pixel_values,
+                pixel_values=pixel_values.to(inputs_embeds),
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_sizes=image_sizes,
