@@ -257,6 +257,48 @@ class IsolatedParallel(TensorParallelLayer):
             partial(self._prepare_output_fn, None, None),
         )
 
+class ReplicateParallel(TensorParallelLayer):
+    """
+    This class is used to replicate computation in a TP layer (used in SP regions when we don't use sequence parallelism for example)
+    """
+    def __init__(self, *, use_dtensor=True, use_local_output=True):
+        super().__init__()
+        self.input_layouts = (Replicate(),)
+        self.output_layouts = (Replicate(),)
+        self.desired_input_layouts = (Replicate(),)
+        self.use_local_output = use_local_output
+        self.use_dtensor = use_dtensor
+
+
+    @staticmethod
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        # TODO: figure out dynamo support for instance method and switch this to instance method
+        # annotate module input placements/sharding with input_layouts
+        input_tensor = inputs[0]
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
+
+        # transform the input layouts to the desired layouts of ColwiseParallel
+        # if input_layouts != desired_input_layouts:
+        #     input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=False)
+        return input_tensor
+
+
+    @staticmethod
+    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        # outputs is a shard on last dimension DTensor, i.e. Shard(-1)
+        # if outputs.placements != output_layouts:
+        #     outputs = outputs.redistribute(placements=output_layouts, async_op=False)
+        # back to local tensor
+        return outputs.to_local() if use_local_output else outputs
+
+
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        param = param[...].to(param_casting_dtype)
+        if to_contiguous:
+            param = param.contiguous()
+        param = DTensor.from_local(param, device_mesh, [Replicate()], run_check=False)
+        return param
 
 class ColwiseParallel(TensorParallelLayer):
     """
@@ -562,7 +604,7 @@ def translate_to_torch_parallel_style(style: str):
         return ColwiseParallel(output_layouts=Replicate())
     elif style == "rowwise_rep":
         return RowwiseParallel(input_layouts=Replicate())
-    elif style == "local_colwise":
+    elif style == "local_cxpolwise":
         return ColwiseParallel(use_dtensor=False)
     elif style == "local_rowwise":
         return RowwiseParallel(use_dtensor=False)
@@ -574,6 +616,8 @@ def translate_to_torch_parallel_style(style: str):
         return PackedRowwiseParallel(use_dtensor=False)
     elif style == "sequence_parallel":
         return SequenceParallel()
+    elif style == "replicate":
+        return ReplicateParallel()
     else:
         raise ValueError(f"Unsupported parallel style value: {style}")
 
@@ -640,28 +684,30 @@ def shard_and_distribute_module(
     elif "." in generic_param_name and generic_param_name.rsplit(".", 1)[0] in tp_plan:
         current_module_plan = tp_plan[generic_param_name.rsplit(".", 1)[0]]
 
+    if current_module_plan is None:
+        # TODO log no plan modules in set
+        # print("No plan for", parameter_name,end ="\n")
+        current_module_plan = "replicate"
+
     # Add hooks to the module if not done yet
     # add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
     if not getattr(module_to_tp, "_is_hooked", False):
         add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
         module_to_tp._is_hooked = True
 
-    if current_module_plan is not None:
-        try:
-            tp_layer = translate_to_torch_parallel_style(current_module_plan)
-            param = tp_layer.partition_tensor(
-                param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
-            )
-        except NotImplementedError as e:
-            print(
-                f"Trying to prepare {parameter_name}, but it's not supported. Corresponding module: {module_to_tp} Fix it's TP plan, current layer: {tp_layer} : {e}"
-            )
-    else:
-        # TODO log no plan modules in set
-        # print("No plan for", parameter_name,end ="\n")
-        param = param[...].to(param_casting_dtype)
-        if is_contiguous:
-            param = param.contiguous()
+    try:
+        tp_layer = translate_to_torch_parallel_style(current_module_plan)
+        param = tp_layer.partition_tensor(
+            param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
+        )
+        # debug attribute
+        module_to_tp._hf_tp_plan = current_module_plan
+        # add it to extra_repr
+        module_to_tp.__repr__ = lambda: f"{module_to_tp.__repr__()}\nTP Plan: {current_module_plan}"
+    except NotImplementedError as e:
+        print(
+            f"Trying to prepare {parameter_name}, but it's not supported. Corresponding module: {module_to_tp} Fix it's TP plan, current layer: {tp_layer} : {e}"
+        )
 
     # SUPER IMPORTANT we have to use setattr
     # otherwise loading is crazy slow
