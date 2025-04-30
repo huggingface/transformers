@@ -257,14 +257,14 @@ def sdpa_mask(
 
     # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` to avoid materializing
     # the mask
-    if not isinstance(past_key_values, (StaticCache, SlidingWindowCache, HybridCache, HybridChunkedCache)):
-        if AttentionMaskConverter._ignore_causal_mask_sdpa(
-            attention_mask,
-            inputs_embeds=input_tensor,
-            past_key_values_length=past_seen_tokens,
-            is_training=self.training,
-        ):
-            return None
+    # if not isinstance(past_key_values, (StaticCache, SlidingWindowCache, HybridCache, HybridChunkedCache)):
+    #     if AttentionMaskConverter._ignore_causal_mask_sdpa(
+    #         attention_mask,
+    #         inputs_embeds=input_tensor,
+    #         past_key_values_length=past_seen_tokens,
+    #         is_training=self.training,
+    #     ):
+    #         return None
 
     query_length = cache_position.shape[0]
     # The kv_length and offset are the same for sliding attention or chunked attention -> only the mask pattern changes
@@ -365,4 +365,4 @@ def sdpa_mask(
     #     min_dtype = torch.finfo(dtype).min
     #     causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
-    return masks
+    return masks[0] if len(masks) == 1 else masks
