@@ -1,6 +1,106 @@
 from typing import Optional, Union
 
 import torch
+import torch.nn.functional as F
+
+# Print the matrix with words as row labels
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+RESET = "\033[0m"
+BLACK_SQUARE = "■"
+WHITE_SQUARE = "⬚"
+GREY_SQUARE = "∙"
+LOW_TRIANGLE = "⬕"
+UPPER_TRIANGLE = "⬔"
+
+YELLOW_SQUARE = f"{YELLOW}{BLACK_SQUARE}{RESET}"
+GREEN_SQUARE = f"{GREEN}{BLACK_SQUARE}{RESET}"
+
+
+def tensor_to_mask_visual(tensor: torch.Tensor, grid_size=(20, 40)) -> str:
+    n, m = tensor.shape
+    max_h, max_w = grid_size
+
+    # Preserve aspect ratio within max grid size
+    aspect_ratio = 2*m / n
+    if aspect_ratio > 1:
+        w = max_w
+        h = min(max_h, max(1, round(max_w / aspect_ratio)))
+    else:
+        h = max_h
+        w = max(1, round(max_h * aspect_ratio))
+
+    # Step 1: Rescale tensor by average pooling
+    tensor = tensor.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+    tensor_resized = F.adaptive_avg_pool2d(tensor, output_size=(h, w))[0, 0]  # Remove extra dims
+
+    # Step 2: a single entry should be non-binary, at the end of the edge, or at the beginning for sliding.
+    binary = tensor_resized
+
+    # Step 3: Build the string representation
+    result = []
+    for i in range(h):
+        row = ""
+        for j in range(w):
+            if binary[i, j] == 1:
+                row += BLACK_SQUARE 
+            elif binary[i, j] == 0:
+                row += WHITE_SQUARE
+            else:
+                if j>0:
+                    if binary[i, j-1] == 1:
+                        row += LOW_TRIANGLE
+                    elif binary[i, j-1] == 0:
+                        row += UPPER_TRIANGLE
+                    else:
+                        row += BLACK_SQUARE if binary[i,j]==1 else WHITE_SQUARE
+                else:
+                    row += BLACK_SQUARE if binary[i, j] == 1 else (
+                        WHITE_SQUARE if binary[i, j] == 0 else (
+                            UPPER_TRIANGLE if binary[i, j+1] == 1 else LOW_TRIANGLE
+                        )
+                    )
+        result.append(row)
+
+    return "\n".join(result) + "\n____________________"
+
+
+class AttentionMask(torch.Tensor):
+    def __new__(cls, data):
+        # Create a new instance of AttentionMask as a Tensor
+        return torch.Tensor._make_subclass(cls, data, require_grad=False)
+
+    def __init__(self, data):
+        # You can initialize any additional metadata here if needed
+        pass
+
+    def to_string(self, grid_size=(20, 20), limit=4):
+        """Returns a string representation of the block mask."""
+        dense_mask = self
+        *batch_dims, num_rows, num_cols = dense_mask.shape
+        total_vis = []
+
+        for idx, batch_idx in enumerate(
+            itertools.product(*[range(i) for i in batch_dims])
+        ):
+            if idx == limit:
+                total_vis.append("...")
+                total_vis.append("To print out more, set AttentionMask.to_string(limit=N)")
+                total_vis.append(
+                    "You can also index (AttentionMask[batch, head]) to choose a specific batch or head"
+                )
+                break
+            block_vis = tensor_to_mask_visual(dense_mask[batch_idx], grid_size=grid_size)
+            total_vis.append(block_vis)
+
+        return "\n".join(total_vis)
+
+    def __repr__(self):
+        return self.to_string()
+
+    @classmethod
+    def from_tensor(cls, tensor: torch.Tensor):
+        return cls(tensor) 
 
 def create_4d_causal_mask(
     batch_size: int,
@@ -112,7 +212,7 @@ def create_4d_causal_mask(
 
     # Make it 4D
     causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
-    return causal_mask
+    return AttentionMask.from_tensor(causal_mask)
 
 
 def merge_2d_padding_mask_into_4d_mask(padding_mask: Optional[torch.Tensor], causal_mask: torch.Tensor) -> torch.Tensor:
@@ -129,7 +229,7 @@ def merge_2d_padding_mask_into_4d_mask(padding_mask: Optional[torch.Tensor], cau
     if padding_mask is not None:
         padding_mask = padding_mask.to(device=causal_mask.device, dtype=torch.bool)
         causal_mask[:, :, :, :padding_mask.shape[-1]] *= padding_mask[:, None, None, :]
-    return causal_mask
+    return AttentionMask.from_tensor(causal_mask)
 
 
 def flash_attention_mask(attention_mask: Optional[torch.Tensor]):
@@ -142,7 +242,7 @@ def flash_attention_mask(attention_mask: Optional[torch.Tensor]):
             A 2D attention mask of shape `(batch_size, key_value_length)`.
     """
     if attention_mask is not None and (attention_mask == 0.0).any():
-        return attention_mask
+        return AttentionMask.from_tensor(attention_mask)
     return None
 
 
@@ -212,5 +312,5 @@ def _update_causal_mask(
         min_dtype = torch.finfo(dtype).min
         causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
-    return causal_mask
+    return AttentionMask.from_tensor(causal_mask)
 
