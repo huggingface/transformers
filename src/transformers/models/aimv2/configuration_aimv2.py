@@ -55,11 +55,9 @@ class AIMv2VisionConfig(PretrainedConfig):
             The epsilon used by the rms normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        projection_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for projection layer in Attention Module.
         qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the queries, keys and values.
-        use_bias (`bool`, *optional*, defaults to `False`):
+        mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the Linear layers or Not.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -99,9 +97,8 @@ class AIMv2VisionConfig(PretrainedConfig):
         patch_size: int = 14,
         rms_norm_eps: float = 1e-5,
         attention_dropout: float = 0.0,
-        projection_dropout: float = 0.0,
         qkv_bias: bool = False,
-        use_bias: bool = False,
+        mlp_bias: bool = False,
         hidden_act: str = "silu",
         initializer_range: float = 0.02,
         use_head: bool = True,
@@ -122,10 +119,9 @@ class AIMv2VisionConfig(PretrainedConfig):
 
         self.use_head = use_head
         self.initializer_range = initializer_range
-        self.use_bias = use_bias
+        self.mlp_bias = mlp_bias
         self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
-        self.projection_dropout = projection_dropout
         self.is_native = is_native
 
 
@@ -155,11 +151,9 @@ class AIMv2TextConfig(PretrainedConfig):
             The epsilon used by the rms normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        projection_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for projection layer in Attention Module.
         qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the queries, keys and values.
-        use_bias (`bool`, *optional*, defaults to `False`):
+        mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the Linear layers or Not.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -189,9 +183,8 @@ class AIMv2TextConfig(PretrainedConfig):
         num_attention_heads: int = 6,
         rms_norm_eps: float = 1e-5,
         attention_dropout: float = 0.0,
-        projection_dropout: float = 0.0,
         qkv_bias: bool = False,
-        use_bias: bool = False,
+        mlp_bias: bool = False,
         hidden_act: str = "silu",
         pad_token_id: int = None,
         bos_token_id: int = None,
@@ -212,10 +205,9 @@ class AIMv2TextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
         self.initializer_range = initializer_range
-        self.use_bias = use_bias
+        self.mlp_bias = mlp_bias
         self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
-        self.projection_dropout = projection_dropout
 
 
 class AIMv2Config(PretrainedConfig):

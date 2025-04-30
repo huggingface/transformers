@@ -16,7 +16,7 @@
 """Pytorch implementation of AIMv2 Model"""
 
 import math
-from typing import Callable, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -24,9 +24,8 @@ from torch import nn
 
 from transformers.modeling_attn_mask_utils import AttentionMaskConverter
 from transformers.modeling_outputs import BaseModelOutputWithPooling
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from transformers.modeling_utils import PreTrainedModel
 
-from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...utils import (
     add_start_docstrings,
@@ -36,10 +35,10 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..clip.modeling_clip import CLIPModel, CLIPTextEmbeddings, _get_vector_norm
-from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
+from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
-from ..siglip.modeling_siglip import SiglipEncoder, SiglipOutput
-
+from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipOutput
+from ..altclip.modeling_altclip import AltCLIPModel
 
 logger = logging.get_logger(__name__)
 
@@ -73,11 +72,9 @@ class AIMv2VisionConfig(SiglipVisionConfig):
             The epsilon used by the rms normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        projection_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for projection layer in Attention Module.
         qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the queries, keys and values.
-        use_bias (`bool`, *optional*, defaults to `False`):
+        mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the Linear layers or Not.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -114,9 +111,8 @@ class AIMv2VisionConfig(SiglipVisionConfig):
         patch_size: int = 14,
         rms_norm_eps: float = 1e-5,
         attention_dropout: float = 0.0,
-        projection_dropout: float = 0.0,
         qkv_bias: bool = False,
-        use_bias: bool = False,
+        mlp_bias: bool = False,
         hidden_act: str = "silu",
         initializer_range: float = 0.02,
         use_head: bool = True,
@@ -139,10 +135,9 @@ class AIMv2VisionConfig(SiglipVisionConfig):
         self.use_head = use_head
         self.initializer_range = initializer_range
         self.attention_dropout = attention_dropout
-        self.use_bias = use_bias
+        self.mlp_bias = mlp_bias
         self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
-        self.projection_dropout = projection_dropout
         self.is_native = is_native
 
         del self.layer_norm_eps
@@ -174,11 +169,9 @@ class AIMv2TextConfig(SiglipTextConfig):
             The epsilon used by the rms normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        projection_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for projection layer in Attention Module.
         qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the queries, keys and values.
-        use_bias (`bool`, *optional*, defaults to `False`):
+        mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the Linear layers or Not.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -205,9 +198,8 @@ class AIMv2TextConfig(SiglipTextConfig):
         num_attention_heads: int = 6,
         rms_norm_eps: float = 1e-5,
         attention_dropout: float = 0.0,
-        projection_dropout: float = 0.0,
         qkv_bias: bool = False,
-        use_bias: bool = False,
+        mlp_bias: bool = False,
         hidden_act: str = "silu",
         pad_token_id: int = None,
         bos_token_id: int = None,
@@ -232,10 +224,9 @@ class AIMv2TextConfig(SiglipTextConfig):
 
         self.initializer_range = initializer_range
         self.attention_dropout = attention_dropout
-        self.use_bias = use_bias
+        self.mlp_bias = mlp_bias
         self.qkv_bias = qkv_bias
         self.rms_norm_eps = rms_norm_eps
-        self.projection_dropout = projection_dropout
 
         del self.bos_token_id
         del self.pad_token_id
@@ -310,23 +301,8 @@ class AIMv2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class AIMv2SwiGLUFFN(nn.Module):
-    def __init__(self, config: AIMv2VisionConfig):
-        super().__init__()
-        in_features = config.hidden_size
-        out_features = config.intermediate_size
-        self.act_fn = config.hidden_act
-
-        self.fc1 = nn.Linear(in_features, out_features, bias=config.use_bias)
-        self.fc2 = nn.Linear(out_features, in_features, bias=config.use_bias)
-        self.fc3 = nn.Linear(in_features, out_features, bias=config.use_bias)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        fc3_out = self.fc3(hidden_states)
-        fc1_out = self.fc1(hidden_states)
-        hidden_states = ACT2FN[self.act_fn](fc1_out) * fc3_out
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+class AIMv2MLP(LlamaMLP):
+    pass
 
 
 class AIMv2VisionEmbeddings(nn.Module):
@@ -385,89 +361,20 @@ class AIMv2TextEmbeddings(CLIPTextEmbeddings):
     pass
 
 
-class AIMv2Attention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
+class AIMv2Attention(SiglipAttention):
     def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.attention_dropout = config.attention_dropout
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-
-        self.num_key_value_groups = 1
-        self.scaling = self.head_dim**-0.5
-
+        super().__init__(config)
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.proj_out = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.proj_drop = nn.Dropout(config.projection_dropout)
-
-        self.is_causal = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Input shape: Batch x Time x Channel"""
-
-        batch_size, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            is_causal=self.is_causal,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim)
-
-        attn_output = self.proj_out(attn_output)
-        attn_output = self.proj_drop(attn_output)
-
-        output = (attn_output, attn_weights) if output_attentions else (attn_output, None)
-
-        return output
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
 
 
 class AIMv2EncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: AIMv2VisionConfig):
         super().__init__()
         self.attention = AIMv2Attention(config)
-        self.ffn = AIMv2SwiGLUFFN(config)
+        self.ffn = AIMv2MLP(config)
         self.rms_norm1 = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.rms_norm2 = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 

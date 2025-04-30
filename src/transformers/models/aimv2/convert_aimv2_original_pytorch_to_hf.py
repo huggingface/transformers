@@ -23,7 +23,7 @@ import torch
 from huggingface_hub import snapshot_download
 from safetensors import safe_open
 
-from transformers import AIMv2Config, AIMv2Model, AIMv2VisionConfig, AIMv2VisionModel, AutoProcessor
+from transformers import AIMv2Config, AIMv2Model, AIMv2VisionConfig, AIMv2VisionModel, AutoProcessor, AutoImageProcessor
 
 
 ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION_MODEL = {
@@ -33,10 +33,10 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION_MODEL = {
     r"preprocessor.patchifier.norm.weight": r"embeddings.rms_norm.weight",
     # Encoder Layers
     r"trunk.blocks.(\d+).attn.qkv": r"encoder.layers.\1.attention.qkv",
-    r"trunk.blocks.(\d+).attn.proj": r"encoder.layers.\1.attention.proj_out",
-    r"trunk.blocks.(\d+).mlp.fc1": r"encoder.layers.\1.ffn.fc1",
-    r"trunk.blocks.(\d+).mlp.fc2": r"encoder.layers.\1.ffn.fc2",
-    r"trunk.blocks.(\d+).mlp.fc3": r"encoder.layers.\1.ffn.fc3",
+    r"trunk.blocks.(\d+).attn.proj": r"encoder.layers.\1.attention.out_proj",
+    r"trunk.blocks.(\d+).mlp.fc1": r"encoder.layers.\1.ffn.gate_proj",
+    r"trunk.blocks.(\d+).mlp.fc2": r"encoder.layers.\1.ffn.down_proj",
+    r"trunk.blocks.(\d+).mlp.fc3": r"encoder.layers.\1.ffn.up_proj",
     # Normalization Layers
     r"trunk.blocks.(\d+).norm_1": r"encoder.layers.\1.rms_norm1",
     r"trunk.blocks.(\d+).norm_2": r"encoder.layers.\1.rms_norm2",
@@ -51,10 +51,10 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"image_encoder.preprocessor.patchifier.norm.weight": r"vision_model.embeddings.rms_norm.weight",
     # Vision Encoder Layers
     r"image_encoder.trunk.blocks.(\d+).attn.qkv": r"vision_model.encoder.layers.\1.attention.qkv",
-    r"image_encoder.trunk.blocks.(\d+).attn.proj": r"vision_model.encoder.layers.\1.attention.proj_out",
-    r"image_encoder.trunk.blocks.(\d+).mlp.fc1": r"vision_model.encoder.layers.\1.ffn.fc1",
-    r"image_encoder.trunk.blocks.(\d+).mlp.fc2": r"vision_model.encoder.layers.\1.ffn.fc2",
-    r"image_encoder.trunk.blocks.(\d+).mlp.fc3": r"vision_model.encoder.layers.\1.ffn.fc3",
+    r"image_encoder.trunk.blocks.(\d+).attn.proj": r"vision_model.encoder.layers.\1.attention.out_proj",
+    r"image_encoder.trunk.blocks.(\d+).mlp.fc1": r"vision_model.encoder.layers.\1.ffn.gate_proj",
+    r"image_encoder.trunk.blocks.(\d+).mlp.fc2": r"vision_model.encoder.layers.\1.ffn.down_proj",
+    r"image_encoder.trunk.blocks.(\d+).mlp.fc3": r"vision_model.encoder.layers.\1.ffn.up_proj",
     # Normalization Layers
     r"image_encoder.trunk.blocks.(\d+).norm_1": r"vision_model.encoder.layers.\1.rms_norm1",
     r"image_encoder.trunk.blocks.(\d+).norm_2": r"vision_model.encoder.layers.\1.rms_norm2",
@@ -70,10 +70,10 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"text_encoder.preprocessor.positional_embedding": r"text_model.embeddings.position_embedding.weight",
     # Text Encoder Layers
     r"text_encoder.trunk.blocks.(\d+).attn.qkv": r"text_model.encoder.layers.\1.attention.qkv",
-    r"text_encoder.trunk.blocks.(\d+).attn.proj": r"text_model.encoder.layers.\1.attention.proj_out",
-    r"text_encoder.trunk.blocks.(\d+).mlp.fc1": r"text_model.encoder.layers.\1.ffn.fc1",
-    r"text_encoder.trunk.blocks.(\d+).mlp.fc2": r"text_model.encoder.layers.\1.ffn.fc2",
-    r"text_encoder.trunk.blocks.(\d+).mlp.fc3": r"text_model.encoder.layers.\1.ffn.fc3",
+    r"text_encoder.trunk.blocks.(\d+).attn.proj": r"text_model.encoder.layers.\1.attention.out_proj",
+    r"text_encoder.trunk.blocks.(\d+).mlp.fc1": r"text_model.encoder.layers.\1.ffn.gate_proj",
+    r"text_encoder.trunk.blocks.(\d+).mlp.fc2": r"text_model.encoder.layers.\1.ffn.down_proj",
+    r"text_encoder.trunk.blocks.(\d+).mlp.fc3": r"text_model.encoder.layers.\1.ffn.up_proj",
     # Text Normalization Layers
     r"text_encoder.trunk.blocks.(\d+).norm_1": r"text_model.encoder.layers.\1.rms_norm1",
     r"text_encoder.trunk.blocks.(\d+).norm_2": r"text_model.encoder.layers.\1.rms_norm2",
@@ -206,7 +206,10 @@ def write_model(
 
 
 def write_image_processor(hf_repo_id: str, output_dir: str):
-    image_processor = AutoProcessor.from_pretrained(hf_repo_id, use_fast=True)
+    if hf_repo_id == "apple/aimv2-large-patch14-224-lit":
+        image_processor = AutoProcessor.from_pretrained(hf_repo_id, use_fast=True)
+    else:
+        image_processor = AutoImageProcessor.from_pretrained(hf_repo_id, use_fast=True)
     image_processor.save_pretrained(output_dir)
     return image_processor
 

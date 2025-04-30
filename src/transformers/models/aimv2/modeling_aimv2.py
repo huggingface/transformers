@@ -30,12 +30,13 @@ from torch import nn
 
 from transformers.modeling_attn_mask_utils import AttentionMaskConverter
 from transformers.modeling_outputs import BaseModelOutputWithPooling
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from transformers.modeling_utils import PreTrainedModel
 
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -108,23 +109,20 @@ class AIMv2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class AIMv2SwiGLUFFN(nn.Module):
-    def __init__(self, config: AIMv2VisionConfig):
+class AIMv2MLP(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        in_features = config.hidden_size
-        out_features = config.intermediate_size
-        self.act_fn = config.hidden_act
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
 
-        self.fc1 = nn.Linear(in_features, out_features, bias=config.use_bias)
-        self.fc2 = nn.Linear(out_features, in_features, bias=config.use_bias)
-        self.fc3 = nn.Linear(in_features, out_features, bias=config.use_bias)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        fc3_out = self.fc3(hidden_states)
-        fc1_out = self.fc1(hidden_states)
-        hidden_states = ACT2FN[self.act_fn](fc1_out) * fc3_out
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class AIMv2VisionEmbeddings(nn.Module):
@@ -219,18 +217,6 @@ class AIMv2TextEmbeddings(nn.Module):
         return embeddings
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -241,17 +227,14 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
+
+    attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
@@ -265,43 +248,37 @@ class AIMv2Attention(nn.Module):
         self.config = config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.attention_dropout = config.attention_dropout
         self.head_dim = self.embed_dim // self.num_heads
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {self.num_heads})."
             )
-
-        self.num_key_value_groups = 1
-        self.scaling = self.head_dim**-0.5
-
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
+        self.is_causal = False
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.proj_out = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.proj_drop = nn.Dropout(config.projection_dropout)
-
-        self.is_causal = False
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size, q_len, _ = hidden_states.size()
+        batch_size, seq_length, embed_dim = hidden_states.shape
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
 
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -315,31 +292,29 @@ class AIMv2Attention(nn.Module):
 
         attn_output, attn_weights = attention_interface(
             self,
-            query_states,
-            key_states,
-            value_states,
+            queries,
+            keys,
+            values,
             attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
             is_causal=self.is_causal,
-            **kwargs,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
         )
 
-        attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim)
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = self.out_proj(attn_output)
 
-        attn_output = self.proj_out(attn_output)
-        attn_output = self.proj_drop(attn_output)
+        if not output_attentions:
+            attn_weights = None
 
-        output = (attn_output, attn_weights) if output_attentions else (attn_output, None)
-
-        return output
+        return attn_output, attn_weights
 
 
 class AIMv2EncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: AIMv2VisionConfig):
         super().__init__()
         self.attention = AIMv2Attention(config)
-        self.ffn = AIMv2SwiGLUFFN(config)
+        self.ffn = AIMv2MLP(config)
         self.rms_norm1 = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.rms_norm2 = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
