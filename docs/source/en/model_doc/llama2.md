@@ -74,7 +74,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers">
+<hfoption id="transformers CLI">
 
 ```bash
 transformers chat meta-llama/Llama-2-7b-chat-hf --torch_dtype auto --attn_implementation flash_attention_2

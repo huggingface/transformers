@@ -76,7 +76,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers">
+<hfoption id="transformers CLI">
 
 ```bash
 # pip install -U flash-attn --no-build-isolation

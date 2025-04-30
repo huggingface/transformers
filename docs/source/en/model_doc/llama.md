@@ -74,7 +74,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers">
+<hfoption id="transformers CLI">
 
 ```bash
 echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model huggyllama/llama-7b --device 0
