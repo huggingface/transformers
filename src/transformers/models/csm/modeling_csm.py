@@ -941,7 +941,9 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
         else:
             slice_indices = logits_to_keep
 
-        logits = self.codebooks_head(hidden_states[:, slice_indices, :], cache_position[slice_indices])
+        logits = self.codebooks_head(
+            hidden_states[:, slice_indices, :], cache_position[slice_indices] if cache_position is not None else None
+        )
         logits = logits.contiguous()
 
         loss = None
@@ -1598,16 +1600,16 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        if input_ids is not None and input_ids.ndim == 2:
+        if input_ids is not None and input_ids.ndim == 2 and model_inputs.get("inputs_embeds") is None:
             merged_inputs = self._merge_input_ids_with_input_values(
                 input_ids=input_ids,
                 input_values=kwargs.get("input_values"),
                 input_values_mask=kwargs.get("input_values_mask"),
                 labels=kwargs.get("labels"),
             )
-            model_inputs["inputs_embeds"] = merged_inputs["inputs_embeds"]
-            model_inputs["labels"] = merged_inputs["labels"]
-            model_inputs["input_ids"] = None
+            model_inputs.update(
+                {"inputs_embeds": merged_inputs["inputs_embeds"], "labels": merged_inputs["labels"], "input_ids": None}
+            )
 
         return model_inputs
 
@@ -1727,9 +1729,12 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
 
         # *************** Csm specific ***************
         depth_decoder_generation_config = generation_config.depth_decoder_generation_config
-        for criterion in stopping_criteria:
-            if isinstance(criterion, MaxLengthCriteria):
-                criterion.max_length -= cur_len
+        if input_ids.ndim == 2 and model_kwargs.get("inputs_embeds") is None:
+            # in the case where the passed input_ids correspond to text tokens, i.e. don't have a third dimension for codebook ids,
+            # we need to remove the input length to the MaxLengthCriteria stopping criteria has such input are not returned
+            for criterion in stopping_criteria:
+                if isinstance(criterion, MaxLengthCriteria):
+                    criterion.max_length -= cur_len
         # ============================================
 
         model_forward = self.__call__
