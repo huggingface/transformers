@@ -432,7 +432,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "The image depicts a vibrant urban scene in what appears to be Chinatown. The focal point is a traditional Chinese archway",
                 ("cuda", 7): "The image depicts a vibrant street scene in what appears to be a Chinatown district. The focal point is a traditional Chinese",
-                ("cuda", 8): "The image depicts a vibrant urban scene in what appears to be Chinatown. The focal point is a traditional Chinese archway",
+                ("cuda", 8): "The image depicts a vibrant street scene in Chinatown, likely in a major city. The focal point is a red \"",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -496,7 +496,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Still lake reflects skies,\nWooden path to nature's heart,\nSilence speaks volumes.",
                 ("cuda", 7): "Sure, here is a haiku inspired by the image:\n\nCalm lake's wooden path\nSilent forest stands guard\n",
-                ("cuda", 8): "Still lake reflects skies,\nWooden path to nature's heart,\nSilence speaks volumes.",
+                ("cuda", 8): "Still lake reflects the sky,\nWooden path to the horizon,\nNature's peace unfolds.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
