@@ -459,7 +459,7 @@ def _compute_2d_rope_parameters(
     attention_factor = 1.0  # Unused in this type of RoPE
 
     # Compute the inverse frequencies
-    inv_freq = 1.0 / (base ** (torch.arange(0, dim, dtype=torch.int64).float().to(device) / dim))
+    inv_freq = 1.0 / (base ** (torch.arange(0, dim, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
     return inv_freq, attention_factor
 
 

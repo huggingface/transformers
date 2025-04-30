@@ -202,7 +202,7 @@ class KeypointMatchingOutput(ModelOutput):
 
 
 class EfficientLoFTRRotaryEmbedding(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig, device="cpu"):
+    def __init__(self, config: EfficientLoFTRConfig, device=None):
         super().__init__()
         self.config = config
         self.rope_type = config.rope_scaling.get("rope_type")
@@ -219,14 +219,11 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         i_position_indices = torch.ones(height, width, device=x.device).cumsum(0).float().unsqueeze(-1)
         j_position_indices = torch.ones(height, width, device=x.device).cumsum(1).float().unsqueeze(-1)
         # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, None, None, :].float().expand(1, 1, 1, -1)
+        inv_freq_expanded = self.inv_freq[None, None, None, :].float().expand(1, 1, 1, -1).to(x.device)
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            emb = torch.zeros(1, height, width, self.config.hidden_size // 2)
-            emb[:, :, :, 0::2] = i_position_indices * inv_freq_expanded
-            emb[:, :, :, 1::2] = j_position_indices * inv_freq_expanded
+        emb = torch.zeros(1, height, width, self.config.hidden_size // 2)
+        emb[:, :, :, 0::2] = i_position_indices * inv_freq_expanded
+        emb[:, :, :, 1::2] = j_position_indices * inv_freq_expanded
 
         sin = emb.sin()
         cos = emb.cos()
@@ -851,7 +848,7 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv1d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv1d, nn.BatchNorm2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
