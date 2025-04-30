@@ -1499,7 +1499,10 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
-        model = super().from_pretrained(*args, **kwargs)
+        if kwargs.get("output_loading_info", False):
+            model, loading_info = super().from_pretrained(*args, **kwargs)
+        else:
+            model = super().from_pretrained(*args, **kwargs)
 
         # copy depth decoder generation conf attr to the depth decoder generation config
         prefix = "depth_decoder_"
@@ -1516,7 +1519,10 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
         for attr in depth_decoder_attrs:
             delattr(model.generation_config, prefix + attr)
 
-        return model
+        if "output_loading_info" in kwargs:
+            return model, loading_info
+        else:
+            return model
 
     def save_pretrained(self, *args, **kwargs):
         # copy the depth decoder generation config attributes to the model generation config
