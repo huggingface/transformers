@@ -29,9 +29,7 @@ from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     logging,
 )
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
@@ -61,9 +59,6 @@ else:
 is_fast_path_available = all(
     (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
 )
-
-_CHECKPOINT_FOR_DOC = "tiiuae/falcon-mamba-7b"
-_CONFIG_FOR_DOC = "FalconMambaConfig"
 
 
 def rms_forward(hidden_states, variance_epsilon=1e-6):
@@ -442,13 +437,9 @@ class FalconMambaBlock(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 # Copied from transformers.models.mamba.modeling_mamba.MambaPreTrainedModel with Mamba->FalconMamba
 class FalconMambaPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = FalconMambaConfig
     base_model_prefix = "backbone"
     _no_split_modules = ["FalconMambaBlock", "FalconMambaMixer"]
@@ -558,57 +549,26 @@ class FalconMambaCausalLMOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-FALCONMAMBA_START_DOCSTRING = r"""
+FALCONMAMBA_CUSTOM_ARGS_DOCSTRING = r"""
+    input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
+        Indices of input sequence tokens in the vocabulary.
 
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
+        If `cache_params.seqlen_offset>0`, only `input_ids` that do not have their past calculated should be passed as
+        `input_ids`.
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
+        Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+        [`PreTrainedTokenizer.__call__`] for details.
 
-    Parameters:
-        config ([`FalconMambaConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-FALCONMAMBA_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            Indices of input sequence tokens in the vocabulary.
-
-            If `cache_params.seqlen_offset>0`, only `input_ids` that do not have their past calculated should be passed as
-            `input_ids`.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        cache_params (`MambaCache`, *optional*):
-            If passed along, the model uses the previous state in all the blocks (which will give the output for the
-            `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
-        use_cache (`bool`, *optional*):
-            If set to `True`, the `cache_params` is returned and can be used to quickly generate the next logits.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        [What are input IDs?](../glossary#input-ids)
+    cache_params (`MambaCache`, *optional*):
+        If passed along, the model uses the previous state in all the blocks (which will give the output for the
+        `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
 """
 
 
-@add_start_docstrings(
-    "The bare FALCONMAMBA Model transformer outputting raw hidden-states without any specific head on top.",
-    FALCONMAMBA_START_DOCSTRING,
-)
+@auto_docstring
 class FalconMambaModel(FalconMambaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FalconMambaConfig):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -627,12 +587,7 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings = new_embeddings
 
-    @add_start_docstrings_to_model_forward(FALCONMAMBA_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=FalconMambaOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring(custom_args=FALCONMAMBA_CUSTOM_ARGS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -709,18 +664,12 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    The FALCONMAMBA Model transformer with a language modeling head on top (linear layer with weights tied to the input
-    embeddings).
-    """,
-    FALCONMAMBA_START_DOCSTRING,
-)
+@auto_docstring
 # Copied from transformers.models.mamba.modeling_mamba.MambaForCausalLM with MAMBA->FALCONMAMBA,Mamba->FalconMamba,mamba->falcon_mamba,FalconMambaCache->MambaCache
 class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config):
+    def __init__(self, config: FalconMambaConfig):
         super().__init__(config)
         self.backbone = FalconMambaModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -806,12 +755,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         )
         return model_inputs
 
-    @add_start_docstrings_to_model_forward(FALCONMAMBA_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=FalconMambaCausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring(custom_args=FALCONMAMBA_CUSTOM_ARGS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

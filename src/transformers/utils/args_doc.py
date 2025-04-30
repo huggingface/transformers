@@ -1,7 +1,6 @@
 import inspect
 import os
 import textwrap
-from functools import wraps
 from typing import List, Optional, Tuple, Union, get_args
 
 import regex as re
@@ -1150,14 +1149,10 @@ def _process_example_section(
     return example_docstring
 
 
-def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint=None):
+def auto_method_docstring(func, parent_class=None, custom_intro=None, custom_args=None, checkpoint=None):
     """
     Wrapper that automatically generates docstring.
     """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        return func(*args, **kwargs)
 
     # Use inspect to retrieve the method's signature
     sig = inspect.signature(func)
@@ -1166,6 +1161,10 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
     # Get model information
     model_name_lowercase, class_name, config_class = _get_model_info(func, parent_class)
     func_documentation = func.__doc__
+    if custom_args is not None and func_documentation is not None:
+        func_documentation = custom_args + "\n" + func_documentation
+    elif custom_args is not None:
+        func_documentation = custom_args
 
     # Add intro to the docstring before args description if needed
     if custom_intro is not None:
@@ -1200,18 +1199,20 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, checkpoint
     docstring += example_docstring
 
     # Assign the dynamically generated docstring to the wrapper function
-    wrapper.__doc__ = docstring
-    return wrapper
+    func.__doc__ = docstring
+    return func
 
 
-def auto_class_docstring(cls, custom_intro=None, checkpoint=None):
+def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=None):
     """
     Wrapper that automatically generates a docstring for classes based on their attributes and methods.
     """
     # import here to avoid circular import
     from transformers.models import auto as auto_module
 
-    docstring_init = auto_method_docstring(cls.__init__, parent_class=cls).__doc__.replace("Args:", "Parameters:")
+    docstring_init = auto_method_docstring(cls.__init__, parent_class=cls, custom_args=custom_args).__doc__.replace(
+        "Args:", "Parameters:"
+    )
     indent_level = get_indent_level(cls)
     model_name_lowercase = get_model_name(cls)
     model_name_title = "".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
@@ -1269,7 +1270,7 @@ def auto_class_docstring(cls, custom_intro=None, checkpoint=None):
     return cls
 
 
-def auto_docstring(obj=None, *, custom_intro=None, checkpoint=None):
+def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=None):
     """
     Automatically generates docstrings for classes and methods in the Transformers library.
 
@@ -1295,9 +1296,11 @@ def auto_docstring(obj=None, *, custom_intro=None, checkpoint=None):
 
     def auto_docstring_decorator(obj):
         if len(obj.__qualname__.split(".")) > 1:
-            return auto_method_docstring(obj, custom_intro=custom_intro, checkpoint=checkpoint)
+            return auto_method_docstring(
+                obj, custom_args=custom_args, custom_intro=custom_intro, checkpoint=checkpoint
+            )
         else:
-            return auto_class_docstring(obj, custom_intro=custom_intro, checkpoint=checkpoint)
+            return auto_class_docstring(obj, custom_args=custom_args, custom_intro=custom_intro, checkpoint=checkpoint)
 
     if obj:
         return auto_docstring_decorator(obj)
