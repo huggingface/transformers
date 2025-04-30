@@ -160,7 +160,7 @@ class GraniteMoeHybridModelTester:
             d = d[-1]  # get the largest divisor
             self.attn_layer_indices = [x + 1 for x in range(0, self.num_hidden_layers, d)]
             self.layer_types = ["mamba"] * self.num_hidden_layers
-            for idx in self.attn_layer_indices :
+            for idx in self.attn_layer_indices:
                 self.layer_types[idx] = "attention"
 
         return GraniteMoeHybridConfig(

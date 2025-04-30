@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 class GraniteMoeHybridConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GraniteMoeHybridConfig`]. It is used to
-    instantiate an GraniteMoeHybrid model according to the specified arguments, defining the model architecture. 
+    instantiate an GraniteMoeHybrid model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

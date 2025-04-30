@@ -24,14 +24,13 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import PreTrainedModel, ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
@@ -462,7 +461,6 @@ class GraniteMoeAttention(nn.Module):
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":

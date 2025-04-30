@@ -433,6 +433,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             mamba_mask = None
         return mamba_mask
 
+
 class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
     _tied_weights_keys = ["lm_head.weight"]
 
