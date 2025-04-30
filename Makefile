@@ -36,6 +36,7 @@ autogenerate_code: deps_table_update
 
 repo-consistency:
 	python utils/check_copies.py
+	python utils/check_main_init.py
 	python utils/check_modular_conversion.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
@@ -83,6 +84,7 @@ fix-copies:
 	python utils/check_dummies.py --fix_and_overwrite
 	python utils/check_doctest_list.py --fix_and_overwrite
 	python utils/check_docstrings.py --fix_and_overwrite
+	python utils/check_main_init.py --fix_and_overwrite
 
 # Run tests for the library
 
