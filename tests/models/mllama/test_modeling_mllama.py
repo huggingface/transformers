@@ -389,12 +389,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_model_parallelism(self):
         pass
 
-    @parameterized.expand([("offloaded",)])
-    @pytest.mark.generate
-    @unittest.skip(reason="Offloaded cache seems to not work with mllama's kv cache type")
-    def test_offloaded_cache_implementation(self, cache_implementation):
-        pass
-
     @unittest.skip(
         reason="Mllama cache type doesn't allow correct check on output `past_key_values` due to `Cache.crop()`"
     )
