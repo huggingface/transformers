@@ -27,13 +27,11 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     logging,
     torch_int,
 )
@@ -41,17 +39,6 @@ from .configuration_donut_swin import DonutSwinConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "DonutSwinConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "https://huggingface.co/naver-clova-ix/donut-base"
-_EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "eljandoubi/donut-base-encoder"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 @dataclass
@@ -886,13 +873,9 @@ class DonutSwinEncoder(nn.Module):
         )
 
 
+@auto_docstring
 # Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->DonutSwin,swin->donut
 class DonutSwinPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = DonutSwinConfig
     base_model_prefix = "donut"
     main_input_name = "pixel_values"
@@ -919,47 +902,15 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
             module.relative_position_bias_table.data.zero_()
 
 
-SWIN_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`DonutSwinConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-SWIN_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`DonutImageProcessor.__call__`] for details.
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare Donut Swin Model transformer outputting raw hidden-states without any specific head on top.",
-    SWIN_START_DOCSTRING,
-)
+@auto_docstring
 class DonutSwinModel(DonutSwinPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+    def __init__(self, config: DonutSwinConfig, add_pooling_layer=True, use_mask_token=False):
+        """
+        add_pooling_layer (`bool`, *optional*, defaults to `True`):
+            Whether to add a pooling layer on top of the last layer hidden state.
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+            Whether to use a mask token.
+        """
         super().__init__(config)
         self.config = config
         self.num_layers = len(config.depths)
@@ -984,14 +935,7 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=DonutSwinModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1056,8 +1000,8 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     DonutSwin Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
     the [CLS] token) e.g. for ImageNet.
 
@@ -1068,12 +1012,11 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
         position embeddings to the higher resolution.
 
     </Tip>
-    """,
-    SWIN_START_DOCSTRING,
+    """
 )
 # Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with Swin->DonutSwin,swin->donut
 class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DonutSwinConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -1087,13 +1030,7 @@ class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=DonutSwinImageClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,

@@ -245,12 +245,15 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], DepthEstimatorOutput]:
         r"""
-        prompt_depth (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
-            Prompt depth is the sparse or low-resolution depth obtained from multi-view geometry or a
-            low-resolution depth sensor. It generally has shape (height, width), where height
-            and width can be smaller than those of the images. It is optional and can be None, which means no prompt depth
-            will be used. If it is None, the output will be a monocular relative depth.
-            The values are recommended to be in meters, but this is not necessary.
+        Args:
+            prompt_depth (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+                Prompt depth is the sparse or low-resolution depth obtained from multi-view geometry or a
+                low-resolution depth sensor. It generally has shape (height, width), where height
+                and width can be smaller than those of the images. It is optional and can be None, which means no prompt depth
+                will be used. If it is None, the output will be a monocular relative depth.
+                The values are recommended to be in meters, but this is not necessary.
+
+        Example:
 
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation

@@ -555,6 +555,12 @@ def parse_docstring(docstring):
     Returns:/Example:
     ...
     """
+    match = re.search(r"(?m)^([ \t]*)(?=Example|Return)", docstring)
+    if match:
+        remainder_docstring = "\n" + docstring[match.start() :]
+        docstring = docstring[: match.start()]
+    else:
+        remainder_docstring = ""
     args_pattern = re.compile(r"(Args:)(\n.*)?(\n)?$", re.DOTALL)
 
     args_match = args_pattern.search(docstring)
@@ -564,8 +570,8 @@ def parse_docstring(docstring):
     params = {}
     if args_section:
         param_pattern = re.compile(
-            # |--- Group 1 ---|| Group 2 ||- Group 3 --||---------- Group 4 ----------|
-            r"^\s*(\w+)\s*\(\s*([^, \)]*)\s*(.*?)\s*\):\s*(.*?)(?=\n^\s*\w+\s*\(|\n\s*$)",
+            # |--- Group 1 ---|| Group 2 ||- Group 3 -||---------- Group 4 ----------|
+            r"^\s*(\w+)\s*\(\s*([^, \)]*)\s*(.*?)\s*\)\s*:\s*((?:(?!\n^\s*\w+\s*\().)*)",
             re.DOTALL | re.MULTILINE,
         )
         for match in param_pattern.finditer(args_section):
@@ -583,13 +589,7 @@ def parse_docstring(docstring):
                 "shape": shape,
             }
 
-    match = re.search(r"(?m)^([ \t]*)(?=Example|Return)", docstring)
-    if match:
-        docstring = "\n" + docstring[match.start() :]
-    else:
-        docstring = ""
-
-    return params, docstring
+    return params, remainder_docstring
 
 
 def contains_type(type_hint, target_type) -> Tuple[bool, Optional[object]]:

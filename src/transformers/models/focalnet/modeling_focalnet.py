@@ -882,7 +882,7 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
 )
 class FocalNetForImageClassification(FocalNetPreTrainedModel):
     # Copied from transformers.models.swin.modeling_swin.SwinForImageClassification.__init__ with Swin->FocalNet, swin->focalnet
-    def __init__(self, config):
+    def __init__(self, config: FocalNetConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
