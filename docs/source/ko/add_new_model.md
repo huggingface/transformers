@@ -73,7 +73,7 @@ model.config  # model has access to its config
 5. 함수 시그니처에는 타입 주석을 사용해야 합니다. 그 외에는 타입 주석보다 변수 이름이 훨씬 읽기 쉽고 이해하기 쉽습니다.
 
 ### 토크나이저 개요 [[overview-of-tokenizers]]
- 
+
 아직 준비되지 않았습니다 :-( 이 섹션은 곧 추가될 예정입니다!
 
 ## 🤗 Transformers에 모델 추가하는 단계별 방법  [[stepbystep-recipe-to-add-a-model-to-transformers]]
@@ -272,7 +272,7 @@ cd transformers
 기존 모델:
 
 ```bash
-transformers-cli add-new-model-like
+transformers add-new-model-like
 ```
 
 모델의 기본 정보를 입력하는 설문지가 표시됩니다.

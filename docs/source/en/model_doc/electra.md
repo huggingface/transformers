@@ -45,9 +45,9 @@ import torch
 from transformers import pipeline
 
 classifier = pipeline(
-    task="text-classification", 
-    model="bhadresh-savani/electra-base-emotion", 
-    torch_dtype=torch.float16, 
+    task="text-classification",
+    model="bhadresh-savani/electra-base-emotion",
+    torch_dtype=torch.float16,
     device=0
 )
 classifier("This restaurant has amazing food!")
@@ -64,7 +64,7 @@ tokenizer = AutoTokenizer.from_pretrained(
     "bhadresh-savani/electra-base-emotion",
 )
 model = AutoModelForSequenceClassification.from_pretrained(
-    "bhadresh-savani/electra-base-emotion", 
+    "bhadresh-savani/electra-base-emotion",
     torch_dtype=torch.float16
 )
 inputs = tokenizer("ELECTRA is more efficient than BERT", return_tensors="pt")
@@ -78,10 +78,10 @@ print(f"Predicted label: {predicted_label}")
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
-echo -e "This restaurant has amazing food." | transformers-cli run --task text-classification --model bhadresh-savani/electra-base-emotion --device 0
+echo -e "This restaurant has amazing food." | transformers run --task text-classification --model bhadresh-savani/electra-base-emotion --device 0
 ```
 
 </hfoption>
@@ -96,12 +96,12 @@ echo -e "This restaurant has amazing food." | transformers-cli run --task text-c
 
     ```py
     # Example of properly handling padding with attention masks
-    inputs = tokenizer(["Short text", "This is a much longer text that needs padding"], 
-                    padding=True, 
+    inputs = tokenizer(["Short text", "This is a much longer text that needs padding"],
+                    padding=True,
                     return_tensors="pt")
     outputs = model(**inputs)  # automatically uses the attention_mask
     ```
-    
+
 - When using the discriminator for a downstream task, you can load it into any of the ELECTRA model classes ([`ElectraForSequenceClassification`], [`ElectraForTokenClassification`], etc.).
 
 ## ElectraConfig
