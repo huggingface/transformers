@@ -103,7 +103,7 @@ for output in outputs:
 
 The downside of few-shot prompting is that you need to create lengthier prompts which increases computation and latency. There is also a limit to prompt lengths. Finally, a model can learn unintended patterns from your examples, and it may not work well on complex reasoning tasks.
 
-To improve few-shot prompting for modern instruction-tuned LLMs, use a models specific [chat template](../conversations). These models are trained on datasets with turn-based conversations between a "user" and "assistant". Structuring your prompt to align with this can improve performance.
+To improve few-shot prompting for modern instruction-tuned LLMs, use a model's specific [chat template](../conversations). These models are trained on datasets with turn-based conversations between a "user" and "assistant". Structuring your prompt to align with this can improve performance.
 
 Structure your prompt as a turn-based conversation and use the [`apply_chat_template`] method to tokenize and format it.
 
@@ -133,7 +133,7 @@ While the basic few-shot prompting approach embedded examples within a single te
 - The model may have a potentially improved understanding because it can better recognize the pattern and the expected roles of user input and assistant output.
 - The model may more consistently output the desired output format because it is structured like its input during training.
 
-Always consult a specific instruction-tuned models documentation to learn more about the format of their chat template so that you can structure your few-shot prompts accordingly.
+Always consult a specific instruction-tuned model's documentation to learn more about the format of their chat template so that you can structure your few-shot prompts accordingly.
 
 ### Chain-of-thought
 
