@@ -415,12 +415,9 @@ class EfficientLoFTRImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in images]
         image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
 
-        target_sizes = [image.shape[:2] for image in images]
-        target_sizes = [target_sizes[i : i + 2] for i in range(0, len(images), 2)]
-
-        for image_pair, pair_output, target_size in zip(image_pairs, keypoint_matching_output, target_sizes):
-            height0, width0 = target_size[0]
-            height1, width1 = target_size[1]
+        for image_pair, pair_output in zip(image_pairs, keypoint_matching_output):
+            height0, width0 = image_pair[0].shape[:2]
+            height1, width1 = image_pair[1].shape[:2]
             plot_image = np.zeros((max(height0, height1), width0 + width1, 3), dtype=np.uint8)
             plot_image[:height0, :width0] = image_pair[0]
             plot_image[:height1, width0:] = image_pair[1]
