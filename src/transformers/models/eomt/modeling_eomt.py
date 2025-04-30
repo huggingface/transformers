@@ -104,7 +104,6 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     return loss
 
 
-# Copied from transformers.models.mask2former.modeling_mask2former.pair_wise_sigmoid_cross_entropy_loss
 def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
     r"""
     A pair wise version of the cross entropy loss, see `sigmoid_cross_entropy_loss` for usage.
@@ -203,7 +202,7 @@ class Mask2FormerHungarianMatcher(nn.Module):
             pred_probs = class_queries_logits[i].softmax(-1)
             pred_mask = masks_queries_logits[i]
 
-            # Compute the classification cost. Contrary to the loss, we don't use the NLL, but approximate it in 1 - proba[target class]. The 1 is a constant that doesn't change the matching, it can be ommitted.
+            # Compute the classification cost. Contrary to the loss, we don't use the NLL, but approximate it in 1 - proba[target class]. The 1 is a constant that doesn't change the matching, it can be omitted.
             cost_class = -pred_probs[:, class_labels[i]]
             target_mask = mask_labels[i].to(pred_mask)
             target_mask = target_mask[:, None]
@@ -220,7 +219,7 @@ class Mask2FormerHungarianMatcher(nn.Module):
 
             # compute the cross entropy loss between each mask pairs -> shape (num_queries, num_labels)
             cost_mask = pair_wise_sigmoid_cross_entropy_loss(pred_mask, target_mask)
-            # Compute the dice loss betwen each mask pairs -> shape (num_queries, num_labels)
+            # Compute the dice loss between each mask pairs -> shape (num_queries, num_labels)
             cost_dice = pair_wise_dice_loss(pred_mask, target_mask)
             # final cost matrix
             cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
@@ -228,7 +227,7 @@ class Mask2FormerHungarianMatcher(nn.Module):
             cost_matrix = torch.minimum(cost_matrix, torch.tensor(1e10))
             cost_matrix = torch.maximum(cost_matrix, torch.tensor(-1e10))
             cost_matrix = torch.nan_to_num(cost_matrix, 0)
-            # do the assigmented using the hungarian algorithm in scipy
+            # do the assignment using the hungarian algorithm in scipy
             assigned_indices: Tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)
 
@@ -270,7 +269,6 @@ def dice_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
     return loss
 
 
-# Copied from transformers.models.mask2former.modeling_mask2former.sigmoid_cross_entropy_loss
 def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_masks: int) -> torch.Tensor:
     r"""
     Args:
@@ -290,10 +288,11 @@ def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_m
     return loss
 
 
+# Adapted from https://github.com/facebookresearch/Mask2Former/blob/main/mask2former/modeling/criterion.py
 class Mask2FormerLoss(nn.Module):
     def __init__(self, config: EoMTConfig, weight_dict: Dict[str, float]):
         """
-        The EoMT Loss. The loss is computed very similar to DETR. The process happens in two steps: 1) we
+        The Mask2Former Loss. The loss is computed very similar to DETR. The process happens in two steps: 1) we
         compute hungarian assignment between ground truth masks and the outputs of the model 2) we supervise each pair
         of matched ground-truth / prediction (supervise class and mask)
 
@@ -1098,10 +1097,44 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.model = EoMTModel(config)
-        self.class_predictor = nn.Linear(config.hidden_size, config.num_labels + 1)
 
-        # Initialize model weights randomly.
+        self.weight_dict: Dict[str, float] = {
+            "loss_cross_entropy": config.class_weight,
+            "loss_mask": config.mask_weight,
+            "loss_dice": config.dice_weight,
+        }
+
+        self.class_predictor = nn.Linear(config.hidden_dim, config.num_labels + 1)
+
+        self.criterion = Mask2FormerLoss(config=config, weight_dict=self.weight_dict)
         self.post_init()
+
+    def get_loss_dict(
+        self,
+        masks_queries_logits: Tensor,
+        class_queries_logits: Tensor,
+        mask_labels: Tensor,
+        class_labels: Tensor,
+        auxiliary_predictions: Dict[str, Tensor],
+    ) -> Dict[str, Tensor]:
+        loss_dict: Dict[str, Tensor] = self.criterion(
+            masks_queries_logits=masks_queries_logits,
+            class_queries_logits=class_queries_logits,
+            mask_labels=mask_labels,
+            class_labels=class_labels,
+            auxiliary_predictions=auxiliary_predictions,
+        )
+
+        # weight each loss by `self.weight_dict[<LOSS_NAME>]` including auxiliary losses
+        for key, weight in self.weight_dict.items():
+            for loss_key, loss in loss_dict.items():
+                if key in loss_key:
+                    loss *= weight
+
+        return loss_dict
+
+    def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
+        return sum(loss_dict.values())
 
     # A better place to add this func
     def _predict(self, logits: torch.Tensor):
