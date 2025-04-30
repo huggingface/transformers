@@ -22,11 +22,13 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_bitsandbytes,
+    require_deterministic_for_xpu,
     require_read_token,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -292,7 +294,7 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 class Mistral3IntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
@@ -325,7 +327,14 @@ class Mistral3IntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "Sure, here's a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace."
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "Sure, here is a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace.",
+                ("cuda", 7): "Sure, here's a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace.",
+                ("cuda", 8): "Sure, here is a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace.",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
         self.assertEqual(decoded_output, expected_output)
 
     @require_read_token
@@ -352,10 +361,20 @@ class Mistral3IntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "The image depicts two cats lying on a pink blanket. The larger cat, which appears to be an"
+
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "The image features two cats resting on a pink blanket. The cat on the left is a kitten",
+                ("cuda", 7): "The image depicts two cats lying on a pink blanket. The larger cat, which appears to be an",
+                ("cuda", 8): "The image features two cats resting on a pink blanket. The cat on the left is a kitten",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(decoded_output, expected_output)
 
     @require_read_token
+    @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = Mistral3ForConditionalGeneration.from_pretrained(
@@ -388,9 +407,19 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
+        gen_tokens = output[:, inputs["input_ids"].shape[1] :]
+
         # Check first output
-        decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        expected_output = "Write a haiku for this imageSure, here is a haiku inspired by the image:\n\nCalm lake's mirror gleams,\nWhispering pines"
+        decoded_output = processor.decode(gen_tokens[0], skip_special_tokens=True)
+
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "Calm lake's mirror gleams,\nWhispering pines stand in silence,\nPath to peace begins.",
+                ("cuda", 7): "Sure, here is a haiku inspired by the image:\n\nCalm lake's mirror gleams,\nWhispering pines",
+                ("cuda", 8): "Calm lake's mirror gleams,\nWhispering pines stand in silence,\nPath to peace begins.",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -398,8 +427,15 @@ class Mistral3IntegrationTest(unittest.TestCase):
         )
 
         # Check second output
-        decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = "Describe this imageThe image depicts a vibrant street scene in what appears to be a Chinatown district. The focal point is a traditional Chinese"
+        decoded_output = processor.decode(gen_tokens[1], skip_special_tokens=True)
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "The image depicts a vibrant urban scene in what appears to be Chinatown. The focal point is a traditional Chinese archway",
+                ("cuda", 7): "The image depicts a vibrant street scene in what appears to be a Chinatown district. The focal point is a traditional Chinese",
+                ("cuda", 8): "The image depicts a vibrant urban scene in what appears to be Chinatown. The focal point is a traditional Chinese archway",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -408,6 +444,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
     @require_read_token
     @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         quantization_config = BitsAndBytesConfig(load_in_4bit=True)
@@ -451,10 +488,18 @@ class Mistral3IntegrationTest(unittest.TestCase):
         ).to(model.device, dtype=torch.float16)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
+        gen_tokens = output[:, inputs["input_ids"].shape[1] :]
 
         # Check first output
-        decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        expected_output = "Write a haiku for this imageSure, here is a haiku inspired by the image:\n\nCalm lake's wooden path\nSilent forest stands guard\n"
+        decoded_output = processor.decode(gen_tokens[0], skip_special_tokens=True)
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "Still lake reflects skies,\nWooden path to nature's heart,\nSilence speaks volumes.",
+                ("cuda", 7): "Sure, here is a haiku inspired by the image:\n\nCalm lake's wooden path\nSilent forest stands guard\n",
+                ("cuda", 8): "Still lake reflects skies,\nWooden path to nature's heart,\nSilence speaks volumes.",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -462,8 +507,16 @@ class Mistral3IntegrationTest(unittest.TestCase):
         )
 
         # Check second output
-        decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = "These images depict two different landmarks. Can you identify them?Certainly! The images depict two iconic landmarks:\n\n1. The first image shows the Statue of Liberty in New York City."
+        decoded_output = processor.decode(gen_tokens[1], skip_special_tokens=True)
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "Certainly! The images depict two iconic landmarks:\n\n1. The first image shows the Statue of Liberty in New York City.",
+                ("cuda", 7): "Certainly! The images depict two iconic landmarks:\n\n1. The first image shows the Statue of Liberty in New York City.",
+                ("cuda", 8): "Certainly! The images depict two iconic landmarks:\n\n1. The first image shows the Statue of Liberty in New York City.",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(
             decoded_output,
             expected_output,
