@@ -323,11 +323,11 @@ def sdpa_mask(
 
         # In this case, we only need to use a single mask everywhere
         if local_mask_kv_length == full_mask_kv_length:
-            sizes_and_patterns = [(full_mask_kv_offset, full_mask_kv_length, sliding_window, chunk_size)]
+            sizes_and_patterns = [(full_mask_kv_offset, full_mask_kv_length, None, None)]
         else:
             sizes_and_patterns = [
                 (local_mask_kv_offset, local_mask_kv_length, sliding_window, chunk_size),
-                (full_mask_kv_offset, full_mask_kv_length, sliding_window, chunk_size),
+                (full_mask_kv_offset, full_mask_kv_length, None, None),
             ]
     elif isinstance(past_key_values, HybridChunkedCache):
         local_mask_kv_offset = torch.clamp(first_cache_position - local_attention_size + 1, min=0)
