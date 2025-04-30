@@ -4553,9 +4553,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
 
-        # attach hook to lm_head if needed
-
-
         # Set model in evaluation mode to deactivate DropOut modules by default
         model.eval()
 

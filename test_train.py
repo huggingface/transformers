@@ -158,6 +158,12 @@ def main():
 
     logger.info("Single training step completed.")
 
+    # Save model
+    model.save_pretrained(f"test_model_{rank}", safe_serialization=False)
+
+    # TODO: make loading topo-aware
+    # model = AutoModelForCausalLM.from_pretrained("test_model", tp_plan="auto", device_mesh=tp_device_mesh)
+
     # Clean up distributed environment
     if dist.is_initialized():
         dist.destroy_process_group()
