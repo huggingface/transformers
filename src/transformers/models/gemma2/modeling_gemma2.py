@@ -289,7 +289,7 @@ class Gemma2DecoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         
         if isinstance(attention_mask, list):
-            attention_mask = attention_mask[1] if self.is_sliding else attention_mask[0]
+            attention_mask = attention_mask[0] if self.is_sliding else attention_mask[1]
 
         residual = hidden_states
 
