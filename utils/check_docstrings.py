@@ -1020,8 +1020,6 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
             if overwrite:
                 fix_docstring(obj, old_doc, new_doc)
             else:
-                print("old_doc", old_doc)
-                print("new_doc", new_doc)
                 failures.append(name)
         elif not overwrite and new_doc is not None and ("<fill_type>" in new_doc or "<fill_docstring>" in new_doc):
             to_clean.append(name)

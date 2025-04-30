@@ -250,8 +250,6 @@ def _sanity_check_splits(splits_1, splits_2, is_class, filename):
             )
 
     if block_names_1 != block_names_2:
-        print(splits_1)
-        print(splits_2)
         raise ValueError(f"In {filename}, two code blocks expected to be copies have different structures.")
 
 
