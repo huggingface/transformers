@@ -127,7 +127,6 @@ for output in outputs:
     print(f"Result: {output['generated_text']}")
 ```
 
-In this revised approach, the few-shot example (the first text-date pair) is represented by a "user" turn and an "assistant" turn. The subsequent input for the model to complete is another "user" turn. The `apply_chat_template` method then formats these turns into the appropriate input for the Mistral model.
 
 While the original few-shot prompting approach embedded examples within a single text string, using the chat template format can offer benefits by more closely mirroring the model's training:
 
