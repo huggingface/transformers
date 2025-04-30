@@ -2989,6 +2989,10 @@ else:
     BACKEND_MANUAL_SEED = {"default": None}
     BACKEND_EMPTY_CACHE = {"default": None}
     BACKEND_DEVICE_COUNT = {"default": lambda: 0}
+    BACKEND_RESET_MAX_MEMORY_ALLOCATED = {"default": None}
+    BACKEND_MAX_MEMORY_ALLOCATED = {"default": 0}
+    BACKEND_MEMORY_ALLOCATED = {"default": 0}
+
 
 if is_torch_hpu_available():
     BACKEND_MANUAL_SEED["hpu"] = torch.hpu.manual_seed
