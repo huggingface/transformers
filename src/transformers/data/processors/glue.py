@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" GLUE processors and helpers"""
+"""GLUE processors and helpers"""
 
 import os
 import warnings
@@ -101,7 +101,7 @@ if is_tf_available():
 
         return tf.data.Dataset.from_generator(
             gen,
-            ({k: tf.int32 for k in input_names}, label_type),
+            (dict.fromkeys(input_names, tf.int32), label_type),
             ({k: tf.TensorShape([None]) for k in input_names}, tf.TensorShape([])),
         )
 

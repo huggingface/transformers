@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 Pegasus model."""
-
+"""TF 2.0 Pegasus model."""
 
 from __future__ import annotations
 
@@ -934,7 +933,7 @@ class TFPegasusDecoder(keras.layers.Layer):
         encoder_attention_mask: tf.Tensor | None = None,
         head_mask: tf.Tensor | None = None,
         cross_attn_head_mask: tf.Tensor | None = None,
-        past_key_values: Tuple[Tuple[tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1171,7 +1170,7 @@ class TFPegasusMainLayer(keras.layers.Layer):
         decoder_head_mask: tf.Tensor | None = None,
         cross_attn_head_mask: tf.Tensor | None = None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
-        past_key_values: Tuple[Tuple[tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         inputs_embeds: tf.Tensor | None = None,
         decoder_inputs_embeds: tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
@@ -1570,3 +1569,6 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLangua
         if getattr(self, "bias_layer", None) is not None:
             with tf.name_scope(self.bias_layer.name):
                 self.bias_layer.build(None)
+
+
+__all__ = ["TFPegasusForConditionalGeneration", "TFPegasusModel", "TFPegasusPreTrainedModel"]

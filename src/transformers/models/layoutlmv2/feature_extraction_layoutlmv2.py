@@ -19,12 +19,14 @@ Feature extractor class for LayoutLMv2.
 import warnings
 
 from ...utils import logging
+from ...utils.import_utils import requires
 from .image_processing_layoutlmv2 import LayoutLMv2ImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class LayoutLMv2FeatureExtractor(LayoutLMv2ImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
@@ -33,3 +35,6 @@ class LayoutLMv2FeatureExtractor(LayoutLMv2ImageProcessor):
             FutureWarning,
         )
         super().__init__(*args, **kwargs)
+
+
+__all__ = ["LayoutLMv2FeatureExtractor"]

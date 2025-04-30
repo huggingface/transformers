@@ -20,7 +20,7 @@ To create the package for pypi.
 1. Create the release branch named: v<RELEASE>-release, for example v4.19-release. For a patch release checkout the
    current release branch.
 
-   If releasing on a special branch, copy the updated README.md on the main branch for your the commit you will make
+   If releasing on a special branch, copy the updated README.md on the main branch for the commit you will make
    for the post-release and run `make fix-copies` on the main branch as well.
 
 2. Run `make pre-release` (or `make pre-patch` for a patch release) and commit these changes with the message:
@@ -96,14 +96,14 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow>=10.0.1,<=15.0",
-    "accelerate>=0.21.0",
-    "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
+    "accelerate>=0.26.0",
+    "av",
     "beautifulsoup4",
-    "codecarbon==1.2.0",
+    "blobfile",
+    "codecarbon>=2.8.1",
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets!=2.5.0",
-    "decord==0.6.0",
     "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",
@@ -112,30 +112,34 @@ _deps = [
     "fastapi",
     "filelock",
     "flax>=0.4.1,<=0.7.0",
-    "fsspec<2023.10.0",
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.19.3,<1.0",
+    "hf_xet",
+    "huggingface-hub>=0.30.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
     "jax>=0.4.1,<=0.4.13",
     "jaxlib>=0.4.1,<=0.4.13",
     "jieba",
-    "kenlm",
+    "jinja2>=3.1.0",
+    "kenlm@git+https://github.com/ydshieh/kenlm@78f664fb3dafe1468d868d71faf19534530698d5",
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
-    "keras<2.16",
-    "keras-nlp>=0.3.1",
+    "keras>2.9,<2.16",
+    "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
+    "kernels>=0.4.4,<0.5",
     "librosa",
-    "nltk",
     "natten>=0.14.6,<0.15.0",
+    "nltk<=3.8.1",
+    "num2words",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
     "opencv-python",
+    "optimum-benchmark>=0.3.0",
     "optuna",
     "optax>=0.0.8,<=0.1.4",
     "packaging>=20.0",
@@ -145,22 +149,30 @@ _deps = [
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
-    "pytest>=7.2.0,<8.0.0",
+    "pytest>=7.2.0",
+    "pytest-asyncio",
+    "pytest-rerunfailures",
     "pytest-timeout",
     "pytest-xdist",
-    "python>=3.8.0",
+    "pytest-order",
+    "python>=3.9.0",
     "ray[tune]>=2.7.0",
     "regex!=2019.12.17",
     "requests",
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
-    "ruff==0.1.5",
+    "ruff==0.11.2",
+    # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
+    # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
+    # `Trainer` tests (see references to `run_translation.py`).
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
-    "safetensors>=0.4.1",
+    "safetensors>=0.4.3",
     "sagemaker>=2.31.0",
+    "schedulefree>=1.2.6",
     "scikit-learn",
+    "scipy<1.13.0",  # SciPy >= 1.13.0 is not supported with the current jax pin (`jax>=0.4.1,<=0.4.13`)
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
     "starlette",
@@ -168,14 +180,16 @@ _deps = [
     "sudachidict_core>=20220729",
     "tensorboard",
     # TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
-    "tensorflow-cpu>=2.6,<2.16",
-    "tensorflow>=2.6,<2.16",
+    "tensorflow-cpu>2.9,<2.16",
+    "tensorflow>2.9,<2.16",
     "tensorflow-text<2.16",
+    "tensorflow-probability<0.24",
     "tf2onnx",
     "timeout-decorator",
-    "timm",
-    "tokenizers>=0.14,<0.19",
-    "torch",
+    "tiktoken",
+    "timm<=1.0.11",
+    "tokenizers>=0.21,<0.22",
+    "torch>=2.1,<2.7",  # Installing torch 2.7 results in slower compiled LLMs. Pinned while we investigate.
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -184,6 +198,9 @@ _deps = [
     "unidic_lite>=1.0.7",
     "urllib3<2.0.0",
     "uvicorn",
+    "pytest-rich",
+    "libcst",
+    "rich",
 ]
 
 
@@ -257,17 +274,26 @@ extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachip
 extras["sklearn"] = deps_list("scikit-learn")
 
 extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
-extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
+extras["tf-cpu"] = deps_list(
+    "keras",
+    "tensorflow-cpu",
+    "onnxconverter-common",
+    "tf2onnx",
+    "tensorflow-text",
+    "keras-nlp",
+    "tensorflow-probability",
+)
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
+extras["hf_xet"] = deps_list("hf_xet")
 
 if os.name == "nt":  # windows
     extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows
     extras["flax"] = []  # jax is not supported on windows
 else:
     extras["retrieval"] = deps_list("faiss-cpu", "datasets")
-    extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax")
+    extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax", "scipy")
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["ftfy"] = deps_list("ftfy")
@@ -280,11 +306,17 @@ extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
 extras["sigopt"] = deps_list("sigopt")
+extras["hub-kernels"] = deps_list("kernels")
 
-extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
+extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
+extras["audio"] = deps_list(
+    "librosa",
+    "pyctcdecode",
+    "phonemizer",
+    "kenlm@git+https://github.com/ydshieh/kenlm@78f664fb3dafe1468d868d71faf19534530698d5",
+)
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
@@ -295,13 +327,18 @@ extras["timm"] = deps_list("timm")
 extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
-extras["video"] = deps_list("decord", "av")
-
+extras["video"] = deps_list("av")
+extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
+extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["testing"] = (
     deps_list(
         "pytest",
+        "pytest-asyncio",
+        "pytest-rich",
         "pytest-xdist",
+        "pytest-order",
+        "pytest-rerunfailures",
         "timeout-decorator",
         "parameterized",
         "psutil",
@@ -310,25 +347,24 @@ extras["testing"] = (
         "evaluate",
         "pytest-timeout",
         "ruff",
-        "sacrebleu",
         "rouge-score",
         "nltk",
         "GitPython",
-        "hf-doc-builder",
-        "protobuf",  # Can be removed once we can unpin protobuf
         "sacremoses",
         "rjieba",
         "beautifulsoup4",
         "tensorboard",
         "pydantic",
+        "sentencepiece",
+        "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
     )
     + extras["retrieval"]
     + extras["modelcreation"]
 )
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
-
-extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "hf-doc-builder", "urllib3")
+extras["ruff"] = deps_list("ruff")
+extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "urllib3", "libcst", "rich")
 
 extras["all"] = (
     extras["tf"]
@@ -344,13 +380,9 @@ extras["all"] = (
     + extras["codecarbon"]
     + extras["accelerate"]
     + extras["video"]
+    + extras["num2words"]
 )
 
-# Might need to add doc-builder and some specific deps in the future
-extras["docs_specific"] = ["hf-doc-builder"]
-
-# "docs" needs "all" to resolve all the references
-extras["docs"] = extras["all"] + extras["docs_specific"]
 
 extras["dev-torch"] = (
     extras["testing"]
@@ -365,10 +397,10 @@ extras["dev-torch"] = (
     + extras["codecarbon"]
     + extras["quality"]
     + extras["ja"]
-    + extras["docs_specific"]
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnxruntime"]
+    + extras["num2words"]
 )
 extras["dev-tensorflow"] = (
     extras["testing"]
@@ -377,20 +409,13 @@ extras["dev-tensorflow"] = (
     + extras["tokenizers"]
     + extras["vision"]
     + extras["quality"]
-    + extras["docs_specific"]
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnx"]
     + extras["tf-speech"]
 )
 extras["dev"] = (
-    extras["all"]
-    + extras["testing"]
-    + extras["quality"]
-    + extras["ja"]
-    + extras["docs_specific"]
-    + extras["sklearn"]
-    + extras["modelcreation"]
+    extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["sklearn"] + extras["modelcreation"]
 )
 
 extras["torchhub"] = deps_list(
@@ -408,9 +433,7 @@ extras["torchhub"] = deps_list(
     "tqdm",
 )
 
-extras["agents"] = deps_list(
-    "diffusers", "accelerate", "datasets", "torch", "sentencepiece", "opencv-python", "Pillow"
-)
+extras["benchmark"] = deps_list("optimum-benchmark")
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
@@ -428,7 +451,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.39.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.52.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
@@ -440,11 +463,11 @@ setup(
     package_dir={"": "src"},
     packages=find_packages("src"),
     include_package_data=True,
-    package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx"]},
+    package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx", "py.typed"]},
     zip_safe=False,
     extras_require=extras,
-    entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
-    python_requires=">=3.8.0",
+    entry_points={"console_scripts": ["transformers=transformers.commands.transformers_cli:main", "transformers-cli=transformers.commands.transformers_cli:main_cli"]},
+    python_requires=">=3.9.0",
     install_requires=list(install_requires),
     classifiers=[
         "Development Status :: 5 - Production/Stable",
@@ -454,10 +477,22 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},
 )
+
+extras["tests_torch"] = deps_list()
+extras["tests_tf"] = deps_list()
+extras["tests_flax"] = deps_list()
+extras["tests_hub"] = deps_list()
+extras["tests_pipelines_torch"] = deps_list()
+extras["tests_pipelines_tf"] = deps_list()
+extras["tests_onnx"] = deps_list()
+extras["tests_examples_torch"] = deps_list()
+extras["tests_examples_tf"] = deps_list()
+extras["tests_custom_tokenizers"] = deps_list()
+extras["tests_exotic_models"] = deps_list()
+extras["consistency"] = deps_list()

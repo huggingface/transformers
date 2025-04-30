@@ -26,7 +26,7 @@ specific language governing permissions and limitations under the License.
 始める前に、必要なライブラリがすべてインストールされていることを確認してください：
 
 ```bash
-!pip install transformers datasets
+!pip install transformers datasets evaluate accelerate
 ```
 
 あなたはまた、好きな機械学習フレームワークをインストールする必要があります:
@@ -386,8 +386,8 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```py
 >>> from transformers import AutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
->>> pt_model = AutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
+>>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
+>>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
 
 </pt>
@@ -396,8 +396,8 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```py
 >>> from transformers import TFAutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
+>>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
+>>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
 ```
 </tf>
 </frameworkcontent>
@@ -516,7 +516,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ...     args=training_args,
 ...     train_dataset=dataset["train"],
 ...     eval_dataset=dataset["test"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=data_collator,
 ... )  # doctest: +SKIP
 ```
@@ -535,7 +535,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 [`Trainer`]内のメソッドをサブクラス化することで、トレーニングループの動作をカスタマイズできます。これにより、損失関数、オプティマイザ、スケジューラなどの機能をカスタマイズできます。サブクラス化できるメソッドの一覧については、[`Trainer`]リファレンスをご覧ください。
 
-トレーニングループをカスタマイズする別の方法は、[Callbacks](./main_classes/callbacks)を使用することです。コールバックを使用して他のライブラリと統合し、トレーニングループを監視して進捗状況を報告したり、トレーニングを早期に停止したりできます。コールバックはトレーニングループ自体には何も変更を加えません。損失関数などのカスタマイズを行う場合は、[`Trainer`]をサブクラス化する必要があります。
+トレーニングループをカスタマイズする別の方法は、[Callbacks](./main_classes/callback)を使用することです。コールバックを使用して他のライブラリと統合し、トレーニングループを監視して進捗状況を報告したり、トレーニングを早期に停止したりできます。コールバックはトレーニングループ自体には何も変更を加えません。損失関数などのカスタマイズを行う場合は、[`Trainer`]をサブクラス化する必要があります。
 
 ## Train with TensorFlow
 

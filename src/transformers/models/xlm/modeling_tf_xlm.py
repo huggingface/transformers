@@ -13,9 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- TF 2.0 XLM model.
+TF 2.0 XLM model.
 """
-
 
 from __future__ import annotations
 
@@ -65,20 +64,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "FacebookAI/xlm-mlm-en-2048"
 _CONFIG_FOR_DOC = "XLMConfig"
-
-TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "FacebookAI/xlm-mlm-en-2048",
-    "FacebookAI/xlm-mlm-ende-1024",
-    "FacebookAI/xlm-mlm-enfr-1024",
-    "FacebookAI/xlm-mlm-enro-1024",
-    "FacebookAI/xlm-mlm-tlm-xnli15-1024",
-    "FacebookAI/xlm-mlm-xnli15-1024",
-    "FacebookAI/xlm-clm-enfr-1024",
-    "FacebookAI/xlm-clm-ende-1024",
-    "FacebookAI/xlm-mlm-17-1280",
-    "FacebookAI/xlm-mlm-100-1280",
-    # See all XLM models at https://huggingface.co/models?filter=xlm
-]
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
@@ -614,7 +599,7 @@ class TFXLMWithLMHeadModelOutput(ModelOutput):
             heads.
     """
 
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
 
@@ -1358,3 +1343,15 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFXLMForMultipleChoice",
+    "TFXLMForQuestionAnsweringSimple",
+    "TFXLMForSequenceClassification",
+    "TFXLMForTokenClassification",
+    "TFXLMMainLayer",
+    "TFXLMModel",
+    "TFXLMPreTrainedModel",
+    "TFXLMWithLMHeadModel",
+]

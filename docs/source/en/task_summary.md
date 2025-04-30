@@ -305,10 +305,7 @@ There are two types of language modeling:
     ...     for pred in preds
     ... ]
     >>> preds
-    [{'score': 0.2236,
-      'token': 1761,
-      'token_str': ' platform',
-      'sequence': 'Hugging Face is a community-based open-source platform for machine learning.'}]
+    [{'score': 0.224, 'token': 3944, 'token_str': ' tool', 'sequence': 'Hugging Face is a community-based open-source tool for machine learning.'}]
     ```
 
 ## Multimodal
@@ -326,7 +323,7 @@ Document question answering is a task that answers natural language questions fr
 >>> from PIL import Image
 >>> import requests
 
->>> url = "https://datasets-server.huggingface.co/assets/hf-internal-testing/example-documents/--/hf-internal-testing--example-documents/test/2/image/image.jpg"
+>>> url = "https://huggingface.co/datasets/hf-internal-testing/example-documents/resolve/main/jpeg_images/2.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> doc_question_answerer = pipeline("document-question-answering", model="magorshunov/layoutlm-invoices")

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for ALBERT model."""
-
+"""Tokenization classes for ALBERT model."""
 
 import os
 import unicodedata
@@ -24,38 +23,17 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "albert/albert-base-v1": "https://huggingface.co/albert/albert-base-v1/resolve/main/spiece.model",
-        "albert/albert-large-v1": "https://huggingface.co/albert/albert-large-v1/resolve/main/spiece.model",
-        "albert/albert-xlarge-v1": "https://huggingface.co/albert/albert-xlarge-v1/resolve/main/spiece.model",
-        "albert/albert-xxlarge-v1": "https://huggingface.co/albert/albert-xxlarge-v1/resolve/main/spiece.model",
-        "albert/albert-base-v2": "https://huggingface.co/albert/albert-base-v2/resolve/main/spiece.model",
-        "albert/albert-large-v2": "https://huggingface.co/albert/albert-large-v2/resolve/main/spiece.model",
-        "albert/albert-xlarge-v2": "https://huggingface.co/albert/albert-xlarge-v2/resolve/main/spiece.model",
-        "albert/albert-xxlarge-v2": "https://huggingface.co/albert/albert-xxlarge-v2/resolve/main/spiece.model",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "albert/albert-base-v1": 512,
-    "albert/albert-large-v1": 512,
-    "albert/albert-xlarge-v1": 512,
-    "albert/albert-xxlarge-v1": 512,
-    "albert/albert-base-v2": 512,
-    "albert/albert-large-v2": 512,
-    "albert/albert-xlarge-v2": 512,
-    "albert/albert-xxlarge-v2": 512,
-}
 
 SPIECE_UNDERLINE = "▁"
 
 
+@requires(backends=("sentencepiece",))
 class AlbertTokenizer(PreTrainedTokenizer):
     """
     Construct an ALBERT tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -130,8 +108,6 @@ class AlbertTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -369,3 +345,6 @@ class AlbertTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["AlbertTokenizer"]

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast tokenization class for BlenderbotSmall."""
+
 from typing import List, Optional
 
 from tokenizers import ByteLevelBPETokenizer
@@ -30,24 +31,6 @@ VOCAB_FILES_NAMES = {
     "tokenizer_config_file": "tokenizer_config.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/vocab.json"
-    },
-    "merges_file": {
-        "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/merges.txt"
-    },
-    "tokenizer_config_file": {
-        "facebook/blenderbot_small-90M": (
-            "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/tokenizer_config.json"
-        )
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/blenderbot_small-90M": 512,
-}
-
 
 class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
     """
@@ -59,8 +42,6 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = BlenderbotSmallTokenizer
 
     def __init__(
@@ -118,23 +99,5 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
-    @property
-    # Copied from transformers.models.blenderbot.tokenization_blenderbot.BlenderbotTokenizer.default_chat_template
-    def default_chat_template(self):
-        """
-        A very simple chat template that just adds whitespace between messages.
-        """
-        logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
-        )
-        return (
-            "{% for message in messages %}"
-            "{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}"
-            "{{ message['content'] }}"
-            "{% if not loop.last %}{{ '  ' }}{% endif %}"
-            "{% endfor %}"
-            "{{ eos_token }}"
-        )
+
+__all__ = ["BlenderbotSmallTokenizerFast"]

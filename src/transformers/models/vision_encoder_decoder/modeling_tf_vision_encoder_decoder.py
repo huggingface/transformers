@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Classes to support TF Vision-Encoder-Text-Decoder architectures"""
-
+"""Classes to support TF Vision-Encoder-Text-Decoder architectures"""
 
 from __future__ import annotations
 
@@ -310,8 +309,8 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
     @classmethod
     def from_encoder_decoder_pretrained(
         cls,
-        encoder_pretrained_model_name_or_path: str = None,
-        decoder_pretrained_model_name_or_path: str = None,
+        encoder_pretrained_model_name_or_path: Optional[str] = None,
+        decoder_pretrained_model_name_or_path: Optional[str] = None,
         *model_args,
         **kwargs,
     ) -> TFPreTrainedModel:
@@ -341,7 +340,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
                       `decoder_from_pt` should be set to `True`.
 
             model_args (remaining positional arguments, *optional*):
-                All remaning positional arguments will be passed to the underlying model's `__init__` method.
+                All remaining positional arguments will be passed to the underlying model's `__init__` method.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
@@ -696,3 +695,6 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         if getattr(self, "decoder", None) is not None:
             with tf.name_scope(self.decoder.name):
                 self.decoder.build(None)
+
+
+__all__ = ["TFVisionEncoderDecoderModel"]

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax mT5 model."""
+"""Flax mT5 model."""
 
 import jax.numpy as jnp
 
@@ -118,3 +118,6 @@ class FlaxMT5ForConditionalGeneration(FlaxT5ForConditionalGeneration):
 
     model_type = "mt5"
     config_class = MT5Config
+
+
+__all__ = ["FlaxMT5EncoderModel", "FlaxMT5ForConditionalGeneration", "FlaxMT5Model"]

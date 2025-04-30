@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert GPT Neo checkpoint."""
 
-
 import argparse
 import json
 

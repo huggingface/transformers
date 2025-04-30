@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Chinese-CLIP model. """
+"""Testing suite for the PyTorch Chinese-CLIP model."""
 
 import inspect
 import os
@@ -48,7 +47,6 @@ if is_torch_available():
         ChineseCLIPTextModel,
         ChineseCLIPVisionModel,
     )
-    from transformers.models.chinese_clip.modeling_chinese_clip import CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -356,7 +354,6 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -385,34 +382,28 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ChineseCLIPTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
+        model = ChineseCLIPTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="ChineseCLIPTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="ChineseCLIPTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
 
@@ -442,7 +433,7 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -467,37 +458,31 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="ChineseCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="ChineseCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ChineseCLIPVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
+        model = ChineseCLIPVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class ChineseCLIPModelTester:
@@ -510,6 +495,7 @@ class ChineseCLIPModelTester:
         self.parent = parent
         self.text_model_tester = ChineseCLIPTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = ChineseCLIPVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -589,10 +575,10 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         pass
 
     @unittest.skip(reason="ChineseCLIPModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for CHINESE_CLIP
+    # override as the `logit_scale` parameter initialization is different for CHINESE_CLIP
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -604,7 +590,7 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
+                    # check if `logit_scale` is initialized as per the original implementation
                     if name == "logit_scale":
                         self.assertAlmostEqual(
                             param.data.item(),
@@ -621,7 +607,7 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -692,9 +678,9 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ChineseCLIPModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
+        model = ChineseCLIPModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of Pikachu
@@ -735,4 +721,42 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
         probs = outputs.logits_per_image.softmax(dim=1)
         expected_probs = torch.tensor([[1.2686e-03, 5.4499e-02, 6.7968e-04, 9.4355e-01]], device=torch_device)
 
-        self.assertTrue(torch.allclose(probs, expected_probs, atol=5e-3))
+        torch.testing.assert_close(probs, expected_probs, rtol=5e-3, atol=5e-3)
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # ViT models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
+        model = ChineseCLIPModel.from_pretrained(model_name).to(torch_device)
+
+        image_processor = ChineseCLIPProcessor.from_pretrained(
+            model_name, size={"height": 180, "width": 180}, crop_size={"height": 180, "width": 180}
+        )
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = image_processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+
+        # interpolate_pos_encodiung false should return value error
+        with self.assertRaises(ValueError, msg="doesn't match model"):
+            with torch.no_grad():
+                model(**inputs, interpolate_pos_encoding=False)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 122, 768))
+
+        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[-0.3990, 0.2983, -0.1239], [-0.1452, -0.2759, 0.0403], [-0.3149, -0.4763, 0.8555]]
+        ).to(torch_device)
+
+        torch.testing.assert_close(
+            outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )

@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tensorflow Longformer model."""
 
-
 from __future__ import annotations
 
 import warnings
@@ -56,15 +55,6 @@ _CONFIG_FOR_DOC = "LongformerConfig"
 
 LARGE_NEGATIVE = -1e8
 
-TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "allenai/longformer-base-4096",
-    "allenai/longformer-large-4096",
-    "allenai/longformer-large-4096-finetuned-triviaqa",
-    "allenai/longformer-base-4096-extra.pos.embd.only",
-    "allenai/longformer-large-4096-extra.pos.embd.only",
-    # See all Longformer models at https://huggingface.co/models?filter=longformer
-]
-
 
 @dataclass
 class TFLongformerBaseModelOutput(ModelOutput):
@@ -103,7 +93,7 @@ class TFLongformerBaseModelOutput(ModelOutput):
             in the sequence.
     """
 
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
     global_attentions: Tuple[tf.Tensor, ...] | None = None
@@ -150,8 +140,8 @@ class TFLongformerBaseModelOutputWithPooling(ModelOutput):
             in the sequence.
     """
 
-    last_hidden_state: tf.Tensor = None
-    pooler_output: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
+    pooler_output: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
     global_attentions: Tuple[tf.Tensor, ...] | None = None
@@ -197,7 +187,7 @@ class TFLongformerMaskedLMOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
     global_attentions: Tuple[tf.Tensor, ...] | None = None
@@ -245,8 +235,8 @@ class TFLongformerQuestionAnsweringModelOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    start_logits: tf.Tensor = None
-    end_logits: tf.Tensor = None
+    start_logits: Optional[tf.Tensor] = None
+    end_logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
     global_attentions: Tuple[tf.Tensor, ...] | None = None
@@ -292,7 +282,7 @@ class TFLongformerSequenceClassifierOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
     global_attentions: Tuple[tf.Tensor, ...] | None = None
@@ -340,7 +330,7 @@ class TFLongformerMultipleChoiceModelOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
     global_attentions: Tuple[tf.Tensor, ...] | None = None
@@ -386,7 +376,7 @@ class TFLongformerTokenClassifierOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
     global_attentions: Tuple[tf.Tensor, ...] | None = None
@@ -756,12 +746,12 @@ class TFLongformerSelfAttention(keras.layers.Layer):
         self.layer_id = layer_id
         attention_window = config.attention_window[self.layer_id]
 
-        assert (
-            attention_window % 2 == 0
-        ), f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
-        assert (
-            attention_window > 0
-        ), f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        assert attention_window % 2 == 0, (
+            f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
+        )
+        assert attention_window > 0, (
+            f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        )
 
         self.one_sided_attn_window_size = attention_window // 2
 
@@ -2782,3 +2772,15 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFLongformerForMaskedLM",
+    "TFLongformerForMultipleChoice",
+    "TFLongformerForQuestionAnswering",
+    "TFLongformerForSequenceClassification",
+    "TFLongformerForTokenClassification",
+    "TFLongformerModel",
+    "TFLongformerPreTrainedModel",
+    "TFLongformerSelfAttention",
+]

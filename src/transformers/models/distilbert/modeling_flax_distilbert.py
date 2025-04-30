@@ -275,9 +275,9 @@ class FlaxTransformerBlock(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        assert (
-            self.config.dim % self.config.n_heads == 0
-        ), f"Hidden size {self.config.dim} not dividable by number of heads {self.config.n_heads}"
+        assert self.config.dim % self.config.n_heads == 0, (
+            f"Hidden size {self.config.dim} not dividable by number of heads {self.config.n_heads}"
+        )
 
         self.attention = FlaxMultiHeadSelfAttention(self.config, dtype=self.dtype)
         self.sa_layer_norm = nn.LayerNorm(epsilon=1e-12, dtype=self.dtype)
@@ -304,7 +304,7 @@ class FlaxTransformerBlock(nn.Module):
         if output_attentions:
             sa_output, sa_weights = sa_output
         else:
-            assert type(sa_output) == tuple
+            assert type(sa_output) is tuple
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + hidden_states)
 
@@ -459,7 +459,7 @@ class FlaxDistilBertPreTrainedModel(FlaxPreTrainedModel):
         input_ids,
         attention_mask=None,
         head_mask=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -861,7 +861,7 @@ class FlaxDistilBertForQuestionAnsweringModule(nn.Module):
 
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         logits = self.qa_outputs(hidden_states)
-        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits, end_logits = jnp.split(logits, self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
@@ -893,3 +893,14 @@ append_call_sample_docstring(
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+
+__all__ = [
+    "FlaxDistilBertForMaskedLM",
+    "FlaxDistilBertForMultipleChoice",
+    "FlaxDistilBertForQuestionAnswering",
+    "FlaxDistilBertForSequenceClassification",
+    "FlaxDistilBertForTokenClassification",
+    "FlaxDistilBertModel",
+    "FlaxDistilBertPreTrainedModel",
+]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,13 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Deformable DETR model. """
-
+"""Testing suite for the PyTorch Deformable DETR model."""
 
 import inspect
 import math
 import unittest
-from typing import Dict, List, Tuple
 
 from transformers import DeformableDetrConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.file_utils import cached_property
@@ -32,7 +29,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -189,7 +185,7 @@ class DeformableDetrModelTester:
 
 
 @require_torch
-class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DeformableDetrModel, DeformableDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-feature-extraction": DeformableDetrModel, "object-detection": DeformableDetrForObjectDetection}
@@ -201,6 +197,7 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -231,15 +228,15 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
     def setUp(self):
         self.model_tester = DeformableDetrModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DeformableDetrConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=DeformableDetrConfig,
+            has_text_modality=False,
+            common_properties=["num_channels", "d_model", "encoder_attention_heads", "decoder_attention_heads"],
+        )
 
     def test_config(self):
-        # we don't test common_properties and arguments_init as these don't apply for Deformable DETR
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.run_common_tests()
 
     def test_deformable_detr_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -253,8 +250,12 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="Deformable DETR does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(reason="Deformable DETR does not have a get_input_embeddings method")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="Deformable DETR is not a generative model")
@@ -381,10 +382,10 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -521,8 +522,9 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
         # let's pick a random timm backbone
         config.backbone = "tf_mobilenetv3_small_075"
-        config.use_timm_backbone = True
         config.backbone_config = None
+        config.use_timm_backbone = True
+        config.backbone_kwargs = {"out_indices": [1, 2, 3, 4]}
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -538,6 +540,43 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propagated to backbone
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+            else:
+                # Confirm out_indices was propagated to backbone
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+
+            self.assertTrue(outputs)
+
+    def test_hf_backbone(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Load a pretrained HF checkpoint as backbone
+        config.backbone = "microsoft/resnet-18"
+        config.backbone_config = None
+        config.use_timm_backbone = False
+        config.use_pretrained_backbone = True
+        config.backbone_kwargs = {"out_indices": [1, 2, 3, 4]}
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if model_class.__name__ == "DeformableDetrForObjectDetection":
+                expected_shape = (
+                    self.model_tester.batch_size,
+                    self.model_tester.num_queries,
+                    self.model_tester.num_labels,
+                )
+                self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propagated to backbone
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+            else:
+                # Confirm out_indices was propagated to backbone
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
 
             self.assertTrue(outputs)
 
@@ -564,6 +603,18 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
+
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+        pass
+
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
+        pass
 
     def test_two_stage_training(self):
         model_class = DeformableDetrForObjectDetection
@@ -644,11 +695,11 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
             [[0.8693, 0.2289, 0.2492], [0.3150, 0.5489, 0.5845], [0.5563, 0.7580, 0.8518]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-4, atol=1e-4)
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
@@ -659,9 +710,9 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         expected_slice_boxes = torch.tensor([16.5028, 52.8390, 318.2544, 470.7841]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
-        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
+        torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-4, atol=1e-4)
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
-        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
+        torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes)
 
     def test_inference_object_detection_head_with_box_refine_two_stage(self):
         model = DeformableDetrForObjectDetection.from_pretrained(
@@ -687,11 +738,11 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
             [[0.2583, 0.5499, 0.4683], [0.7652, 0.9068, 0.4882], [0.5490, 0.2763, 0.0564]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-4, atol=1e-4)
 
     @require_torch_accelerator
     def test_inference_object_detection_head_equivalence_cpu_gpu(self):

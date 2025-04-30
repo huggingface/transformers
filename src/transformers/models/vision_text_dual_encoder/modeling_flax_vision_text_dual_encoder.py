@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax VisionTextDualEncoder model."""
-
+"""Flax VisionTextDualEncoder model."""
 
 from typing import Optional, Tuple
 
@@ -42,7 +41,7 @@ VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     should be fine-tuned on a downstream task, like contrastive image-text modeling.
 
     In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://arxiv.org/abs/2111.07991) it is shown how
-    leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvment
+    leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvement
     on new zero-shot vision tasks such as image classification or retrieval.
 
     After such a Vision-Text-Dual-Encoder model has been trained/fine-tuned, it can be saved/loaded just like any other
@@ -274,7 +273,7 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         attention_mask=None,
         position_ids=None,
         token_type_ids=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -323,7 +322,7 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         attention_mask=None,
         position_ids=None,
         token_type_ids=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train=False,
     ):
@@ -380,7 +379,7 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         )
 
     def get_image_features(
-        self, pixel_values, params: dict = None, dropout_rng: jax.random.PRNGKey = None, train=False
+        self, pixel_values, params: Optional[dict] = None, dropout_rng: jax.random.PRNGKey = None, train=False
     ):
         r"""
         Args:
@@ -415,8 +414,8 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
     @classmethod
     def from_vision_text_pretrained(
         cls,
-        vision_model_name_or_path: str = None,
-        text_model_name_or_path: str = None,
+        vision_model_name_or_path: Optional[str] = None,
+        text_model_name_or_path: Optional[str] = None,
         *model_args,
         **kwargs,
     ) -> FlaxPreTrainedModel:
@@ -445,7 +444,7 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
                       conversion scripts and loading the Flax model afterwards.
 
             model_args (remaining positional arguments, *optional*):
-                All remaning positional arguments will be passed to the underlying model's `__init__` method.
+                All remaining positional arguments will be passed to the underlying model's `__init__` method.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
@@ -597,3 +596,6 @@ overwrite_call_docstring(
 append_replace_return_docstrings(
     FlaxVisionTextDualEncoderModel, output_type=FlaxCLIPOutput, config_class=_CONFIG_FOR_DOC
 )
+
+
+__all__ = ["FlaxVisionTextDualEncoderModel"]

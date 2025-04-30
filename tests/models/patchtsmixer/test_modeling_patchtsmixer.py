@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 IBM and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,14 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch PatchTSMixer model. """
+"""Testing suite for the PyTorch PatchTSMixer model."""
 
 import inspect
 import itertools
 import random
 import tempfile
 import unittest
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -28,6 +27,7 @@ from parameterized import parameterized
 from transformers import is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.utils import check_torch_load_is_safe
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -92,12 +92,12 @@ class PatchTSMixerModelTester:
         head_dropout: float = 0.2,
         # forecast related
         prediction_length: int = 16,
-        out_channels: int = None,
+        out_channels: Optional[int] = None,
         # Classification/regression related
         # num_labels: int = 3,
         num_targets: int = 3,
-        output_range: list = None,
-        head_aggregation: str = None,
+        output_range: Optional[list] = None,
+        head_aggregation: Optional[str] = None,
         # Trainer related
         batch_size=13,
         is_training=True,
@@ -219,9 +219,6 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (
-        (PatchTSMixerForPrediction, PatchTSMixerForPretraining) if is_torch_available() else ()
-    )
     pipeline_model_mapping = {"feature-extraction": PatchTSMixerModel} if is_torch_available() else {}
     is_encoder_decoder = False
     test_pruning = False
@@ -229,7 +226,6 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_missing_keys = False
     test_torchscript = False
     test_inputs_embeds = False
-    test_model_common_attributes = False
 
     test_resize_embeddings = True
     test_resize_position_embeddings = False
@@ -318,7 +314,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         for model_class in self.all_model_classes:
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip("No tokens embeddings")
+    @unittest.skip(reason="No tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
@@ -337,10 +333,10 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
                 dict_output = tuple(attributes_.values())
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -448,11 +444,16 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_retain_grad_hidden_states_attentions(self):
         super().test_retain_grad_hidden_states_attentions()
 
+    @unittest.skip(reason="Model does not have input embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
+
 
 def prepare_batch(repo_id="ibm/patchtsmixer-etth1-test-data", file="pretrain_batch.pt"):
     # TODO: Make repo public
     file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
-    batch = torch.load(file, map_location=torch_device)
+    check_torch_load_is_safe()
+    batch = torch.load(file, map_location=torch_device, weights_only=True)
     return batch
 
 
@@ -480,7 +481,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor([[[[-0.9106]],[[1.5326]],[[-0.8245]],[[0.7439]],[[-0.7830]],[[2.6256]],[[-0.6485]],]],device=torch_device)  # fmt: skip
-        self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[0, :7, :1, :1], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_forecasting_head(self):
         model = PatchTSMixerForPrediction.from_pretrained("ibm/patchtsmixer-etth1-forecasting").to(torch_device)
@@ -501,7 +502,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
             [[0.2471, 0.5036, 0.3596, 0.5401, -0.0985, 0.3423, -0.8439]],
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[0, :1, :7], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_prediction_generation(self):
         model = PatchTSMixerForPrediction.from_pretrained("ibm/patchtsmixer-etth1-generate").to(torch_device)
@@ -523,7 +524,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
 
         mean_prediction = outputs.sequences.mean(dim=1)
 
-        self.assertTrue(torch.allclose(mean_prediction[0, -1:], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(mean_prediction[0, -1:], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
 
 @require_torch

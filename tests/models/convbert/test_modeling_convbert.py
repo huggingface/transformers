@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ConvBERT model. """
+"""Testing suite for the PyTorch ConvBERT model."""
+
 import os
 import tempfile
 import unittest
@@ -38,7 +38,6 @@ if is_torch_available():
         ConvBertForTokenClassification,
         ConvBertModel,
     )
-    from transformers.models.convbert.modeling_convbert import CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ConvBertModelTester:
@@ -307,9 +306,9 @@ class ConvBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ConvBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "YituTech/conv-bert-base"
+        model = ConvBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -433,7 +432,7 @@ class ConvBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         for model_class in self.all_model_classes:
             # ConvBertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == ConvBertForMultipleChoice:
-                return
+                self.skipTest(reason="ConvBertForMultipleChoice behaves incorrectly in JIT environments.")
 
             config.torchscript = True
             model = model_class(config=config)
@@ -481,4 +480,4 @@ class ConvBertModelIntegrationTest(unittest.TestCase):
             [[[-0.0864, -0.4898, -0.3677], [0.1434, -0.2952, -0.7640], [-0.0112, -0.4432, -0.5432]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

@@ -12,20 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TrOCR model configuration"""
+"""TrOCR model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/trocr-base-handwritten": (
-        "https://huggingface.co/microsoft/trocr-base-handwritten/resolve/main/config.json"
-    ),
-    # See all TrOCR models at https://huggingface.co/models?filter=trocr
-}
 
 
 class TrOCRConfig(PretrainedConfig):
@@ -148,3 +141,6 @@ class TrOCRConfig(PretrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
+
+
+__all__ = ["TrOCRConfig"]

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow ResNet model."""
+"""TensorFlow ResNet model."""
 
 from typing import Optional, Tuple, Union
 
@@ -48,11 +48,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "microsoft/resnet-50"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
-
-TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/resnet-50",
-    # See all resnet models at https://huggingface.co/models?filter=resnet
-]
 
 
 class TFResNetConvLayer(keras.layers.Layer):
@@ -557,10 +552,10 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
     @unpack_inputs
     def call(
         self,
-        pixel_values: tf.Tensor = None,
-        labels: tf.Tensor = None,
-        output_hidden_states: bool = None,
-        return_dict: bool = None,
+        pixel_values: Optional[tf.Tensor] = None,
+        labels: Optional[tf.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[Tuple[tf.Tensor], TFImageClassifierOutputWithNoAttention]:
         r"""
@@ -596,3 +591,6 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
         if getattr(self, "classifier_layer", None) is not None:
             with tf.name_scope(self.classifier_layer.name):
                 self.classifier_layer.build([None, None, self.config.hidden_sizes[-1]])
+
+
+__all__ = ["TFResNetForImageClassification", "TFResNetModel", "TFResNetPreTrainedModel"]

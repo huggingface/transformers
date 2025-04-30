@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch DecisionTransformer model. """
-
+"""Testing suite for the PyTorch DecisionTransformer model."""
 
 import inspect
 import unittest
@@ -21,7 +19,6 @@ import unittest
 from transformers import DecisionTransformerConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -31,9 +28,6 @@ if is_torch_available():
     import torch
 
     from transformers import DecisionTransformerModel
-    from transformers.models.decision_transformer.modeling_decision_transformer import (
-        DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 
 
 class DecisionTransformerModelTester:
@@ -45,7 +39,6 @@ class DecisionTransformerModelTester:
         act_dim=6,
         state_dim=17,
         hidden_size=23,
-        max_length=11,
         is_training=True,
     ):
         self.parent = parent
@@ -54,7 +47,6 @@ class DecisionTransformerModelTester:
         self.act_dim = act_dim
         self.state_dim = state_dim
         self.hidden_size = hidden_size
-        self.max_length = max_length
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -84,7 +76,6 @@ class DecisionTransformerModelTester:
             act_dim=self.act_dim,
             state_dim=self.state_dim,
             hidden_size=self.hidden_size,
-            max_length=self.max_length,
         )
 
     def create_and_check_model(
@@ -132,9 +123,8 @@ class DecisionTransformerModelTester:
 
 
 @require_torch
-class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class DecisionTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DecisionTransformerModel,) if is_torch_available() else ()
-    all_generative_model_classes = ()
     pipeline_model_mapping = {"feature-extraction": DecisionTransformerModel} if is_torch_available() else {}
 
     # Ignoring of a failing test from GenerationTesterMixin, as the model does not use inputs_ids
@@ -147,7 +137,6 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
     test_attention_outputs = False
     test_hidden_states_output = False
     test_inputs_embeds = False
-    test_model_common_attributes = False
     test_gradient_checkpointing = False
     test_torchscript = False
 
@@ -164,9 +153,9 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DecisionTransformerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "edbeeching/decision-transformer-gym-hopper-medium"
+        model = DecisionTransformerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -187,6 +176,10 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
             ]
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    @unittest.skip(reason="Model does not have input embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
 
 
 @require_torch
@@ -235,7 +228,7 @@ class DecisionTransformerModelIntegrationTest(unittest.TestCase):
                 )
 
             self.assertEqual(action_pred.shape, actions.shape)
-            self.assertTrue(torch.allclose(action_pred[0, -1], expected_outputs[step], atol=1e-4))
+            torch.testing.assert_close(action_pred[0, -1], expected_outputs[step], rtol=1e-4, atol=1e-4)
             state, reward, _, _ = (  # env.step(action)
                 torch.randn(1, 1, config.state_dim).to(device=torch_device, dtype=torch.float32),
                 1.0,

@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for Flaubert."""
 
-
 import json
 import os
 import re
@@ -30,47 +29,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
     "merges_file": "merges.txt",
-}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "flaubert/flaubert_small_cased": (
-            "https://huggingface.co/flaubert/flaubert_small_cased/resolve/main/vocab.json"
-        ),
-        "flaubert/flaubert_base_uncased": (
-            "https://huggingface.co/flaubert/flaubert_base_uncased/resolve/main/vocab.json"
-        ),
-        "flaubert/flaubert_base_cased": "https://huggingface.co/flaubert/flaubert_base_cased/resolve/main/vocab.json",
-        "flaubert/flaubert_large_cased": (
-            "https://huggingface.co/flaubert/flaubert_large_cased/resolve/main/vocab.json"
-        ),
-    },
-    "merges_file": {
-        "flaubert/flaubert_small_cased": (
-            "https://huggingface.co/flaubert/flaubert_small_cased/resolve/main/merges.txt"
-        ),
-        "flaubert/flaubert_base_uncased": (
-            "https://huggingface.co/flaubert/flaubert_base_uncased/resolve/main/merges.txt"
-        ),
-        "flaubert/flaubert_base_cased": "https://huggingface.co/flaubert/flaubert_base_cased/resolve/main/merges.txt",
-        "flaubert/flaubert_large_cased": (
-            "https://huggingface.co/flaubert/flaubert_large_cased/resolve/main/merges.txt"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "flaubert/flaubert_small_cased": 512,
-    "flaubert/flaubert_base_uncased": 512,
-    "flaubert/flaubert_base_cased": 512,
-    "flaubert/flaubert_large_cased": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "flaubert/flaubert_small_cased": {"do_lowercase": False},
-    "flaubert/flaubert_base_uncased": {"do_lowercase": True},
-    "flaubert/flaubert_base_cased": {"do_lowercase": False},
-    "flaubert/flaubert_large_cased": {"do_lowercase": False},
 }
 
 
@@ -216,9 +174,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -291,6 +246,7 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         self.cache = {}
 
         super().__init__(
+            do_lowercase=do_lowercase,
             unk_token=unk_token,
             bos_token=bos_token,
             sep_token=sep_token,
@@ -607,3 +563,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
             )
 
         self.sm = sacremoses
+
+
+__all__ = ["FlaubertTokenizer"]

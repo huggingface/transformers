@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,7 +31,6 @@ if is_tf_available():
 
     from transformers.modeling_tf_utils import keras
     from transformers.models.esm.modeling_tf_esm import (
-        TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFEsmForMaskedLM,
         TFEsmForSequenceClassification,
         TFEsmForTokenClassification,
@@ -238,7 +236,7 @@ class TFEsmModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model_as_decoder(self):
         """Test the base model as a decoder (of an encoder-decoder architecture)
 
-        is_deocder=True + cross_attention + pass encoder outputs
+        is_decoder=True + cross_attention + pass encoder outputs
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
@@ -253,9 +251,9 @@ class TFEsmModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFEsmModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/esm2_t6_8M_UR50D"
+        model = TFEsmModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip("Protein models do not support embedding resizing.")
     def test_resize_token_embeddings(self):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 HuggingFace Inc..
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +20,7 @@ import sys
 from time import time
 from unittest.mock import patch
 
-from transformers.testing_utils import TestCasePlus, require_torch_tpu
+from transformers.testing_utils import TestCasePlus, require_torch_xla
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -33,7 +32,7 @@ def get_results(output_dir):
     results = {}
     path = os.path.join(output_dir, "all_results.json")
     if os.path.exists(path):
-        with open(path, "r") as f:
+        with open(path) as f:
             results = json.load(f)
     else:
         raise ValueError(f"can't find {path}")
@@ -44,7 +43,7 @@ stream_handler = logging.StreamHandler(sys.stdout)
 logger.addHandler(stream_handler)
 
 
-@require_torch_tpu
+@require_torch_xla
 class TorchXLAExamplesTests(TestCasePlus):
     def test_run_glue(self):
         import xla_spawn

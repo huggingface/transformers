@@ -12,9 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 "AWQ (Activation aware Weight Quantization) integration file"
+
+import importlib
+
+from packaging import version
+
 from ..activations import ACT2FN
 from ..modeling_utils import PreTrainedModel
-from ..utils import is_auto_awq_available, is_torch_available
+from ..utils import is_auto_awq_available, is_ipex_available, is_torch_available, logging
 from ..utils.quantization_config import (
     AwqBackendPackingMethod,
     AwqConfig,
@@ -27,6 +32,7 @@ if is_torch_available():
     import torch
     import torch.nn as nn
 
+logger = logging.get_logger(__name__)
 
 AWQ_FUSED_MAPPINGS = {
     "mistral": {
@@ -56,6 +62,34 @@ AWQ_FUSED_MAPPINGS = {
     },
 }
 
+AWQ_SCALES_MAPPINGS = {
+    "starcoder2": {"act": "act", "layer_before_act": "c_fc"},
+    "RefinedWebModel": {"act": "act", "layer_before_act": "dense_h_to_4h"},
+    "falcon": {"act": "act", "layer_before_act": "dense_h_to_4h"},
+    "mpt": {"act": "act", "layer_before_act": "up_proj"},
+    "gptj": {"act": "act", "layer_before_act": "fc_in"},
+    "gpt_neox": {"act": "act", "layer_before_act": "dense_h_to_4h"},
+    "gpt_bigcode": {"act": "act", "layer_before_act": "c_fc"},
+    "bloom": {"act": "gelu_impl", "layer_before_act": "dense_h_to_4h"},
+}
+
+
+def replace_quantization_scales(model, model_type):
+    from awq.modules.act import ScaledActivation
+
+    if model_type not in AWQ_SCALES_MAPPINGS:
+        return model
+    for name, module in model.named_children():
+        act_name = AWQ_SCALES_MAPPINGS[model_type]["act"]
+        layer_before_act_name = AWQ_SCALES_MAPPINGS[model_type]["layer_before_act"]
+        if name == act_name and hasattr(model, layer_before_act_name):
+            layer_before_act = getattr(model, AWQ_SCALES_MAPPINGS[model_type]["layer_before_act"])
+            size = layer_before_act.out_features
+            scale_like = torch.ones(size)
+            model._modules[name] = ScaledActivation(module, scale_like)
+        _ = replace_quantization_scales(module, model_type)
+    return model
+
 
 def replace_with_awq_linear(
     model,
@@ -67,7 +101,7 @@ def replace_with_awq_linear(
     """
     Public method that recursively replaces the Linear layers of the given model with AWQ quantized layers.
     `accelerate` is needed to use this method. Returns the converted model and a boolean that indicates if the
-    conversion has been successfull or not.
+    conversion has been successful or not.
 
     During the module replacement, we also infer the backend to use through the `quantization_config` object.
 
@@ -115,6 +149,10 @@ def replace_with_awq_linear(
                 target_cls = WQLinear_ExllamaV2
             else:
                 raise ValueError(f"Unrecognized Exllama version: {quantization_config.exllama_config['version']}")
+        elif quantization_config.version == AWQLinearVersion.IPEX:
+            from awq.modules.linear.gemm_ipex import WQLinear_IPEX
+
+            target_cls = WQLinear_IPEX
         else:
             raise ValueError(f"Unrecognized AWQ version: {quantization_config.version}")
     else:
@@ -169,7 +207,7 @@ def get_modules_to_fuse(model, quantization_config):
             The quantization configuration to use.
     """
     if not isinstance(model, PreTrainedModel):
-        raise ValueError(f"The model should be an instance of `PreTrainedModel`, got {model.__class__.__name__}")
+        raise TypeError(f"The model should be an instance of `PreTrainedModel`, got {model.__class__.__name__}")
 
     # Always default to `quantization_config.modules_to_fuse`
     if quantization_config.modules_to_fuse is not None:
@@ -179,10 +217,7 @@ def get_modules_to_fuse(model, quantization_config):
         current_fused_mapping = AWQ_FUSED_MAPPINGS[model.config.model_type]
 
         # Properly deal with the case where we have a multi-modal model as well (e.g. Llava)
-        if not hasattr(model.config, "text_config"):
-            config = model.config
-        else:
-            config = model.config.text_config
+        config = model.config.get_text_config(decoder=True)
 
         # Handle hidden_size, num_attention_heads, num_key_value_heads on our own.
         hidden_size = config.hidden_size
@@ -229,6 +264,8 @@ def fuse_awq_modules(model, quantization_config):
     else:
         raise ValueError("Fusing is only supported for the AutoAWQ backend")
 
+    fused_attention_modules = []
+
     for name, module in model.named_modules():
         if modules_to_not_convert is not None:
             if any(module_name_to_not_convert in name for module_name_to_not_convert in modules_to_not_convert):
@@ -237,11 +274,30 @@ def fuse_awq_modules(model, quantization_config):
         # Replace layer norms
         _fuse_awq_layernorm(modules_to_fuse["layernorm"], module, FasterTransformerRMSNorm)
 
-        # Replace MLP layers
-        _fuse_awq_mlp(model, name, modules_to_fuse["mlp"], module, QuantFusedMLP)
+        # Replace MLP layers if awq version is not ipex.
+        if quantization_config.version != "ipex":
+            _fuse_awq_mlp(model, name, modules_to_fuse["mlp"], module, QuantFusedMLP)
+        else:
+            logger.info("The IPEX version AWQ does not support fuse mlp for now.")
 
         # Replace attention layers
-        _fuse_awq_attention_layers(model, module, modules_to_fuse, name, QuantAttentionFused)
+        attention_has_been_fused = _fuse_awq_attention_layers(
+            model, module, modules_to_fuse, name, QuantAttentionFused
+        )
+
+        if attention_has_been_fused:
+            fused_attention_modules.append(name.split(".")[0])
+
+    # For AWQ fused + Llama we need to set `config._attn_implementation` = "custom" to avoid unexpected behavior and pass
+    # `None` attention mask to the fused attention modules as now the attention mask is dropped by our models and dealt
+    # by the `AttentionMaskConverter` module.
+    if len(fused_attention_modules) > 0:
+        for module_name, module in model.named_modules():
+            if any(
+                module_name in fused_attention_modules for fused_attention_parent_module in fused_attention_modules
+            ):
+                if hasattr(module, "config") and hasattr(module.config, "_attn_implementation"):
+                    module.config._attn_implementation = "custom"
     return model
 
 
@@ -297,11 +353,8 @@ def _fuse_awq_mlp(model, current_module_name, fuse_module_names, module, target_
         previous_device = gate_proj.qweight.device
 
         # Deal also with the case model has `text_config` attribute
-        hidden_act = (
-            model.config.hidden_act
-            if not hasattr(model.config, "text_config")
-            else model.config.text_config.hidden_act
-        )
+        config = model.config.get_text_config(decoder=True)
+        hidden_act = config.hidden_act
         activation_fn = ACT2FN[hidden_act]
         new_module = target_cls(gate_proj, down_proj, up_proj, activation_fn)
 
@@ -332,8 +385,10 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
     """
     from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
 
+    module_has_been_fused = False
+
     if len(modules_to_fuse["attention"]) == 0:
-        return
+        return module_has_been_fused
 
     if hasattr(module, modules_to_fuse["attention"][0]):
         # First, we pack the QKV layers together
@@ -345,6 +400,12 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
         elif isinstance(q_proj, WQLinear_GEMM):
             linear_target_cls = WQLinear_GEMM
             cat_dim = 1
+        elif is_ipex_available() and version.parse(importlib.metadata.version("autoawq")) > version.parse("0.2.6"):
+            from awq.modules.linear import WQLinear_IPEX
+
+            if isinstance(q_proj, WQLinear_IPEX):
+                linear_target_cls = WQLinear_IPEX
+                cat_dim = 1
         else:
             raise ValueError("Unsupported q_proj type: {type(q_proj)}")
 
@@ -394,6 +455,9 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
         setattr(parent, child_name, fused_attention_layer.to(previous_device))
 
         del q_proj, k_proj, v_proj, o_proj
+        module_has_been_fused = True
+
+    return module_has_been_fused
 
 
 def post_init_awq_exllama_modules(model, exllama_config):
@@ -417,5 +481,18 @@ def post_init_awq_exllama_modules(model, exllama_config):
         )
     else:
         raise ValueError(f"Unrecognized Exllama version: {exllama_config['version']}")
+
+    return model
+
+
+def post_init_awq_ipex_modules(model):
+    """
+    Runs post init for IPEX layers which performs:
+        - Weights packing, reordering and repacking
+    """
+
+    from awq.modules.linear.gemm_ipex import ipex_post_init
+
+    model = ipex_post_init(model)
 
     return model

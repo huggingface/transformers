@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for model Reformer."""
-
+"""Tokenization class for model Reformer."""
 
 import os
 from shutil import copyfile
@@ -23,6 +22,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -32,19 +32,8 @@ SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/reformer-crime-and-punishment": (
-            "https://huggingface.co/google/reformer-crime-and-punishment/resolve/main/spiece.model"
-        )
-    }
-}
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/reformer-crime-and-punishment": 524288,
-}
-
-
+@requires(backends=("sentencepiece",))
 class ReformerTokenizer(PreTrainedTokenizer):
     """
     Construct a Reformer tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece) .
@@ -89,8 +78,6 @@ class ReformerTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -184,3 +171,6 @@ class ReformerTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["ReformerTokenizer"]

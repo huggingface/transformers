@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 XLM-RoBERTa model."""
-
+"""TF 2.0 XLM-RoBERTa model."""
 
 from __future__ import annotations
 
@@ -67,13 +66,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "FacebookAI/xlm-roberta-base"
 _CONFIG_FOR_DOC = "XLMRobertaConfig"
 
-TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "FacebookAI/xlm-roberta-base",
-    "FacebookAI/xlm-roberta-large",
-    "joeddav/xlm-roberta-large-xnli",
-    "cardiffnlp/twitter-xlm-roberta-base-sentiment",
-    # See all XLM-RoBERTa models at https://huggingface.co/models?filter=xlm-roberta
-]
 
 XLM_ROBERTA_START_DOCSTRING = r"""
 
@@ -1785,3 +1777,15 @@ class TFXLMRobertaForQuestionAnswering(TFXLMRobertaPreTrainedModel, TFQuestionAn
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFXLMRobertaForCausalLM",
+    "TFXLMRobertaForMaskedLM",
+    "TFXLMRobertaForMultipleChoice",
+    "TFXLMRobertaForQuestionAnswering",
+    "TFXLMRobertaForSequenceClassification",
+    "TFXLMRobertaForTokenClassification",
+    "TFXLMRobertaModel",
+    "TFXLMRobertaPreTrainedModel",
+]

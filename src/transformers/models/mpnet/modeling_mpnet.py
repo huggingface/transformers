@@ -15,7 +15,6 @@
 # limitations under the License.
 """PyTorch MPNet model."""
 
-
 import math
 from typing import Optional, Tuple, Union
 
@@ -45,14 +44,8 @@ _CHECKPOINT_FOR_DOC = "microsoft/mpnet-base"
 _CONFIG_FOR_DOC = "MPNetConfig"
 
 
-MPNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/mpnet-base",
-]
-
-
 class MPNetPreTrainedModel(PreTrainedModel):
     config_class = MPNetConfig
-    pretrained_model_archive_map = MPNET_PRETRAINED_MODEL_ARCHIVE_LIST
     base_model_prefix = "mpnet"
 
     def _init_weights(self, module):
@@ -70,6 +63,8 @@ class MPNetPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, MPNetLMHead):
+            module.bias.data.zero_()
 
 
 class MPNetEmbeddings(nn.Module):
@@ -587,6 +582,7 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
+        self.lm_head.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -657,6 +653,9 @@ class MPNetLMHead(nn.Module):
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def _tie_weights(self):
         self.decoder.bias = self.bias
 
     def forward(self, features, **kwargs):
@@ -1053,3 +1052,15 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = torch.cumsum(mask, dim=1).type_as(mask) * mask
     return incremental_indices.long() + padding_idx
+
+
+__all__ = [
+    "MPNetForMaskedLM",
+    "MPNetForMultipleChoice",
+    "MPNetForQuestionAnswering",
+    "MPNetForSequenceClassification",
+    "MPNetForTokenClassification",
+    "MPNetLayer",
+    "MPNetModel",
+    "MPNetPreTrainedModel",
+]

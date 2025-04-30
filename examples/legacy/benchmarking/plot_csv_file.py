@@ -15,7 +15,7 @@
 import csv
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -59,7 +59,7 @@ class PlotArguments:
         default=None,
         metadata={"help": "Filename under which the plot will be saved. If unused no plot is saved."},
     )
-    short_model_names: Optional[List[str]] = list_field(
+    short_model_names: Optional[list[str]] = list_field(
         default=None, metadata={"help": "List of model names that are used instead of the ones in the csv file."}
     )
 
@@ -93,14 +93,14 @@ class Plot:
                 self.result_dict[model_name]["seq_len"].append(int(row["sequence_length"]))
                 if can_convert_to_int(row["result"]):
                     # value is not None
-                    self.result_dict[model_name]["result"][
-                        (int(row["batch_size"]), int(row["sequence_length"]))
-                    ] = int(row["result"])
+                    self.result_dict[model_name]["result"][(int(row["batch_size"]), int(row["sequence_length"]))] = (
+                        int(row["result"])
+                    )
                 elif can_convert_to_float(row["result"]):
                     # value is not None
-                    self.result_dict[model_name]["result"][
-                        (int(row["batch_size"]), int(row["sequence_length"]))
-                    ] = float(row["result"])
+                    self.result_dict[model_name]["result"][(int(row["batch_size"]), int(row["sequence_length"]))] = (
+                        float(row["result"])
+                    )
 
     def plot(self):
         fig, ax = plt.subplots()

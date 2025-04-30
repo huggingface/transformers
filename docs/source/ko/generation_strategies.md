@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 텍스트 생성은 개방형 텍스트 작성, 요약, 번역 등 다양한 자연어 처리(NLP) 작업에 필수적입니다. 이는 또한 음성-텍스트 변환, 시각-텍스트 변환과 같이 텍스트를 출력으로 하는 여러 혼합 모달리티 응용 프로그램에서도 중요한 역할을 합니다. 텍스트 생성을 가능하게 하는 몇몇 모델로는 GPT2, XLNet, OpenAI GPT, CTRL, TransformerXL, XLM, Bart, T5, GIT, Whisper 등이 있습니다.
 
 
-[`~transformers.generation_utils.GenerationMixin.generate`] 메서드를 활용하여 다음과 같은 다양한 작업들에 대해 텍스트 결과물을 생성하는 몇 가지 예시를 살펴보세요:
+[`~generation.GenerationMixin.generate`] 메서드를 활용하여 다음과 같은 다양한 작업들에 대해 텍스트 결과물을 생성하는 몇 가지 예시를 살펴보세요:
 * [텍스트 요약](./tasks/summarization#inference)
 * [이미지 캡셔닝](./model_doc/git#transformers.GitForCausalLM.forward.example)
 * [오디오 전사](./model_doc/whisper#transformers.WhisperForConditionalGeneration.forward.example)
@@ -333,5 +333,5 @@ culture, and they allow us to design the'
 >>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
 >>> outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.5)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Alice and Bob are going to the same party. It is a small party, in a small']
+['Alice and Bob, who were both in their early twenties, were both in the process of']
 ```

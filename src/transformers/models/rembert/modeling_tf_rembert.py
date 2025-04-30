@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 RemBERT model."""
-
+"""TF 2.0 RemBERT model."""
 
 from __future__ import annotations
 
@@ -62,11 +61,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RemBertConfig"
 
-TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/rembert",
-    # See all RemBERT models at https://huggingface.co/models?filter=rembert
-]
-
 
 class TFRemBertEmbeddings(keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
@@ -112,10 +106,10 @@ class TFRemBertEmbeddings(keras.layers.Layer):
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         past_key_values_length=0,
         training: bool = False,
     ) -> tf.Tensor:
@@ -1043,7 +1037,7 @@ REMBERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare RemBERT Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare RemBERT Model transformer outputting raw hidden-states without any specific head on top.",
     REMBERT_START_DOCSTRING,
 )
 class TFRemBertModel(TFRemBertPreTrainedModel):
@@ -1712,3 +1706,16 @@ class TFRemBertForQuestionAnswering(TFRemBertPreTrainedModel, TFQuestionAnswerin
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFRemBertForCausalLM",
+    "TFRemBertForMaskedLM",
+    "TFRemBertForMultipleChoice",
+    "TFRemBertForQuestionAnswering",
+    "TFRemBertForSequenceClassification",
+    "TFRemBertForTokenClassification",
+    "TFRemBertLayer",
+    "TFRemBertModel",
+    "TFRemBertPreTrainedModel",
+]

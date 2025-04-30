@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 ConvNext model."""
-
+"""TF 2.0 ConvNext model."""
 
 from __future__ import annotations
 
@@ -665,3 +664,6 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
             if hasattr(self.classifier, "name"):
                 with tf.name_scope(self.classifier.name):
                     self.classifier.build([None, None, self.config.hidden_sizes[-1]])
+
+
+__all__ = ["TFConvNextForImageClassification", "TFConvNextModel", "TFConvNextPreTrainedModel"]

@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for Bert."""
 
-
 import collections
 import os
 import unicodedata
@@ -27,91 +26,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google-bert/bert-base-uncased": "https://huggingface.co/google-bert/bert-base-uncased/resolve/main/vocab.txt",
-        "google-bert/bert-large-uncased": "https://huggingface.co/google-bert/bert-large-uncased/resolve/main/vocab.txt",
-        "google-bert/bert-base-cased": "https://huggingface.co/google-bert/bert-base-cased/resolve/main/vocab.txt",
-        "google-bert/bert-large-cased": "https://huggingface.co/google-bert/bert-large-cased/resolve/main/vocab.txt",
-        "google-bert/bert-base-multilingual-uncased": (
-            "https://huggingface.co/google-bert/bert-base-multilingual-uncased/resolve/main/vocab.txt"
-        ),
-        "google-bert/bert-base-multilingual-cased": "https://huggingface.co/google-bert/bert-base-multilingual-cased/resolve/main/vocab.txt",
-        "google-bert/bert-base-chinese": "https://huggingface.co/google-bert/bert-base-chinese/resolve/main/vocab.txt",
-        "google-bert/bert-base-german-cased": "https://huggingface.co/google-bert/bert-base-german-cased/resolve/main/vocab.txt",
-        "google-bert/bert-large-uncased-whole-word-masking": (
-            "https://huggingface.co/google-bert/bert-large-uncased-whole-word-masking/resolve/main/vocab.txt"
-        ),
-        "google-bert/bert-large-cased-whole-word-masking": (
-            "https://huggingface.co/google-bert/bert-large-cased-whole-word-masking/resolve/main/vocab.txt"
-        ),
-        "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad": (
-            "https://huggingface.co/google-bert/bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt"
-        ),
-        "google-bert/bert-large-cased-whole-word-masking-finetuned-squad": (
-            "https://huggingface.co/google-bert/bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt"
-        ),
-        "google-bert/bert-base-cased-finetuned-mrpc": (
-            "https://huggingface.co/google-bert/bert-base-cased-finetuned-mrpc/resolve/main/vocab.txt"
-        ),
-        "google-bert/bert-base-german-dbmdz-cased": "https://huggingface.co/google-bert/bert-base-german-dbmdz-cased/resolve/main/vocab.txt",
-        "google-bert/bert-base-german-dbmdz-uncased": (
-            "https://huggingface.co/google-bert/bert-base-german-dbmdz-uncased/resolve/main/vocab.txt"
-        ),
-        "TurkuNLP/bert-base-finnish-cased-v1": (
-            "https://huggingface.co/TurkuNLP/bert-base-finnish-cased-v1/resolve/main/vocab.txt"
-        ),
-        "TurkuNLP/bert-base-finnish-uncased-v1": (
-            "https://huggingface.co/TurkuNLP/bert-base-finnish-uncased-v1/resolve/main/vocab.txt"
-        ),
-        "wietsedv/bert-base-dutch-cased": (
-            "https://huggingface.co/wietsedv/bert-base-dutch-cased/resolve/main/vocab.txt"
-        ),
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google-bert/bert-base-uncased": 512,
-    "google-bert/bert-large-uncased": 512,
-    "google-bert/bert-base-cased": 512,
-    "google-bert/bert-large-cased": 512,
-    "google-bert/bert-base-multilingual-uncased": 512,
-    "google-bert/bert-base-multilingual-cased": 512,
-    "google-bert/bert-base-chinese": 512,
-    "google-bert/bert-base-german-cased": 512,
-    "google-bert/bert-large-uncased-whole-word-masking": 512,
-    "google-bert/bert-large-cased-whole-word-masking": 512,
-    "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad": 512,
-    "google-bert/bert-large-cased-whole-word-masking-finetuned-squad": 512,
-    "google-bert/bert-base-cased-finetuned-mrpc": 512,
-    "google-bert/bert-base-german-dbmdz-cased": 512,
-    "google-bert/bert-base-german-dbmdz-uncased": 512,
-    "TurkuNLP/bert-base-finnish-cased-v1": 512,
-    "TurkuNLP/bert-base-finnish-uncased-v1": 512,
-    "wietsedv/bert-base-dutch-cased": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "google-bert/bert-base-uncased": {"do_lower_case": True},
-    "google-bert/bert-large-uncased": {"do_lower_case": True},
-    "google-bert/bert-base-cased": {"do_lower_case": False},
-    "google-bert/bert-large-cased": {"do_lower_case": False},
-    "google-bert/bert-base-multilingual-uncased": {"do_lower_case": True},
-    "google-bert/bert-base-multilingual-cased": {"do_lower_case": False},
-    "google-bert/bert-base-chinese": {"do_lower_case": False},
-    "google-bert/bert-base-german-cased": {"do_lower_case": False},
-    "google-bert/bert-large-uncased-whole-word-masking": {"do_lower_case": True},
-    "google-bert/bert-large-cased-whole-word-masking": {"do_lower_case": False},
-    "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad": {"do_lower_case": True},
-    "google-bert/bert-large-cased-whole-word-masking-finetuned-squad": {"do_lower_case": False},
-    "google-bert/bert-base-cased-finetuned-mrpc": {"do_lower_case": False},
-    "google-bert/bert-base-german-dbmdz-cased": {"do_lower_case": False},
-    "google-bert/bert-base-german-dbmdz-uncased": {"do_lower_case": True},
-    "TurkuNLP/bert-base-finnish-cased-v1": {"do_lower_case": False},
-    "TurkuNLP/bert-base-finnish-uncased-v1": {"do_lower_case": True},
-    "wietsedv/bert-base-dutch-cased": {"do_lower_case": False},
-}
 
 
 def load_vocab(vocab_file):
@@ -174,12 +88,12 @@ class BertTokenizer(PreTrainedTokenizer):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
+            extra spaces.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -194,6 +108,7 @@ class BertTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         tokenize_chinese_chars=True,
         strip_accents=None,
+        clean_up_tokenization_spaces=True,
         **kwargs,
     ):
         if not os.path.isfile(vocab_file):
@@ -225,6 +140,7 @@ class BertTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
 
@@ -370,7 +286,7 @@ class BertTokenizer(PreTrainedTokenizer):
         return (vocab_file,)
 
 
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -531,7 +447,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
 
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
@@ -544,7 +460,7 @@ class WordpieceTokenizer(object):
         Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
         tokenization using the given vocabulary.
 
-        For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
+        For example, `input = "unaffable"` will return as output `["un", "##aff", "##able"]`.
 
         Args:
             text: A single token or whitespace separated tokens. This should have
@@ -586,3 +502,6 @@ class WordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
+
+
+__all__ = ["BasicTokenizer", "BertTokenizer", "WordpieceTokenizer"]

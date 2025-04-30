@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # X-CLIP
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The X-CLIP model was proposed in [Expanding Language-Image Pretrained Models for General Video Recognition](https://arxiv.org/abs/2208.02816) by Bolin Ni, Houwen Peng, Minghao Chen, Songyang Zhang, Gaofeng Meng, Jianlong Fu, Shiming Xiang, Haibin Ling.
@@ -30,7 +34,7 @@ Tips:
 - Usage of X-CLIP is identical to [CLIP](clip).
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/xclip_architecture.png"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 <small> X-CLIP architecture. Taken from the <a href="https://arxiv.org/abs/2208.02816">original paper.</a> </small>
 

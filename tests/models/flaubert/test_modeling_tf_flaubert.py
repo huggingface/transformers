@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +29,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
-        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         FlaubertConfig,
         TFFlaubertForMultipleChoice,
         TFFlaubertForQuestionAnsweringSimple,
@@ -310,10 +308,17 @@ class TFFlaubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         if (
-            pipeline_test_casse_name == "QAPipelineTests"
+            pipeline_test_case_name == "QAPipelineTests"
             and tokenizer_name is not None
             and not tokenizer_name.endswith("Fast")
         ):
@@ -357,9 +362,9 @@ class TFFlaubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFFlaubertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "hf-internal-testing/tiny-random-flaubert"
+        model = TFFlaubertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf

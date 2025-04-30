@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" LUKE configuration"""
+"""LUKE configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "studio-ousia/luke-base": "https://huggingface.co/studio-ousia/luke-base/resolve/main/config.json",
-    "studio-ousia/luke-large": "https://huggingface.co/studio-ousia/luke-large/resolve/main/config.json",
-}
 
 
 class LukeConfig(PretrainedConfig):
@@ -142,3 +137,6 @@ class LukeConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_entity_aware_attention = use_entity_aware_attention
         self.classifier_dropout = classifier_dropout
+
+
+__all__ = ["LukeConfig"]

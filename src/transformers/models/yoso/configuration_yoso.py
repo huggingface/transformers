@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" YOSO model configuration"""
+"""YOSO model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "uw-madison/yoso-4096": "https://huggingface.co/uw-madison/yoso-4096/resolve/main/config.json",
-    # See all YOSO models at https://huggingface.co/models?filter=yoso
-}
 
 
 class YosoConfig(PretrainedConfig):
@@ -144,3 +139,6 @@ class YosoConfig(PretrainedConfig):
         self.conv_window = conv_window
         self.use_fast_hash = use_fast_hash
         self.lsh_backward = lsh_backward
+
+
+__all__ = ["YosoConfig"]

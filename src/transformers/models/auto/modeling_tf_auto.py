@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Model class."""
-
+"""Auto Model class."""
 
 import warnings
 from collections import OrderedDict
@@ -58,6 +57,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("gptj", "TFGPTJModel"),
         ("groupvit", "TFGroupViTModel"),
         ("hubert", "TFHubertModel"),
+        ("idefics", "TFIdeficsModel"),
         ("layoutlm", "TFLayoutLMModel"),
         ("layoutlmv3", "TFLayoutLMv3Model"),
         ("led", "TFLEDModel"),
@@ -65,6 +65,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("lxmert", "TFLxmertModel"),
         ("marian", "TFMarianModel"),
         ("mbart", "TFMBartModel"),
+        ("mistral", "TFMistralModel"),
         ("mobilebert", "TFMobileBertModel"),
         ("mobilevit", "TFMobileViTModel"),
         ("mpnet", "TFMPNetModel"),
@@ -79,8 +80,10 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("roberta-prelayernorm", "TFRobertaPreLayerNormModel"),
         ("roformer", "TFRoFormerModel"),
         ("sam", "TFSamModel"),
+        ("sam_vision_model", "TFSamVisionModel"),
         ("segformer", "TFSegformerModel"),
         ("speech_to_text", "TFSpeech2TextModel"),
+        ("swiftformer", "TFSwiftFormerModel"),
         ("swin", "TFSwinModel"),
         ("t5", "TFT5Model"),
         ("tapas", "TFTapasModel"),
@@ -111,6 +114,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("funnel", "TFFunnelForPreTraining"),
         ("gpt-sw3", "TFGPT2LMHeadModel"),
         ("gpt2", "TFGPT2LMHeadModel"),
+        ("idefics", "TFIdeficsForVisionText2Text"),
         ("layoutlm", "TFLayoutLMForMaskedLM"),
         ("lxmert", "TFLxmertForPreTraining"),
         ("mobilebert", "TFMobileBertForPreTraining"),
@@ -176,6 +180,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gpt-sw3", "TFGPT2LMHeadModel"),
         ("gpt2", "TFGPT2LMHeadModel"),
         ("gptj", "TFGPTJForCausalLM"),
+        ("mistral", "TFMistralForCausalLM"),
         ("openai-gpt", "TFOpenAIGPTLMHeadModel"),
         ("opt", "TFOPTForCausalLM"),
         ("rembert", "TFRemBertForCausalLM"),
@@ -213,6 +218,7 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("regnet", "TFRegNetForImageClassification"),
         ("resnet", "TFResNetForImageClassification"),
         ("segformer", "TFSegformerForImageClassification"),
+        ("swiftformer", "TFSwiftFormerForImageClassification"),
         ("swin", "TFSwinForImageClassification"),
         ("vit", "TFViTForImageClassification"),
     ]
@@ -317,6 +323,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("layoutlm", "TFLayoutLMForSequenceClassification"),
         ("layoutlmv3", "TFLayoutLMv3ForSequenceClassification"),
         ("longformer", "TFLongformerForSequenceClassification"),
+        ("mistral", "TFMistralForSequenceClassification"),
         ("mobilebert", "TFMobileBertForSequenceClassification"),
         ("mpnet", "TFMPNetForSequenceClassification"),
         ("openai-gpt", "TFOpenAIGPTForSequenceClassification"),
@@ -719,3 +726,51 @@ class TFAutoModelWithLMHead(_TFAutoModelWithLMHead):
             FutureWarning,
         )
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
+
+__all__ = [
+    "TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
+    "TF_MODEL_FOR_CAUSAL_LM_MAPPING",
+    "TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
+    "TF_MODEL_FOR_MASK_GENERATION_MAPPING",
+    "TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
+    "TF_MODEL_FOR_MASKED_LM_MAPPING",
+    "TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
+    "TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
+    "TF_MODEL_FOR_PRETRAINING_MAPPING",
+    "TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+    "TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
+    "TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING",
+    "TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
+    "TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+    "TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
+    "TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
+    "TF_MODEL_FOR_TEXT_ENCODING_MAPPING",
+    "TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
+    "TF_MODEL_FOR_VISION_2_SEQ_MAPPING",
+    "TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING",
+    "TF_MODEL_MAPPING",
+    "TF_MODEL_WITH_LM_HEAD_MAPPING",
+    "TFAutoModel",
+    "TFAutoModelForAudioClassification",
+    "TFAutoModelForCausalLM",
+    "TFAutoModelForImageClassification",
+    "TFAutoModelForMaskedImageModeling",
+    "TFAutoModelForMaskedLM",
+    "TFAutoModelForMaskGeneration",
+    "TFAutoModelForMultipleChoice",
+    "TFAutoModelForNextSentencePrediction",
+    "TFAutoModelForPreTraining",
+    "TFAutoModelForDocumentQuestionAnswering",
+    "TFAutoModelForQuestionAnswering",
+    "TFAutoModelForSemanticSegmentation",
+    "TFAutoModelForSeq2SeqLM",
+    "TFAutoModelForSequenceClassification",
+    "TFAutoModelForSpeechSeq2Seq",
+    "TFAutoModelForTableQuestionAnswering",
+    "TFAutoModelForTextEncoding",
+    "TFAutoModelForTokenClassification",
+    "TFAutoModelForVision2Seq",
+    "TFAutoModelForZeroShotImageClassification",
+    "TFAutoModelWithLMHead",
+]

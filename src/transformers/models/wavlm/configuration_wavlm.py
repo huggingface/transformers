@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" WavLM model configuration"""
+"""WavLM model configuration"""
 
 import functools
 import operator
@@ -22,11 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/wavlm-base": "https://huggingface.co/microsoft/wavlm-base/resolve/main/config.json",
-    # See all WavLM models at https://huggingface.co/models?filter=wavlm
-}
 
 
 class WavLMConfig(PretrainedConfig):
@@ -106,7 +101,7 @@ class WavLMConfig(PretrainedConfig):
             [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
             Recognition](https://arxiv.org/abs/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
-            Propability of each feature vector along the time axis to be chosen as the start of the vector span to be
+            Probability of each feature vector along the time axis to be chosen as the start of the vector span to be
             masked. Approximately `mask_time_prob * sequence_length // mask_time_length` feature vectors will be masked
             along the time axis. This is only relevant if `apply_spec_augment is True`.
         mask_time_length (`int`, *optional*, defaults to 10):
@@ -116,7 +111,7 @@ class WavLMConfig(PretrainedConfig):
             irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
             mask_time_min_masks''
         mask_feature_prob (`float`, *optional*, defaults to 0.0):
-            Propability of each feature vector along the feature axis to be chosen as the start of the vector span to
+            Probability of each feature vector along the feature axis to be chosen as the start of the vector span to
             be masked. Approximately `mask_time_prob * hidden_size // mask_time_length` feature vectors will be masked
             along the time axis. This is only relevant if `apply_spec_augment is True`.
         mask_feature_length (`int`, *optional*, defaults to 10):
@@ -337,3 +332,6 @@ class WavLMConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
+
+
+__all__ = ["WavLMConfig"]

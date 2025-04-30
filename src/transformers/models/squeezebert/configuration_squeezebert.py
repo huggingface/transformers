@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SqueezeBERT model configuration"""
+"""SqueezeBERT model configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 
@@ -22,16 +23,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "squeezebert/squeezebert-uncased": (
-        "https://huggingface.co/squeezebert/squeezebert-uncased/resolve/main/config.json"
-    ),
-    "squeezebert/squeezebert-mnli": "https://huggingface.co/squeezebert/squeezebert-mnli/resolve/main/config.json",
-    "squeezebert/squeezebert-mnli-headless": (
-        "https://huggingface.co/squeezebert/squeezebert-mnli-headless/resolve/main/config.json"
-    ),
-}
 
 
 class SqueezeBertConfig(PretrainedConfig):
@@ -105,12 +96,8 @@ class SqueezeBertConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
-
-    Attributes: pretrained_config_archive_map (Dict[str, str]): A dictionary containing all the available pre-trained
-    checkpoints.
     """
 
-    pretrained_config_archive_map = SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "squeezebert"
 
     def __init__(
@@ -175,3 +162,6 @@ class SqueezeBertOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
+
+
+__all__ = ["SqueezeBertConfig", "SqueezeBertOnnxConfig"]

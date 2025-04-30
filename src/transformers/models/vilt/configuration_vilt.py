@@ -12,17 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" VilT model configuration"""
+"""VilT model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-VILT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "dandelin/vilt-b32-mlm": "https://huggingface.co/dandelin/vilt-b32-mlm/blob/main/config.json"
-}
 
 
 class ViltConfig(PretrainedConfig):
@@ -43,7 +39,7 @@ class ViltConfig(PretrainedConfig):
             The vocabulary size of the `token_type_ids` passed when calling [`ViltModel`]. This is used when encoding
             text.
         modality_type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the modalities passed when calling [`ViltModel`]. This is used after concatening the
+            The vocabulary size of the modalities passed when calling [`ViltModel`]. This is used after concatenating the
             embeddings of the text and image modalities.
         max_position_embeddings (`int`, *optional*, defaults to 40):
             The maximum sequence length that this model might ever be used with.
@@ -146,3 +142,6 @@ class ViltConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.max_image_length = max_image_length
         self.num_images = num_images
+
+
+__all__ = ["ViltConfig"]

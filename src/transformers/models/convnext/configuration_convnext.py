@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ConvNeXT model configuration"""
+"""ConvNeXT model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -26,11 +26,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 
 logger = logging.get_logger(__name__)
-
-CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/convnext-tiny-224": "https://huggingface.co/facebook/convnext-tiny-224/resolve/main/config.json",
-    # See all ConvNeXT models at https://huggingface.co/models?filter=convnext
-}
 
 
 class ConvNextConfig(BackboneConfigMixin, PretrainedConfig):
@@ -46,9 +41,9 @@ class ConvNextConfig(BackboneConfigMixin, PretrainedConfig):
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        patch_size (`int`, optional, defaults to 4):
+        patch_size (`int`, *optional*, defaults to 4):
             Patch size to use in the patch embedding layer.
-        num_stages (`int`, optional, defaults to 4):
+        num_stages (`int`, *optional*, defaults to 4):
             The number of stages in the model.
         hidden_sizes (`List[int]`, *optional*, defaults to [96, 192, 384, 768]):
             Dimensionality (hidden size) at each stage.
@@ -142,3 +137,6 @@ class ConvNextOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-5
+
+
+__all__ = ["ConvNextConfig", "ConvNextOnnxConfig"]

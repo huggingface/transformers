@@ -14,72 +14,97 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# OpenAI GPT2
-
-<div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=gpt2">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-gpt2-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/gpt2">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+  </div>
 </div>
 
-## Overview
 
-OpenAI GPT-2 model was proposed in [Language Models are Unsupervised Multitask Learners](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) by Alec
-Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei and Ilya Sutskever from [OpenAI](https://huggingface.co/openai). It's a causal (unidirectional)
-transformer pretrained using language modeling on a very large corpus of ~40 GB of text data.
+# GPT-2
 
-The abstract from the paper is the following:
+[GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) is a scaled up version of GPT, a causal transformer language model, with 10x more parameters and training data. The model was pretrained on a 40GB dataset to predict the next word in a sequence based on all the previous words. This approach enabled the model to perform many downstream tasks in a zero-shot setting.
 
-*GPT-2 is a large transformer-based language model with 1.5 billion parameters, trained on a dataset[1] of 8 million
-web pages. GPT-2 is trained with a simple objective: predict the next word, given all of the previous words within some
-text. The diversity of the dataset causes this simple goal to contain naturally occurring demonstrations of many tasks
-across diverse domains. GPT-2 is a direct scale-up of GPT, with more than 10X the parameters and trained on more than
-10X the amount of data.*
+The model architecture uses a unidirectional (causal) attention mechanism where each token can only attend to previous tokens, making it particularly effective for text generation tasks.
 
-[Write With Transformer](https://transformer.huggingface.co/doc/gpt2-large) is a webapp created and hosted by
-Hugging Face showcasing the generative capabilities of several models. GPT-2 is one of them and is available in five
-different sizes: small, medium, large, xl and a distilled version of the small checkpoint: *distilgpt-2*.
+You can find all the original GPT-2 checkpoints under the [OpenAI community](https://huggingface.co/openai-community?search_models=gpt) organization.
 
-This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://openai.com/blog/better-language-models/).
+> [!TIP]
+> Click on the GPT-2 models in the right sidebar for more examples of how to apply GPT-2 to different language tasks.
 
-## Usage tips
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
-- GPT-2 is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
-  the left.
-- GPT-2 was trained with a causal language modeling (CLM) objective and is therefore powerful at predicting the next
-  token in a sequence. Leveraging this feature allows GPT-2 to generate syntactically coherent text as it can be
-  observed in the *run_generation.py* example script.
-- The model can take the *past_key_values* (for PyTorch) or *past* (for TF) as input, which is the previously computed
-  key/value attention pairs. Using this (*past_key_values* or *past*) value prevents the model from re-computing
-  pre-computed values in the context of text generation. For PyTorch, see *past_key_values* argument of the
-  [`GPT2Model.forward`] method, or for TF the *past* argument of the
-  [`TFGPT2Model.call`] method for more information on its usage.
-- Enabling the *scale_attn_by_inverse_layer_idx* and *reorder_and_upcast_attn* flags will apply the training stability
-  improvements from [Mistral](https://github.com/stanford-crfm/mistral/) (for PyTorch only).
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-## Resources
+```py
+import torch
+from transformers import pipeline
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with GPT2. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+pipeline = pipeline(task="text-generation", model="openai-community/gpt2", torch_dtype=torch.float16, device=0)
+pipeline("Hello, I'm a language model")
+```
+</hfoption>
+<hfoption id="AutoModel">
 
-<PipelineTag pipeline="text-generation"/>
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-- A blog on how to [Finetune a non-English GPT-2 Model with Hugging Face](https://www.philschmid.de/fine-tune-a-non-english-gpt-2-model-with-huggingface).
-- A blog on [How to generate text: using different decoding methods for language generation with Transformers](https://huggingface.co/blog/how-to-generate) with GPT-2.
-- A blog on [Training CodeParrot 🦜 from Scratch](https://huggingface.co/blog/codeparrot), a large GPT-2 model.
-- A blog on [Faster Text Generation with TensorFlow and XLA](https://huggingface.co/blog/tf-xla-generate) with GPT-2.
-- A blog on [How to train a Language Model with Megatron-LM](https://huggingface.co/blog/megatron-training) with a GPT-2 model.
-- A notebook on how to [finetune GPT2 to generate lyrics in the style of your favorite artist](https://colab.research.google.com/github/AlekseyKorshuk/huggingartists/blob/master/huggingartists-demo.ipynb). 🌎
-- A notebook on how to [finetune GPT2 to generate tweets in the style of your favorite Twitter user](https://colab.research.google.com/github/borisdayma/huggingtweets/blob/master/huggingtweets-demo.ipynb). 🌎
-- [Causal language modeling](https://huggingface.co/course/en/chapter7/6?fw=pt#training-a-causal-language-model-from-scratch) chapter of the 🤗 Hugging Face Course.
-- [`GPT2LMHeadModel`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#gpt-2gpt-and-causal-language-modeling), [text generation example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-generation), and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-- [`TFGPT2LMHeadModel`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_clmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
-- [`FlaxGPT2LMHeadModel`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#causal-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/causal_language_modeling_flax.ipynb).
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Causal language modeling task guide](../tasks/language_modeling)
+model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+
+input_ids = tokenzier("Hello, I'm a language model". return_tensors="pt").to("cuda")
+
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "Hello, I'm a language model" | transformers run --task text-generation --model openai-community/gpt2 --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, pipeline
+
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype="float16",
+    bnb_4bit_use_double_quant=True
+)
+
+model = AutoModelForCausalLM.from_pretrained(
+    "openai-community/gpt2-xl",
+    quantization_config=quantization_config,
+    device_map="auto"
+)
+
+tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2-xl")
+inputs = tokenizer("Once upon a time, there was a magical forest", return_tensors="pt").to("cuda")
+outputs = model.generate(**inputs, max_new_tokens=100)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+## Notes
+
+- Pad inputs on the right because GPT-2 uses absolute position embeddings.
+- GPT-2 can reuse previously computed key-value attention pairs. Access this feature with the [past_key_values](https://huggingface.co/docs/transformers//en/model_doc/gpt2#transformers.GPT2Model.forward.past_key_values) parameter in [`GPT2Model.forward`].
+- Enable the [scale_attn_by_inverse_layer_idx](https://huggingface.co/docs/transformers/en/model_doc/gpt2#transformers.GPT2Config.scale_attn_by_inverse_layer_idx) and [reorder_and_upcast_attn](https://huggingface.co/docs/transformers/en/model_doc/gpt2#transformers.GPT2Config.reorder_and_upcast_attn) parameters to apply the training stability improvements from [Mistral](./mistral).
 
 ## GPT2Config
 

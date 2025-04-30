@@ -137,22 +137,22 @@ def convert_state_dict(orig_state_dict, config):
                 orig_state_dict[
                     f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.query.weight"
                 ] = val[:dim, :]
-                orig_state_dict[
-                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.key.weight"
-                ] = val[dim : dim * 2, :]
+                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.key.weight"] = (
+                    val[dim : dim * 2, :]
+                )
                 orig_state_dict[
                     f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.value.weight"
                 ] = val[-dim:, :]
             else:
-                orig_state_dict[
-                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.query.bias"
-                ] = val[:dim]
-                orig_state_dict[
-                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.key.bias"
-                ] = val[dim : dim * 2]
-                orig_state_dict[
-                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.value.bias"
-                ] = val[-dim:]
+                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.query.bias"] = (
+                    val[:dim]
+                )
+                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.key.bias"] = (
+                    val[dim : dim * 2]
+                )
+                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.value.bias"] = (
+                    val[-dim:]
+                )
             pass
         else:
             orig_state_dict[rename_key(key, config)] = val
@@ -224,9 +224,9 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
             [[-0.5238, -0.5557, -0.6321], [-0.6016, -0.5903, -0.6391], [-0.6244, -0.6334, -0.6889]]
         )
 
-    assert (
-        outputs.reconstruction.shape == expected_shape
-    ), f"Shape of reconstruction should be {expected_shape}, but is {outputs.reconstruction.shape}"
+    assert outputs.reconstruction.shape == expected_shape, (
+        f"Shape of reconstruction should be {expected_shape}, but is {outputs.reconstruction.shape}"
+    )
     assert torch.allclose(outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-3)
     print("Looks ok!")
 

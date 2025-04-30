@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
-""" TensorFlow 2.0 MobileViT model."""
+"""TensorFlow 2.0 MobileViT model."""
 
 from __future__ import annotations
 
@@ -59,17 +59,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 640, 8, 8]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "apple/mobilevit-small"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "apple/mobilevit-small",
-    "apple/mobilevit-x-small",
-    "apple/mobilevit-xx-small",
-    "apple/deeplabv3-mobilevit-small",
-    "apple/deeplabv3-mobilevit-x-small",
-    "apple/deeplabv3-mobilevit-xx-small",
-    # See all MobileViT models at https://huggingface.co/models?filter=mobilevit
-]
 
 
 def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
@@ -273,7 +262,7 @@ class TFMobileViTSelfAttention(keras.layers.Layer):
 
         if hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                f"The hidden size {hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {hidden_size} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -1334,6 +1323,9 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if labels is not None and not self.config.num_labels > 1:
+            raise ValueError("The number of labels should be greater than one")
+
         outputs = self.mobilevit(
             pixel_values,
             output_hidden_states=True,  # we need the intermediate hidden states
@@ -1347,10 +1339,7 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if not self.config.num_labels > 1:
-                raise ValueError("The number of labels should be greater than one")
-            else:
-                loss = self.hf_compute_loss(logits=logits, labels=labels)
+            loss = self.hf_compute_loss(logits=logits, labels=labels)
 
         # make logits of shape (batch_size, num_labels, height, width) to
         # keep them consistent across APIs
@@ -1379,3 +1368,11 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
         if getattr(self, "segmentation_head", None) is not None:
             with tf.name_scope(self.segmentation_head.name):
                 self.segmentation_head.build(None)
+
+
+__all__ = [
+    "TFMobileViTForImageClassification",
+    "TFMobileViTForSemanticSegmentation",
+    "TFMobileViTModel",
+    "TFMobileViTPreTrainedModel",
+]

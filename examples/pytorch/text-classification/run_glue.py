@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,14 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for sequence classification on GLUE."""
+"""Finetuning the library models for sequence classification on GLUE."""
 # You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
 import logging
 import os
 import random
 import sys
-import warnings
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -49,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.39.0.dev0")
+check_min_version("4.52.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -157,9 +156,9 @@ class DataTrainingArguments:
             train_extension = self.train_file.split(".")[-1]
             assert train_extension in ["csv", "json"], "`train_file` should be a csv or a json file."
             validation_extension = self.validation_file.split(".")[-1]
-            assert (
-                validation_extension == train_extension
-            ), "`validation_file` should have the same extension (csv or json) as `train_file`."
+            assert validation_extension == train_extension, (
+                "`validation_file` should have the same extension (csv or json) as `train_file`."
+            )
 
 
 @dataclass
@@ -198,19 +197,13 @@ class ModelArguments:
             )
         },
     )
-    use_auth_token: bool = field(
-        default=None,
-        metadata={
-            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
-        },
-    )
     trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -232,15 +225,6 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
-    if model_args.use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
-            FutureWarning,
-        )
-        if model_args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        model_args.token = model_args.use_auth_token
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
@@ -304,7 +288,7 @@ def main():
     if data_args.task_name is not None:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(
-            "glue",
+            "nyu-mll/glue",
             data_args.task_name,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
@@ -316,6 +300,7 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         # Loading a dataset from your local files.
@@ -328,9 +313,9 @@ def main():
             if data_args.test_file is not None:
                 train_extension = data_args.train_file.split(".")[-1]
                 test_extension = data_args.test_file.split(".")[-1]
-                assert (
-                    test_extension == train_extension
-                ), "`test_file` should have the same extension (csv or json) as `train_file`."
+                assert test_extension == train_extension, (
+                    "`test_file` should have the same extension (csv or json) as `train_file`."
+                )
                 data_files["test"] = data_args.test_file
             else:
                 raise ValueError("Need either a GLUE task or a test file for `do_predict`.")
@@ -443,7 +428,7 @@ def main():
             label_to_id = {i: int(label_name_to_id[label_list[i]]) for i in range(num_labels)}
         else:
             logger.warning(
-                "Your model seems to have been trained with labels, but they don't match the dataset: ",
+                "Your model seems to have been trained with labels, but they don't match the dataset: "
                 f"model labels: {sorted(label_name_to_id.keys())}, dataset labels: {sorted(label_list)}."
                 "\nIgnoring the model labels as a result.",
             )
@@ -483,6 +468,14 @@ def main():
             load_from_cache_file=not data_args.overwrite_cache,
             desc="Running tokenizer on dataset",
         )
+
+    def print_class_distribution(dataset, split_name):
+        label_counts = Counter(dataset["label"])
+        total = sum(label_counts.values())
+        logger.info(f"Class distribution in {split_name} set:")
+        for label, count in label_counts.items():
+            logger.info(f"  Label {label}: {count} ({count / total:.2%})")
+
     if training_args.do_train:
         if "train" not in raw_datasets:
             raise ValueError("--do_train requires a train dataset")
@@ -490,6 +483,7 @@ def main():
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
+        print_class_distribution(train_dataset, "train")
 
     if training_args.do_eval:
         if "validation" not in raw_datasets and "validation_matched" not in raw_datasets:
@@ -498,6 +492,7 @@ def main():
         if data_args.max_eval_samples is not None:
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
             eval_dataset = eval_dataset.select(range(max_eval_samples))
+        print_class_distribution(eval_dataset, "validation")
 
     if training_args.do_predict or data_args.task_name is not None or data_args.test_file is not None:
         if "test" not in raw_datasets and "test_matched" not in raw_datasets:
@@ -506,6 +501,7 @@ def main():
         if data_args.max_predict_samples is not None:
             max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
             predict_dataset = predict_dataset.select(range(max_predict_samples))
+        print_class_distribution(predict_dataset, "test")
 
     # Log a few random samples from the training set:
     if training_args.do_train:
@@ -524,8 +520,12 @@ def main():
     # predictions and label_ids field) and has to return a dictionary string to float.
     def compute_metrics(p: EvalPrediction):
         preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
+        labels = p.label_ids
+        if not training_args.eval_do_concat_batches:
+            preds = np.concatenate(preds, axis=0)
+            labels = np.concatenate(p.label_ids, axis=0)
         preds = np.squeeze(preds) if is_regression else np.argmax(preds, axis=1)
-        result = metric.compute(predictions=preds, references=p.label_ids)
+        result = metric.compute(predictions=preds, references=labels)
         if len(result) > 1:
             result["combined_score"] = np.mean(list(result.values())).item()
         return result
@@ -546,7 +546,7 @@ def main():
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
         compute_metrics=compute_metrics,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         data_collator=data_collator,
     )
 

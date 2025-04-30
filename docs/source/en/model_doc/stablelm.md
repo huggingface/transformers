@@ -16,6 +16,12 @@ rendered properly in your Markdown viewer.
 
 # StableLM
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 `StableLM 3B 4E1T` was proposed in [`StableLM 3B 4E1T`: Technical Report](https://stability.wandb.io/stability-llm/stable-lm/reports/StableLM-3B-4E1T--VmlldzoyMjU4?accessToken=u3zujipenkx5g7rtcj9qojjgxpconyjktjkli2po09nffrffdhhchq045vp0wyfo) by Stability AI and is the first model in a series of multi-epoch pre-trained language models.
@@ -37,19 +43,21 @@ We also provide `StableLM Zephyr 3B`, an instruction fine-tuned version of the m
 The following code snippet demonstrates how to use `StableLM 3B 4E1T` for inference:
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 >>> device = "cuda" # the device to load the model onto
+
+>>> set_seed(0)
 
 >>> tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
 >>> model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t")
->>> model.to(device)
+>>> model.to(device)  # doctest: +IGNORE_RESULT
 
 >>> model_inputs = tokenizer("The weather is always wonderful in", return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(**model_inputs, max_length=32, do_sample=True)
 >>> responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 >>> responses
-['The weather is always wonderful in Santa Barbara and, for visitors hoping to make the move to our beautiful seaside city, this town offers plenty of great places to...']
+['The weather is always wonderful in Costa Rica, which makes it a prime destination for retirees. That’s where the Pensionado program comes in, offering']
 ```
 
 ## Combining StableLM and Flash Attention 2
@@ -66,19 +74,21 @@ Now, to run the model with Flash Attention 2, refer to the snippet below:
 
 ```python
 >>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 >>> device = "cuda" # the device to load the model onto
 
+>>> set_seed(0)
+
 >>> tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
->>> model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
->>> model.to(device)
+>>> model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")  # doctest: +SKIP
+>>> model.to(device)  # doctest: +SKIP
 
 >>> model_inputs = tokenizer("The weather is always wonderful in", return_tensors="pt").to(model.device)
 
->>> generated_ids = model.generate(**model_inputs, max_length=32, do_sample=True)
->>> responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
->>> responses
-['The weather is always wonderful in Santa Barbara and, for visitors hoping to make the move to our beautiful seaside city, this town offers plenty of great places to...']
+>>> generated_ids = model.generate(**model_inputs, max_length=32, do_sample=True)  # doctest: +SKIP
+>>> responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)  # doctest: +SKIP
+>>> responses  # doctest: +SKIP
+['The weather is always wonderful in Costa Rica, which makes it a prime destination for retirees. That’s where the Pensionado program comes in, offering']
 ```
 
 
@@ -99,4 +109,9 @@ Now, to run the model with Flash Attention 2, refer to the snippet below:
 ## StableLmForSequenceClassification
 
 [[autodoc]] StableLmForSequenceClassification
+    - forward
+
+## StableLmForTokenClassification
+
+[[autodoc]] StableLmForTokenClassification
     - forward

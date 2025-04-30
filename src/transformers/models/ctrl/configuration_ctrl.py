@@ -12,17 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Salesforce CTRL configuration"""
+"""Salesforce CTRL configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Salesforce/ctrl": "https://huggingface.co/Salesforce/ctrl/resolve/main/config.json"
-}
 
 
 class CTRLConfig(PretrainedConfig):
@@ -115,3 +111,6 @@ class CTRLConfig(PretrainedConfig):
         self.use_cache = use_cache
 
         super().__init__(**kwargs)
+
+
+__all__ = ["CTRLConfig"]

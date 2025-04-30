@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Informer model. """
+"""Testing suite for the PyTorch Informer model."""
 
 import inspect
 import tempfile
@@ -23,6 +22,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
 from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.utils import check_torch_load_is_safe
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -35,7 +35,11 @@ if is_torch_available():
     import torch
 
     from transformers import InformerConfig, InformerForPrediction, InformerModel
-    from transformers.models.informer.modeling_informer import InformerDecoder, InformerEncoder
+    from transformers.models.informer.modeling_informer import (
+        InformerDecoder,
+        InformerEncoder,
+        InformerSinusoidalPositionalEmbedding,
+    )
 
 
 @require_torch
@@ -164,6 +168,13 @@ class InformerModelTester:
 
         self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
 
+        embed_positions = InformerSinusoidalPositionalEmbedding(
+            config.context_length + config.prediction_length, config.d_model
+        ).to(torch_device)
+        embed_positions._init_weight()
+        self.parent.assertTrue(torch.equal(model.encoder.embed_positions.weight, embed_positions.weight))
+        self.parent.assertTrue(torch.equal(model.decoder.embed_positions.weight, embed_positions.weight))
+
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
             decoder.save_pretrained(tmpdirname)
@@ -180,7 +191,6 @@ class InformerModelTester:
 @require_torch
 class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (InformerModel, InformerForPrediction) if is_torch_available() else ()
-    all_generative_model_classes = (InformerForPrediction,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": InformerModel} if is_torch_available() else {}
     is_encoder_decoder = True
     test_pruning = False
@@ -188,7 +198,6 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_missing_keys = False
     test_torchscript = False
     test_inputs_embeds = False
-    test_model_common_attributes = False
 
     def setUp(self):
         self.model_tester = InformerModelTester(self)
@@ -269,30 +278,36 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # Ignore since we have no tokens embeddings
+    @unittest.skip(reason="Informer does not have tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
+    @unittest.skip
     def test_model_outputs_equivalence(self):
         pass
 
+    @unittest.skip
     def test_determinism(self):
         pass
 
+    @unittest.skip(reason="randomly selects U keys while calculating attentions")
+    def test_batching_equivalence(self):
+        pass
+
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -454,10 +469,15 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_retain_grad_hidden_states_attentions(self):
         super().test_retain_grad_hidden_states_attentions()
 
+    @unittest.skip(reason="Model does not have input embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
+
 
 def prepare_batch(filename="train-batch.pt"):
     file = hf_hub_download(repo_id="hf-internal-testing/tourism-monthly-batch", filename=filename, repo_type="dataset")
-    batch = torch.load(file, map_location=torch_device)
+    check_torch_load_is_safe()
+    batch = torch.load(file, map_location=torch_device, weights_only=True)
     return batch
 
 
@@ -485,7 +505,7 @@ class InformerModelIntegrationTests(unittest.TestCase):
             [[0.4699, 0.7295, 0.8967], [0.4858, 0.3810, 0.9641], [-0.0233, 0.3608, 1.0303]],
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_inference_head(self):
         model = InformerForPrediction.from_pretrained("huggingface/informer-tourism-monthly").to(torch_device)
@@ -508,7 +528,7 @@ class InformerModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[0.4170, 0.9067, 0.8153], [0.3004, 0.7574, 0.7066], [0.6803, -0.6323, 1.2802]], device=torch_device
         )
-        self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_seq_to_seq_generation(self):
         model = InformerForPrediction.from_pretrained("huggingface/informer-tourism-monthly").to(torch_device)
@@ -528,4 +548,4 @@ class InformerModelIntegrationTests(unittest.TestCase):
 
         expected_slice = torch.tensor([3400.8005, 4289.2637, 7101.9209], device=torch_device)
         mean_prediction = outputs.sequences.mean(dim=1)
-        self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=1e-1))
+        torch.testing.assert_close(mean_prediction[0, -3:], expected_slice, rtol=1e-1, atol=1e-1)

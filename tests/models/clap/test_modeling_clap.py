@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch CLAP model. """
-
+"""Testing suite for the PyTorch CLAP model."""
 
 import inspect
 import os
@@ -49,7 +47,6 @@ if is_torch_available():
         ClapTextModel,
         ClapTextModelWithProjection,
     )
-    from transformers.models.clap.modeling_clap import CLAP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ClapAudioModelTester:
@@ -179,7 +176,7 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -254,37 +251,29 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="ClapAudioModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="ClapAudioModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ClapAudioModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "laion/clap-htsat-fused"
+        model = ClapAudioModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ClapAudioModelWithProjection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "audio_projection"))
+        model_name = "laion/clap-htsat-fused"
+        model = ClapAudioModelWithProjection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertTrue(hasattr(model, "audio_projection"))
 
 
 class ClapTextModelTester:
@@ -419,13 +408,13 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -434,26 +423,18 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="ClapTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="ClapTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ClapTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "laion/clap-htsat-fused"
+        model = ClapTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ClapTextModelWithProjection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "text_projection"))
+        model_name = "laion/clap-htsat-fused"
+        model = ClapTextModelWithProjection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertTrue(hasattr(model, "text_projection"))
 
 
 class ClapModelTester:
@@ -466,6 +447,7 @@ class ClapModelTester:
         self.parent = parent
         self.text_model_tester = ClapTextModelTester(parent, **text_kwargs)
         self.audio_model_tester = ClapAudioModelTester(parent, **audio_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -516,10 +498,17 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ClapModelTester(self)
+        common_properties = ["logit_scale_init_value", "projection_hidden_act", "projection_dim"]
+        self.config_tester = ConfigTester(
+            self, config_class=ClapConfig, has_text_modality=False, common_properties=common_properties
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -534,10 +523,10 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="ClapModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for CLAP
+    # override as the `logit_scale` parameter initialization is different for CLAP
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -546,7 +535,7 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
+                    # check if `logit_scale` is initialized as per the original implementation
                     if name == "logit_scale":
                         self.assertAlmostEqual(
                             param.data.item(),
@@ -563,7 +552,7 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -649,9 +638,9 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ClapModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "laion/clap-htsat-fused"
+        model = ClapModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @slow

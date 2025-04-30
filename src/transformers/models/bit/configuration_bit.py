@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BiT model configuration"""
+"""BiT model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -20,10 +20,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 
 logger = logging.get_logger(__name__)
-
-BIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/bit-50": "https://huggingface.co/google/bit-50/resolve/main/config.json",
-}
 
 
 class BitConfig(BackboneConfigMixin, PretrainedConfig):
@@ -135,3 +131,6 @@ class BitConfig(BackboneConfigMixin, PretrainedConfig):
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
+
+
+__all__ = ["BitConfig"]

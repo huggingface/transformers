@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
-""" Tokenization classes for XLM-RoBERTa model."""
-
+"""Tokenization classes for XLM-RoBERTa model."""
 
 import os
 from shutil import copyfile
@@ -23,6 +22,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -31,35 +31,8 @@ SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "FacebookAI/xlm-roberta-base": "https://huggingface.co/FacebookAI/xlm-roberta-base/resolve/main/sentencepiece.bpe.model",
-        "FacebookAI/xlm-roberta-large": "https://huggingface.co/FacebookAI/xlm-roberta-large/resolve/main/sentencepiece.bpe.model",
-        "FacebookAI/xlm-roberta-large-finetuned-conll02-dutch": (
-            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll02-dutch/resolve/main/sentencepiece.bpe.model"
-        ),
-        "FacebookAI/xlm-roberta-large-finetuned-conll02-spanish": (
-            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll02-spanish/resolve/main/sentencepiece.bpe.model"
-        ),
-        "FacebookAI/xlm-roberta-large-finetuned-conll03-english": (
-            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll03-english/resolve/main/sentencepiece.bpe.model"
-        ),
-        "FacebookAI/xlm-roberta-large-finetuned-conll03-german": (
-            "https://huggingface.co/FacebookAI/xlm-roberta-large-finetuned-conll03-german/resolve/main/sentencepiece.bpe.model"
-        ),
-    }
-}
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "FacebookAI/xlm-roberta-base": 512,
-    "FacebookAI/xlm-roberta-large": 512,
-    "FacebookAI/xlm-roberta-large-finetuned-conll02-dutch": 512,
-    "FacebookAI/xlm-roberta-large-finetuned-conll02-spanish": 512,
-    "FacebookAI/xlm-roberta-large-finetuned-conll03-english": 512,
-    "FacebookAI/xlm-roberta-large-finetuned-conll03-german": 512,
-}
-
-
+@requires(backends=("sentencepiece",))
 class XLMRobertaTokenizer(PreTrainedTokenizer):
     """
     Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
@@ -128,8 +101,6 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -325,3 +296,6 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["XLMRobertaTokenizer"]

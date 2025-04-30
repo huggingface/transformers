@@ -14,8 +14,11 @@ def get_daily_ci_runs(token, num_runs=7):
     if token is not None:
         headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
-    # The id of a workflow (not of a workflow run)
-    workflow_id = "636036"
+    # The id of a workflow (not of a workflow run).
+    # From a given workflow run (where we have workflow run id), we can get the workflow id by going to
+    # https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}
+    # and check the `workflow_id` key.
+    workflow_id = "90575235"
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/workflows/{workflow_id}/runs"
     # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results
@@ -36,6 +39,18 @@ def get_last_daily_ci_runs(token):
             break
 
     return workflow_run_id
+
+
+def get_last_daily_ci_run_commit(token):
+    """Get the commit sha of the last completed scheduled daily CI workflow run."""
+    workflow_runs = get_daily_ci_runs(token)
+    head_sha = None
+    for workflow_run in workflow_runs:
+        if workflow_run["status"] == "completed":
+            head_sha = workflow_run["head_sha"]
+            break
+
+    return head_sha
 
 
 def get_last_daily_ci_artifacts(artifact_names, output_dir, token):

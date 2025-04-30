@@ -20,25 +20,21 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"google/pegasus-xsum": "https://huggingface.co/google/pegasus-xsum/resolve/main/spiece.model"}
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/pegasus-xsum": 512,
-}
-
 
 logger = logging.get_logger(__name__)
 
 
 # TODO ArthurZ refactor this to only use the added_tokens_encoder
+
+
+@requires(backends=("sentencepiece",))
 class PegasusTokenizer(PreTrainedTokenizer):
     r"""
     Construct a PEGASUS tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -98,8 +94,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -293,3 +287,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["PegasusTokenizer"]

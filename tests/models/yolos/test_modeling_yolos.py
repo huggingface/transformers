@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch YOLOS model. """
-
+"""Testing suite for the PyTorch YOLOS model."""
 
 import unittest
 
@@ -31,7 +29,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import YolosForObjectDetection, YolosModel
-    from transformers.models.yolos.modeling_yolos import YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -63,6 +60,7 @@ class YolosModelTester:
         scope=None,
         n_targets=8,
         num_detection_tokens=10,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -84,6 +82,7 @@ class YolosModelTester:
         self.scope = scope
         self.n_targets = n_targets
         self.num_detection_tokens = num_detection_tokens
+        self.attn_implementation = attn_implementation
         # we set the expected sequence length (which is used in several tests)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token) + num_detection_tokens
         num_patches = (image_size[1] // patch_size) * (image_size[0] // patch_size)
@@ -124,6 +123,7 @@ class YolosModelTester:
             initializer_range=self.initializer_range,
             num_detection_tokens=self.num_detection_tokens,
             num_labels=self.num_labels,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -177,6 +177,7 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     test_torchscript = False
+    test_torch_exportable = True
 
     # special case for head model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -205,11 +206,11 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="YOLOS does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # YOLOS does not use inputs_embeds
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -319,9 +320,9 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = YolosModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "hustvl/yolos-small"
+        model = YolosModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -360,8 +361,8 @@ class YolosModelIntegrationTest(unittest.TestCase):
         expected_slice_boxes = torch.tensor(
             [[0.2536, 0.5449, 0.4643], [0.2037, 0.7735, 0.3672], [0.7692, 0.4056, 0.4549]], device=torch_device
         )
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice_logits, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
@@ -372,6 +373,6 @@ class YolosModelIntegrationTest(unittest.TestCase):
         expected_slice_boxes = torch.tensor([331.8438, 80.5440, 369.9546, 188.0579]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
-        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
+        torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-4, atol=1e-4)
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
-        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
+        torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes)

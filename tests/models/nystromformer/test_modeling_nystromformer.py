@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Nystromformer model. """
-
+"""Testing suite for the PyTorch Nystromformer model."""
 
 import unittest
 
@@ -36,7 +34,6 @@ if is_torch_available():
         NystromformerForTokenClassification,
         NystromformerModel,
     )
-    from transformers.models.nystromformer.modeling_nystromformer import NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class NystromformerModelTester:
@@ -284,9 +281,9 @@ class NystromformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = NystromformerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "uw-madison/nystromformer-512"
+        model = NystromformerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
@@ -306,7 +303,7 @@ class NystromformerModelIntegrationTest(unittest.TestCase):
             [[[-0.4532, -0.0936, 0.5137], [-0.2676, 0.0628, 0.6186], [-0.3629, -0.1726, 0.4716]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_masked_lm_end_to_end(self):

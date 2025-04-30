@@ -50,7 +50,7 @@ python run_audio_classification.py \
     --dataloader_num_workers 4 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
     --metric_for_best_model accuracy \
@@ -92,7 +92,7 @@ python run_audio_classification.py \
     --dataloader_num_workers 8 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
     --metric_for_best_model accuracy \

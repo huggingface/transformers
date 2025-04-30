@@ -20,11 +20,6 @@ from ....utils import logging
 
 logger = logging.get_logger(__name__)
 
-MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "speechbrain/m-ctc-t-large": "https://huggingface.co/speechbrain/m-ctc-t-large/resolve/main/config.json",
-    # See all M-CTC-T models at https://huggingface.co/models?filter=mctct
-}
-
 
 class MCTCTConfig(PretrainedConfig):
     r"""
@@ -184,3 +179,6 @@ class MCTCTConfig(PretrainedConfig):
                 f"but is `len(config.conv_kernel) = {len(self.conv_kernel)}`, "
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
+
+
+__all__ = ["MCTCTConfig"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,9 +18,13 @@ import unittest
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqConfig, OPTForCausalLM
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_accelerate,
     require_auto_awq,
+    require_intel_extension_for_pytorch,
+    require_torch_accelerator,
     require_torch_gpu,
+    require_torch_multi_accelerator,
     require_torch_multi_gpu,
     slow,
     torch_device,
@@ -36,7 +39,7 @@ if is_accelerate_available():
     from accelerate import init_empty_weights
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class AwqConfigTest(unittest.TestCase):
     def test_wrong_backend(self):
         """
@@ -55,16 +58,23 @@ class AwqConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             AwqConfig(bits=4, backend="unexisting-backend")
 
-        compute_capability = torch.cuda.get_device_capability()
-        major, minor = compute_capability
+        # Only cuda and xpu devices can run this function
+        support_llm_awq = False
+        if torch.cuda.is_available():
+            compute_capability = torch.cuda.get_device_capability()
+            major, minor = compute_capability
+            if major >= 8:
+                support_llm_awq = True
+        elif torch.xpu.is_available():
+            support_llm_awq = True
 
-        if major < 8:
+        if support_llm_awq:
+            # LLMAWQ should work on an A100
+            AwqConfig(bits=4, backend="llm-awq")
+        else:
             # LLMAWQ does not work on a T4
             with self.assertRaises(ValueError):
                 AwqConfig(bits=4, backend="llm-awq")
-        else:
-            # LLMAWQ should work on an A100
-            AwqConfig(bits=4, backend="llm-awq")
 
     def test_to_dict(self):
         """
@@ -89,7 +99,7 @@ class AwqConfigTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_auto_awq
 @require_accelerate
 class AwqTest(unittest.TestCase):
@@ -100,9 +110,13 @@ class AwqTest(unittest.TestCase):
     input_text = "Hello my name is"
 
     EXPECTED_OUTPUT = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
-    EXPECTED_OUTPUT_BF16 = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Exercise and Sport Science with a"
+    EXPECTED_OUTPUT_BF16 = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
 
-    device_map = "cuda"
+    EXPECTED_OUTPUT_EXLLAMA = [
+        "Hello my name is Katie and I am a 20 year old student from the UK. I am currently studying for a degree in English Literature and History at the University of York. I am a very out",
+        "Hello my name is Katie and I am a 20 year old student from the UK. I am currently studying for a degree in English Literature and History at the University of York. I am a very creative",
+    ]
+    device_map = torch_device
 
     # called only once for all test in this class
     @classmethod
@@ -111,14 +125,11 @@ class AwqTest(unittest.TestCase):
         Setup quantized model
         """
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
-            cls.model_name,
-            device_map=cls.device_map,
-        )
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(cls.model_name, device_map=cls.device_map)
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_quantized_model_conversion(self):
@@ -192,6 +203,7 @@ class AwqTest(unittest.TestCase):
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_BF16)
 
+    @require_torch_gpu
     def test_quantized_model_exllama(self):
         """
         Simple test that checks if the quantized model is working properly with exllama backend
@@ -200,11 +212,11 @@ class AwqTest(unittest.TestCase):
 
         quantization_config = AwqConfig(version="exllama")
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=quantization_config
-        ).to(torch_device)
+            self.model_name, quantization_config=quantization_config, device_map=torch_device
+        )
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_EXLLAMA)
 
     def test_quantized_model_no_device_map(self):
         """
@@ -230,7 +242,7 @@ class AwqTest(unittest.TestCase):
             output = model.generate(**input_ids, max_new_tokens=40)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_quantized_model_multi_gpu(self):
         """
         Simple test that checks if the quantized model is working properly with multiple GPUs
@@ -239,7 +251,7 @@ class AwqTest(unittest.TestCase):
 
         quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
 
-        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1, 2, 3})
+        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
 
@@ -265,15 +277,15 @@ class AwqTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_auto_awq
 @require_accelerate
 class AwqFusedTest(unittest.TestCase):
     model_name = "TheBloke/Mistral-7B-OpenOrca-AWQ"
     model_revision = "7048b2af77d0dd1c81b000b19d73f9cc8950b510"
 
-    custom_mapping_model_id = "TheBloke/Yi-34B-AWQ"
-    custom_model_revision = "f1b2cd1b7459ceecfdc1fac5bb8725f13707c589"
+    custom_mapping_model_id = "TheBloke/Mistral-7B-v0.1-AWQ"
+    custom_model_revision = "f186bcfa9edbe2a4334262ec1e67f23e53ed1ae7"
 
     mixtral_model_name = "casperhansen/mixtral-instruct-awq"
     mixtral_model_revision = "87dd4ec502dde74fb3a624835c776b000d190c3b"
@@ -287,8 +299,8 @@ class AwqFusedTest(unittest.TestCase):
         "You end up exactly where you started. Where are you?"
     )
 
-    EXPECTED_GENERATION = prompt + "\n\nThis is a classic puzzle that has been around for"
-    EXPECTED_GENERATION_CUSTOM_MODEL = "HelloWorld.java:11)\r\n\tat org"
+    EXPECTED_GENERATION = prompt + "\n\nYou're at the center of a square."
+    EXPECTED_GENERATION_CUSTOM_MODEL = "Hello,\n\nI have a problem with my 20"
     EXPECTED_GENERATION_MIXTRAL = prompt + " You're on the North Pole.\n\nThe"
 
     def tearDown(self):
@@ -343,6 +355,10 @@ class AwqFusedTest(unittest.TestCase):
         # Checks if the modules_to_not_convert (here gate layer) is a Linear
         self.assertTrue(isinstance(model.model.layers[0].block_sparse_moe.gate, torch.nn.Linear))
 
+    @unittest.skipIf(
+        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 8,
+        "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
+    )
     def test_generation_fused(self):
         """
         Test generation quality for fused models - single batch case
@@ -366,6 +382,10 @@ class AwqFusedTest(unittest.TestCase):
 
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION)
 
+    @unittest.skipIf(
+        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 8,
+        "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
+    )
     def test_generation_fused_batched(self):
         """
         Test generation quality for fused models - multi batch case
@@ -414,6 +434,10 @@ class AwqFusedTest(unittest.TestCase):
         self.assertEqual(outputs[0]["generated_text"], EXPECTED_OUTPUT)
 
     @require_torch_multi_gpu
+    @unittest.skipIf(
+        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 8,
+        "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
+    )
     def test_generation_custom_model(self):
         """
         Test generation quality for fused models using custom fused map.
@@ -423,28 +447,25 @@ class AwqFusedTest(unittest.TestCase):
             fuse_max_seq_len=512,
             modules_to_fuse={
                 "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
-                "layernorm": ["ln1", "ln2", "norm"],
                 "mlp": ["gate_proj", "up_proj", "down_proj"],
+                "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
                 "use_alibi": False,
-                "num_attention_heads": 56,
+                "hidden_size": 4096,
+                "num_attention_heads": 32,
                 "num_key_value_heads": 8,
-                "hidden_size": 7168,
             },
         )
 
         model = AutoModelForCausalLM.from_pretrained(
             self.custom_mapping_model_id,
             quantization_config=quantization_config,
-            trust_remote_code=True,
             device_map="balanced",
             revision=self.custom_model_revision,
         )
 
         self._check_fused_modules(model)
 
-        tokenizer = AutoTokenizer.from_pretrained(
-            self.custom_mapping_model_id, revision=self.custom_model_revision, trust_remote_code=True
-        )
+        tokenizer = AutoTokenizer.from_pretrained(self.custom_mapping_model_id, revision=self.custom_model_revision)
 
         prompt = "Hello"
         inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
@@ -452,6 +473,7 @@ class AwqFusedTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=12)
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_CUSTOM_MODEL)
 
+    @unittest.skip(reason="Not enough GPU memory on CI runners")
     @require_torch_multi_gpu
     def test_generation_mixtral_fused(self):
         """
@@ -472,3 +494,50 @@ class AwqFusedTest(unittest.TestCase):
 
         outputs = model.generate(**inputs, max_new_tokens=12)
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_MIXTRAL)
+
+
+@slow
+@require_torch_accelerator
+@require_auto_awq
+@require_accelerate
+class AwqScaleTest(unittest.TestCase):
+    model_name = "TechxGenus/starcoder2-3b-AWQ"
+
+    def test_load_quantized_model(self):
+        from awq.modules.act import ScaledActivation
+
+        """
+        Simple test that checks if the scales have been replaced in the quantized model
+        """
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            "TechxGenus/starcoder2-3b-AWQ", torch_dtype=torch.float16, device_map=torch_device
+        )
+        self.assertTrue(isinstance(quantized_model.model.layers[0].mlp.act, ScaledActivation))
+
+
+@slow
+@require_auto_awq
+@require_accelerate
+@require_intel_extension_for_pytorch
+class AwqIPEXTest(unittest.TestCase):
+    def test_quantized_model_ipex(self):
+        """
+        Simple test that checks if the quantized model is working properly with ipex backend
+        """
+        quantization_config = AwqConfig(version="ipex")
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ",
+            quantization_config=quantization_config,
+            device_map="cpu",
+        )
+        tokenizer = AutoTokenizer.from_pretrained("TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ")
+        input_ids = tokenizer.encode("How to make a cake", return_tensors="pt")
+        pad_token_id = tokenizer.eos_token_id
+        output = model.generate(input_ids, do_sample=False, max_length=20, pad_token_id=pad_token_id)
+        print(tokenizer.decode(output[0], skip_special_tokens=True))
+
+        expected_output = (
+            "How to make a cake with a round tin?\nHow to make a cake with a round tin?\n1. Preheat the oven to 180°"
+        )
+        self.assertIn(tokenizer.decode(output[0], skip_special_tokens=True), expected_output)

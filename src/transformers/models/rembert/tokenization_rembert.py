@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for RemBERT."""
 
-
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
@@ -23,23 +22,15 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/rembert": "https://huggingface.co/google/rembert/resolve/main/sentencepiece.model",
-    },
-}
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/rembert": 256,
-}
-
-
+@requires(backends=("sentencepiece",))
 class RemBertTokenizer(PreTrainedTokenizer):
     """
     Construct a RemBERT tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -93,8 +84,6 @@ class RemBertTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -273,3 +262,6 @@ class RemBertTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["RemBertTokenizer"]

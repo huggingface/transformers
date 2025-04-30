@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch UniSpeech model. """
+"""Testing suite for the PyTorch UniSpeech model."""
 
 import math
 import unittest
@@ -22,7 +21,7 @@ import pytest
 from datasets import load_dataset
 
 from transformers import UniSpeechConfig, is_torch_available
-from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import is_flaky, require_soundfile, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -329,6 +328,12 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @is_flaky(
+        description="The `codevector_idx` computed with `argmax()` in `UniSpeechGumbelVectorQuantizer.forward` is not stable."
+    )
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
+
     def test_batched_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_batch_inference(*config_and_inputs)
@@ -354,22 +359,23 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
     # UniSpeech has no inputs_embeds
+    @unittest.skip(reason="UniSpeech has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
     # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="UniSpeech has no inputs_embeds")
     def test_forward_signature(self):
         pass
 
     # UniSpeech cannot resize token embeddings
     # since it has no tokens embeddings
+    @unittest.skip(reason="UniSpeech has no tokens embeds")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # UniSpeech has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="UniSpeech has no inputs_embeds")
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -557,7 +563,7 @@ class UniSpeechModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test")
+        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
 
         return ds[:num_samples]
 
@@ -590,4 +596,4 @@ class UniSpeechModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(cosine_sim[:, :5], expected_cosine_sim_slice, atol=1e-3))
+        torch.testing.assert_close(cosine_sim[:, :5], expected_cosine_sim_slice, rtol=1e-3, atol=1e-3)

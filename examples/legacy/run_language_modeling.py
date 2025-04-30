@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -19,7 +18,6 @@ Fine-tuning the library models for language modeling on a text file (GPT, GPT-2,
 GPT, GPT-2 and CTRL are fine-tuned using a causal language modeling (CLM) loss. BERT and RoBERTa are fine-tuned
 using a masked language modeling (MLM) loss. XLNet is fine-tuned using a permutation language modeling (PLM) loss.
 """
-
 
 import logging
 import math
@@ -359,7 +357,7 @@ def main():
                 logger.info("***** Eval results *****")
                 for key in sorted(result.keys()):
                     logger.info("  %s = %s", key, str(result[key]))
-                    writer.write("%s = %s\n" % (key, str(result[key])))
+                    writer.write("{} = {}\n".format(key, str(result[key])))
 
         results.update(result)
 

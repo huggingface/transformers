@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # Conditional DETR
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The Conditional DETR model was proposed in [Conditional DETR for Fast Training Convergence](https://arxiv.org/abs/2108.06152) by Depu Meng, Xiaokang Chen, Zejia Fan, Gang Zeng, Houqiang Li, Yuhui Yuan, Lei Sun, Jingdong Wang. Conditional DETR presents a conditional cross-attention mechanism for fast DETR training. Conditional DETR converges 6.7× to 10× faster than DETR.
@@ -33,7 +37,8 @@ This model was contributed by [DepuMeng](https://huggingface.co/DepuMeng). The o
 
 ## Resources
 
-- [Object detection task guide](../tasks/object_detection)
+- Scripts for finetuning [`ConditionalDetrForObjectDetection`] with [`Trainer`] or [Accelerate](https://huggingface.co/docs/accelerate/index) can be found [here](https://github.com/huggingface/transformers/tree/main/examples/pytorch/object-detection).
+- See also: [Object detection task guide](../tasks/object_detection).
 
 ## ConditionalDetrConfig
 
@@ -42,6 +47,11 @@ This model was contributed by [DepuMeng](https://huggingface.co/DepuMeng). The o
 ## ConditionalDetrImageProcessor
 
 [[autodoc]] ConditionalDetrImageProcessor
+    - preprocess
+
+## ConditionalDetrImageProcessorFast
+
+[[autodoc]] ConditionalDetrImageProcessorFast
     - preprocess
     - post_process_object_detection
     - post_process_instance_segmentation

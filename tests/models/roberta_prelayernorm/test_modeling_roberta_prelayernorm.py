@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,7 +37,6 @@ if is_torch_available():
         RobertaPreLayerNormModel,
     )
     from transformers.models.roberta_prelayernorm.modeling_roberta_prelayernorm import (
-        ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST,
         RobertaPreLayerNormEmbeddings,
         create_position_ids_from_input_ids,
     )
@@ -379,7 +377,6 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (RobertaPreLayerNormForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": RobertaPreLayerNormModel,
@@ -424,7 +421,6 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
 
     # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_model_as_decoder_with_default_input_mask
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -482,16 +478,14 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
     @slow
-    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_model_from_pretrained with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm
     def test_model_from_pretrained(self):
-        for model_name in ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RobertaPreLayerNormModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "andreasmadsen/efficient_mlm_m0.15"
+        model = RobertaPreLayerNormModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_create_position_ids_respects_padding_index with Roberta->RobertaPreLayerNorm
     def test_create_position_ids_respects_padding_index(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is RobertaPreLayerNormEmbeddings.padding_idx + 1
@@ -510,8 +504,7 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
 
     # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_create_position_ids_from_inputs_embeds with Roberta->RobertaPreLayerNorm
     def test_create_position_ids_from_inputs_embeds(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is RobertaPreLayerNormEmbeddings.padding_idx + 1
@@ -548,7 +541,7 @@ class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):
             [[[40.4880, 18.0199, -5.2367], [-1.8877, -4.0885, 10.7085], [-2.2613, -5.6110, 7.2665]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], EXPECTED_SLICE, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_no_head(self):
@@ -562,4 +555,4 @@ class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):
             [[[0.0208, -0.0356, 0.0237], [-0.1569, -0.0411, -0.2626], [0.1879, 0.0125, -0.0089]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], EXPECTED_SLICE, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)

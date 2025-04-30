@@ -250,6 +250,10 @@ The following auto classes are available for the following computer vision tasks
 
 [[autodoc]] AutoModelForVideoClassification
 
+### AutoModelForKeypointDetection
+
+[[autodoc]] AutoModelForKeypointDetection
+
 ### AutoModelForMaskedImageModeling
 
 [[autodoc]] AutoModelForMaskedImageModeling
@@ -377,3 +381,7 @@ The following auto classes are available for the following multimodal tasks.
 ### FlaxAutoModelForVision2Seq
 
 [[autodoc]] FlaxAutoModelForVision2Seq
+
+### AutoModelForImageTextToText
+
+[[autodoc]] AutoModelForImageTextToText

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch TrOCR decoder model (based on RoBERTa)."""
-
+"""PyTorch TrOCR decoder model (based on RoBERTa)."""
 
 import copy
 import math
@@ -24,6 +23,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
@@ -35,12 +35,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "TrOCRConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/trocr-base-handwritten"
-
-
-TROCR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/trocr-base-handwritten",
-    # See all TrOCR models at https://huggingface.co/models?filter=trocr
-]
 
 
 # Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->TrOCR
@@ -64,6 +58,20 @@ class TrOCRLearnedPositionalEmbedding(nn.Embedding):
         ).expand(bsz, -1)
 
         return super().forward(positions + self.offset)
+
+
+# Copied from transformers.models.bart.modeling_bart.BartScaledWordEmbedding with Bart->TrOCR
+class TrOCRScaledWordEmbedding(nn.Embedding):
+    """
+    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_scale = embed_scale
+
+    def forward(self, input_ids: torch.Tensor):
+        return super().forward(input_ids) * self.embed_scale
 
 
 class TrOCRSinusoidalPositionalEmbedding(nn.Module):
@@ -136,8 +144,8 @@ class TrOCRAttention(nn.Module):
         config,
         embed_dim: int,
         num_heads: int,
-        kdim: int = None,
-        vdim: int = None,
+        kdim: Optional[int] = None,
+        vdim: Optional[int] = None,
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
@@ -410,6 +418,7 @@ class TrOCRPreTrainedModel(PreTrainedModel):
     config_class = TrOCRConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["TrOCRDecoderLayer"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -453,9 +462,11 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
-        self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
+        embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = TrOCRScaledWordEmbedding(
+            config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=embed_scale
+        )
 
         if config.use_learned_position_embeddings:
             self.embed_positions = TrOCRLearnedPositionalEmbedding(config.max_position_embeddings, config.hidden_size)
@@ -586,7 +597,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if self.config.use_learned_position_embeddings:
             embed_pos = self.embed_positions(input, past_key_values_length=past_key_values_length)
@@ -726,7 +737,7 @@ class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
     " [`VisionEncoderDecoder`].",
     TROCR_START_DOCSTRING,
 )
-class TrOCRForCausalLM(TrOCRPreTrainedModel):
+class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["output_projection.weight"]
 
     def __init__(self, config):
@@ -875,7 +886,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
         >>> text = "industry, ' Mr. Brown commented icily. ' Let us have a"
 
         >>> # training
-        >>> model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
+        >>> model.config.decoder_start_token_id = processor.tokenizer.eos_token_id
         >>> model.config.pad_token_id = processor.tokenizer.pad_token_id
         >>> model.config.vocab_size = model.config.decoder.vocab_size
 
@@ -934,32 +945,6 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
-    ):
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_ids.shape)
-
-        if past_key_values:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-        # first step, decoder_cached_states are empty
-        return {
-            "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-        }
-
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
@@ -968,3 +953,6 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+
+__all__ = ["TrOCRForCausalLM", "TrOCRPreTrainedModel"]

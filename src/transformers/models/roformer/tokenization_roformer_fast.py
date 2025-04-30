@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for RoFormer."""
+
 import json
 from typing import List, Optional, Tuple
 
@@ -28,44 +29,6 @@ from .tokenization_utils import JiebaPreTokenizer
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "junnyu/roformer_chinese_small": "https://huggingface.co/junnyu/roformer_chinese_small/resolve/main/vocab.txt",
-        "junnyu/roformer_chinese_base": "https://huggingface.co/junnyu/roformer_chinese_base/resolve/main/vocab.txt",
-        "junnyu/roformer_chinese_char_small": (
-            "https://huggingface.co/junnyu/roformer_chinese_char_small/resolve/main/vocab.txt"
-        ),
-        "junnyu/roformer_chinese_char_base": (
-            "https://huggingface.co/junnyu/roformer_chinese_char_base/resolve/main/vocab.txt"
-        ),
-        "junnyu/roformer_small_discriminator": (
-            "https://huggingface.co/junnyu/roformer_small_discriminator/resolve/main/vocab.txt"
-        ),
-        "junnyu/roformer_small_generator": (
-            "https://huggingface.co/junnyu/roformer_small_generator/resolve/main/vocab.txt"
-        ),
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "junnyu/roformer_chinese_small": 1536,
-    "junnyu/roformer_chinese_base": 1536,
-    "junnyu/roformer_chinese_char_small": 512,
-    "junnyu/roformer_chinese_char_base": 512,
-    "junnyu/roformer_small_discriminator": 128,
-    "junnyu/roformer_small_generator": 128,
-}
-
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "junnyu/roformer_chinese_small": {"do_lower_case": True},
-    "junnyu/roformer_chinese_base": {"do_lower_case": True},
-    "junnyu/roformer_chinese_char_small": {"do_lower_case": True},
-    "junnyu/roformer_chinese_char_base": {"do_lower_case": True},
-    "junnyu/roformer_small_discriminator": {"do_lower_case": True},
-    "junnyu/roformer_small_generator": {"do_lower_case": True},
-}
 
 
 class RoFormerTokenizerFast(PreTrainedTokenizerFast):
@@ -89,9 +52,6 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
     ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     slow_tokenizer_class = RoFormerTokenizer
 
     def __init__(
@@ -215,3 +175,6 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
     ):
         self.backend_tokenizer.pre_tokenizer = BertPreTokenizer()
         return super().save_pretrained(save_directory, legacy_format, filename_prefix, push_to_hub, **kwargs)
+
+
+__all__ = ["RoFormerTokenizerFast"]

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 Funnel model."""
-
+"""TF 2.0 Funnel model."""
 
 from __future__ import annotations
 
@@ -62,18 +61,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "FunnelConfig"
 
-TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "funnel-transformer/small",  # B4-4-4H768
-    "funnel-transformer/small-base",  # B4-4-4H768, no decoder
-    "funnel-transformer/medium",  # B6-3x2-3x2H768
-    "funnel-transformer/medium-base",  # B6-3x2-3x2H768, no decoder
-    "funnel-transformer/intermediate",  # B6-6-6H768
-    "funnel-transformer/intermediate-base",  # B6-6-6H768, no decoder
-    "funnel-transformer/large",  # B8-8-8H1024
-    "funnel-transformer/large-base",  # B8-8-8H1024, no decoder
-    "funnel-transformer/xlarge-base",  # B10-10-10H1024
-    "funnel-transformer/xlarge",  # B10-10-10H1024, no decoder
-]
 
 INF = 1e6
 
@@ -1117,7 +1104,7 @@ class TFFunnelForPreTrainingOutput(ModelOutput):
             heads.
     """
 
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 
@@ -1878,3 +1865,16 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFFunnelBaseModel",
+    "TFFunnelForMaskedLM",
+    "TFFunnelForMultipleChoice",
+    "TFFunnelForPreTraining",
+    "TFFunnelForQuestionAnswering",
+    "TFFunnelForSequenceClassification",
+    "TFFunnelForTokenClassification",
+    "TFFunnelModel",
+    "TFFunnelPreTrainedModel",
+]

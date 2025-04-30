@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 Iz Beltagy, Matthew E. Peters, Arman Cohan and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch LED model. """
-
+"""Testing suite for the PyTorch LED model."""
 
 import copy
 import tempfile
@@ -282,10 +280,8 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (LEDForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": LEDForConditionalGeneration,
             "feature-extraction": LEDModel,
             "question-answering": LEDForQuestionAnswering,
             "summarization": LEDForConditionalGeneration,
@@ -304,9 +300,16 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+        if pipeline_test_case_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
             return True
 
         return False
@@ -339,6 +342,12 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_global_attention(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_global_attention(*config_and_inputs)
+
+    def prepare_config_and_inputs_for_generate(self, *args, **kwargs):
+        config, inputs_dict = super().prepare_config_and_inputs_for_generate(*args, **kwargs)
+        # LED computes attention scores based on mask indices if `is_global`
+        inputs_dict.pop("global_attention_mask")
+        return config, inputs_dict
 
     # LEDForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
@@ -380,8 +389,8 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
+    @unittest.skip(reason="Longformer cannot keep gradients in attentions or hidden states")
     def test_retain_grad_hidden_states_attentions(self):
-        # longformer cannot keep gradients in attentions or hidden states
         return
 
     def test_attention_outputs(self):
@@ -457,6 +466,20 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 ],
             )
 
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
+        # overwrite because LED does not have (bs, num_heads, seq_len, seq_len) shape
+        encoder_expected_shape = (
+            batch_size,
+            config.num_attention_heads,
+            prompt_length,
+            self.model_tester.attention_window // 2 * 2 + 1,
+        )
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [layer_attentions.shape for layer_attentions in attentions],
+            [encoder_expected_shape] * len(attentions),
+        )
+
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
@@ -515,7 +538,7 @@ class LEDModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[2.3050, 2.8279, 0.6531], [-1.8457, -0.1455, -3.5661], [-1.0186, 0.4586, -2.2043]], device=torch_device
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_inference_head(self):
         model = LEDForConditionalGeneration.from_pretrained("allenai/led-base-16384").to(torch_device)
@@ -532,7 +555,7 @@ class LEDModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[33.6507, 6.4572, 16.8089], [5.8739, -2.4238, 11.2902], [-3.2139, -4.3149, 4.2783]], device=torch_device
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_seq_to_seq_generation(self):
         # this test requires 16GB of RAM

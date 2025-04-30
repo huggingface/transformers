@@ -1,4 +1,6 @@
-git://github.com/huggingface/accelerate.git
 datasets >= 2.0.0
 torch >= 1.3
+accelerate
 evaluate
+Pillow
+albumentations >= 1.4.16

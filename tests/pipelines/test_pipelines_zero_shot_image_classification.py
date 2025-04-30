@@ -14,9 +14,12 @@
 
 import unittest
 
+from huggingface_hub import ZeroShotImageClassificationOutputElement
+
 from transformers import is_vision_available
 from transformers.pipelines import pipeline
 from transformers.testing_utils import (
+    compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
     require_tf,
@@ -49,7 +52,7 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
     #     if tokenizer is None:
     #         # Side effect of no Fast Tokenizer class for these model, so skipping
     #         # But the slow tokenizer test should still run as they're quite small
-    #         self.skipTest("No tokenizer available")
+    #         self.skipTest(reason="No tokenizer available")
     #         return
     #         # return None, None
 
@@ -71,9 +74,9 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
     #     outputs = pipe([image] * 3, batch_size=2, candidate_labels=["A", "B"])
 
     @require_torch
-    def test_small_model_pt(self):
+    def test_small_model_pt(self, torch_dtype="float32"):
         image_classifier = pipeline(
-            model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification",
+            model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification", torch_dtype=torch_dtype
         )
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         output = image_classifier(image, candidate_labels=["a", "b", "c"])
@@ -126,6 +129,13 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
                 ],
             ],
         )
+
+        for single_output in output:
+            compare_pipeline_output_to_hub_spec(single_output, ZeroShotImageClassificationOutputElement)
+
+    @require_torch
+    def test_small_model_pt_fp16(self):
+        self.test_small_model_pt(torch_dtype="float16")
 
     @require_tf
     def test_small_model_tf(self):
@@ -271,6 +281,49 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
                     {"score": 0.198, "label": "2 cats"},
                     {"score": 0.0, "label": "a remote"},
                     {"score": 0.0, "label": "a plane"},
+                ]
+            ]
+            * 5,
+        )
+
+    @slow
+    @require_torch
+    def test_blip2_model_pt(self):
+        image_classifier = pipeline(
+            task="zero-shot-image-classification",
+            model="Salesforce/blip2-itm-vit-g",
+        )
+        # This is an image of 2 cats with remotes and no planes
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        output = image_classifier(
+            image,
+            candidate_labels=["2 cats", "a plane", "a remote"],
+            tokenizer_kwargs={"return_token_type_ids": False},
+        )
+
+        self.assertEqual(
+            nested_simplify(output),
+            [
+                {"score": 0.369, "label": "2 cats"},
+                {"score": 0.333, "label": "a remote"},
+                {"score": 0.297, "label": "a plane"},
+            ],
+        )
+
+        output = image_classifier(
+            [image] * 5,
+            candidate_labels=["2 cats", "a plane", "a remote"],
+            batch_size=2,
+            tokenizer_kwargs={"return_token_type_ids": False},
+        )
+
+        self.assertEqual(
+            nested_simplify(output),
+            [
+                [
+                    {"score": 0.369, "label": "2 cats"},
+                    {"score": 0.333, "label": "a remote"},
+                    {"score": 0.297, "label": "a plane"},
                 ]
             ]
             * 5,

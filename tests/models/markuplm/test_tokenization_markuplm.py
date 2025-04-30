@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,8 @@ import re
 import shutil
 import tempfile
 import unittest
-from typing import List
+
+from parameterized import parameterized
 
 from transformers import (
     AddedToken,
@@ -31,7 +31,7 @@ from transformers import (
     logging,
 )
 from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES, MarkupLMTokenizer
-from transformers.testing_utils import is_pt_tf_cross_test, require_tokenizers, require_torch, slow
+from transformers.testing_utils import require_tokenizers, require_torch, slow
 
 from ...test_tokenization_common import SMALL_TRAINING_CORPUS, TokenizerTesterMixin, merge_model_tokenizer_mappings
 
@@ -41,32 +41,34 @@ logger = logging.get_logger(__name__)
 
 @require_tokenizers
 class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/markuplm-base"
     tokenizer_class = MarkupLMTokenizer
     rust_tokenizer_class = MarkupLMTokenizerFast
     test_rust_tokenizer = True
     from_pretrained_kwargs = {"cls_token": "<s>"}
     test_seq2seq = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "\u0120", "\u0120l", "\u0120n", "\u0120lo", "\u0120low", "er", "\u0120lowest", "\u0120newer", "\u0120wider", "\u0120hello", "\u0120world", "<unk>",]  # fmt: skip
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.tags_dict = {"a": 0, "abbr": 1, "acronym": 2, "address": 3}
-        self.special_tokens_map = {"unk_token": "<unk>"}
+        cls.tags_dict = {"a": 0, "abbr": 1, "acronym": 2, "address": 3}
+        cls.special_tokens_map = {"unk_token": "<unk>"}
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        self.tokenizer_config_file = os.path.join(self.tmpdirname, "tokenizer_config.json")
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        cls.tokenizer_config_file = os.path.join(cls.tmpdirname, "tokenizer_config.json")
 
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
+        with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
-        with open(self.tokenizer_config_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps({"tags_dict": self.tags_dict}))
+        with open(cls.tokenizer_config_file, "w", encoding="utf-8") as fp:
+            fp.write(json.dumps({"tags_dict": cls.tags_dict}))
 
     def get_nodes_and_xpaths(self):
         nodes = ["hello", "world"]
@@ -100,13 +102,17 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         return questions, nodes, xpaths
 
+    @unittest.skip(reason="Chat template tests don't play well with table/layout models.")
+    def test_chat_template_batched(self):
+        pass
+
     def get_input_output_texts(self, tokenizer):
-        input_text = "UNwant\u00E9d,running"
+        input_text = "UNwant\u00e9d,running"
         output_text = "unwanted, running"
         return input_text, output_text
 
     def test_add_special_tokens(self):
-        tokenizers: List[MarkupLMTokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[MarkupLMTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 special_token = "[SPECIAL_TOKEN]"
@@ -122,7 +128,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token not in decoded)
 
     def test_add_tokens_tokenizer(self):
-        tokenizers: List[MarkupLMTokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[MarkupLMTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 vocab_size = tokenizer.vocab_size
@@ -202,11 +208,12 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=self.space_between_special_tokens)
                 self.assertIn(decoded, [output, output.lower()])
 
-    @unittest.skip("Not implemented")
+    @unittest.skip(reason="Not implemented")
     def test_right_and_left_truncation(self):
         pass
 
-    def test_encode_plus_with_padding(self):
+    @parameterized.expand([(True,), (False,)])
+    def test_encode_plus_with_padding(self, use_padding_as_call_kwarg: bool):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
@@ -257,15 +264,18 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_tokens_mask == not_padded_special_tokens_mask)
 
                 # Test right padding
-                tokenizer.padding_side = "right"
+                tokenizer_kwargs_right = {
+                    "max_length": sequence_length + padding_size,
+                    "padding": "max_length",
+                    "return_special_tokens_mask": True,
+                }
 
-                right_padded_sequence = tokenizer.encode_plus(
-                    nodes,
-                    xpaths=xpaths,
-                    max_length=sequence_length + padding_size,
-                    padding="max_length",
-                    return_special_tokens_mask=True,
-                )
+                if not use_padding_as_call_kwarg:
+                    tokenizer.padding_side = "right"
+                else:
+                    tokenizer_kwargs_right["padding_side"] = "right"
+
+                right_padded_sequence = tokenizer.encode_plus(nodes, xpaths=xpaths, **tokenizer_kwargs_right)
                 right_padded_input_ids = right_padded_sequence["input_ids"]
 
                 right_padded_special_tokens_mask = right_padded_sequence["special_tokens_mask"]
@@ -276,14 +286,18 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_tokens_mask + [1] * padding_size == right_padded_special_tokens_mask)
 
                 # Test left padding
-                tokenizer.padding_side = "left"
-                left_padded_sequence = tokenizer.encode_plus(
-                    nodes,
-                    xpaths=xpaths,
-                    max_length=sequence_length + padding_size,
-                    padding="max_length",
-                    return_special_tokens_mask=True,
-                )
+                tokenizer_kwargs_left = {
+                    "max_length": sequence_length + padding_size,
+                    "padding": "max_length",
+                    "return_special_tokens_mask": True,
+                }
+
+                if not use_padding_as_call_kwarg:
+                    tokenizer.padding_side = "left"
+                else:
+                    tokenizer_kwargs_left["padding_side"] = "left"
+
+                left_padded_sequence = tokenizer.encode_plus(nodes, xpaths=xpaths, **tokenizer_kwargs_left)
                 left_padded_input_ids = left_padded_sequence["input_ids"]
                 left_padded_special_tokens_mask = left_padded_sequence["special_tokens_mask"]
                 left_padded_sequence_length = len(left_padded_input_ids)
@@ -406,8 +420,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding(self, max_length=50):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
@@ -703,7 +717,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         encoded_sequences_batch_padded_2[key],
                     )
 
-    @unittest.skip("batch_encode_plus does not handle overflowing tokens.")
+    @unittest.skip(reason="batch_encode_plus does not handle overflowing tokens.")
     def test_batch_encode_plus_overflowing_tokens(self):
         pass
 
@@ -764,7 +778,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.pad_token is None:
-                    self.skipTest("No padding token.")
+                    self.skipTest(reason="No padding token.")
                 else:
                     nodes, xpaths = self.get_nodes_and_xpaths()
 
@@ -809,12 +823,12 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_build_inputs_with_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 # Input tokens id
                 nodes, xpaths = self.get_nodes_and_xpaths()
@@ -995,7 +1009,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_offsets_mapping(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 text = ["a", "wonderful", "test"]
                 xpaths = ["html/body" for _ in range(len(text))]
@@ -1051,13 +1065,13 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    return
+                    self.skipTest(f"{tokenizer.__class__} is not in the MODEL_TOKENIZER_MAPPING")
 
                 config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    return
+                    self.skipTest(reason="Model is an encoder-decoder or does not have a pad token set")
 
                 model = model_class(config)
 
@@ -1083,11 +1097,11 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -1105,12 +1119,12 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_tokenization_python_rust_equals(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 nodes, xpaths = self.get_nodes_and_xpaths()
 
@@ -1167,12 +1181,12 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_embeded_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 nodes, xpaths = self.get_nodes_and_xpaths()
                 tokens_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths, add_special_tokens=True)
                 tokens_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths, add_special_tokens=True)
@@ -1242,50 +1256,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Ensure that the input IDs are still truncated when no max_length is specified
         self.assertListEqual(new_encoded_inputs, dropped_encoded_inputs)
         self.assertLessEqual(len(new_encoded_inputs), 20)
-
-    @is_pt_tf_cross_test
-    def test_batch_encode_plus_tensors(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                nodes, xpaths = self.get_nodes_and_xpaths_batch()
-
-                # A Tensor cannot be build by sequences which are not the same size
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, nodes, xpaths=xpaths, return_tensors="pt")
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, nodes, xpaths=xpaths, return_tensors="tf")
-
-                if tokenizer.pad_token_id is None:
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        nodes,
-                        xpaths=xpaths,
-                        padding=True,
-                        return_tensors="pt",
-                    )
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        nodes,
-                        xpaths=xpaths,
-                        padding="longest",
-                        return_tensors="tf",
-                    )
-                else:
-                    pytorch_tensor = tokenizer.batch_encode_plus(
-                        nodes, xpaths=xpaths, padding=True, return_tensors="pt"
-                    )
-                    tensorflow_tensor = tokenizer.batch_encode_plus(
-                        nodes, xpaths=xpaths, padding="longest", return_tensors="tf"
-                    )
-                    encoded_sequences = tokenizer.batch_encode_plus(nodes, xpaths=xpaths, padding=True)
-
-                    for key in encoded_sequences.keys():
-                        pytorch_value = pytorch_tensor[key].tolist()
-                        tensorflow_value = tensorflow_tensor[key].numpy().tolist()
-                        encoded_value = encoded_sequences[key]
-
-                        self.assertEqual(pytorch_value, tensorflow_value, encoded_value)
 
     def test_sequence_ids(self):
         tokenizers = self.get_tokenizers()
@@ -1362,7 +1332,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_rust_tokenizer()
         new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
@@ -1401,7 +1371,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer_with_special_tokens_change(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_rust_tokenizer()
         # Test with a special tokens map
@@ -1420,7 +1390,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         special_tokens_map = {}
         for token in special_tokens_list:
             # Get the private one to avoid unnecessary warnings.
-            if getattr(tokenizer, f"_{token}") is not None:
+            if getattr(tokenizer, token) is not None:
                 special_token = getattr(tokenizer, token)
                 special_tokens_map[special_token] = f"{special_token}a"
 
@@ -1432,7 +1402,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Check the changes
         for token in special_tokens_list:
             # Get the private one to avoid unnecessary warnings.
-            if getattr(tokenizer, f"_{token}") is None:
+            if getattr(tokenizer, token) is None:
                 continue
             special_token = getattr(tokenizer, token)
             if special_token in special_tokens_map:
@@ -1514,12 +1484,12 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding_different_model_input_name(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
 
@@ -1608,7 +1578,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         self.assertEqual(len(tokens[key].shape), 3)
                         self.assertEqual(tokens[key].shape[-2], 6)
 
-    @unittest.skip("TO DO: overwrite this very extensive test.")
+    @unittest.skip(reason="TO DO: overwrite this very extensive test.")
     def test_alignement_methods(self):
         pass
 
@@ -2147,15 +2117,15 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(xpath_tags_seq, sequence["xpath_tags_seq"][:-2])
                     self.assertEqual(overflowing_xpath_tags_seq, sequence["xpath_tags_seq"][-(2 + stride) :])
 
-    @unittest.skip("MarkupLM tokenizer requires xpaths besides sequences.")
+    @unittest.skip(reason="MarkupLM tokenizer requires xpaths besides sequences.")
     def test_pretokenized_inputs(self):
         pass
 
-    @unittest.skip("MarkupLM tokenizer always expects pretokenized inputs.")
+    @unittest.skip(reason="MarkupLM tokenizer always expects pretokenized inputs.")
     def test_compare_pretokenized_inputs(self):
         pass
 
-    @unittest.skip("MarkupLM fast tokenizer does not support prepare_for_model")
+    @unittest.skip(reason="MarkupLM fast tokenizer does not support prepare_for_model")
     def test_compare_prepare_for_model(self):
         pass
 
@@ -2259,13 +2229,13 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
-    @unittest.skip("Doesn't support another framework than PyTorch")
+    @unittest.skip(reason="Doesn't support another framework than PyTorch")
     def test_np_encode_plus_sent_to_model(self):
         pass
 
     def test_padding_warning_message_fast_tokenizer(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         nodes, xpaths = self.get_nodes_and_xpaths()
 
@@ -2285,7 +2255,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         if not self.test_slow_tokenizer:
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         tokenizer_slow = self.get_tokenizer()
         # check correct behaviour if no pad_token_id exists and add it eventually
@@ -2304,10 +2274,18 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             cm.records[0].message,
         )
 
-    @unittest.skip("Chat is not supported")
+    @unittest.skip(reason="Chat is not supported")
     def test_chat_template(self):
         pass
 
-    @unittest.skip("The model tested fails `Hub -> Fast == Hub -> Slow`, nothing much we can do")
+    @unittest.skip(reason="The model tested fails `Hub -> Fast == Hub -> Slow`, nothing much we can do")
     def test_added_tokens_serialization(self):
+        pass
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template_return_assistant_tokens_mask(self):
+        pass
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template_return_assistant_tokens_mask_truncated(self):
         pass

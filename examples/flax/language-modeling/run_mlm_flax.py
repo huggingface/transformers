@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,20 +19,20 @@ text file or a dataset.
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
 https://huggingface.co/models?filter=fill-mask
 """
+
 import json
 import logging
 import math
 import os
 import sys
 import time
-import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from itertools import chain
 
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import flax
 import jax
@@ -45,7 +44,7 @@ from flax import jax_utils, traverse_util
 from flax.jax_utils import pad_shard_unpad
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import HfApi
 from tqdm import tqdm
 
 from transformers import (
@@ -184,19 +183,13 @@ class ModelArguments:
             )
         },
     )
-    use_auth_token: bool = field(
-        default=None,
-        metadata={
-            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
-        },
-    )
     trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -308,7 +301,7 @@ class FlaxDataCollatorForLanguageModeling:
                 "You should pass `mlm=False` to train on causal language modeling instead."
             )
 
-    def __call__(self, examples: List[Dict[str, np.ndarray]], pad_to_multiple_of: int) -> Dict[str, np.ndarray]:
+    def __call__(self, examples: list[dict[str, np.ndarray]], pad_to_multiple_of: int) -> dict[str, np.ndarray]:
         # Handle dict or lists with proper padding and conversion to tensor.
         batch = self.tokenizer.pad(examples, pad_to_multiple_of=pad_to_multiple_of, return_tensors=TensorType.NUMPY)
 
@@ -322,7 +315,7 @@ class FlaxDataCollatorForLanguageModeling:
 
     def mask_tokens(
         self, inputs: np.ndarray, special_tokens_mask: Optional[np.ndarray]
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
         """
@@ -394,15 +387,6 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    if model_args.use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
-            FutureWarning,
-        )
-        if model_args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        model_args.token = model_args.use_auth_token
-
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_mlm", model_args, data_args, framework="flax")
@@ -441,9 +425,8 @@ def main():
         if repo_name is None:
             repo_name = Path(training_args.output_dir).absolute().name
         # Create repo and retrieve repo_id
-        repo_id = create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
-        # Clone repo locally
-        repo = Repository(training_args.output_dir, clone_from=repo_id, token=training_args.hub_token)
+        api = HfApi()
+        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
@@ -462,6 +445,7 @@ def main():
             cache_dir=model_args.cache_dir,
             token=model_args.token,
             num_proc=data_args.preprocessing_num_workers,
+            trust_remote_code=model_args.trust_remote_code,
         )
 
         if "validation" not in datasets.keys():
@@ -472,6 +456,7 @@ def main():
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
                 num_proc=data_args.preprocessing_num_workers,
+                trust_remote_code=model_args.trust_remote_code,
             )
             datasets["train"] = load_dataset(
                 data_args.dataset_name,
@@ -480,6 +465,7 @@ def main():
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
                 num_proc=data_args.preprocessing_num_workers,
+                trust_remote_code=model_args.trust_remote_code,
             )
     else:
         data_files = {}
@@ -890,8 +876,13 @@ def main():
                     model.save_pretrained(training_args.output_dir, params=params)
                     tokenizer.save_pretrained(training_args.output_dir)
                     if training_args.push_to_hub:
-                        repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
-
+                        api.upload_folder(
+                            commit_message=f"Saving weights and logs of step {cur_step}",
+                            folder_path=training_args.output_dir,
+                            repo_id=repo_id,
+                            repo_type="model",
+                            token=training_args.hub_token,
+                        )
     # Eval after training
     if training_args.do_eval:
         num_eval_samples = len(tokenized_datasets["validation"])

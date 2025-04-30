@@ -19,7 +19,6 @@ import timeout_decorator  # noqa
 from transformers import BartConfig, BartTokenizer, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
-from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
@@ -180,7 +179,7 @@ class FlaxBartModelTester:
 
         outputs = model.decode(decoder_input_ids, encoder_outputs)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(np.abs(outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
     def check_use_cache_forward_with_attn_mask(self, model_class_name, config, inputs_dict):
@@ -226,7 +225,7 @@ class FlaxBartModelTester:
 
         outputs = model.decode(decoder_input_ids, encoder_outputs, decoder_attention_mask=decoder_attention_mask)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(np.abs(outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
@@ -324,7 +323,7 @@ class BartHeadTests(unittest.TestCase):
 
 
 @require_flax
-class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
+class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (
         (
@@ -336,7 +335,6 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
         if is_flax_available()
         else ()
     )
-    all_generative_model_classes = (FlaxBartForConditionalGeneration,) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxBartModelTester(self)

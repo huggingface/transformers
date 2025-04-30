@@ -12,12 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch KOSMOS-2 model."""
-
+"""PyTorch KOSMOS-2 model."""
 
 import math
 from dataclasses import dataclass
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,19 +24,21 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
     CausalLMOutputWithCrossAttentions,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from .configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2VisionConfig
 
@@ -45,11 +46,6 @@ from .configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2Visi
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = Kosmos2Config
-
-KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/kosmos-2-patch14-224",
-    # See all KOSMOS-2 models at https://huggingface.co/models?filter=kosmos-2
-]
 
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
@@ -126,6 +122,8 @@ KOSMOS2_VISION_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -264,6 +262,8 @@ KOSMOS2_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -309,7 +309,7 @@ class Kosmos2ModelOutput(ModelOutput):
             input) to speed up sequential decoding.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -367,7 +367,7 @@ class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -406,19 +406,89 @@ class Kosmos2VisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+
+        num_patches = embeddings.shape[1] - 1
+        position_embedding = self.position_embedding.weight.unsqueeze(0)
+        num_positions = position_embedding.shape[1] - 1
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embedding(self.position_ids)
+
+        class_pos_embed = position_embedding[:, :1]
+        patch_pos_embed = position_embedding[:, 1:]
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+        batch_size, _, height, width = pixel_values.shape
+        if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size}*{self.image_size})."
+            )
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->Kosmos2Vision
+# Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
 class Kosmos2VisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -435,14 +505,12 @@ class Kosmos2VisionAttention(nn.Module):
             )
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
+        self.is_causal = False
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
@@ -450,77 +518,54 @@ class Kosmos2VisionAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
-        bsz, tgt_len, embed_dim = hidden_states.size()
+        batch_size, seq_length, embed_dim = hidden_states.shape
 
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scale
-        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
-
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        # apply the causal_attention_mask first
-        if causal_attention_mask is not None:
-            if causal_attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
-                    f" {causal_attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if output_attentions:
-            # this operation is a bit akward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        # CLIP text model uses both `causal_attention_mask` and `attention_mask`
+        # in case FA2 kernel is called, `is_causal` should be inferred from `causal_attention_mask`
+        if self.config._attn_implementation != "flash_attention_2":
+            if attention_mask is not None and causal_attention_mask is not None:
+                attention_mask = attention_mask + causal_attention_mask
+            elif causal_attention_mask is not None:
+                attention_mask = causal_attention_mask
         else:
-            attn_weights_reshaped = None
+            self.is_causal = causal_attention_mask is not None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_output = torch.bmm(attn_probs, value_states)
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+        )
 
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
-
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights_reshaped
+        if not output_attentions:
+            attn_weights = None
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Kosmos2Vision
@@ -539,7 +584,7 @@ class Kosmos2VisionMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->Kosmos2Vision
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->Kosmos2Vision
 class Kosmos2VisionEncoderLayer(nn.Module):
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
@@ -590,7 +635,7 @@ class Kosmos2VisionEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->Kosmos2Vision
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->Kosmos2Vision
 class Kosmos2VisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -690,7 +735,7 @@ class Kosmos2VisionEncoder(nn.Module):
 
 # Similar to `transformers.models.clip.modeling_clip.CLIPVisionTransformer` but without docstring for `forward`
 class Kosmos2VisionTransformer(nn.Module):
-    # Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer.__init__ with CLIPVision->Kosmos2Vision,CLIP_VISION->KOSMOS2_VISION,CLIP->Kosmos2Vision
+    # Copied from transformers.models.altclip.modeling_altclip.AltCLIPVisionTransformer.__init__ with AltCLIPVision->Kosmos2Vision,ALTCLIP_VISION->KOSMOS2_VISION,AltCLIP->Kosmos2Vision
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
         self.config = config
@@ -706,6 +751,7 @@ class Kosmos2VisionTransformer(nn.Module):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -717,7 +763,7 @@ class Kosmos2VisionTransformer(nn.Module):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.encoder(
@@ -788,10 +834,10 @@ class Kosmos2TextSinusoidalPositionalEmbedding(nn.Module):
     @torch.no_grad()
     def forward(
         self,
-        input_ids: torch.Tensor = None,
-        inputs_embeds: torch.Tensor = None,
+        input_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         past_key_values_length: int = 0,
-        position_ids: torch.Tensor = None,
+        position_ids: Optional[torch.Tensor] = None,
     ):
         if input_ids is not None:
             bsz, seq_len = input_ids.size()
@@ -1138,11 +1184,11 @@ class Kosmos2TextTransformer(nn.Module):
     def forward_embedding(
         self,
         input_ids,
-        inputs_embeds: torch.Tensor = None,
-        image_embeds: torch.Tensor = None,
-        img_input_mask: torch.Tensor = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        image_embeds: Optional[torch.Tensor] = None,
+        img_input_mask: Optional[torch.Tensor] = None,
         past_key_values_length: int = 0,
-        position_ids: torch.Tensor = None,
+        position_ids: Optional[torch.Tensor] = None,
     ):
         # The argument `inputs_embeds` should be the one without being multiplied by `self.embed_scale`.
         if inputs_embeds is None:
@@ -1448,6 +1494,7 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
@@ -1458,6 +1505,7 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
@@ -1527,7 +1575,7 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
     """,
     KOSMOS2_START_DOCSTRING,
 )
-class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
+class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
     config_class = Kosmos2TextConfig
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1643,29 +1691,23 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
         past_key_values=None,
         attention_mask=None,
         use_cache=None,
+        cache_position=None,
         **model_kwargs,
     ):
-        input_shape = input_ids.shape
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        position_ids = None
+        # Kosmos2 has offset for position ids, so we need to create them correctly
+        position_ids = create_position_ids_from_input_ids(
+            input_ids,
+            padding_idx=self.config.pad_token_id,
+            past_key_values_length=0,
+        )
 
-        # cut input_ids if past_key_values is used
         if past_key_values is not None:
-            position_ids = create_position_ids_from_input_ids(
-                input_ids,
-                padding_idx=self.config.pad_token_id,
-                past_key_values_length=0,
-            )[:, -1:]
-
-            input_ids = input_ids[:, -1:]
-            # the image info. is already encoded into the past keys/values
             image_embeds = None
             image_embeds_position_mask = None
+        # appending `False` to `image_embeds_position_mask` (because `input_ids` grows during generation)
         elif image_embeds_position_mask is not None:
-            # appending `False` to `image_embeds_position_mask` (because `input_ids` grows during generation)
             batch_size, seq_len = input_ids.size()
             mask_len = image_embeds_position_mask.size()[-1]
             image_embeds_position_mask = torch.cat(
@@ -1676,15 +1718,19 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
                 dim=1,
             )
 
-        return {
-            "input_ids": input_ids,
-            "image_embeds": image_embeds,
-            "image_embeds_position_mask": image_embeds_position_mask,
-            "past_key_values": past_key_values,
-            "attention_mask": attention_mask,
-            "position_ids": position_ids,
-            "use_cache": use_cache,
-        }
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            image_embeds=image_embeds,
+            image_embeds_position_mask=image_embeds_position_mask,
+            use_cache=use_cache,
+            position_ids=position_ids,
+            cache_position=cache_position,
+            **model_kwargs,
+        )
+
+        return model_inputs
 
     @staticmethod
     # Copied from transformers.models.umt5.modeling_umt5.UMT5ForConditionalGeneration._reorder_cache
@@ -1774,6 +1820,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Kosmos2ModelOutput]:
         r"""
@@ -1825,6 +1872,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
                 pixel_values=pixel_values,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                interpolate_pos_encoding=interpolate_pos_encoding,
                 return_dict=return_dict,
             )
             # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
@@ -1870,7 +1918,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
     """,
     KOSMOS2_START_DOCSTRING,
 )
-class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
+class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
     config_class = Kosmos2Config
     main_input_name = "pixel_values"
     _tied_weights_keys = ["text_model.lm_head.weight"]
@@ -2054,3 +2102,6 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         )
 
         return output
+
+
+__all__ = ["Kosmos2ForConditionalGeneration", "Kosmos2Model", "Kosmos2PreTrainedModel"]

@@ -16,6 +16,13 @@ rendered properly in your Markdown viewer.
 
 # DeiT
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The DeiT model was proposed in [Training data-efficient image transformers & distillation through attention](https://arxiv.org/abs/2012.12877) by Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre
@@ -68,6 +75,34 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The Tenso
   *facebook/deit-base-patch16-384*. Note that one should use [`DeiTImageProcessor`] in order to
   prepare images for the model.
 
+### Using Scaled Dot Product Attention (SDPA)
+
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
+page for more information.
+
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+
+```
+from transformers import DeiTForImageClassification
+model = DeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224", attn_implementation="sdpa", torch_dtype=torch.float16)
+...
+```
+
+For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+
+On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` and `facebook/deit-base-distilled-patch16-224` model, we saw the following speedups during inference.
+
+|   Batch size |   Average inference time (ms), eager mode |   Average inference time (ms), sdpa model |   Speed up, Sdpa / Eager (x) |
+|--------------|-------------------------------------------|-------------------------------------------|------------------------------|
+|            1 |                                         8 |                                         6 |                      1.33 |
+|            2 |                                         9 |                                         6 |                      1.5  |
+|            4 |                                         9 |                                         6 |                      1.5  |
+|            8 |                                         8 |                                         6 |                      1.33 |
+
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DeiT.
@@ -95,6 +130,11 @@ If you're interested in submitting a resource to be included here, please feel f
 ## DeiTImageProcessor
 
 [[autodoc]] DeiTImageProcessor
+    - preprocess
+
+## DeiTImageProcessorFast
+
+[[autodoc]] DeiTImageProcessorFast
     - preprocess
 
 <frameworkcontent>

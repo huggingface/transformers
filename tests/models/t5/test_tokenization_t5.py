@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Google T5 Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,12 +16,13 @@ import os
 import re
 import tempfile
 import unittest
+from functools import lru_cache
 
 from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, T5Tokenizer, T5TokenizerFast
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_seqio, require_tokenizers, slow
 from transformers.utils import cached_property, is_tf_available, is_torch_available
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
@@ -38,17 +38,19 @@ else:
 @require_sentencepiece
 @require_tokenizers
 class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google-t5/t5-small"
     tokenizer_class = T5Tokenizer
     rust_tokenizer_class = T5TokenizerFast
     test_rust_tokenizer = True
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = T5Tokenizer(SAMPLE_VOCAB)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
@@ -144,15 +146,23 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def t5_base_tokenizer_fast(self):
         return T5TokenizerFast.from_pretrained("google-t5/t5-base")
 
-    def get_tokenizer(self, **kwargs) -> T5Tokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> T5Tokenizer:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs) -> T5TokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> T5TokenizerFast:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -226,7 +236,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Since T5 does NOT have a max input length,
         # this test should be changed to the following in Transformers v5:
         # self.assertEqual(batch.input_ids.shape, (2, 8001))
-        self.assertEqual(batch.input_ids.shape, (2, 512))
+        self.assertEqual(batch.input_ids.shape, (2, 8001))
 
     def test_eos_in_input(self):
         tokenizer = self.t5_base_tokenizer
@@ -274,10 +284,10 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [f"<extra_id_{i}>" for i in range(100)] + [AddedToken("<special>", lstrip=True)]
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_r = self.get_rust_tokenizer(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )
-                tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_cr = self.get_rust_tokenizer(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs, from_slow=True
                 )
                 tokenizer_p = self.tokenizer_class.from_pretrained(
@@ -361,12 +371,6 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
     # overwritten from `test_tokenization_common` since T5 has no max length
-    def test_pretrained_model_lists(self):
-        # We should have at least one default checkpoint for each tokenizer
-        # We should specify the max input length as well (used in some part to list the pretrained checkpoints)
-        self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
-        self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
-
     @slow
     def test_tokenizer_integration(self):
         expected_encoding = {'input_ids': [[31220, 7, 41, 14034, 801, 38, 3, 102, 63, 17, 127, 524, 18, 7031, 2032, 277, 11, 3, 102, 63, 17, 127, 524, 18, 2026, 17, 10761, 18, 7041, 61, 795, 879, 18, 19681, 4648, 7, 41, 12920, 382, 6, 350, 6383, 4949, 6, 2158, 12920, 382, 9, 6, 3, 4, 11160, 6, 2043, 17153, 279, 49, 17, 6, 3, 4, 434, 9688, 11439, 21, 6869, 10509, 17725, 41, 567, 9138, 61, 11, 6869, 10509, 11946, 41, 18207, 517, 61, 28, 147, 3538, 1220, 7140, 10761, 2250, 16, 910, 1220, 8024, 11, 1659, 1413, 32, 883, 2020, 344, 2215, 226, 6, 12901, 382, 127, 524, 11, 4738, 7, 127, 15390, 5, 1], [272, 24203, 19, 876, 12, 554, 18, 9719, 1659, 2647, 26352, 6497, 7, 45, 73, 9339, 400, 26, 1499, 57, 22801, 10760, 30, 321, 646, 11, 269, 2625, 16, 66, 7500, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [37, 1704, 4216, 3, 20400, 4418, 7, 147, 8, 19743, 1782, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # fmt: skip
@@ -465,10 +469,8 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         EXPECTED_WITH_SPACE = [9459, 149, 33, 25, 692, 1]
         EXPECTED_WO_SPACE = [3845, 63, 149, 33, 25, 692, 1]
 
-        slow_ = self.tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=False, legacy=False)
-        fast_ = self.rust_tokenizer_class.from_pretrained(
-            pretrained_name, add_prefix_space=False, legacy=False, from_slow=True
-        )
+        slow_ = self.get_tokenizer(pretrained_name, add_prefix_space=False, legacy=False)
+        fast_ = self.get_rust_tokenizer(pretrained_name, add_prefix_space=False, legacy=False, from_slow=True)
         self.assertEqual(slow_.encode(inputs), EXPECTED_WO_SPACE)
         self.assertEqual(slow_.encode(inputs), fast_.encode(inputs))
         self.assertEqual(slow_.tokenize(inputs), ["He", "y", "▁how", "▁are", "▁you", "▁doing"])
@@ -478,8 +480,8 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             fast_.decode(EXPECTED_WO_SPACE, skip_special_tokens=True),
         )
 
-        slow_ = self.tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=True, legacy=False)
-        fast_ = self.rust_tokenizer_class.from_pretrained(pretrained_name, add_prefix_space=True, legacy=False)
+        slow_ = self.get_tokenizer(pretrained_name, add_prefix_space=True, legacy=False)
+        fast_ = self.get_rust_tokenizer(pretrained_name, add_prefix_space=True, legacy=False)
         self.assertEqual(slow_.encode(inputs), EXPECTED_WITH_SPACE)
         self.assertEqual(slow_.encode(inputs), fast_.encode(inputs))
         self.assertEqual(slow_.tokenize(inputs), ["▁Hey", "▁how", "▁are", "▁you", "▁doing"])
@@ -503,7 +505,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         tokenizer.add_special_tokens(
             {"additional_special_tokens": [AddedToken("<extra_id_0>", rstrip=False, lstrip=False)]}
         )
-        # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
+        # TODO ArthurZ the above is necessary as addedTokens / initialization sucks. Trie is not correctly created
         # So the extra ids are split....
         cls.tokenizer = tokenizer
 
@@ -603,7 +605,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         from datasets import load_dataset
         from seqio import SentencePieceVocabulary
 
-        ds = load_dataset("xnli", "all_languages", split="train+test+validation")
+        ds = load_dataset("facebook/xnli", "all_languages", split="train+test+validation")
 
         # TODO @ArthurZucker fix the 3 commented tests with #23909
         input_texts = [

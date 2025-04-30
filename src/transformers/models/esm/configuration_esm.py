@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ESM model configuration"""
+"""ESM model configuration"""
 
 from dataclasses import asdict, dataclass
 from typing import Optional
@@ -24,10 +24,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 # TODO Update this
-ESM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/esm-1b": "https://huggingface.co/facebook/esm-1b/resolve/main/config.json",
-    # See all ESM models at https://huggingface.co/models?filter=esm
-}
 
 
 class EsmConfig(PretrainedConfig):
@@ -91,11 +87,14 @@ class EsmConfig(PretrainedConfig):
     ```python
     >>> from transformers import EsmModel, EsmConfig
 
-    >>> # Initializing a ESM facebook/esm-1b style configuration >>> configuration = EsmConfig()
+    >>> # Initializing a ESM facebook/esm-1b style configuration
+    >>> configuration = EsmConfig(vocab_size=33)
 
-    >>> # Initializing a model from the configuration >>> model = ESMModel(configuration)
+    >>> # Initializing a model from the configuration
+    >>> model = EsmModel(configuration)
 
-    >>> # Accessing the model configuration >>> configuration = model.config
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
 
     model_type = "esm"
@@ -173,7 +172,7 @@ class EsmConfig(PretrainedConfig):
 
 @dataclass
 class EsmFoldConfig:
-    esm_type: str = None
+    esm_type: Optional[str] = None
     fp16_esm: bool = True
     use_esm_attn_map: bool = False
     esm_ablate_pairwise: bool = False
@@ -361,3 +360,6 @@ def get_default_vocab_list():
         "<null_1>",
         "<mask>",
     )
+
+
+__all__ = ["EsmConfig"]

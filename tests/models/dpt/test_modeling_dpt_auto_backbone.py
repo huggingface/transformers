@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch DPT model. """
-
+"""Testing suite for the PyTorch DPT model."""
 
 import unittest
 
@@ -31,7 +29,6 @@ if is_torch_available():
 
     from transformers import DPTForDepthEstimation
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
-    from transformers.models.dpt.modeling_dpt import DPT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -142,6 +139,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = DPTModelTester(self)
@@ -219,34 +217,26 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     )
 
     @unittest.skip(reason="DPT with AutoBackbone does not have a base model and hence no input_embeddings")
-    def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="DPT with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="DPT with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_to_base(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DPTForDepthEstimation.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Intel/dpt-large"
+        model = DPTForDepthEstimation.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -276,10 +266,10 @@ class DPTModelIntegrationTest(unittest.TestCase):
         self.assertEqual(predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[6.0433, 7.1636, 7.4268], [6.9047, 7.2471, 7.2355], [7.9261, 8.0631, 8.0244]]
+            [[6.0336, 7.1502, 7.4130], [6.8977, 7.2383, 7.2268], [7.9180, 8.0525, 8.0134]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_depth_estimation_beit(self):
         image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-beit-base-384")
@@ -301,7 +291,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
             [[2669.7061, 2663.7144, 2674.9399], [2633.9326, 2650.9092, 2665.4270], [2621.8271, 2632.0129, 2637.2290]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_depth_estimation_swinv2(self):
         image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-swinv2-tiny-256")
@@ -323,4 +313,4 @@ class DPTModelIntegrationTest(unittest.TestCase):
             [[1032.7719, 1025.1886, 1030.2661], [1023.7619, 1021.0075, 1024.9121], [1022.5667, 1018.8522, 1021.4145]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

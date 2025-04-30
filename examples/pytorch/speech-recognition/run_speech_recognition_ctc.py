@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition"""
+"""Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition"""
 
 import functools
 import json
@@ -24,11 +23,10 @@ import re
 import sys
 import warnings
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import datasets
 import evaluate
-import numpy as np
 import torch
 from datasets import DatasetDict, load_dataset
 
@@ -51,7 +49,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.39.0.dev0")
+check_min_version("4.52.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -212,11 +210,11 @@ class DataTrainingArguments:
             )
         },
     )
-    chars_to_ignore: Optional[List[str]] = list_field(
+    chars_to_ignore: Optional[list[str]] = list_field(
         default=None,
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
-    eval_metrics: List[str] = list_field(
+    eval_metrics: list[str] = list_field(
         default=["wer"],
         metadata={"help": "A list of metrics the model should be evaluated on. E.g. `'wer cer'`"},
     )
@@ -252,19 +250,13 @@ class DataTrainingArguments:
             )
         },
     )
-    use_auth_token: bool = field(
-        default=None,
-        metadata={
-            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
-        },
-    )
     trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -299,7 +291,7 @@ class DataCollatorCTCWithPadding:
     Data collator that will dynamically pad the inputs received.
     Args:
         processor (:class:`~transformers.AutoProcessor`)
-            The processor used for proccessing the data.
+            The processor used for processing the data.
         padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
@@ -325,7 +317,7 @@ class DataCollatorCTCWithPadding:
     pad_to_multiple_of_labels: Optional[int] = None
     feature_extractor_input_name: Optional[str] = "input_values"
 
-    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [
@@ -412,15 +404,6 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    if data_args.use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
-            FutureWarning,
-        )
-        if data_args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        data_args.token = data_args.use_auth_token
-
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_speech_recognition_ctc", model_args, data_args)
@@ -470,6 +453,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.train_split_name,
             token=data_args.token,
+            trust_remote_code=data_args.trust_remote_code,
         )
 
         if data_args.audio_column_name not in raw_datasets["train"].column_names:
@@ -495,6 +479,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.eval_split_name,
             token=data_args.token,
+            trust_remote_code=data_args.trust_remote_code,
         )
 
         if data_args.max_eval_samples is not None:
@@ -505,7 +490,7 @@ def main():
     # E.g. characters, such as `,` and `.` do not really have an acoustic characteristic
     # that could be easily picked up by the model
     chars_to_ignore_regex = (
-        f'[{"".join(data_args.chars_to_ignore)}]' if data_args.chars_to_ignore is not None else None
+        f"[{''.join(data_args.chars_to_ignore)}]" if data_args.chars_to_ignore is not None else None
     )
     text_column_name = data_args.text_column_name
 
@@ -712,10 +697,14 @@ def main():
         logger.info(f"Data preprocessing finished. Files cached at {vectorized_datasets.cache_files}")
         return
 
-    def compute_metrics(pred):
-        pred_logits = pred.predictions
-        pred_ids = np.argmax(pred_logits, axis=-1)
+    # For languages like Chinese with large vocabulary size, we need to discard logits
+    # and only keep the argmax, otherwise we run out of memory during evaluation.
+    def preprocess_logits_for_metrics(logits, labels):
+        pred_ids = torch.argmax(logits, dim=-1)
+        return pred_ids, labels
 
+    def compute_metrics(pred):
+        pred_ids = pred.predictions[0]
         pred.label_ids[pred.label_ids == -100] = tokenizer.pad_token_id
 
         pred_str = tokenizer.batch_decode(pred_ids)
@@ -761,7 +750,8 @@ def main():
         compute_metrics=compute_metrics,
         train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
         eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
-        tokenizer=processor,
+        processing_class=processor,
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
     )
 
     # 8. Finally, we can start training

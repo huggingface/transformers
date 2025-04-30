@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Huggingface
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -163,10 +162,8 @@ def prepare_fsmt_inputs_dict(
 @require_torch
 class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FSMTModel, FSMTForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (FSMTForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": FSMTForConditionalGeneration,
             "feature-extraction": FSMTModel,
             "summarization": FSMTForConditionalGeneration,
             "text2text-generation": FSMTForConditionalGeneration,
@@ -194,8 +191,8 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # XXX: override test_model_common_attributes / different Embedding type
-    def test_model_common_attributes(self):
+    # XXX: override test_model_get_set_embeddings / different Embedding type
+    def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
 
         for model_class in self.all_model_classes:
@@ -264,20 +261,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
-    @unittest.skip("Test has a segmentation fault on torch 1.8.0")
-    def test_export_to_onnx(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        model = FSMTModel(config).to(torch_device)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            torch.onnx.export(
-                model,
-                (inputs_dict["input_ids"], inputs_dict["attention_mask"]),
-                f"{tmpdirname}/fsmt_test.onnx",
-                export_params=True,
-                opset_version=12,
-                input_names=["input_ids", "attention_mask"],
-            )
-
     def test_ensure_weights_are_shared(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
 
@@ -313,19 +296,23 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             2,
         )
 
-    @unittest.skip("can't be implemented for FSMT due to dual vocab.")
+    @unittest.skip(reason="can't be implemented for FSMT due to dual vocab.")
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip("Passing inputs_embeds not implemented for FSMT.")
+    @unittest.skip(reason="Passing inputs_embeds not implemented for FSMT.")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("model weights aren't tied in FSMT.")
+    @unittest.skip(reason="Input ids is required for FSMT.")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
+    @unittest.skip(reason="model weights aren't tied in FSMT.")
     def test_tie_model_weights(self):
         pass
 
-    @unittest.skip("TODO: Decoder embeddings cannot be resized at the moment")
+    @unittest.skip(reason="TODO: Decoder embeddings cannot be resized at the moment")
     def test_resize_embeddings_untied(self):
         pass
 
@@ -421,7 +408,7 @@ class FSMTHeadTests(unittest.TestCase):
 
     def test_prepare_fsmt_decoder_inputs(self):
         config, *_ = self._get_config_and_data()
-        input_ids = _long_tensor(([4, 4, 2]))
+        input_ids = _long_tensor([4, 4, 2])
         decoder_input_ids = _long_tensor([[26388, 2, config.pad_token_id]])
         causal_mask_dtype = torch.float32
         ignore = torch.finfo(causal_mask_dtype).min
@@ -510,7 +497,7 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-1.5753, -1.5753, 2.8975], [-0.9540, -0.9540, 1.0299], [-3.3131, -3.3131, 0.5219]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def translation_setup(self, pair):
         text = {
@@ -560,6 +547,7 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
         emb1 = SinusoidalPositionalEmbedding(num_positions=6, embedding_dim=6, padding_idx=self.padding_idx).to(
             torch_device
         )
+        emb1.make_weight(*emb1.weight.shape, emb1.padding_idx)
         emb = emb1(input_ids)
         desired_weights = torch.tensor(
             [
@@ -574,12 +562,18 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
 
     def test_odd_embed_dim(self):
         # odd embedding_dim  is allowed
-        SinusoidalPositionalEmbedding(num_positions=4, embedding_dim=5, padding_idx=self.padding_idx).to(torch_device)
+        test = SinusoidalPositionalEmbedding(num_positions=4, embedding_dim=5, padding_idx=self.padding_idx).to(
+            torch_device
+        )
+        test.make_weight(*test.weight.shape, test.padding_idx)
 
         # odd num_embeddings is allowed
-        SinusoidalPositionalEmbedding(num_positions=5, embedding_dim=4, padding_idx=self.padding_idx).to(torch_device)
+        test = SinusoidalPositionalEmbedding(num_positions=5, embedding_dim=4, padding_idx=self.padding_idx).to(
+            torch_device
+        )
+        test.make_weight(*test.weight.shape, test.padding_idx)
 
-    @unittest.skip("different from marian (needs more research)")
+    @unittest.skip(reason="different from marian (needs more research)")
     def test_positional_emb_weights_against_marian(self):
         desired_weights = torch.tensor(
             [
@@ -591,6 +585,7 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
         emb1 = SinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512, padding_idx=self.padding_idx).to(
             torch_device
         )
+        emb1.make_weight(*emb1.weight.shape, emb1.padding_idx)
         weights = emb1.weights.data[:3, :5]
         # XXX: only the 1st and 3rd lines match - this is testing against
         # verbatim copy of SinusoidalPositionalEmbedding from fairseq
@@ -605,6 +600,6 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
         )
         no_cache_pad_zero = emb1(input_ids)[0]
         # XXX: only the 1st line matches the 3rd
-        self.assertTrue(
-            torch.allclose(torch.tensor(desired_weights, device=torch_device), no_cache_pad_zero[:3, :5], atol=1e-3)
+        torch.testing.assert_close(
+            torch.tensor(desired_weights, device=torch_device), no_cache_pad_zero[:3, :5], rtol=1e-3, atol=1e-3
         )

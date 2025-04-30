@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" XLNet configuration"""
+"""XLNet configuration"""
 
 import warnings
 
@@ -22,11 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "xlnet/xlnet-base-cased": "https://huggingface.co/xlnet/xlnet-base-cased/resolve/main/config.json",
-    "xlnet/xlnet-large-cased": "https://huggingface.co/xlnet/xlnet-large-cased/resolve/main/config.json",
-}
 
 
 class XLNetConfig(PretrainedConfig):
@@ -240,3 +235,6 @@ class XLNetConfig(PretrainedConfig):
         raise NotImplementedError(
             f"The model {self.model_type} is one of the few models that has no sequence length limit."
         )
+
+
+__all__ = ["XLNetConfig"]

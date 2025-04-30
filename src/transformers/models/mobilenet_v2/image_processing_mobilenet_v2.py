@@ -35,19 +35,22 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_torch_available, is_torch_tensor, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_torch_available, is_torch_tensor, logging
 
 
 if is_torch_available():
     import torch
 
 
+from ...utils.import_utils import requires
+
+
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class MobileNetV2ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a MobileNetV2 image processor.
@@ -95,7 +98,7 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -118,22 +121,6 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self._valid_processor_keys = [
-            "images",
-            "do_resize",
-            "size",
-            "resample",
-            "do_center_crop",
-            "crop_size",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     # Copied from transformers.models.mobilenet_v1.image_processing_mobilenet_v1.MobileNetV1ImageProcessor.resize
     def resize(
@@ -185,14 +172,15 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
+        do_center_crop: Optional[bool] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -201,7 +189,6 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ):
         """
         Preprocess an image or batch of images.
@@ -266,8 +253,6 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
@@ -288,7 +273,7 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -298,38 +283,33 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        if do_resize:
-            images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
+        all_images = []
+        for image in images:
+            if do_resize:
+                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
 
-        if do_center_crop:
-            images = [
-                self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
-            ]
+            if do_center_crop:
+                image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
+            if do_rescale:
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
+            if do_normalize:
+                image = self.normalize(
+                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                )
 
+            all_images.append(image)
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            for image in all_images
         ]
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->MobileNetV2
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple]] = None):
         """
         Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
@@ -371,3 +351,6 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
+
+
+__all__ = ["MobileNetV2ImageProcessor"]

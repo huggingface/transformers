@@ -40,8 +40,8 @@ class SiglipProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "SiglipImageProcessor"
-    tokenizer_class = "SiglipTokenizer"
+    image_processor_class = ("SiglipImageProcessor", "SiglipImageProcessorFast")
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
@@ -52,14 +52,14 @@ class SiglipProcessor(ProcessorMixin):
         images: ImageInput = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: int = None,
+        max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to SiglipTokenizer's [`~SiglipTokenizer.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` argument to
-        SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
@@ -69,8 +69,7 @@ class SiglipProcessor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
+                tensor. Both channels-first and channels-last formats are supported.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -114,7 +113,7 @@ class SiglipProcessor(ProcessorMixin):
             image_features = self.image_processor(images, return_tensors=return_tensors)
 
         if text is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values
+            encoding.update(image_features)
             return encoding
         elif text is not None:
             return encoding
@@ -141,3 +140,6 @@ class SiglipProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["SiglipProcessor"]

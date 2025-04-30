@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for FNet model."""
+"""Tokenization classes for FNet model."""
 
 import os
 import unicodedata
@@ -23,26 +23,17 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/fnet-base": "https://huggingface.co/google/fnet-base/resolve/main/spiece.model",
-        "google/fnet-large": "https://huggingface.co/google/fnet-large/resolve/main/spiece.model",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/fnet-base": 512,
-    "google/fnet-large": 512,
-}
 
 SPIECE_UNDERLINE = "▁"
 
 
+@requires(backends=("sentencepiece",))
 class FNetTokenizer(PreTrainedTokenizer):
     """
     Construct an FNet tokenizer. Adapted from [`AlbertTokenizer`]. Based on
@@ -96,8 +87,6 @@ class FNetTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "token_type_ids"]
 
     def __init__(
@@ -234,7 +223,7 @@ class FNetTokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         spaces_between_special_tokens: bool = False,
         **kwargs,
     ) -> str:
@@ -349,3 +338,6 @@ class FNetTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["FNetTokenizer"]

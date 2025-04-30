@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for Perceiver."""
-
+"""Tokenization class for Perceiver."""
 
 from typing import Dict, List, Optional, Tuple
 
@@ -196,3 +195,6 @@ class PerceiverTokenizer(PreTrainedTokenizer):
     # PerceiverTokenizer has no vocab file
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         return ()
+
+
+__all__ = ["PerceiverTokenizer"]

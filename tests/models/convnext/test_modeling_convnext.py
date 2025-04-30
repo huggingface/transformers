@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ConvNext model. """
-
+"""Testing suite for the PyTorch ConvNext model."""
 
 import unittest
 
@@ -31,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import ConvNextBackbone, ConvNextForImageClassification, ConvNextModel
-    from transformers.models.convnext.modeling_convnext import CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -182,29 +179,27 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = ConvNextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ConvNextConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=ConvNextConfig,
+            has_text_modality=False,
+            hidden_size=37,
+            common_properties=["num_channels", "hidden_sizes"],
+        )
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="ConvNext does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
     @unittest.skip(reason="ConvNext does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="ConvNext does not use feedforward chunking")
@@ -257,9 +252,9 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ConvNextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/convnext-tiny-224"
+        model = ConvNextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -293,7 +288,7 @@ class ConvNextModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-0.0260, -0.4739, 0.1911]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
 
 @require_torch

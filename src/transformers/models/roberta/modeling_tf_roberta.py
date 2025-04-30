@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 RoBERTa model."""
-
+"""TF 2.0 RoBERTa model."""
 
 from __future__ import annotations
 
@@ -64,14 +63,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "FacebookAI/roberta-base"
 _CONFIG_FOR_DOC = "RobertaConfig"
-
-TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "FacebookAI/roberta-base",
-    "FacebookAI/roberta-large",
-    "FacebookAI/roberta-large-mnli",
-    "distilbert/distilroberta-base",
-    # See all RoBERTa models at https://huggingface.co/models?filter=roberta
-]
 
 
 class TFRobertaEmbeddings(keras.layers.Layer):
@@ -1777,3 +1768,16 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFRobertaForCausalLM",
+    "TFRobertaForMaskedLM",
+    "TFRobertaForMultipleChoice",
+    "TFRobertaForQuestionAnswering",
+    "TFRobertaForSequenceClassification",
+    "TFRobertaForTokenClassification",
+    "TFRobertaMainLayer",
+    "TFRobertaModel",
+    "TFRobertaPreTrainedModel",
+]

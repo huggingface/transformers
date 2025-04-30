@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PEGASUS model."""
+"""PyTorch PEGASUS model."""
 
 import copy
 import math
@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -50,12 +51,6 @@ _CHECKPOINT_FOR_DOC = "google/pegasus-large"
 _CONFIG_FOR_DOC = "PegasusConfig"
 
 
-PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/pegasus-large",
-    # See all PEGASUS models at https://huggingface.co/models?filter=pegasus
-]
-
-
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
@@ -79,24 +74,21 @@ class PegasusSinusoidalPositionalEmbedding(nn.Embedding):
 
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
         super().__init__(num_positions, embedding_dim)
-        self.weight = self._init_weight(self.weight)
 
-    @staticmethod
-    def _init_weight(out: nn.Parameter) -> nn.Parameter:
+    def _init_weight(self):
         """
         Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
         the 2nd half of the vector. [dim // 2:]
         """
-        n_pos, dim = out.shape
+        n_pos, dim = self.weight.shape
         position_enc = np.array(
             [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
         )
-        out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
+        out = torch.empty(n_pos, dim, dtype=self.weight.dtype, requires_grad=False)
         sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
         out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
         out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
-        out.detach_()
-        return out
+        self.weight = nn.Parameter(out, requires_grad=False)
 
     @torch.no_grad()
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0) -> torch.Tensor:
@@ -327,9 +319,7 @@ class PegasusEncoderLayer(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
-        if hidden_states.dtype == torch.float16 and (
-            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
-        ):
+        if hidden_states.dtype == torch.float16:
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -474,7 +464,7 @@ class PegasusPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, PegasusSinusoidalPositionalEmbedding):
-            pass
+            module._init_weight()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -670,6 +660,7 @@ class PegasusEncoder(PegasusPreTrainedModel):
             self.config.d_model,
             self.padding_idx,
         )
+        self.embed_positions._init_weight()
         self.embed_positions.to(self.device)
 
     def get_position_embeddings(self) -> nn.Embedding:
@@ -873,6 +864,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
             self.config.d_model,
             self.padding_idx,
         )
+        self.embed_positions._init_weight()
         self.embed_positions.to(self.device)
 
     def get_position_embeddings(self) -> nn.Embedding:
@@ -1250,7 +1242,7 @@ class PegasusModel(PegasusPreTrainedModel):
 @add_start_docstrings(
     "The PEGASUS Model with a language modeling head. Can be used for summarization.", PEGASUS_START_DOCSTRING
 )
-class PegasusForConditionalGeneration(PegasusPreTrainedModel):
+class PegasusForConditionalGeneration(PegasusPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
@@ -1270,8 +1262,10 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def resize_token_embeddings(self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+    def resize_token_embeddings(
+        self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
+    ) -> nn.Embedding:
+        new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
         self._resize_final_logits_bias(new_embeddings.weight.shape[0])
         return new_embeddings
 
@@ -1395,43 +1389,6 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
-    ):
-        # cut decoder_input_ids if past is used
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if decoder_input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = decoder_input_ids.shape[1] - 1
-
-            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
-
-        return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
-        }
-
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
@@ -1462,7 +1419,7 @@ class PegasusDecoderWrapper(PegasusPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-class PegasusForCausalLM(PegasusPreTrainedModel):
+class PegasusForCausalLM(PegasusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -1521,7 +1478,7 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
     # Copied from transformers.models.bart.modeling_bart.BartForCausalLM.forward with Bart->Pegasus, facebook/bart-base->google/pegasus-large
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
@@ -1663,32 +1620,6 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
-    ):
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_ids.shape)
-
-        if past_key_values:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-        # first step, decoder_cached_states are empty
-        return {
-            "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-        }
-
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
@@ -1697,3 +1628,6 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+
+__all__ = ["PegasusForCausalLM", "PegasusForConditionalGeneration", "PegasusModel", "PegasusPreTrainedModel"]

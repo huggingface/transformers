@@ -17,7 +17,7 @@
 import math
 import os
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, get_activation
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -35,7 +36,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, SequenceSummary
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
@@ -52,16 +53,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/electra-small-discriminator"
 _CONFIG_FOR_DOC = "ElectraConfig"
-
-ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/electra-small-generator",
-    "google/electra-base-generator",
-    "google/electra-large-generator",
-    "google/electra-small-discriminator",
-    "google/electra-base-discriminator",
-    "google/electra-large-discriminator",
-    # See all ELECTRA models at https://huggingface.co/models?filter=electra
-]
 
 
 def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_or_generator="discriminator"):
@@ -362,11 +353,18 @@ class ElectraSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Electra
+ELECTRA_SELF_ATTENTION_CLASSES = {
+    "eager": ElectraSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Electra,BERT->ELECTRA
 class ElectraAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = ElectraSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = ELECTRA_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = ElectraSelfOutput(config)
         self.pruned_heads = set()
 
@@ -672,7 +670,6 @@ class ElectraPreTrainedModel(PreTrainedModel):
     base_model_prefix = "electra"
     supports_gradient_checkpointing = True
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -714,7 +711,7 @@ class ElectraForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -947,6 +944,106 @@ class ElectraClassificationHead(nn.Module):
         x = self.dropout(x)
         x = self.out_proj(x)
         return x
+
+
+# Copied from transformers.models.xlm.modeling_xlm.XLMSequenceSummary with XLM->Electra
+class ElectraSequenceSummary(nn.Module):
+    r"""
+    Compute a single vector summary of a sequence hidden states.
+
+    Args:
+        config ([`ElectraConfig`]):
+            The config used by the model. Relevant arguments in the config class of the model are (refer to the actual
+            config class of your model for the default values it uses):
+
+            - **summary_type** (`str`) -- The method to use to make this summary. Accepted values are:
+
+                - `"last"` -- Take the last token hidden state (like XLNet)
+                - `"first"` -- Take the first token hidden state (like Bert)
+                - `"mean"` -- Take the mean of all tokens hidden states
+                - `"cls_index"` -- Supply a Tensor of classification token position (GPT/GPT-2)
+                - `"attn"` -- Not implemented now, use multi-head attention
+
+            - **summary_use_proj** (`bool`) -- Add a projection after the vector extraction.
+            - **summary_proj_to_labels** (`bool`) -- If `True`, the projection outputs to `config.num_labels` classes
+              (otherwise to `config.hidden_size`).
+            - **summary_activation** (`Optional[str]`) -- Set to `"tanh"` to add a tanh activation to the output,
+              another string or `None` will add no activation.
+            - **summary_first_dropout** (`float`) -- Optional dropout probability before the projection and activation.
+            - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and activation.
+    """
+
+    def __init__(self, config: ElectraConfig):
+        super().__init__()
+
+        self.summary_type = getattr(config, "summary_type", "last")
+        if self.summary_type == "attn":
+            # We should use a standard multi-head attention module with absolute positional embedding for that.
+            # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
+            # We can probably just use the multi-head attention module of PyTorch >=1.1.0
+            raise NotImplementedError
+
+        self.summary = nn.Identity()
+        if hasattr(config, "summary_use_proj") and config.summary_use_proj:
+            if hasattr(config, "summary_proj_to_labels") and config.summary_proj_to_labels and config.num_labels > 0:
+                num_classes = config.num_labels
+            else:
+                num_classes = config.hidden_size
+            self.summary = nn.Linear(config.hidden_size, num_classes)
+
+        activation_string = getattr(config, "summary_activation", None)
+        self.activation: Callable = get_activation(activation_string) if activation_string else nn.Identity()
+
+        self.first_dropout = nn.Identity()
+        if hasattr(config, "summary_first_dropout") and config.summary_first_dropout > 0:
+            self.first_dropout = nn.Dropout(config.summary_first_dropout)
+
+        self.last_dropout = nn.Identity()
+        if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
+            self.last_dropout = nn.Dropout(config.summary_last_dropout)
+
+    def forward(
+        self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None
+    ) -> torch.FloatTensor:
+        """
+        Compute a single vector summary of a sequence hidden states.
+
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_len, hidden_size]`):
+                The hidden states of the last layer.
+            cls_index (`torch.LongTensor` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
+                Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
+
+        Returns:
+            `torch.FloatTensor`: The summary of the sequence hidden states.
+        """
+        if self.summary_type == "last":
+            output = hidden_states[:, -1]
+        elif self.summary_type == "first":
+            output = hidden_states[:, 0]
+        elif self.summary_type == "mean":
+            output = hidden_states.mean(dim=1)
+        elif self.summary_type == "cls_index":
+            if cls_index is None:
+                cls_index = torch.full_like(
+                    hidden_states[..., :1, :],
+                    hidden_states.shape[-2] - 1,
+                    dtype=torch.long,
+                )
+            else:
+                cls_index = cls_index.unsqueeze(-1).unsqueeze(-1)
+                cls_index = cls_index.expand((-1,) * (cls_index.dim() - 1) + (hidden_states.size(-1),))
+            # shape of cls_index: (bsz, XX, 1, hidden_size) where XX are optional leading dim of hidden_states
+            output = hidden_states.gather(-2, cls_index).squeeze(-2)  # shape (bsz, XX, hidden_size)
+        elif self.summary_type == "attn":
+            raise NotImplementedError
+
+        output = self.first_dropout(output)
+        output = self.summary(output)
+        output = self.activation(output)
+        output = self.last_dropout(output)
+
+        return output
 
 
 @add_start_docstrings(
@@ -1445,7 +1542,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
         super().__init__(config)
 
         self.electra = ElectraModel(config)
-        self.sequence_summary = SequenceSummary(config)
+        self.sequence_summary = ElectraSequenceSummary(config)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         # Initialize weights and apply final processing
@@ -1527,7 +1624,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
 @add_start_docstrings(
     """ELECTRA Model with a `language modeling` head on top for CLM fine-tuning.""", ELECTRA_START_DOCSTRING
 )
-class ElectraForCausalLM(ElectraPreTrainedModel):
+class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["generator_lm_head.weight"]
 
     def __init__(self, config):
@@ -1566,6 +1663,7 @@ class ElectraForCausalLM(ElectraPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -1635,11 +1733,12 @@ class ElectraForCausalLM(ElectraPreTrainedModel):
 
         lm_loss = None
         if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            lm_loss = self.loss_function(
+                prediction_scores,
+                labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[1:]
@@ -1654,28 +1753,6 @@ class ElectraForCausalLM(ElectraPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        # cut decoder_input_ids if past_key_values is used
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
-
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM._reorder_cache
     def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
@@ -1684,3 +1761,17 @@ class ElectraForCausalLM(ElectraPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+
+__all__ = [
+    "ElectraForCausalLM",
+    "ElectraForMaskedLM",
+    "ElectraForMultipleChoice",
+    "ElectraForPreTraining",
+    "ElectraForQuestionAnswering",
+    "ElectraForSequenceClassification",
+    "ElectraForTokenClassification",
+    "ElectraModel",
+    "ElectraPreTrainedModel",
+    "load_tf_weights_in_electra",
+]

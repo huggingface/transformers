@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 GroupViT model."""
-
+"""TF 2.0 GroupViT model."""
 
 from __future__ import annotations
 
@@ -63,13 +62,17 @@ if is_tensorflow_probability_available():
             "It seems you have `tensorflow_probability` installed with the wrong tensorflow version."
             "Please try to reinstall it following the instructions here: https://github.com/tensorflow/probability."
         )
+else:
+    try:
+        import tensorflow_probability as tfp
+
+        # On the first call, check whether a compatible version of TensorFlow is installed
+        # TensorFlow Probability depends on a recent stable release of TensorFlow
+        _ = tfp.distributions.Normal(loc=0.0, scale=1.0)
+    except ImportError:
+        pass
 
 _CHECKPOINT_FOR_DOC = "nvidia/groupvit-gcc-yfcc"
-
-TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nvidia/groupvit-gcc-yfcc",
-    # See all GroupViT models at https://huggingface.co/models?filter=groupvit
-]
 
 
 LARGE_NEGATIVE = -1e8
@@ -250,11 +253,11 @@ class TFGroupViTModelOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits_per_image: tf.Tensor = None
-    logits_per_text: tf.Tensor = None
-    segmentation_logits: tf.Tensor = None
-    text_embeds: tf.Tensor = None
-    image_embeds: tf.Tensor = None
+    logits_per_image: Optional[tf.Tensor] = None
+    logits_per_text: Optional[tf.Tensor] = None
+    segmentation_logits: Optional[tf.Tensor] = None
+    text_embeds: Optional[tf.Tensor] = None
+    image_embeds: Optional[tf.Tensor] = None
     text_model_output: TFBaseModelOutputWithPooling = None
     vision_model_output: TFBaseModelOutputWithPooling = None
 
@@ -643,9 +646,9 @@ class TFGroupViTTextEmbeddings(keras.layers.Layer):
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
     ) -> tf.Tensor:
         """
         Applies embedding based on inputs tensor.
@@ -895,10 +898,10 @@ class TFGroupViTAttention(keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: tf.Tensor = None,
-        causal_attention_mask: tf.Tensor = None,
-        output_attentions: bool = None,
-        encoder_hidden_states: tf.Tensor = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        causal_attention_mask: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        encoder_hidden_states: Optional[tf.Tensor] = None,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         """Input shape: Batch x Time x Channel"""
@@ -1440,13 +1443,13 @@ class TFGroupViTMainLayer(keras.layers.Layer):
         super().__init__(**kwargs)
 
         if not isinstance(config.text_config, GroupViTTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type GroupViTTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, GroupViTVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type GroupViTVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
@@ -2133,3 +2136,6 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         if getattr(self, "groupvit", None) is not None:
             with tf.name_scope(self.groupvit.name):
                 self.groupvit.build(None)
+
+
+__all__ = ["TFGroupViTModel", "TFGroupViTPreTrainedModel", "TFGroupViTTextModel", "TFGroupViTVisionModel"]

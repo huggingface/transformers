@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" M2M100 model configuration"""
+"""M2M100 model configuration"""
+
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
 
@@ -24,11 +25,6 @@ from ...utils import TensorType, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
-
-M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/m2m100_418M": "https://huggingface.co/facebook/m2m100_418M/resolve/main/config.json",
-    # See all M2M100 models at https://huggingface.co/models?filter=m2m_100
-}
 
 
 class M2M100Config(PretrainedConfig):
@@ -282,3 +278,6 @@ class M2M100OnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_inputs
 
     generate_dummy_inputs = _generate_dummy_inputs_for_default_and_seq2seq_lm
+
+
+__all__ = ["M2M100Config", "M2M100OnnxConfig"]

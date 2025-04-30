@@ -12,6 +12,16 @@ on:
       slice_id:
         required: true
         type: number
+      runner:
+        required: true
+        type: string
+      docker:
+        required: true
+        type: string
+      report_name_prefix:
+        required: false
+        default: run_models_gpu
+        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -24,19 +34,20 @@ env:
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
-  RUN_PT_TF_CROSS_TESTS: 1
   CUDA_VISIBLE_DEVICES: 0,1
 
 jobs:
-  model_job:
+  run_models_gpu:
     name: " "
     strategy:
+      max-parallel: 8
       fail-fast: false
       matrix:
         folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
-    runs-on: ['${{ inputs.machine_type }}', nvidia-gpu, t4, daily-ci]
+    runs-on:
+      group: '${{ inputs.machine_type }}'
     container:
-      image: huggingface/transformers-all-latest-gpu
+      image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Echo input and matrix info
@@ -65,6 +76,18 @@ jobs:
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
+      - name: Update / Install some packages (for Past CI)
+        if: ${{ contains(inputs.docker, '-past-') }}
+        working-directory: /transformers
+        run: |
+          python3 -m pip install -U datasets
+
+      - name: Update / Install some packages (for Past CI)
+        if: ${{ contains(inputs.docker, '-past-') && contains(inputs.docker, '-pytorch-') }}
+        working-directory: /transformers
+        run: |
+          python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
@@ -78,25 +101,42 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /transformers
+        shell: bash
+        run: |
+          echo "${{ inputs.machine_type }}"
+
+          if [ "${{ inputs.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+            machine_type=single-gpu
+          elif [ "${{ inputs.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+            machine_type=multi-gpu
+          else
+            machine_type=${{ inputs.machine_type }}
+          fi
+
+          echo "$machine_type"
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m pytest -v --make-reports=${{ inputs.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
+        run: python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ inputs.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
+        run: cat /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports/failures_short.txt
 
       - name: Run test
         shell: bash
         run: |
-          mkdir -p /transformers/reports/${{ inputs.machine_type }}_tests_gpu_${{ matrix.folders }}
-          echo "hello" > /transformers/reports/${{ inputs.machine_type }}_tests_gpu_${{ matrix.folders }}/hello.txt
-          echo "${{ inputs.machine_type }}_tests_gpu_${{ matrix.folders }}"
+          mkdir -p /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports
+          echo "hello" > /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports/hello.txt
+          echo "${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports"
 
-      - name: "Test suite reports artifacts: ${{ inputs.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports"
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
-          path: /transformers/reports/${{ inputs.machine_type }}_tests_gpu_${{ matrix.folders }}
+          name: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports

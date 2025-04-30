@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning a 🤗 Flax Transformers model for sequence classification on GLUE."""
+"""Finetuning a 🤗 Flax Transformers model for sequence classification on GLUE."""
+
 import json
 import logging
 import math
@@ -24,7 +24,7 @@ import time
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Optional
 
 import datasets
 import evaluate
@@ -37,7 +37,7 @@ from flax import struct, traverse_util
 from flax.jax_utils import pad_shard_unpad, replicate, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import HfApi
 from tqdm import tqdm
 
 import transformers
@@ -55,7 +55,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 logger = logging.getLogger(__name__)
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.39.0.dev0")
+check_min_version("4.52.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -373,9 +373,8 @@ def main():
         if repo_name is None:
             repo_name = Path(training_args.output_dir).absolute().name
         # Create repo and retrieve repo_id
-        repo_id = create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
-        # Clone repo locally
-        repo = Repository(training_args.output_dir, clone_from=repo_id, token=training_args.hub_token)
+        api = HfApi()
+        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
 
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
     # or specify a GLUE benchmark task (the dataset will be downloaded automatically from the datasets Hub).
@@ -484,7 +483,7 @@ def main():
             label_to_id = {i: label_name_to_id[label_list[i]] for i in range(num_labels)}
         else:
             logger.warning(
-                "Your model seems to have been trained with labels, but they don't match the dataset: ",
+                "Your model seems to have been trained with labels, but they don't match the dataset: "
                 f"model labels: {sorted(label_name_to_id.keys())}, dataset labels: {sorted(label_list)}."
                 "\nIgnoring the model labels as a result.",
             )
@@ -572,8 +571,8 @@ def main():
 
     # define step functions
     def train_step(
-        state: train_state.TrainState, batch: Dict[str, Array], dropout_rng: PRNGKey
-    ) -> Tuple[train_state.TrainState, float]:
+        state: train_state.TrainState, batch: dict[str, Array], dropout_rng: PRNGKey
+    ) -> tuple[train_state.TrainState, float]:
         """Trains model with an optimizer (both in `state`) on `batch`, returning a pair `(new_state, loss)`."""
         dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
         targets = batch.pop("labels")
@@ -677,7 +676,13 @@ def main():
                     model.save_pretrained(training_args.output_dir, params=params)
                     tokenizer.save_pretrained(training_args.output_dir)
                     if training_args.push_to_hub:
-                        repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
+                        api.upload_folder(
+                            commit_message=f"Saving weights and logs of epoch {epoch}",
+                            folder_path=training_args.output_dir,
+                            repo_id=repo_id,
+                            repo_type="model",
+                            token=training_args.hub_token,
+                        )
             epochs.desc = f"Epoch ... {epoch + 1}/{num_epochs}"
 
     # save the eval metrics in json

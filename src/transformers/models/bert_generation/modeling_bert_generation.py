@@ -20,9 +20,9 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
@@ -192,11 +192,18 @@ class BertGenerationSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BertGeneration
+BERT_GENERATION_SELF_ATTENTION_CLASSES = {
+    "eager": BertGenerationSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BertGeneration,BERT->BERT_GENERATION
 class BertGenerationAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = BertGenerationSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = BERT_GENERATION_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = BertGenerationSelfOutput(config)
         self.pruned_heads = set()
 
@@ -601,6 +608,8 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, BertGenerationOnlyLMHead):
+            module.bias.data.zero_()
 
 
 BERT_GENERATION_START_DOCSTRING = r"""
@@ -726,6 +735,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,  # NOOP kwargs, for now
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -777,9 +787,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask = None
-        if not use_cache:
-            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -844,15 +852,19 @@ class BertGenerationOnlyLMHead(nn.Module):
         return logits
 
     def _tie_weights(self):
-        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        self.bias = self.decoder.bias
+        # For accelerate compatibility and to not break backward compatibility
+        if self.decoder.bias.device.type == "meta":
+            self.decoder.bias = self.bias
+        else:
+            # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
+            self.bias = self.decoder.bias
 
 
 @add_start_docstrings(
     """BertGeneration Model with a `language modeling` head on top for CLM fine-tuning.""",
     BERT_GENERATION_START_DOCSTRING,
 )
-class BertGenerationDecoder(BertGenerationPreTrainedModel):
+class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     def __init__(self, config):
@@ -872,6 +884,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
+        self.lm_head.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(BERT_GENERATION_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
@@ -890,6 +903,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -952,6 +966,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -959,11 +974,12 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
 
         lm_loss = None
         if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            lm_loss = self.loss_function(
+                prediction_scores,
+                labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[1:]
@@ -978,27 +994,6 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        # cut decoder_input_ids if past_key_values is used
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
-
     def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
@@ -1006,3 +1001,11 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+
+__all__ = [
+    "BertGenerationDecoder",
+    "BertGenerationEncoder",
+    "BertGenerationPreTrainedModel",
+    "load_tf_weights_in_bert_generation",
+]

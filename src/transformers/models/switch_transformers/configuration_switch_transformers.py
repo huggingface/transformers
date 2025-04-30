@@ -12,16 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Switch Transformers model configuration"""
+"""Switch Transformers model configuration"""
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/switch-base-8": "https://huggingface.co/google/switch-base-8/blob/main/config.json",
-}
 
 
 class SwitchTransformersConfig(PretrainedConfig):
@@ -183,3 +180,6 @@ class SwitchTransformersConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
+
+
+__all__ = ["SwitchTransformersConfig"]

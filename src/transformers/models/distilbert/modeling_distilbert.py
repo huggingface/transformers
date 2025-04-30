@@ -14,23 +14,23 @@
 # limitations under the License.
 
 """
- PyTorch DistilBERT model adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM) and in
- part from HuggingFace PyTorch version of Google AI Bert model (https://github.com/google-research/bert)
+PyTorch DistilBERT model adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM) and in
+part from HuggingFace PyTorch version of Google AI Bert model (https://github.com/google-research/bert)
 """
-
 
 import math
 from typing import Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import get_activation
 from ...configuration_utils import PretrainedConfig
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask_for_sdpa
+from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -40,54 +40,32 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import (
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    is_torch_greater_or_equal_than_2_2,
+    prune_linear_layer,
+)
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
 from .configuration_distilbert import DistilBertConfig
 
 
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+if is_flash_attn_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "distilbert-base-uncased"
 _CONFIG_FOR_DOC = "DistilBertConfig"
 
-DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "distilbert-base-uncased",
-    "distilbert-base-uncased-distilled-squad",
-    "distilbert-base-cased",
-    "distilbert-base-cased-distilled-squad",
-    "distilbert-base-german-cased",
-    "distilbert-base-multilingual-cased",
-    "distilbert-base-uncased-finetuned-sst-2-english",
-    # See all DistilBERT models at https://huggingface.co/models?filter=distilbert
-]
-
 
 # UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
-
-
-# Copied from transformers.models.llama.modeling_llama._get_unpad_data
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
 
 
 def create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
@@ -114,10 +92,6 @@ class Embeddings(nn.Module):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.dim)
-        if config.sinusoidal_pos_embds:
-            create_sinusoidal_embeddings(
-                n_pos=config.max_position_embeddings, dim=config.dim, out=self.position_embeddings.weight
-            )
 
         self.LayerNorm = nn.LayerNorm(config.dim, eps=1e-12)
         self.dropout = nn.Dropout(config.dropout)
@@ -144,7 +118,7 @@ class Embeddings(nn.Module):
 
         # Setting the position-ids to the registered buffer in constructor, it helps
         # when tracing the model without passing position-ids, solves
-        # isues similar to issue #5664
+        # issues similar to issue #5664
         if hasattr(self, "position_ids"):
             position_ids = self.position_ids[:, :seq_length]
         else:
@@ -270,14 +244,13 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
     API of flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
     def forward(
         self,
@@ -340,8 +313,15 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        attn_weights = self._flash_attention_forward(
-            query_states, key_states, value_states, mask, q_length, dropout=attn_dropout
+        attn_weights = _flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            mask,
+            q_length,
+            dropout=attn_dropout,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            is_causal=self.is_causal,
         )
 
         attn_weights_reshaped = attn_weights.reshape(batch_size, q_length, self.n_heads * dim_per_head)
@@ -352,104 +332,85 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
         else:
             return (attn_output,)
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward with causal=True->causal=False
-    def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
-    ):
+
+class DistilBertSdpaAttention(MultiHeadSelfAttention):
+    def __init__(self, config: PretrainedConfig):
+        super().__init__(config=config)
+        self.dropout_prob = config.attention_dropout
+        self.require_contiguous_qkv = not is_torch_greater_or_equal_than_2_2
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        mask: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, ...]:
         """
-        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
-        first unpad the input, then computes the attention scores and pad the final attention scores.
+        Parameters:
+            query: torch.tensor(bs, seq_length, dim)
+            key: torch.tensor(bs, seq_length, dim)
+            value: torch.tensor(bs, seq_length, dim)
+            mask: torch.tensor(bs, seq_length)
 
-        Args:
-            query_states (`torch.Tensor`):
-                Input query states to be passed to Flash Attention API
-            key_states (`torch.Tensor`):
-                Input key states to be passed to Flash Attention API
-            value_states (`torch.Tensor`):
-                Input value states to be passed to Flash Attention API
-            attention_mask (`torch.Tensor`):
-                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
-                position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
-                Attention dropout
-            softmax_scale (`float`, *optional*):
-                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+        Returns:
+            weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
+            seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        if not self._flash_attn_uses_top_left_mask:
-            causal = self.is_causal
-        else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
-            causal = self.is_causal and query_length != 1
-
-        # Contains at least one padding token in the sequence
-        if attention_mask is not None:
-            batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
+        if output_attentions or head_mask is not None:
+            logger.warning_once(
+                "DistilBertSdpaAttention is used but `torch.nn.functional.scaled_dot_product_attention` does not support"
+                " `output_attentions=True` or `head_mask`. Falling back to the manual attention implementation, but specifying"
+                " the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be"
+                ' removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                query,
+                key,
+                value,
+                mask,
+                head_mask,
+                output_attentions,
             )
 
-            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+        batch_size, _, _ = query.size()
+        dim_per_head = self.dim // self.n_heads
 
-            attn_output_unpad = flash_attn_varlen_func(
-                query_states,
-                key_states,
-                value_states,
-                cu_seqlens_q=cu_seqlens_q,
-                cu_seqlens_k=cu_seqlens_k,
-                max_seqlen_q=max_seqlen_in_batch_q,
-                max_seqlen_k=max_seqlen_in_batch_k,
-                dropout_p=dropout,
-                softmax_scale=softmax_scale,
-                causal=causal,
-            )
+        def shape(x: torch.Tensor) -> torch.Tensor:
+            """separate heads"""
+            return x.view(batch_size, -1, self.n_heads, dim_per_head).transpose(1, 2)
 
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
-        else:
-            attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
-            )
+        def unshape(x: torch.Tensor) -> torch.Tensor:
+            """group heads"""
+            return x.transpose(1, 2).contiguous().view(batch_size, -1, self.n_heads * dim_per_head)
 
-        return attn_output
+        q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
+        k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
+        v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input with num_heads->n_heads
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
+        # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
+        # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
+        # Reference: https://github.com/pytorch/pytorch/issues/112577
+        if self.require_contiguous_qkv and q.device.type == "cuda" and mask is not None:
+            q = q.contiguous()
+            k = k.contiguous()
+            v = v.contiguous()
 
-        key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=mask,
+            dropout_p=self.dropout_prob if self.training else 0.0,
+            is_causal=False,
         )
-        value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.n_heads, head_dim), indices_k
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
 
-        return (
-            query_layer,
-            key_layer,
-            value_layer,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-        )
+        attn_output = unshape(attn_output)
+        attn_output = self.out_lin(attn_output)
+
+        return (attn_output,)
 
 
 class FFN(nn.Module):
@@ -476,6 +437,7 @@ class FFN(nn.Module):
 DISTILBERT_ATTENTION_CLASSES = {
     "eager": MultiHeadSelfAttention,
     "flash_attention_2": DistilBertFlashAttention2,
+    "sdpa": DistilBertSdpaAttention,
 }
 
 
@@ -521,7 +483,7 @@ class TransformerBlock(nn.Module):
         if output_attentions:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
         else:  # To handle these `output_attentions` or `output_hidden_states` cases returning tuples
-            if type(sa_output) != tuple:
+            if type(sa_output) is not tuple:
                 raise TypeError(f"sa_output must be a tuple but it is {type(sa_output)} type")
 
             sa_output = sa_output[0]
@@ -626,6 +588,7 @@ class DistilBertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "distilbert"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
@@ -642,6 +605,10 @@ class DistilBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, Embeddings) and self.config.sinusoidal_pos_embds:
+            create_sinusoidal_embeddings(
+                self.config.max_position_embeddings, self.config.dim, module.position_embeddings.weight
+            )
 
 
 DISTILBERT_START_DOCSTRING = r"""
@@ -708,6 +675,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         self.embeddings = Embeddings(config)  # Embeddings
         self.transformer = Transformer(config)  # Encoder
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -808,6 +776,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
+        head_mask_is_none = head_mask is None
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
@@ -818,6 +787,11 @@ class DistilBertModel(DistilBertPreTrainedModel):
         else:
             if attention_mask is None:
                 attention_mask = torch.ones(input_shape, device=device)  # (bs, seq_length)
+
+            if self._use_sdpa and head_mask_is_none and not output_attentions:
+                attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    attention_mask, embeddings.dtype, tgt_len=input_shape[1]
+                )
 
         return self.transformer(
             x=embeddings,
@@ -1390,3 +1364,14 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "DistilBertForMaskedLM",
+    "DistilBertForMultipleChoice",
+    "DistilBertForQuestionAnswering",
+    "DistilBertForSequenceClassification",
+    "DistilBertForTokenClassification",
+    "DistilBertModel",
+    "DistilBertPreTrainedModel",
+]

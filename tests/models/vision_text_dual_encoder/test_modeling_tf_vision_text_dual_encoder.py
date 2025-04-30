@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VisionTextDualEncoder model. """
-
+"""Testing suite for the PyTorch VisionTextDualEncoder model."""
 
 from __future__ import annotations
 
@@ -151,7 +149,7 @@ class TFVisionTextDualEncoderMixin:
         )
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
-        diff = np.abs((a - b)).max()
+        diff = np.abs(a - b).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
     def test_vision_text_dual_encoder_model(self):

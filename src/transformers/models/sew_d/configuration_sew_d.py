@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SEW-D model configuration"""
+"""SEW-D model configuration"""
 
 import functools
 import operator
@@ -22,11 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "asapp/sew-d-tiny-100k": "https://huggingface.co/asapp/sew-d-tiny-100k/resolve/main/config.json",
-    # See all SEW-D models at https://huggingface.co/models?filter=sew-d
-}
 
 
 class SEWDConfig(PretrainedConfig):
@@ -117,8 +112,8 @@ class SEWDConfig(PretrainedConfig):
             Recognition](https://arxiv.org/abs/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
-            procecure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
-            reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
+            procedure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
+            reasoning from the probability of each feature vector to be chosen as the start of the vector span to be
             masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
             actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`.
         mask_time_length (`int`, *optional*, defaults to 10):
@@ -129,8 +124,8 @@ class SEWDConfig(PretrainedConfig):
             mask_time_min_masks''
         mask_feature_prob (`float`, *optional*, defaults to 0.0):
             Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
-            masking procecure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
-            the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
+            masking procedure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
+            the axis. If reasoning from the probability of each feature vector to be chosen as the start of the vector
             span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
             may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
             True`.
@@ -284,11 +279,6 @@ class SEWDConfig(PretrainedConfig):
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
 
-    @property
-    def hidden_dropout(self):
-        logger.warning_once("hidden_dropout is not used by the model and will be removed as config attribute in v4.35")
-        return self._hidden_dropout
-
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary.
@@ -296,3 +286,6 @@ class SEWDConfig(PretrainedConfig):
         output = super().to_dict()
         output["hidden_dropout"] = output.pop("_hidden_dropout")
         return output
+
+
+__all__ = ["SEWDConfig"]

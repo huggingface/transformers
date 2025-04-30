@@ -119,6 +119,30 @@ LOCALIZED_READMES = {
             "अनुसंधान पत्र {paper_title_link} के साथ जारी किया गया"
         ),
     },
+    "README_ru.md": {
+        "start_prompt": "🤗 В настоящее время Transformers предоставляет следующие архитектуры",
+        "end_prompt": "1. Хотите внести новую модель?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
+    "README_pt-br.md": {
+        "start_prompt": "🤗 Transformers atualmente fornece as seguintes arquiteturas",
+        "end_prompt": "1. Quer contribuir com um novo modelo?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
+    "README_te.md": {
+        "start_prompt": "🤗 ట్రాన్స్‌ఫార్మర్లు ప్రస్తుతం కింది ఆర్కిటెక్చర్‌లను అందజేస్తున్నాయి",
+        "end_prompt": "1. కొత్త మోడల్‌ను అందించాలనుకుంటున్నారా?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
     "README_fr.md": {
         "start_prompt": "🤗 Transformers fournit actuellement les architectures suivantes",
         "end_prompt": "1. Vous souhaitez contribuer avec un nouveau modèle ?",
@@ -127,8 +151,23 @@ LOCALIZED_READMES = {
             "{paper_authors}.{supplements}"
         ),
     },
+    "README_de.md": {
+        "start_prompt": "🤗 Transformers bietet derzeit die folgenden Architekturen an",
+        "end_prompt": "1. Möchten Sie ein neues Modell beitragen?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
+    "README_vi.md": {
+        "start_prompt": "🤗 Transformers hiện đang cung cấp các kiến trúc sau đây",
+        "end_prompt": "1. Muốn đóng góp một mô hình mới?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (từ {paper_affiliations}) được phát hành với bài báo {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
 }
-
 
 # This is to make sure the transformers module imported is the one in the repo.
 transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
@@ -145,7 +184,7 @@ def _should_continue(line: str, indent: str) -> bool:
     return line.startswith(indent) or len(line.strip()) == 0 or _is_definition_header_ending_line(line)
 
 
-def _sanity_check_splits(splits_1, splits_2, is_class):
+def _sanity_check_splits(splits_1, splits_2, is_class, filename):
     """Check the two (inner) block structures of the corresponding code block given by `split_code_into_blocks` match.
 
     For the case of `class`, they must be of one of the following 3 cases:
@@ -206,11 +245,12 @@ def _sanity_check_splits(splits_1, splits_2, is_class):
             ["block_without_name", "block_with_name"],
         ]:
             raise ValueError(
-                "For a class, it must have a specific structure. See the docstring of `_sanity_check_splits` in the file `utils/check_copies.py`"
+                f"""Class defined in {filename} doesn't have the expected structure.
+                See the docstring of `_sanity_check_splits` in the file `utils/check_copies.py`""",
             )
 
     if block_names_1 != block_names_2:
-        raise ValueError("The structures in the 2 code blocks differ.")
+        raise ValueError(f"In {filename}, two code blocks expected to be copies have different structures.")
 
 
 def find_block_end(lines: List[str], start_index: int, indent: int) -> int:
@@ -269,7 +309,18 @@ def split_code_into_blocks(
     """
     splits = []
     # `indent - 4` is the indent level of the target class/func header
-    target_block_name = re.search(rf"^{' ' * (indent - 4)}((class|def)\s+\S+)(\(|\:)", lines[start_index]).groups()[0]
+    try:
+        target_block_name = re.search(
+            rf"^{' ' * (indent - 4)}((class|def)\s+\S+)(\(|\:)", lines[start_index]
+        ).groups()[0]
+    except Exception:
+        start_context = min(start_index - 10, 0)
+        end_context = min(end_index + 10, len(lines))
+        raise ValueError(
+            f"Tried to split a class or function. It did not work. Error comes from line {start_index}: \n```\n"
+            + "".join(lines[start_context:end_context])
+            + "```\n"
+        )
 
     # from now on, the `block` means inner blocks unless explicitly specified
     indent_str = " " * indent
@@ -339,7 +390,7 @@ def split_code_into_blocks(
 
 
 def find_code_in_transformers(
-    object_name: str, base_path: str = None, return_indices: bool = False
+    object_name: str, base_path: Optional[str] = None, return_indices: bool = False
 ) -> Union[str, Tuple[List[str], int, int]]:
     """
     Find and return the source code of an object.
@@ -440,7 +491,7 @@ def replace_code(code: str, replace_pattern: str) -> str:
     return code
 
 
-def find_code_and_splits(object_name: str, base_path: str, buffer: dict = None):
+def find_code_and_splits(object_name: str, base_path: str, buffer: Optional[dict] = None):
     """Find the code of an object (specified by `object_name`) and split it into blocks.
 
     Args:
@@ -508,8 +559,11 @@ def get_indent(code: str) -> str:
     return ""
 
 
-def run_ruff(code):
-    command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
+def run_ruff(code, check=False):
+    if check:
+        command = ["ruff", "check", "-", "--fix", "--exit-zero"]
+    else:
+        command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
     stdout, _ = process.communicate(input=code.encode())
     return stdout.decode()
@@ -553,8 +607,23 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
     _re_func_match = re.compile(r"def\s+([^\(]+)\(")
     for re_pattern in [_re_class_match, _re_func_match]:
         if re_pattern.match(observed_code_header) is not None:
-            observed_obj_name = re_pattern.search(observed_code_header).groups()[0]
-            theoretical_name = re_pattern.search(theoretical_code_header).groups()[0]
+            try:
+                observed_obj_name = re_pattern.search(observed_code_header).groups()[0]
+            except Exception:
+                raise ValueError(
+                    "Tried to split a class or function. It did not work. Error comes from: \n```\n"
+                    + observed_code_header
+                    + "\n```\n"
+                )
+
+            try:
+                theoretical_name = re_pattern.search(theoretical_code_header).groups()[0]
+            except Exception:
+                raise ValueError(
+                    "Tried to split a class or function. It did not work. Error comes from: \n```\n"
+                    + theoretical_code_header
+                    + "\n```\n"
+                )
             theoretical_code_header = theoretical_code_header.replace(theoretical_name, observed_obj_name)
 
     # Find the first diff. Line 0 is special since we need to compare with the function/class names ignored.
@@ -569,7 +638,9 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
         diff_index += 1
 
 
-def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = None) -> Optional[List[Tuple[str, int]]]:
+def is_copy_consistent(
+    filename: str, overwrite: bool = False, buffer: Optional[dict] = None
+) -> Optional[List[Tuple[str, int]]]:
     """
     Check if the code commented as a copy in a file matches the original.
 
@@ -583,7 +654,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
 
     Returns:
         `Optional[List[Tuple[str, int]]]`: If `overwrite=False`, returns the list of differences as tuples `(str, int)`
-        with the name of the object having a diff and the line number where theere is the first diff.
+        with the name of the object having a diff and the line number where there is the first diff.
     """
     base_path = TRANSFORMERS_PATH if not filename.startswith("tests") else MODEL_TEST_PATH
 
@@ -592,11 +663,8 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
     diffs = []
     line_index = 0
     # Not a for loop cause `lines` is going to change (if `overwrite=True`).
+    search_re = _re_copy_warning_for_test_file if filename.startswith("tests") else _re_copy_warning
     while line_index < len(lines):
-        search_re = _re_copy_warning
-        if filename.startswith("tests"):
-            search_re = _re_copy_warning_for_test_file
-
         search = search_re.search(lines[line_index])
         if search is None:
             line_index += 1
@@ -606,9 +674,13 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
         indent, object_name, replace_pattern = search.groups()
 
         # Find the file lines, the object's code, and its blocks
-        target_lines, theoretical_code, theoretical_code_splits = find_code_and_splits(
-            object_name, base_path, buffer=buffer
-        )
+        try:
+            target_lines, theoretical_code, theoretical_code_splits = find_code_and_splits(
+                object_name, base_path, buffer=buffer
+            )
+        except Exception as exc:
+            exc.args = (f"Error while trying to find source code for {filename}.\n\n" + str(exc),)
+            raise
 
         # code replaced by the patterns
         theoretical_code_blocks = OrderedDict()
@@ -649,7 +721,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
 
         is_class = lines[start_index].startswith(f"{' ' * (len(indent) - 4)}class ")
         # sanity check
-        _sanity_check_splits(theoretical_code_splits, observed_code_splits, is_class=is_class)
+        _sanity_check_splits(theoretical_code_splits, observed_code_splits, is_class=is_class, filename=filename)
 
         # observed code in a structured way (a dict mapping block names to blocks' code)
         observed_code_blocks = OrderedDict()
@@ -687,9 +759,9 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
                 else:
                     # not in the target --> add it
                     theoretical_code_blocks[f"_ignored_new_block_{ignored_new_block_index}"] = code
-                    name_mappings_1[
+                    name_mappings_1[f"_ignored_new_block_{ignored_new_block_index}"] = (
                         f"_ignored_new_block_{ignored_new_block_index}"
-                    ] = f"_ignored_new_block_{ignored_new_block_index}"
+                    )
 
                     del observed_code_blocks[name]
                     observed_code_blocks[f"_ignored_new_block_{ignored_new_block_index}"] = code
@@ -761,7 +833,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
     return diffs
 
 
-def check_copies(overwrite: bool = False, file: str = None):
+def check_copies(overwrite: bool = False, file: Optional[str] = None):
     """
     Check every file is copy-consistent with the original. Also check the model list in the main README and other
     READMEs are consistent.
@@ -792,7 +864,6 @@ def check_copies(overwrite: bool = False, file: str = None):
             + diff
             + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
         )
-    check_model_list_copy(overwrite=overwrite)
 
 
 def check_full_copies(overwrite: bool = False):
@@ -898,8 +969,10 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
     _re_capture_meta = re.compile(
         r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*?by (.*?[A-Za-z\*]{2,}?)\. (.*)$"
     )
-    # This regex is used to synchronize link.
+    # This regex is used to synchronize title link.
     _re_capture_title_link = re.compile(r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\*")
+    # This regex is used to synchronize paper title and link.
+    _re_capture_paper_link = re.compile(r" \[([^\]]*)\]\(([^\)]*)\)")
 
     if len(localized_model_list) == 0:
         localized_model_index = {}
@@ -931,110 +1004,26 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
                 readmes_match = False
                 localized_model_index[title] = update
         else:
-            # Synchronize link
-            localized_model_index[title] = _re_capture_title_link.sub(
+            # Synchronize title link
+            converted_model = _re_capture_title_link.sub(
                 f"**[{title}]({model_link})**", localized_model_index[title], count=1
             )
+
+            # Synchronize paper title and its link (if found)
+            paper_title_link = _re_capture_paper_link.search(model)
+            if paper_title_link is not None:
+                paper_title, paper_link = paper_title_link.groups()
+                converted_model = _re_capture_paper_link.sub(
+                    f" [{paper_title}]({paper_link})", converted_model, count=1
+                )
+
+            if converted_model != localized_model_index[title]:
+                readmes_match = False
+                localized_model_index[title] = converted_model
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
 
     return readmes_match, "\n".join((x[1] for x in sorted_index)) + "\n"
-
-
-def _find_text_in_file(filename: str, start_prompt: str, end_prompt: str) -> Tuple[str, int, int, List[str]]:
-    """
-    Find the text in a file between two prompts.
-
-    Args:
-        filename (`str`): The name of the file to look into.
-        start_prompt (`str`): The string to look for that introduces the content looked for.
-        end_prompt (`str`): The string to look for that ends the content looked for.
-
-    Returns:
-        Tuple[str, int, int, List[str]]: The content between the two prompts, the index of the start line in the
-        original file, the index of the end line in the original file and the list of lines of that file.
-    """
-    with open(filename, "r", encoding="utf-8", newline="\n") as f:
-        lines = f.readlines()
-    # Find the start prompt.
-    start_index = 0
-    while not lines[start_index].startswith(start_prompt):
-        start_index += 1
-    start_index += 1
-
-    end_index = start_index
-    while not lines[end_index].startswith(end_prompt):
-        end_index += 1
-    end_index -= 1
-
-    while len(lines[start_index]) <= 1:
-        start_index += 1
-    while len(lines[end_index]) <= 1:
-        end_index -= 1
-    end_index += 1
-    return "".join(lines[start_index:end_index]), start_index, end_index, lines
-
-
-def check_model_list_copy(overwrite: bool = False):
-    """
-    Check the model lists in the README is consistent with the ones in the other READMES and also with `index.nmd`.
-
-    Args:
-        overwrite (`bool`, *optional*, defaults to `False`):
-            Whether or not to overwrite the copies when they don't match.
-    """
-    # Fix potential doc links in the README
-    with open(os.path.join(REPO_PATH, "README.md"), "r", encoding="utf-8", newline="\n") as f:
-        readme = f.read()
-    new_readme = readme.replace("https://huggingface.co/transformers", "https://huggingface.co/docs/transformers")
-    new_readme = new_readme.replace(
-        "https://huggingface.co/docs/main/transformers", "https://huggingface.co/docs/transformers/main"
-    )
-    if new_readme != readme:
-        if overwrite:
-            with open(os.path.join(REPO_PATH, "README.md"), "w", encoding="utf-8", newline="\n") as f:
-                f.write(new_readme)
-        else:
-            raise ValueError(
-                "The main README contains wrong links to the documentation of Transformers. Run `make fix-copies` to "
-                "automatically fix them."
-            )
-
-    md_list = get_model_list(
-        filename="README.md",
-        start_prompt=LOCALIZED_READMES["README.md"]["start_prompt"],
-        end_prompt=LOCALIZED_READMES["README.md"]["end_prompt"],
-    )
-
-    # Build the converted Markdown.
-    converted_md_lists = []
-    for filename, value in LOCALIZED_READMES.items():
-        _start_prompt = value["start_prompt"]
-        _end_prompt = value["end_prompt"]
-        _format_model_list = value["format_model_list"]
-
-        localized_md_list = get_model_list(filename, _start_prompt, _end_prompt)
-        readmes_match, converted_md_list = convert_to_localized_md(md_list, localized_md_list, _format_model_list)
-
-        converted_md_lists.append((filename, readmes_match, converted_md_list, _start_prompt, _end_prompt))
-
-    # Compare the converted Markdowns
-    for converted_md_list in converted_md_lists:
-        filename, readmes_match, converted_md, _start_prompt, _end_prompt = converted_md_list
-
-        if filename == "README.md":
-            continue
-        if overwrite:
-            _, start_index, end_index, lines = _find_text_in_file(
-                filename=os.path.join(REPO_PATH, filename), start_prompt=_start_prompt, end_prompt=_end_prompt
-            )
-            with open(os.path.join(REPO_PATH, filename), "w", encoding="utf-8", newline="\n") as f:
-                f.writelines(lines[:start_index] + [converted_md] + lines[end_index:])
-        elif not readmes_match:
-            raise ValueError(
-                f"The model list in the README changed and the list in `{filename}` has not been updated. Run "
-                "`make fix-copies` to fix this."
-            )
 
 
 # Map a model name with the name it has in the README for the check_readme check
@@ -1051,6 +1040,7 @@ SPECIAL_MODEL_NAMES = {
     "OpenAI GPT": "GPT",
     "Perceiver": "Perceiver IO",
     "SAM": "Segment Anything",
+    "SAM_HQ": "Segment Anything High Quality",
     "ViT": "Vision Transformer (ViT)",
 }
 
@@ -1071,6 +1061,7 @@ MODELS_NOT_IN_README = [
     "CLIPVisionModel",
     "SiglipVisionModel",
     "ChineseCLIPVisionModel",
+    "VitPoseBackbone",
 ]
 
 # Template for new entries to add in the main README when we have missing models.
@@ -1080,60 +1071,11 @@ README_TEMPLATE = (
 )
 
 
-def check_readme(overwrite: bool = False):
-    """
-    Check if the main README contains all the models in the library or not.
-
-    Args:
-        overwrite (`bool`, *optional*, defaults to `False`):
-            Whether or not to add an entry for the missing models using `README_TEMPLATE`.
-    """
-    info = LOCALIZED_READMES["README.md"]
-    models, start_index, end_index, lines = _find_text_in_file(
-        os.path.join(REPO_PATH, "README.md"),
-        info["start_prompt"],
-        info["end_prompt"],
-    )
-    models_in_readme = [re.search(r"\*\*\[([^\]]*)", line).groups()[0] for line in models.strip().split("\n")]
-
-    model_names_mapping = transformers_module.models.auto.configuration_auto.MODEL_NAMES_MAPPING
-    absents = [
-        (key, name)
-        for key, name in model_names_mapping.items()
-        if SPECIAL_MODEL_NAMES.get(name, name) not in models_in_readme
-    ]
-    # Remove exceptions
-    absents = [(key, name) for key, name in absents if name not in MODELS_NOT_IN_README]
-    if len(absents) > 0 and not overwrite:
-        print(absents)
-        raise ValueError(
-            "The main README doesn't contain all models, run `make fix-copies` to fill it with the missing model(s)"
-            " then complete the generated entries.\nIf the model is not supposed to be in the main README, add it to"
-            " the list `MODELS_NOT_IN_README` in utils/check_copies.py.\nIf it has a different name in the repo than"
-            " in the README, map the correspondence in `SPECIAL_MODEL_NAMES` in utils/check_copies.py."
-        )
-
-    new_models = [README_TEMPLATE.format(model_name=name, model_type=key) for key, name in absents]
-
-    all_models = models.strip().split("\n") + new_models
-    all_models = sorted(all_models, key=lambda x: re.search(r"\*\*\[([^\]]*)", x).groups()[0].lower())
-    all_models = "\n".join(all_models) + "\n"
-
-    if all_models != models:
-        if overwrite:
-            print("Fixing the main README.")
-            with open(os.path.join(REPO_PATH, "README.md"), "w", encoding="utf-8", newline="\n") as f:
-                f.writelines(lines[:start_index] + [all_models] + lines[end_index:])
-        else:
-            raise ValueError("The main README model list is not properly sorted. Run `make fix-copies` to fix this.")
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--file", type=str, default=None, help="A specific file to check and/or fix")
     parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
     args = parser.parse_args()
 
-    check_readme(args.fix_and_overwrite)
     check_copies(args.fix_and_overwrite, args.file)
     check_full_copies(args.fix_and_overwrite)

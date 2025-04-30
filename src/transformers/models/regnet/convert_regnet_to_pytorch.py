@@ -14,19 +14,18 @@
 # limitations under the License.
 """Convert RegNet checkpoints from timm and vissl."""
 
-
 import argparse
 import json
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import timm
 import torch
 import torch.nn as nn
 from classy_vision.models.regnet import RegNet, RegNetParams, RegNetY32gf, RegNetY64gf, RegNetY128gf
-from huggingface_hub import cached_download, hf_hub_url
+from huggingface_hub import hf_hub_download
 from torch import Tensor
 from vissl.models.model_helpers import get_trunk_forward_outputs
 
@@ -91,7 +90,7 @@ class ModuleTransfer:
         for dest_m, src_m in zip(dest_traced, src_traced):
             dest_m.load_state_dict(src_m.state_dict())
             if self.verbose == 1:
-                print(f"Transfered from={src_m} to={dest_m}")
+                print(f"Transferred from={src_m} to={dest_m}")
 
 
 class FakeRegNetVisslWrapper(nn.Module):
@@ -219,14 +218,14 @@ def convert_weight_and_push(
         print(f"Pushed {name}")
 
 
-def convert_weights_and_push(save_directory: Path, model_name: str = None, push_to_hub: bool = True):
+def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = None, push_to_hub: bool = True):
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
     expected_shape = (1, num_labels)
 
     repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
+    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label

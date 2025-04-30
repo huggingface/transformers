@@ -18,7 +18,7 @@ The main use case is a GitHub Actions workflow file calling this script to get t
 to split the list of jobs to run into multiple slices each containing a smaller number of jobs. This way, we can bypass
 the maximum of 256 jobs in a matrix.
 
-See the `setup` and `run_tests_gpu` jobs defined in the workflow file `.github/workflows/self-scheduled.yml` for more
+See the `setup` and `run_models_gpu` jobs defined in the workflow file `.github/workflows/self-scheduled.yml` for more
 details.
 
 Usage:

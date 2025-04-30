@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for XLNet model."""
-
+"""Tokenization classes for XLNet model."""
 
 import os
 import unicodedata
@@ -24,23 +23,13 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import SPIECE_UNDERLINE, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "xlnet/xlnet-base-cased": "https://huggingface.co/xlnet/xlnet-base-cased/resolve/main/spiece.model",
-        "xlnet/xlnet-large-cased": "https://huggingface.co/xlnet/xlnet-large-cased/resolve/main/spiece.model",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "xlnet/xlnet-base-cased": None,
-    "xlnet/xlnet-large-cased": None,
-}
 
 # Segments (not really needed)
 SEG_ID_A = 0
@@ -50,6 +39,7 @@ SEG_ID_SEP = 3
 SEG_ID_PAD = 4
 
 
+@requires(backends=("sentencepiece",))
 class XLNetTokenizer(PreTrainedTokenizer):
     """
     Construct an XLNet tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -126,8 +116,6 @@ class XLNetTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     padding_side = "left"
 
     def __init__(
@@ -254,7 +242,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         spaces_between_special_tokens: bool = True,
         **kwargs,
     ) -> str:
@@ -394,3 +382,6 @@ class XLNetTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["XLNetTokenizer"]

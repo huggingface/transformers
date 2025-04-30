@@ -1,0 +1,101 @@
+name: CI slack report
+
+on:
+  workflow_call:
+    inputs:
+      job:
+        required: true
+        type: string
+      slack_report_channel:
+        required: true
+        type: string
+      setup_status:
+        required: true
+        type: string
+      folder_slices:
+        required: true
+        type: string
+      quantization_matrix:
+        required: true
+        type: string
+      ci_event:
+        required: true
+        type: string
+
+env:
+  TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+
+jobs:
+  send_results:
+    name: Send results to webhook
+    runs-on: ubuntu-22.04
+    if: always()
+    steps:
+      - name: Preliminary job status
+        shell: bash
+        # For the meaning of these environment variables, see the job `Setup`
+        run: |
+          echo "Setup status: ${{ inputs.setup_status }}"
+
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+      - name: Send message to Slack
+        if: ${{ inputs.job != 'run_quantization_torch_gpu' }}
+        env:
+          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+          CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
+          CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
+          CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
+          SLACK_REPORT_CHANNEL: ${{ inputs.slack_report_channel }}
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          CI_EVENT: ${{ inputs.ci_event }}
+          CI_SHA: ${{ github.sha }}
+          CI_WORKFLOW_REF: ${{ github.workflow_ref }}
+          CI_TEST_JOB: ${{ inputs.job }}
+          SETUP_STATUS: ${{ inputs.setup_status }}
+        # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
+        # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
+        # For a job that doesn't depend on (i.e. `needs`) `setup`, the value for `inputs.folder_slices` would be an
+        # empty string, and the called script still get one argument (which is the emtpy string).
+        run: |
+          sudo apt-get install -y curl
+          pip install huggingface_hub
+          pip install slack_sdk
+          pip show slack_sdk
+          python utils/notification_service.py "${{ inputs.folder_slices }}"
+
+      # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
+      - name: Failure table artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci_results_${{ inputs.job }}
+          path: ci_results_${{ inputs.job }}
+
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+      - name: Send message to Slack for quantization workflow
+        if: ${{ inputs.job == 'run_quantization_torch_gpu' }}
+        env:
+          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          SLACK_REPORT_CHANNEL: ${{ inputs.slack_report_channel }}
+          CI_EVENT: ${{ inputs.ci_event }}
+          CI_SHA: ${{ github.sha }}
+          CI_TEST_JOB: ${{ inputs.job }}
+          SETUP_STATUS: ${{ inputs.setup_status }}
+        # We pass `needs.setup.outputs.quantization_matrix` as the argument. A processing in `notification_service_quantization.py` to change
+        # `quantization/bnb` to `quantization_bnb` is required, as the artifact names use `_` instead of `/`.
+        run: |
+          sudo apt-get install -y curl
+          pip install huggingface_hub
+          pip install slack_sdk
+          pip show slack_sdk
+          python utils/notification_service_quantization.py "${{ inputs.quantization_matrix }}"
+
+      # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
+      - name: Failure table artifacts
+        if: ${{ inputs.job == 'run_quantization_torch_gpu' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci_results_${{ inputs.job }}
+          path: ci_results_${{ inputs.job }}

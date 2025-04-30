@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF Electra model."""
-
+"""TF Electra model."""
 
 from __future__ import annotations
 
@@ -64,16 +63,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/electra-small-discriminator"
 _CONFIG_FOR_DOC = "ElectraConfig"
-
-TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/electra-small-generator",
-    "google/electra-base-generator",
-    "google/electra-large-generator",
-    "google/electra-small-discriminator",
-    "google/electra-base-discriminator",
-    "google/electra-large-discriminator",
-    # See all ELECTRA models at https://huggingface.co/models?filter=electra
-]
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->Electra
@@ -612,10 +601,10 @@ class TFElectraEmbeddings(keras.layers.Layer):
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.call
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         past_key_values_length=0,
         training: bool = False,
     ) -> tf.Tensor:
@@ -942,7 +931,7 @@ class TFElectraForPreTrainingOutput(ModelOutput):
             heads.
     """
 
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 
@@ -1773,3 +1762,15 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFElectraForMaskedLM",
+    "TFElectraForMultipleChoice",
+    "TFElectraForPreTraining",
+    "TFElectraForQuestionAnswering",
+    "TFElectraForSequenceClassification",
+    "TFElectraForTokenClassification",
+    "TFElectraModel",
+    "TFElectraPreTrainedModel",
+]

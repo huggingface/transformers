@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 BigCode and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,10 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Starcoder2 model. """
+"""Testing suite for the PyTorch Starcoder2 model."""
 
-
-import tempfile
 import unittest
 
 import pytest
@@ -25,6 +22,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
@@ -43,6 +41,7 @@ if is_torch_available():
         AutoTokenizer,
         Starcoder2ForCausalLM,
         Starcoder2ForSequenceClassification,
+        Starcoder2ForTokenClassification,
         Starcoder2Model,
     )
 
@@ -107,7 +106,7 @@ class Starcoder2ModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -157,119 +156,6 @@ class Starcoder2ModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Starcoder2
-    def create_and_check_model_as_decoder(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.add_cross_attention = True
-        model = Starcoder2Model(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-        )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Starcoder2
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = Starcoder2ForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->Starcoder2
-    def create_and_check_decoder_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.is_decoder = True
-        config.add_cross_attention = True
-        model = Starcoder2ForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # first forward pass
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            use_cache=True,
-        )
-        past_key_values = outputs.past_key_values
-
-        # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
-
-        output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-        output_from_past = model(
-            next_tokens,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -290,13 +176,15 @@ class Starcoder2ModelTester:
 # Copied from transformers.tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Starcoder2
 class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Starcoder2Model, Starcoder2ForCausalLM, Starcoder2ForSequenceClassification) if is_torch_available() else ()
+        (Starcoder2Model, Starcoder2ForCausalLM, Starcoder2ForSequenceClassification, Starcoder2ForTokenClassification)
+        if is_torch_available()
+        else ()
     )
-    all_generative_model_classes = (Starcoder2ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Starcoder2Model,
             "text-classification": Starcoder2ForSequenceClassification,
+            "token-classification": Starcoder2ForTokenClassification,
             "text-generation": Starcoder2ForCausalLM,
             "zero-shot": Starcoder2ForSequenceClassification,
         }
@@ -308,7 +196,14 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
 
@@ -370,103 +265,32 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @unittest.skip("Starcoder2 buffers include complex numbers, which breaks this test")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip("Starcoder2 uses GQA on all models so the KV cache is a non standard format")
-    def test_past_key_values_format(self):
-        pass
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        import torch
-
-        for model_class in self.all_generative_model_classes:
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
-                    torch_device
-                )
-
-                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
-
-                model.generate(dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False)
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                with self.assertRaises(ValueError):
-                    _ = model.generate(
-                        dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
-                    )
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model with Llama->Starcoder2,llama->Starcoder2
+    def test_Starcoder2_token_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = Starcoder2ForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
 
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
-    def test_flash_attn_2_generate_use_cache(self):
-        import torch
-
-        max_new_tokens = 30
-
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # NOTE: Starcoder2 apparently does not support right padding + use_cache with FA2.
-                dummy_attention_mask[:, -1] = 1
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                # Just test that a large cache works as expected
-                _ = model.generate(
-                    dummy_input,
-                    attention_mask=dummy_attention_mask,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
-                )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_padding_right(self):
-        self.skipTest("Starcoder2 flash attention does not support right padding")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        self.skipTest(reason="Starcoder2 flash attention does not support right padding")
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 class Starcoder2IntegrationTest(unittest.TestCase):
     def test_starcoder2_batched_generation_sdpa(self):
         EXPECTED_TEXT = [
@@ -509,6 +333,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT, output_text)
 
     @require_flash_attn
+    @pytest.mark.flash_attn_test
     def test_starcoder2_batched_generation_fa2(self):
         EXPECTED_TEXT = [
             "Hello my name is Younes and I am a student at the University of Liverpool. I am currently studying for my MSc in Computer Science. I am interested in the field of Machine Learning and I am currently working on",

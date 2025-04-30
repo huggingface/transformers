@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 GPT-J model."""
+"""TF 2.0 GPT-J model."""
 
 from __future__ import annotations
 
@@ -54,11 +54,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-j-6B"
 _CONFIG_FOR_DOC = "GPTJConfig"
-
-GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "EleutherAI/gpt-j-6B",
-    # See all GPT-J models at https://huggingface.co/models?filter=gptj
-]
 
 
 def create_sinusoidal_positions(num_pos: int, dim: int) -> tf.Tensor:
@@ -640,7 +635,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, sequence_length)`, *optional*):
+        token_type_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, input_ids_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
             1]`:
 
@@ -648,7 +643,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, sequence_length)`, *optional*):
+        position_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, input_ids_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
 
@@ -659,7 +654,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`tf.Tensor` of shape `(batch_size, input_ids_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -813,7 +808,7 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
         training: Optional[bool] = False,
     ) -> Union[TFCausalLMOutputWithPast, Tuple[tf.Tensor]]:
         r"""
-        labels (`np.ndarray` or `tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`np.ndarray` or `tf.Tensor` of shape `(batch_size, input_ids_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
@@ -926,6 +921,8 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
+        if labels is not None and self.config.pad_token_id is None and input_ids.shape[0] != 1:
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
 
         transformer_outputs = self.transformer(
             input_ids=input_ids,
@@ -944,38 +941,30 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
         logits_shape = shape_list(logits)
-        in_logits = None
+        batch_size = logits_shape[0]
+
         if self.config.pad_token_id is None:
-            sequence_lengths = -1
+            last_non_pad_token = tf.fill((batch_size,), value=logits_shape[1] - 1)
         else:
             if input_ids is not None:
-                sequence_lengths = (
-                    tf.argmax(tf.cast(tf.math.equal(input_ids, self.config.pad_token_id), input_ids.dtype), axis=-1)
-                    - 1
-                )
-                sequence_lengths = tf.where(
-                    sequence_lengths >= 0,
-                    sequence_lengths,
-                    tf.cast(shape_list(input_ids[-1]), sequence_lengths.dtype) - 1,
-                )
-                in_logits = tf.gather(logits, sequence_lengths, batch_dims=1, axis=1)
+                token_indices = tf.range(shape_list(input_ids)[-1])
+                non_pad_mask = tf.cast(input_ids != self.config.pad_token_id, token_indices.dtype)
+                last_non_pad_token = tf.reduce_max(token_indices * non_pad_mask, axis=-1)
             else:
-                sequence_lengths = -1
-                logger.warning(
+                last_non_pad_token = tf.fill((batch_size,), value=logits_shape[1] - 1)
+                logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
         loss = None
 
+        pooled_logits = tf.gather(logits, last_non_pad_token, batch_dims=1, axis=1)
+
         if labels is not None:
             if self.config.pad_token_id is None and logits_shape[0] != 1:
                 raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
 
-            if not tf.is_tensor(sequence_lengths):
-                in_logits = logits[0 : logits_shape[0], sequence_lengths]
-
-            loss = self.hf_compute_loss(tf.reshape(labels, [-1]), tf.reshape(in_logits, [-1, self.num_labels]))
-        pooled_logits = in_logits if in_logits is not None else logits
+            loss = self.hf_compute_loss(tf.reshape(labels, [-1]), tf.reshape(pooled_logits, [-1, self.num_labels]))
 
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
@@ -1102,3 +1091,12 @@ class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFGPTJForCausalLM",
+    "TFGPTJForQuestionAnswering",
+    "TFGPTJForSequenceClassification",
+    "TFGPTJModel",
+    "TFGPTJPreTrainedModel",
+]

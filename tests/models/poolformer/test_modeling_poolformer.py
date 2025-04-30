@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch PoolFormer model. """
-
+"""Testing suite for the PyTorch PoolFormer model."""
 
 import unittest
 
@@ -30,7 +28,6 @@ if is_torch_available():
     import torch
 
     from transformers import MODEL_MAPPING, PoolFormerConfig, PoolFormerForImageClassification, PoolFormerModel
-    from transformers.models.poolformer.modeling_poolformer import POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -134,6 +131,7 @@ class PoolFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     test_resize_embeddings = False
     test_torchscript = False
     has_attentions = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = PoolFormerModelTester(self)
@@ -146,12 +144,12 @@ class PoolFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip("PoolFormer does not use inputs_embeds")
+    @unittest.skip(reason="PoolFormer does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("PoolFormer does not have get_input_embeddings method and get_output_embeddings methods")
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="PoolFormer does not have get_input_embeddings method and get_output_embeddings methods")
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_hidden_states_output(self):
@@ -192,7 +190,7 @@ class PoolFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -209,9 +207,9 @@ class PoolFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = PoolFormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "sail/poolformer_s12"
+        model = PoolFormerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -238,4 +236,4 @@ class PoolFormerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor([-0.6113, 0.1685, -0.0492]).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)

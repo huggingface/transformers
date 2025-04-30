@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch OneFormer model. """
+"""Testing suite for the PyTorch OneFormer model."""
 
 import copy
 import inspect
@@ -23,6 +22,8 @@ import numpy as np
 from tests.test_modeling_common import floats_tensor
 from transformers import OneFormerConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
+    is_flaky,
+    require_timm,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -171,7 +172,7 @@ class OneFormerModelTester:
 
             output = model(pixel_values=pixel_values, task_inputs=task_inputs, pixel_mask=pixel_mask)
             output = model(pixel_values, task_inputs=task_inputs, output_hidden_states=True)
-        # the correct shape of output.transformer_decoder_hidden_states ensure the correcteness of the
+        # the correct shape of output.transformer_decoder_hidden_states ensure the correctness of the
         # encoder and pixel decoder
         self.parent.assertEqual(
             output.transformer_decoder_object_queries.shape,
@@ -246,9 +247,16 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "FeatureExtractionPipelineTests":
+        if pipeline_test_case_name == "FeatureExtractionPipelineTests":
             return True
 
         return False
@@ -259,6 +267,12 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @is_flaky(
+        description="The `attention_mask` computed with `< 0.5` in `OneFormerTransformerDecoder.forward_prediction_heads` is sensitive to input values."
+    )
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
     def test_oneformer_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -292,7 +306,7 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         pass
 
     @unittest.skip(reason="OneFormer does not have a get_input_embeddings method")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="OneFormer is not a generative model")
@@ -376,7 +390,7 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
         # only OneFormerForUniversalSegmentation has the loss
         model_class = self.all_model_classes[1]
         (
@@ -445,6 +459,37 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         self.assertIsNotNone(transformer_decoder_class_predictions.grad)
         self.assertIsNotNone(transformer_decoder_mask_predictions.grad)
         self.assertIsNotNone(attentions.grad)
+
+    @require_timm
+    def test_backbone_selection(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        config.backbone_config = None
+        config.backbone_kwargs = {"out_indices": [1, 2, 3]}
+        config.use_pretrained_backbone = True
+
+        # Load a timm backbone
+        # We can't load transformer checkpoint with timm backbone, as we can't specify features_only and out_indices
+        config.backbone = "resnet18"
+        config.use_timm_backbone = True
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            if model.__class__.__name__ == "OneFormerModel":
+                self.assertEqual(model.pixel_level_module.encoder.out_indices, [1, 2, 3])
+            elif model.__class__.__name__ == "OneFormerForUniversalSegmentation":
+                self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
+
+        # Load a HF backbone
+        config.backbone = "microsoft/resnet-18"
+        config.use_timm_backbone = False
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            if model.__class__.__name__ == "OneFormerModel":
+                self.assertEqual(model.pixel_level_module.encoder.out_indices, [1, 2, 3])
+            elif model.__class__.__name__ == "OneFormerForUniversalSegmentation":
+                self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
 
 
 TOLERANCE = 1e-4
@@ -530,7 +575,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         )
         expected_slice = [[[3.1848, 4.2141, 4.1993], [2.9000, 3.5721, 3.6603], [2.5358, 3.0883, 3.6168]]]
         expected_slice = torch.tensor(expected_slice).to(torch_device)
-        self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(masks_queries_logits[0, 0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
         # class_queries_logits
         class_queries_logits = outputs.class_queries_logits
         self.assertEqual(
@@ -540,7 +585,7 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[3.0668, -1.1833, -5.1103], [3.3440, -3.3620, -5.1101], [2.6017, -4.3613, -4.1444]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(class_queries_logits[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     @require_torch_accelerator
     @require_torch_fp16

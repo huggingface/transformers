@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning a 🤗 Transformers model for sequence classification on GLUE."""
+"""Finetuning a 🤗 Transformers model for sequence classification on GLUE."""
+
 import argparse
 import json
 import logging
@@ -28,7 +28,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.39.0.dev0")
+check_min_version("4.52.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -255,9 +255,8 @@ def main():
             if repo_name is None:
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
-            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
-            # Clone repo locally
-            repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
+            api = HfApi()
+            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
 
             with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
                 if "step_*" not in gitignore:
@@ -282,7 +281,7 @@ def main():
     # download the dataset.
     if args.task_name is not None:
         # Downloading and loading a dataset from the hub.
-        raw_datasets = load_dataset("glue", args.task_name)
+        raw_datasets = load_dataset("nyu-mll/glue", args.task_name)
     else:
         # Loading the dataset from local csv or json file.
         data_files = {}
@@ -328,6 +327,9 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path, use_fast=not args.use_slow_tokenizer, trust_remote_code=args.trust_remote_code
     )
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    config.pad_token_id = tokenizer.pad_token_id
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name_or_path,
         from_tf=bool(".ckpt" in args.model_name_or_path),
@@ -367,7 +369,7 @@ def main():
             label_to_id = {i: label_name_to_id[label_list[i]] for i in range(num_labels)}
         else:
             logger.warning(
-                "Your model seems to have been trained with labels, but they don't match the dataset: ",
+                "Your model seems to have been trained with labels, but they don't match the dataset: "
                 f"model labels: {sorted(label_name_to_id.keys())}, dataset labels: {sorted(label_list)}."
                 "\nIgnoring the model labels as a result.",
             )
@@ -423,7 +425,14 @@ def main():
         # Otherwise, `DataCollatorWithPadding` will apply dynamic padding for us (by padding to the maximum length of
         # the samples passed). When using mixed precision, we add `pad_to_multiple_of=8` to pad all tensors to multiple
         # of 8s, which will enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=(8 if accelerator.use_fp16 else None))
+        # For fp8, we pad to multiple of 16.
+        if accelerator.mixed_precision == "fp8":
+            pad_to_multiple_of = 16
+        elif accelerator.mixed_precision != "no":
+            pad_to_multiple_of = 8
+        else:
+            pad_to_multiple_of = None
+        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=pad_to_multiple_of)
 
     train_dataloader = DataLoader(
         train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
@@ -561,7 +570,7 @@ def main():
                 completed_steps += 1
 
             if isinstance(checkpointing_steps, int):
-                if completed_steps % checkpointing_steps == 0:
+                if completed_steps % checkpointing_steps == 0 and accelerator.sync_gradients:
                     output_dir = f"step_{completed_steps}"
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
@@ -611,8 +620,12 @@ def main():
             )
             if accelerator.is_main_process:
                 tokenizer.save_pretrained(args.output_dir)
-                repo.push_to_hub(
-                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                api.upload_folder(
+                    commit_message=f"Training in progress epoch {epoch}",
+                    folder_path=args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=args.hub_token,
                 )
 
         if args.checkpointing_steps == "epoch":
@@ -620,9 +633,6 @@ def main():
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
-
-    if args.with_tracking:
-        accelerator.end_training()
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
@@ -633,7 +643,13 @@ def main():
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
-                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+                api.upload_folder(
+                    commit_message="End of training",
+                    folder_path=args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=args.hub_token,
+                )
 
     if args.task_name == "mnli":
         # Final evaluation on mismatched validation set
@@ -659,6 +675,9 @@ def main():
         all_results = {f"eval_{k}": v for k, v in eval_metric.items()}
         with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
             json.dump(all_results, f)
+
+    accelerator.wait_for_everyone()
+    accelerator.end_training()
 
 
 if __name__ == "__main__":

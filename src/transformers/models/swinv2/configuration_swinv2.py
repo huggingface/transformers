@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Swinv2 Transformer model configuration"""
+"""Swinv2 Transformer model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -20,12 +20,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 
 logger = logging.get_logger(__name__)
-
-SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/swinv2-tiny-patch4-window8-256": (
-        "https://huggingface.co/microsoft/swinv2-tiny-patch4-window8-256/resolve/main/config.json"
-    ),
-}
 
 
 class Swinv2Config(BackboneConfigMixin, PretrainedConfig):
@@ -160,3 +154,6 @@ class Swinv2Config(BackboneConfigMixin, PretrainedConfig):
         # we set the hidden_size attribute in order to make Swinv2 work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
+
+
+__all__ = ["Swinv2Config"]

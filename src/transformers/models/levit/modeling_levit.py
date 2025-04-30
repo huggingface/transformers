@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch LeViT model."""
+"""PyTorch LeViT model."""
 
 import itertools
 from dataclasses import dataclass
@@ -47,11 +47,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 16, 384]
 _IMAGE_CLASS_CHECKPOINT = "facebook/levit-128S"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/levit-128S",
-    # See all LeViT models at https://huggingface.co/models?filter=levit
-]
-
 
 @dataclass
 class LevitForImageClassificationWithTeacherOutput(ModelOutput):
@@ -73,9 +68,9 @@ class LevitForImageClassificationWithTeacherOutput(ModelOutput):
             plus the initial embedding outputs.
     """
 
-    logits: torch.FloatTensor = None
-    cls_logits: torch.FloatTensor = None
-    distillation_logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    cls_logits: Optional[torch.FloatTensor] = None
+    distillation_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -251,7 +246,7 @@ class LevitAttentionSubsample(nn.Module):
         self.out_dim_keys_values = attention_ratio * key_dim * num_attention_heads + key_dim * num_attention_heads
         self.out_dim_projection = attention_ratio * key_dim * num_attention_heads
         self.resolution_out = resolution_out
-        # resolution_in is the intial resolution, resoloution_out is final resolution after downsampling
+        # resolution_in is the initial resolution, resolution_out is final resolution after downsampling
         self.keys_values = MLPLayerWithBN(input_dim, self.out_dim_keys_values)
         self.queries_subsample = LevitSubsample(stride, resolution_in)
         self.queries = MLPLayerWithBN(input_dim, key_dim * num_attention_heads)
@@ -375,7 +370,7 @@ class LevitStage(nn.Module):
         self.layers = []
         self.config = config
         self.resolution_in = resolution_in
-        # resolution_in is the intial resolution, resolution_out is final resolution after downsampling
+        # resolution_in is the initial resolution, resolution_out is final resolution after downsampling
         for _ in range(depths):
             self.layers.append(
                 LevitResidualLayer(
@@ -493,6 +488,7 @@ class LevitPreTrainedModel(PreTrainedModel):
     config_class = LevitConfig
     base_model_prefix = "levit"
     main_input_name = "pixel_values"
+    _no_split_modules = ["LevitResidualLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -555,7 +551,7 @@ class LevitModel(LevitPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
@@ -622,7 +618,7 @@ class LevitForImageClassification(LevitPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -714,7 +710,7 @@ class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, LevitForImageClassificationWithTeacherOutput]:
@@ -737,3 +733,11 @@ class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
             distillation_logits=distill_logits,
             hidden_states=outputs.hidden_states,
         )
+
+
+__all__ = [
+    "LevitForImageClassification",
+    "LevitForImageClassificationWithTeacher",
+    "LevitModel",
+    "LevitPreTrainedModel",
+]

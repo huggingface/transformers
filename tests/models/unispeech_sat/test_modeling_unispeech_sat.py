@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch UniSpeechSat model. """
+"""Testing suite for the PyTorch UniSpeechSat model."""
 
 import math
 import unittest
@@ -403,23 +402,20 @@ class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # UniSpeechSat has no inputs_embeds
+    @unittest.skip(reason="Model has no input_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="Model has input_values instead of input_ids")
     def test_forward_signature(self):
         pass
 
-    # UniSpeechSat cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Model has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # UniSpeechSat has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="Model has no input_embeds")
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -615,23 +611,20 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # UniSpeechSat has no inputs_embeds
+    @unittest.skip(reason="Model has no input_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="Model has input_values instead of input_ids")
     def test_forward_signature(self):
         pass
 
-    # UniSpeechSat cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Model has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # UniSpeechSat has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="Model has no input_embeds")
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -821,7 +814,7 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test")
+        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
 
         return ds[:num_samples]
 
@@ -851,7 +844,9 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[:, :2, -2:], expected_hidden_states_slice, atol=1e-3))
+        torch.testing.assert_close(
+            outputs.last_hidden_state[:, :2, -2:], expected_hidden_states_slice, rtol=1e-3, atol=1e-3
+        )
 
     def test_inference_encoder_large(self):
         model = UniSpeechSatModel.from_pretrained("microsoft/unispeech-sat-large")
@@ -877,7 +872,9 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[:, :2, -2:], expected_hidden_states_slice, atol=1e-3))
+        torch.testing.assert_close(
+            outputs.last_hidden_state[:, :2, -2:], expected_hidden_states_slice, rtol=1e-3, atol=1e-3
+        )
 
     def test_inference_diarization(self):
         model = UniSpeechSatForAudioFrameClassification.from_pretrained("microsoft/unispeech-sat-base-plus-sd").to(
@@ -906,7 +903,7 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(labels[0, :, 0].sum(), 270)
         self.assertEqual(labels[0, :, 1].sum(), 647)
-        self.assertTrue(torch.allclose(outputs.logits[:, :4], expected_logits, atol=1e-2))
+        torch.testing.assert_close(outputs.logits[:, :4], expected_logits, rtol=1e-2, atol=1e-2)
 
     def test_inference_speaker_verification(self):
         model = UniSpeechSatForXVector.from_pretrained("microsoft/unispeech-sat-base-plus-sv").to(torch_device)

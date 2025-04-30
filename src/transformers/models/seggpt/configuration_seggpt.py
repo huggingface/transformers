@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SegGpt model configuration"""
-
+"""SegGpt model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "BAAI/seggpt-vit-large": "https://huggingface.co/BAAI/seggpt-vit-large/resolve/main/config.json",
-}
 
 
 class SegGptConfig(PretrainedConfig):
@@ -143,3 +138,6 @@ class SegGptConfig(PretrainedConfig):
         self.intermediate_hidden_state_indices = intermediate_hidden_state_indices
         self.beta = beta
         self.mlp_dim = int(hidden_size * 4) if mlp_dim is None else mlp_dim
+
+
+__all__ = ["SegGptConfig"]

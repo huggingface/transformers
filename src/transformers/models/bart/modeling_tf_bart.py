@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 Bart model."""
-
+"""TF 2.0 Bart model."""
 
 from __future__ import annotations
 
@@ -1710,3 +1709,6 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
         if getattr(self, "classification_head", None) is not None:
             with tf.name_scope(self.classification_head.name):
                 self.classification_head.build(None)
+
+
+__all__ = ["TFBartForConditionalGeneration", "TFBartForSequenceClassification", "TFBartModel", "TFBartPretrainedModel"]

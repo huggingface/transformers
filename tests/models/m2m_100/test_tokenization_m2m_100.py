@@ -14,6 +14,7 @@
 
 import tempfile
 import unittest
+from functools import lru_cache
 from pathlib import Path
 from shutil import copyfile
 
@@ -32,7 +33,7 @@ from transformers.utils import is_sentencepiece_available
 if is_sentencepiece_available():
     from transformers.models.m2m_100.tokenization_m2m_100 import VOCAB_FILES_NAMES, save_json
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 if is_sentencepiece_available():
@@ -48,26 +49,32 @@ FR_CODE = 128028
 
 @require_sentencepiece
 class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/m2m100_418M"
     tokenizer_class = M2M100Tokenizer
     test_rust_tokenizer = False
     test_seq2seq = False
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab = ["</s>", "<unk>", "▁This", "▁is", "▁a", "▁t", "est", "\u0120", "<pad>"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        save_dir = Path(self.tmpdirname)
+        save_dir = Path(cls.tmpdirname)
         save_json(vocab_tokens, save_dir / VOCAB_FILES_NAMES["vocab_file"])
         if not (save_dir / VOCAB_FILES_NAMES["spm_file"]).exists():
             copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["spm_file"])
 
-        tokenizer = M2M100Tokenizer.from_pretrained(self.tmpdirname)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer = M2M100Tokenizer.from_pretrained(cls.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs):
-        return M2M100Tokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return M2M100Tokenizer.from_pretrained(pretrained_name, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         return (
@@ -92,10 +99,6 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(vocab_keys[-1], "<s>")
         # The length of the vocab keys can be different
         # self.assertEqual(len(vocab_keys), tokenizer.vocab_size)
-
-    @unittest.skip("Skip this test while all models are still to be uploaded.")
-    def test_pretrained_model_lists(self):
-        pass
 
     def test_full_tokenizer(self):
         tokenizer = self.get_tokenizer()

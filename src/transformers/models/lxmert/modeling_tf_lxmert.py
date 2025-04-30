@@ -14,8 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 LXMERT model."""
-
+"""TF 2.0 LXMERT model."""
 
 from __future__ import annotations
 
@@ -52,10 +51,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "unc-nlp/lxmert-base-uncased"
 _CONFIG_FOR_DOC = "LxmertConfig"
-
-TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "unc-nlp/lxmert-base-uncased",
-]
 
 
 @dataclass
@@ -1041,8 +1036,8 @@ LXMERT_INPUTS_DOCSTRING = r"""
 
             These are currently not provided by the transformers library.
         visual_pos (`tf.Tensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
-            This input represents spacial features corresponding to their relative (via index) visual features. The
-            pre-trained LXMERT model expects these spacial features to be normalized bounding boxes on a scale of 0 to
+            This input represents spatial features corresponding to their relative (via index) visual features. The
+            pre-trained LXMERT model expects these spatial features to be normalized bounding boxes on a scale of 0 to
             1.
 
             These are currently not provided by the transformers library.
@@ -1655,3 +1650,12 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         if getattr(self, "answer_head", None) is not None:
             with tf.name_scope(self.answer_head.name):
                 self.answer_head.build(None)
+
+
+__all__ = [
+    "TFLxmertForPreTraining",
+    "TFLxmertMainLayer",
+    "TFLxmertModel",
+    "TFLxmertPreTrainedModel",
+    "TFLxmertVisualFeatureEncoder",
+]

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch XGLM model."""
-
+"""PyTorch XGLM model."""
 
 import math
 from typing import List, Optional, Tuple, Union
@@ -21,9 +20,9 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
@@ -36,11 +35,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "facebook/xglm-564M"
 _CONFIG_FOR_DOC = "XGLMConfig"
 
-
-XGLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/xglm-564M",
-    # See all XGLM models at https://huggingface.co/models?filter=xglm
-]
 
 XGLM_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -129,6 +123,20 @@ XGLM_INPUTS_DOCSTRING = r"""
 """
 
 
+# Copied from transformers.models.bart.modeling_bart.BartScaledWordEmbedding with Bart->XGLM
+class XGLMScaledWordEmbedding(nn.Embedding):
+    """
+    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_scale = embed_scale
+
+    def forward(self, input_ids: torch.Tensor):
+        return super().forward(input_ids) * self.embed_scale
+
+
 class XGLMSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
@@ -169,7 +177,7 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
         return emb.to(torch.get_default_dtype())
 
     @torch.no_grad()
-    def forward(self, position_ids: torch.Tensor = None, past_key_values_length: int = 0):
+    def forward(self, position_ids: Optional[torch.Tensor] = None, past_key_values_length: int = 0):
         bsz, seq_len = position_ids.size()
         position_ids += self.offset
 
@@ -492,12 +500,14 @@ class XGLMModel(XGLMPreTrainedModel):
         self.layerdrop = config.layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         if embed_tokens is not None:
             self.embed_tokens = embed_tokens
         else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+            self.embed_tokens = XGLMScaledWordEmbedding(
+                config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
+            )
 
         self.embed_positions = XGLMSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -570,7 +580,7 @@ class XGLMModel(XGLMPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -583,14 +593,15 @@ class XGLMModel(XGLMPreTrainedModel):
                 encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
             )
 
-        hidden_states = inputs_embeds + self.embed_positions(position_ids, past_key_values_length)
+        hidden_states = inputs_embeds + self.embed_positions(position_ids, past_key_values_length).to(
+            inputs_embeds.device
+        )
         hidden_states = nn.functional.dropout(hidden_states, p=float(self.dropout), training=self.training)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
-                    "`use_cache = True` is incompatible with gradient checkpointing`. Setting `use_cache ="
-                    " False`..."
+                    "`use_cache = True` is incompatible with gradient checkpointing`. Setting `use_cache = False`..."
                 )
                 use_cache = False
 
@@ -686,7 +697,7 @@ class XGLMModel(XGLMPreTrainedModel):
     """,
     XGLM_START_DOCSTRING,
 )
-class XGLMForCausalLM(XGLMPreTrainedModel):
+class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -732,6 +743,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -767,13 +779,13 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # shift labels and add a pad token to the end
-            shift_labels = labels.new_zeros(labels.shape)
-            shift_labels[:, :-1] = labels[:, 1:].clone()
-            shift_labels[:, -1] = self.config.pad_token_id
-
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
+            loss = self.loss_function(
+                logits,
+                labels,
+                vocab_size=self.config.vocab_size,
+                pad_token_id=self.config.pad_token_id,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -788,42 +800,6 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
-    ):
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-        else:
-            position_ids = None
-            # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-            if attention_mask is None:
-                attention_mask = input_ids.new_ones(input_ids.shape)
-        # first step, decoder_cached_states are empty
-        return {
-            "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
-            "attention_mask": attention_mask,
-            "position_ids": position_ids,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-        }
-
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
@@ -832,3 +808,6 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+
+__all__ = ["XGLMForCausalLM", "XGLMModel", "XGLMPreTrainedModel"]

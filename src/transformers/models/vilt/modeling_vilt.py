@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ViLT model."""
+"""PyTorch ViLT model."""
 
 import collections.abc
 import math
@@ -48,11 +48,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ViltConfig"
 _CHECKPOINT_FOR_DOC = "dandelin/vilt-b32-mlm"
 
-VILT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "dandelin/vilt-b32-mlm",
-    # See all ViLT models at https://huggingface.co/models?filter=vilt
-]
-
 
 @dataclass
 class ViltForImagesAndTextClassificationOutput(ModelOutput):
@@ -75,7 +70,7 @@ class ViltForImagesAndTextClassificationOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[List[Tuple[torch.FloatTensor]]] = None
     attentions: Optional[List[Tuple[torch.FloatTensor]]] = None
 
@@ -144,7 +139,7 @@ class ViltEmbeddings(nn.Module):
         x_mask = x_mask.flatten(1)
 
         if max_image_length < 0 or max_image_length is None or not isinstance(max_image_length, int):
-            # suppose aug is 800 x 1333, then, maximum effective res is 800 x 1333 (if one side gets bigger, the other will be constrained and be shrinked)
+            # suppose aug is 800 x 1333, then, maximum effective res is 800 x 1333 (if one side gets bigger, the other will be constrained and be shrunk)
             # (800 // self.patch_size) * (1333 // self.patch_size) is the maximum number of patches that single image can get.
             # if self.patch_size = 32, 25 * 41 = 1025
             # if res is 384 x 640, 12 * 20 = 240
@@ -176,7 +171,7 @@ class ViltEmbeddings(nn.Module):
         select = torch.cat(select, dim=0)
         x = x[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
         x_mask = x_mask[select[:, 0], select[:, 1]].view(batch_size, -1)
-        # `patch_index` should be on the same device as `select` (for torch>=1.13), which is ensured at definition time.
+        # `patch_index` should be on the same device as `select`, which is ensured at definition time.
         patch_index = patch_index[select[:, 0], select[:, 1]].view(batch_size, -1, 2)
         pos_embed = pos_embed[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
 
@@ -327,7 +322,7 @@ class ViltSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -896,6 +891,7 @@ class ViltForMaskedLM(ViltPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.mlm_score.decoder = new_embeddings
+        self.mlm_score.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(VILT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1040,6 +1036,9 @@ class ViltMLMHead(nn.Module):
             self.decoder.weight = weight
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def _tie_weights(self):
         self.decoder.bias = self.bias
 
     def forward(self, x):
@@ -1227,6 +1226,10 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not yet supported.")
+
         outputs = self.vilt(
             input_ids,
             attention_mask=attention_mask,
@@ -1244,12 +1247,6 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
         pooler_output = outputs.pooler_output if return_dict else outputs[1]
 
         logits = self.rank_output(pooler_output)
-
-        loss = None
-        if labels is not None:
-            # move labels to correct device to enable PP
-            labels = labels.to(logits.device)
-            raise NotImplementedError("Training is not yet supported.")
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1488,3 +1485,15 @@ class ViltForTokenClassification(ViltPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "ViltForImageAndTextRetrieval",
+    "ViltForImagesAndTextClassification",
+    "ViltForTokenClassification",
+    "ViltForMaskedLM",
+    "ViltForQuestionAnswering",
+    "ViltLayer",
+    "ViltModel",
+    "ViltPreTrainedModel",
+]

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 Marian model."""
-
+"""TF 2.0 Marian model."""
 
 from __future__ import annotations
 
@@ -1156,7 +1155,7 @@ class TFMarianMainLayer(keras.layers.Layer):
         decoder_head_mask: tf.Tensor | None = None,
         cross_attn_head_mask: tf.Tensor | None = None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
-        past_key_values: Tuple[Tuple[tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         inputs_embeds: tf.Tensor | None = None,
         decoder_inputs_embeds: tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
@@ -1555,3 +1554,6 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         if getattr(self, "bias_layer", None) is not None:
             with tf.name_scope(self.bias_layer.name):
                 self.bias_layer.build(None)
+
+
+__all__ = ["TFMarianModel", "TFMarianMTModel", "TFMarianPreTrainedModel"]

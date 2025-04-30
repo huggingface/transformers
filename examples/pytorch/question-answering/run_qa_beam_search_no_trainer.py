@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,14 +33,13 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from utils_qa import postprocess_qa_predictions_with_beam_search
 
 import transformers
 from transformers import (
-    AdamW,
     DataCollatorWithPadding,
     EvalPrediction,
     SchedulerType,
@@ -56,7 +54,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.39.0.dev0")
+check_min_version("4.52.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -99,6 +97,15 @@ def parse_args():
         type=str,
         default=None,
         help="The configuration name of the dataset to use (via the datasets library).",
+    )
+    parser.add_argument(
+        "--trust_remote_code",
+        action="store_true",
+        help=(
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
+        ),
     )
     parser.add_argument(
         "--train_file", type=str, default=None, help="A csv or a json file containing the training data."
@@ -333,9 +340,8 @@ def main():
             if repo_name is None:
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
-            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
-            # Clone repo locally
-            repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
+            api = HfApi()
+            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
 
             with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
                 if "step_*" not in gitignore:
@@ -357,7 +363,9 @@ def main():
     # download the dataset.
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
+        raw_datasets = load_dataset(
+            args.dataset_name, args.dataset_config_name, trust_remote_code=args.trust_remote_code
+        )
     else:
         data_files = {}
         if args.train_file is not None:
@@ -445,7 +453,12 @@ def main():
         for i, offsets in enumerate(offset_mapping):
             # We will label impossible answers with the index of the CLS token.
             input_ids = tokenized_examples["input_ids"][i]
-            cls_index = input_ids.index(tokenizer.cls_token_id)
+            if tokenizer.cls_token_id in input_ids:
+                cls_index = input_ids.index(tokenizer.cls_token_id)
+            elif tokenizer.bos_token_id in input_ids:
+                cls_index = input_ids.index(tokenizer.bos_token_id)
+            else:
+                cls_index = 0
             tokenized_examples["cls_index"].append(cls_index)
 
             # Grab the sequence corresponding to that example (to know what is the context and what is the question).
@@ -564,7 +577,12 @@ def main():
 
         for i, input_ids in enumerate(tokenized_examples["input_ids"]):
             # Find the CLS token in the input ids.
-            cls_index = input_ids.index(tokenizer.cls_token_id)
+            if tokenizer.cls_token_id in input_ids:
+                cls_index = input_ids.index(tokenizer.cls_token_id)
+            elif tokenizer.bos_token_id in input_ids:
+                cls_index = input_ids.index(tokenizer.bos_token_id)
+            else:
+                cls_index = 0
             tokenized_examples["cls_index"].append(cls_index)
 
             # Grab the sequence corresponding to that example (to know what is the context and what is the question).
@@ -650,7 +668,14 @@ def main():
         # Otherwise, `DataCollatorWithPadding` will apply dynamic padding for us (by padding to the maximum length of
         # the samples passed). When using mixed precision, we add `pad_to_multiple_of=8` to pad all tensors to multiple
         # of 8s, which will enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=(8 if accelerator.use_fp16 else None))
+        # For fp8, we pad to multiple of 16.
+        if accelerator.mixed_precision == "fp8":
+            pad_to_multiple_of = 16
+        elif accelerator.mixed_precision != "no":
+            pad_to_multiple_of = 8
+        else:
+            pad_to_multiple_of = None
+        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=pad_to_multiple_of)
 
     train_dataloader = DataLoader(
         train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
@@ -740,7 +765,7 @@ def main():
             "weight_decay": 0.0,
         },
     ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
@@ -859,7 +884,7 @@ def main():
                 completed_steps += 1
 
             if isinstance(checkpointing_steps, int):
-                if completed_steps % checkpointing_steps == 0:
+                if completed_steps % checkpointing_steps == 0 and accelerator.sync_gradients:
                     accelerator.save_state(f"step_{completed_steps}")
 
             if completed_steps >= args.max_train_steps:
@@ -873,8 +898,12 @@ def main():
             )
             if accelerator.is_main_process:
                 tokenizer.save_pretrained(args.output_dir)
-                repo.push_to_hub(
-                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                api.upload_folder(
+                    commit_message=f"Training in progress epoch {epoch}",
+                    folder_path=args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=args.hub_token,
                 )
 
     # initialize all lists to collect the batches
@@ -1020,7 +1049,13 @@ def main():
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
-                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+                api.upload_folder(
+                    commit_message="End of training",
+                    folder_path=args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=args.hub_token,
+                )
 
             logger.info(json.dumps(eval_metric, indent=4))
             save_prefixed_metrics(eval_metric, args.output_dir)

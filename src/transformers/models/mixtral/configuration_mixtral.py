@@ -12,17 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Mixtral model configuration"""
+"""Mixtral model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "mistral-ai/Mixtral-8x7B": "https://huggingface.co/mistral-ai/Mixtral-8x7B/resolve/main/config.json",
-}
 
 
 class MixtralConfig(PretrainedConfig):
@@ -53,10 +49,12 @@ class MixtralConfig(PretrainedConfig):
         num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
+        head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):
+            The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to `4096*32`):
@@ -84,15 +82,17 @@ class MixtralConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         num_experts_per_tok (`int`, *optional*, defaults to 2):
-            The number of experts to root per-token, can be also interpreted as the `top-p` routing
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
             parameter
         num_local_experts (`int`, *optional*, defaults to 8):
             Number of experts per Sparse MLP layer.
         output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabeling this will also
+            Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss. See [here]() for more details
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
+        router_jitter_noise (`float`, *optional*, defaults to 0.0):
+            Amount of noise to add to the router.
 
     ```python
     >>> from transformers import MixtralModel, MixtralConfig
@@ -109,6 +109,21 @@ class MixtralConfig(PretrainedConfig):
 
     model_type = "mixtral"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.block_sparse_moe.gate": "colwise_rep",  # we need to replicate here to correctly route experts
+        "layers.*.block_sparse_moe.experts.*.w1": "colwise",
+        "layers.*.block_sparse_moe.experts.*.w2": "rowwise",
+        "layers.*.block_sparse_moe.experts.*.w3": "colwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,
@@ -118,6 +133,7 @@ class MixtralConfig(PretrainedConfig):
         num_hidden_layers=32,
         num_attention_heads=32,
         num_key_value_heads=8,
+        head_dim=None,
         hidden_act="silu",
         max_position_embeddings=4096 * 32,
         initializer_range=0.02,
@@ -134,6 +150,7 @@ class MixtralConfig(PretrainedConfig):
         num_local_experts=8,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
+        router_jitter_noise=0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -155,11 +172,13 @@ class MixtralConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
+        self.head_dim = head_dim
 
         self.num_experts_per_tok = num_experts_per_tok
         self.num_local_experts = num_local_experts
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
+        self.router_jitter_noise = router_jitter_noise
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -167,3 +186,6 @@ class MixtralConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+
+__all__ = ["MixtralConfig"]

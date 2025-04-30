@@ -12,19 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" VAN model configuration"""
+"""VAN model configuration"""
 
 from ....configuration_utils import PretrainedConfig
 from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-VAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Visual-Attention-Network/van-base": (
-        "https://huggingface.co/Visual-Attention-Network/van-base/blob/main/config.json"
-    ),
-}
 
 
 class VanConfig(PretrainedConfig):
@@ -111,3 +105,6 @@ class VanConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.dropout_rate = dropout_rate
+
+
+__all__ = ["VanConfig"]

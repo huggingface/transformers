@@ -152,7 +152,7 @@ I modelli pre-allenati sono scaricati e memorizzati localmente nella cache in: `
 
 ## Modalità Offline
 
-🤗 Transformers può essere eseguita in un ambiente firewalled o offline utilizzando solo file locali. Imposta la variabile d'ambiente `TRANSFORMERS_OFFLINE=1` per abilitare questo comportamento.
+🤗 Transformers può essere eseguita in un ambiente firewalled o offline utilizzando solo file locali. Imposta la variabile d'ambiente `HF_HUB_OFFLINE=1` per abilitare questo comportamento.
 
 <Tip>
 
@@ -169,7 +169,7 @@ python examples/pytorch/translation/run_translation.py --model_name_or_path goog
 Esegui lo stesso programma in un'istanza offline con:
 
 ```bash
-HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
 python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 

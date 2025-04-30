@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@
 
 import unittest
 
-from transformers import RobertaConfig, is_torch_available
+from transformers import AutoTokenizer, RobertaConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -38,10 +37,10 @@ if is_torch_available():
         RobertaModel,
     )
     from transformers.models.roberta.modeling_roberta import (
-        ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         RobertaEmbeddings,
         create_position_ids_from_input_ids,
     )
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 
 ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
 
@@ -380,7 +379,6 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (RobertaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": RobertaModel,
@@ -419,7 +417,6 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -477,13 +474,12 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RobertaModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "FacebookAI/roberta-base"
+        model = RobertaModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is RobertaEmbeddings.padding_idx + 1
@@ -501,8 +497,7 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
     def test_create_position_ids_from_inputs_embeds(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is RobertaEmbeddings.padding_idx + 1
@@ -543,7 +538,7 @@ class RobertaModelIntegrationTest(TestCasePlus):
         # roberta.eval()
         # expected_slice = roberta.model.forward(input_ids)[0][:, :3, :3].detach()
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_no_head(self):
@@ -561,7 +556,7 @@ class RobertaModelIntegrationTest(TestCasePlus):
         # roberta.eval()
         # expected_slice = roberta.extract_features(input_ids)[:, :3, :3].detach()
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_classification_head(self):
@@ -578,4 +573,44 @@ class RobertaModelIntegrationTest(TestCasePlus):
         # roberta.eval()
         # expected_tensor = roberta.predict("mnli", input_ids, return_logits=True).detach()
 
-        self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4))
+        torch.testing.assert_close(output, expected_tensor, rtol=1e-4, atol=1e-4)
+
+    @slow
+    def test_export(self):
+        if not is_torch_greater_or_equal_than_2_4:
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        roberta_model = "FacebookAI/roberta-base"
+        device = "cpu"
+        attn_implementation = "sdpa"
+        max_length = 512
+
+        tokenizer = AutoTokenizer.from_pretrained(roberta_model)
+        inputs = tokenizer(
+            "The goal of life is <mask>.",
+            return_tensors="pt",
+            padding="max_length",
+            max_length=max_length,
+        )
+
+        model = RobertaForMaskedLM.from_pretrained(
+            roberta_model,
+            device_map=device,
+            attn_implementation=attn_implementation,
+            use_cache=True,
+        )
+
+        logits = model(**inputs).logits
+        eager_predicted_mask = tokenizer.decode(logits[0, 6].topk(5).indices)
+        self.assertEqual(eager_predicted_mask.split(), ["happiness", "love", "peace", "freedom", "simplicity"])
+
+        exported_program = torch.export.export(
+            model,
+            args=(inputs["input_ids"],),
+            kwargs={"attention_mask": inputs["attention_mask"]},
+            strict=True,
+        )
+
+        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
+        exported_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
+        self.assertEqual(eager_predicted_mask, exported_predicted_mask)

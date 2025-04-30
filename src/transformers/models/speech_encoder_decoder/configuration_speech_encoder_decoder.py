@@ -71,13 +71,14 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
     ```"""
 
     model_type = "speech-encoder-decoder"
-    is_composition = True
+    sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
+    has_no_defaults_at_init = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if "encoder" not in kwargs or "decoder" not in kwargs:
             raise ValueError(
-                f"A configuraton of type {self.model_type} cannot be instantiated because not both `encoder` and"
+                f"A configuration of type {self.model_type} cannot be instantiated because not both `encoder` and"
                 f" `decoder` sub-configurations are passed, but only {kwargs}"
             )
 
@@ -106,3 +107,6 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
         decoder_config.add_cross_attention = True
 
         return cls(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs)
+
+
+__all__ = ["SpeechEncoderDecoderConfig"]

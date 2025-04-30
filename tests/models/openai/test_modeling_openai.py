@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,7 +28,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         OpenAIGPTConfig,
         OpenAIGPTDoubleHeadsModel,
         OpenAIGPTForSequenceClassification,
@@ -196,9 +194,6 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (
-        (OpenAIGPTLMHeadModel,) if is_torch_available() else ()
-    )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
     pipeline_model_mapping = (
         {
             "feature-extraction": OpenAIGPTModel,
@@ -212,9 +207,16 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "ZeroShotClassificationPipelineTests":
+        if pipeline_test_case_name == "ZeroShotClassificationPipelineTests":
             # Get `tokenizer does not have a padding token` error for both fast/slow tokenizers.
             # `OpenAIGPTConfig` was never used in pipeline tests, either because of a missing checkpoint or because a
             # tiny config could not be created.
@@ -270,9 +272,9 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = OpenAIGPTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai-community/openai-gpt"
+        model = OpenAIGPTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

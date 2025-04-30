@@ -13,24 +13,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ALBERT model configuration"""
+"""ALBERT model configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
-
-
-ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "albert/albert-base-v1": "https://huggingface.co/albert/albert-base-v1/resolve/main/config.json",
-    "albert/albert-large-v1": "https://huggingface.co/albert/albert-large-v1/resolve/main/config.json",
-    "albert/albert-xlarge-v1": "https://huggingface.co/albert/albert-xlarge-v1/resolve/main/config.json",
-    "albert/albert-xxlarge-v1": "https://huggingface.co/albert/albert-xxlarge-v1/resolve/main/config.json",
-    "albert/albert-base-v2": "https://huggingface.co/albert/albert-base-v2/resolve/main/config.json",
-    "albert/albert-large-v2": "https://huggingface.co/albert/albert-large-v2/resolve/main/config.json",
-    "albert/albert-xlarge-v2": "https://huggingface.co/albert/albert-xlarge-v2/resolve/main/config.json",
-    "albert/albert-xxlarge-v2": "https://huggingface.co/albert/albert-xxlarge-v2/resolve/main/config.json",
-}
 
 
 class AlbertConfig(PretrainedConfig):
@@ -176,3 +165,6 @@ class AlbertOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
+
+
+__all__ = ["AlbertConfig", "AlbertOnnxConfig"]

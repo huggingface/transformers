@@ -16,7 +16,6 @@
 RetriBERT model
 """
 
-
 import math
 from typing import Optional
 
@@ -31,11 +30,6 @@ from .configuration_retribert import RetriBertConfig
 
 
 logger = logging.get_logger(__name__)
-
-RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "yjernite/retribert-base-uncased",
-    # See all RetriBert models at https://huggingface.co/models?filter=retribert
-]
 
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
@@ -218,3 +212,6 @@ class RetriBertModel(RetriBertPreTrainedModel):
         loss_aq = self.ce_loss(compare_scores.t(), torch.arange(compare_scores.shape[0]).to(device))
         loss = (loss_qa + loss_aq) / 2
         return loss
+
+
+__all__ = ["RetriBertModel", "RetriBertPreTrainedModel"]

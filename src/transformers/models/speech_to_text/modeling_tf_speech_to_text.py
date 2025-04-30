@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow Speech2Text model."""
-
+"""TensorFlow Speech2Text model."""
 
 from __future__ import annotations
 
@@ -54,12 +53,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Speech2TextConfig"
 _CHECKPOINT_FOR_DOC = "facebook/s2t-small-librispeech-asr"
-
-
-TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/s2t-small-librispeech-asr",
-    # See all Speech2Text models at https://huggingface.co/models?filter=speech_to_text
-]
 
 
 LARGE_NEGATIVE = -1e8
@@ -822,7 +815,7 @@ class TFSpeech2TextEncoder(keras.layers.Layer):
 
     def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
         # generate creates 3D attention mask, because of the shape of input_features
-        # convert it to 2D if thats the case
+        # convert it to 2D if that's the case
         if len(attention_mask.shape) > 2:
             attention_mask = attention_mask[:, :, -1]
 
@@ -1608,3 +1601,6 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
             return tf_weight, "model.decoder.embed_tokens.weight"
         else:
             return (tf_weight,)
+
+
+__all__ = ["TFSpeech2TextForConditionalGeneration", "TFSpeech2TextModel", "TFSpeech2TextPreTrainedModel"]

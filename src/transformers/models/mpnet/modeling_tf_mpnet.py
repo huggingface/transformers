@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 MPNet model."""
-
+"""TF 2.0 MPNet model."""
 
 from __future__ import annotations
 
@@ -62,10 +61,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/mpnet-base"
 _CONFIG_FOR_DOC = "MPNetConfig"
-
-TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/mpnet-base",
-]
 
 
 class TFMPNetPreTrainedModel(TFPreTrainedModel):
@@ -1344,3 +1339,16 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFMPNetEmbeddings",
+    "TFMPNetForMaskedLM",
+    "TFMPNetForMultipleChoice",
+    "TFMPNetForQuestionAnswering",
+    "TFMPNetForSequenceClassification",
+    "TFMPNetForTokenClassification",
+    "TFMPNetMainLayer",
+    "TFMPNetModel",
+    "TFMPNetPreTrainedModel",
+]

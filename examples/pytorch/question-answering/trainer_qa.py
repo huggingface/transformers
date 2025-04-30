@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +14,15 @@
 """
 A subclass of `Trainer` specific to Question-Answering tasks
 """
+
 import math
 import time
 
-from transformers import Trainer, is_torch_tpu_available
+from transformers import Trainer, is_torch_xla_available
 from transformers.trainer_utils import PredictionOutput, speed_metrics
 
 
-if is_torch_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
 

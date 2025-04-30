@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" RemBERT model configuration"""
+"""RemBERT model configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 
@@ -22,11 +23,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/rembert": "https://huggingface.co/google/rembert/resolve/main/config.json",
-    # See all RemBERT models at https://huggingface.co/models?filter=rembert
-}
 
 
 class RemBertConfig(PretrainedConfig):
@@ -161,3 +157,6 @@ class RemBertOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+
+__all__ = ["RemBertConfig", "RemBertOnnxConfig"]

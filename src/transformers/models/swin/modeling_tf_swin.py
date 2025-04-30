@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 Swin Transformer model."""
-
+"""TF 2.0 Swin Transformer model."""
 
 from __future__ import annotations
 
@@ -61,11 +60,6 @@ _IMAGE_CLASS_CHECKPOINT = "microsoft/swin-tiny-patch4-window7-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/swin-tiny-patch4-window7-224",
-    # See all Swin models at https://huggingface.co/models?filter=swin
-]
-
 # drop_path, TFSwinPatchEmbeddings, TFSwinPatchMerging and TFSwinDropPath are tensorflow
 # implementations of PyTorch functionalities in the timm library.
 
@@ -97,7 +91,7 @@ class TFSwinEncoderOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
     reshaped_hidden_states: Tuple[tf.Tensor, ...] | None = None
@@ -132,7 +126,7 @@ class TFSwinModelOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     pooler_output: tf.Tensor | None = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
@@ -169,7 +163,7 @@ class TFSwinMaskedImageModelingOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    reconstruction: tf.Tensor = None
+    reconstruction: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
     reshaped_hidden_states: Tuple[tf.Tensor, ...] | None = None
@@ -214,7 +208,7 @@ class TFSwinImageClassifierOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
     reshaped_hidden_states: Tuple[tf.Tensor, ...] | None = None
@@ -313,7 +307,7 @@ class TFSwinEmbeddings(keras.layers.Layer):
                 self.dropout.build(None)
 
     def call(
-        self, pixel_values: tf.Tensor, bool_masked_pos: bool = None, training: bool = False
+        self, pixel_values: tf.Tensor, bool_masked_pos: Optional[bool] = None, training: bool = False
     ) -> Tuple[tf.Tensor, Tuple[int, int]]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values, training=training)
         embeddings = self.norm(embeddings, training=training)
@@ -480,7 +474,7 @@ class TFSwinPatchMerging(keras.layers.Layer):
 class TFSwinDropPath(keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: float = None, scale_by_keep: bool = True, **kwargs) -> None:
+    def __init__(self, drop_prob: Optional[float] = None, scale_by_keep: bool = True, **kwargs) -> None:
         super(TFSwinDropPath, self).__init__(**kwargs)
         self.drop_prob = drop_prob
         self.scale_by_keep = scale_by_keep
@@ -748,7 +742,14 @@ class TFSwinOutput(keras.layers.Layer):
 
 class TFSwinLayer(keras.layers.Layer):
     def __init__(
-        self, config, dim, input_resolution: Tuple[int, int], num_heads: int, shift_size: int = 0, **kwargs
+        self,
+        config,
+        dim,
+        input_resolution: Tuple[int, int],
+        num_heads: int,
+        drop_path_rate: float = 0.0,
+        shift_size: int = 0,
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -760,8 +761,8 @@ class TFSwinLayer(keras.layers.Layer):
         self.layernorm_before = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_before")
         self.attention = TFSwinAttention(config, dim, num_heads, name="attention")
         self.drop_path = (
-            TFSwinDropPath(config.drop_path_rate, name="drop_path")
-            if config.drop_path_rate > 0.0
+            TFSwinDropPath(drop_path_rate, name="drop_path")
+            if drop_path_rate > 0.0
             else keras.layers.Activation("linear", name="drop_path")
         )
         self.layernorm_after = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_after")
@@ -919,6 +920,7 @@ class TFSwinStage(keras.layers.Layer):
                 input_resolution=input_resolution,
                 num_heads=num_heads,
                 shift_size=0 if (i % 2 == 0) else config.window_size // 2,
+                drop_path_rate=drop_path[i],
                 name=f"blocks.{i}",
             )
             for i in range(depth)
@@ -1631,3 +1633,6 @@ class TFSwinForImageClassification(TFSwinPreTrainedModel, TFSequenceClassificati
             if hasattr(self.classifier, "name"):
                 with tf.name_scope(self.classifier.name):
                     self.classifier.build([None, None, self.swin.num_features])
+
+
+__all__ = ["TFSwinForImageClassification", "TFSwinForMaskedImageModeling", "TFSwinModel", "TFSwinPreTrainedModel"]

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Flax Gemma model."""
+
 from typing import Optional, Tuple
 
 import flax.linen as nn
@@ -102,7 +103,7 @@ GEMMA_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+        position_ids (`numpy.ndarray` of shape `(batch_size, input_ids_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`.
 
@@ -233,7 +234,7 @@ class FlaxGemmaAttention(nn.Module):
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached
-        states from previous steps. This function is slighly adapted from the official Flax repository:
+        states from previous steps. This function is slightly adapted from the official Flax repository:
         https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
         """
         # detect if we're initializing by absence of existing cache data.
@@ -339,7 +340,6 @@ class FlaxGemmaAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaMLP with Llama->Gemma
 class FlaxGemmaMLP(nn.Module):
     config: GemmaConfig
     dtype: jnp.dtype = jnp.float32
@@ -349,7 +349,18 @@ class FlaxGemmaMLP(nn.Module):
         inner_dim = self.config.intermediate_size if self.config.intermediate_size is not None else 4 * embed_dim
 
         kernel_init = jax.nn.initializers.normal(self.config.initializer_range)
-        self.act = ACT2FN[self.config.hidden_act]
+        if self.config.hidden_activation is None:
+            logger.warning_once(
+                "Gemma's activation function should be approximate GeLU and not exact GeLU. "
+                "Changing the activation function to `gelu_pytorch_tanh`."
+                f"if you want to use the legacy `{self.config.hidden_act}`, "
+                f"edit the `model.config` to set `hidden_activation={self.config.hidden_act}` "
+                "  instead of `hidden_act`. See https://github.com/huggingface/transformers/pull/29402 for more details."
+            )
+            hidden_activation = "gelu_pytorch_tanh"
+        else:
+            hidden_activation = self.config.hidden_activation
+        self.act = ACT2FN[hidden_activation]
 
         self.gate_proj = nn.Dense(inner_dim, use_bias=False, dtype=self.dtype, kernel_init=kernel_init)
         self.down_proj = nn.Dense(embed_dim, use_bias=False, dtype=self.dtype, kernel_init=kernel_init)
@@ -474,8 +485,8 @@ class FlaxGemmaPreTrainedModel(FlaxPreTrainedModel):
         input_ids,
         attention_mask=None,
         position_ids=None,
-        params: dict = None,
-        past_key_values: dict = None,
+        params: Optional[dict] = None,
+        past_key_values: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -761,3 +772,6 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
     real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
+
+
+__all__ = ["FlaxGemmaForCausalLM", "FlaxGemmaModel", "FlaxGemmaPreTrainedModel"]

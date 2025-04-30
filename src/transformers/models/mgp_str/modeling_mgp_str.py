@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MGP-STR model."""
+"""PyTorch MGP-STR model."""
 
 import collections.abc
 from dataclasses import dataclass
@@ -43,11 +43,6 @@ _TOKENIZER_FOR_DOC = "MgpstrTokenizer"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "alibaba-damo/mgp-str-base"
-
-MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "alibaba-damo/mgp-str-base",
-    # See all MGP-STR models at https://huggingface.co/models?filter=mgp-str
-]
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -251,7 +246,7 @@ class MgpstrEncoder(nn.Module):
     def __init__(self, config: MgpstrConfig):
         super().__init__()
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
 
         self.blocks = nn.Sequential(
             *[MgpstrLayer(config=config, drop_path=dpr[i]) for i in range(config.num_hidden_layers)]
@@ -319,6 +314,7 @@ class MgpstrPreTrainedModel(PreTrainedModel):
 
     config_class = MgpstrConfig
     base_model_prefix = "mgp_str"
+    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -512,3 +508,6 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
             attentions=mgp_outputs.attentions,
             a3_attentions=all_a3_attentions,
         )
+
+
+__all__ = ["MgpstrModel", "MgpstrPreTrainedModel", "MgpstrForSceneTextRecognition"]

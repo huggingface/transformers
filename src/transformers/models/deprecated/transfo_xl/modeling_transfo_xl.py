@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- PyTorch Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl. In particular
- https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py
+PyTorch Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl. In particular
+https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py
 """
+
 import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -41,11 +42,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "transfo-xl/transfo-xl-wt103"
 _CONFIG_FOR_DOC = "TransfoXLConfig"
-
-TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "transfo-xl/transfo-xl-wt103",
-    # See all Transformer XL models at https://huggingface.co/models?filter=transfo-xl
-]
 
 
 def build_tf_to_pytorch_map(model, config):
@@ -159,9 +155,9 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
                 p_i.data = torch.from_numpy(arr_i)
         else:
             try:
-                assert (
-                    pointer.shape == array.shape
-                ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+                assert pointer.shape == array.shape, (
+                    f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+                )
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
@@ -655,7 +651,7 @@ class TransfoXLSequenceClassifierOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     mems: List[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -691,7 +687,7 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
     """
 
     losses: Optional[torch.FloatTensor] = None
-    prediction_scores: torch.FloatTensor = None
+    prediction_scores: Optional[torch.FloatTensor] = None
     mems: List[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1242,9 +1238,9 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
         else:
             batch_size, sequence_length = inputs_embeds.shape[:2]
 
-        assert (
-            self.config.pad_token_id is not None or batch_size == 1
-        ), "Cannot handle batch sizes > 1 if no padding token is defined."
+        assert self.config.pad_token_id is not None or batch_size == 1, (
+            "Cannot handle batch sizes > 1 if no padding token is defined."
+        )
         if self.config.pad_token_id is None:
             sequence_lengths = -1
         else:
@@ -1255,7 +1251,7 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
                 sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
@@ -1295,3 +1291,13 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+
+__all__ = [
+    "AdaptiveEmbedding",
+    "TransfoXLForSequenceClassification",
+    "TransfoXLLMHeadModel",
+    "TransfoXLModel",
+    "TransfoXLPreTrainedModel",
+    "load_tf_weights_in_transfo_xl",
+]

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Hubert model configuration"""
+"""Hubert model configuration"""
 
 import functools
 import operator
@@ -22,11 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/hubert-base-ls960": "https://huggingface.co/facebook/hubert-base-ls960/resolve/main/config.json",
-    # See all Hubert models at https://huggingface.co/models?filter=hubert
-}
 
 
 class HubertConfig(PretrainedConfig):
@@ -99,6 +94,8 @@ class HubertConfig(PretrainedConfig):
             embeddings layer.
         num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
             Number of groups of 1D convolutional positional embeddings layer.
+        conv_pos_batch_norm (`bool`, *optional*, defaults to `False`):
+            Whether to use batch norm instead of weight norm in conv_pos
         do_stable_layer_norm (`bool`, *optional*, defaults to `False`):
             Whether do apply *stable* layer norm architecture of the Transformer encoder. `do_stable_layer_norm is
             True` corresponds to applying layer norm before the attention layer, whereas `do_stable_layer_norm is
@@ -109,8 +106,8 @@ class HubertConfig(PretrainedConfig):
             Recognition](https://arxiv.org/abs/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
-            procecure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
-            reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
+            procedure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
+            reasoning from the probability of each feature vector to be chosen as the start of the vector span to be
             masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
             actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`.
         mask_time_length (`int`, *optional*, defaults to 10):
@@ -121,8 +118,8 @@ class HubertConfig(PretrainedConfig):
             mask_time_min_masks''
         mask_feature_prob (`float`, *optional*, defaults to 0.0):
             Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
-            masking procecure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
-            the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
+            masking procedure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
+            the axis. If reasoning from the probability of each feature vector to be chosen as the start of the vector
             span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
             may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
             True`.
@@ -187,6 +184,7 @@ class HubertConfig(PretrainedConfig):
         conv_bias=False,
         num_conv_pos_embeddings=128,
         num_conv_pos_embedding_groups=16,
+        conv_pos_batch_norm=False,
         do_stable_layer_norm=False,
         apply_spec_augment=True,
         mask_time_prob=0.05,
@@ -214,6 +212,7 @@ class HubertConfig(PretrainedConfig):
         self.conv_bias = conv_bias
         self.num_conv_pos_embeddings = num_conv_pos_embeddings
         self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
+        self.conv_pos_batch_norm = conv_pos_batch_norm
         self.num_feat_extract_layers = len(self.conv_dim)
         self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size
@@ -261,3 +260,6 @@ class HubertConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
+
+
+__all__ = ["HubertConfig"]

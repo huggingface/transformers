@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@ import inspect
 import shutil
 import tempfile
 import unittest
-from typing import List
 
 from transformers import (
     AddedToken,
@@ -30,7 +28,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     get_tests_dir,
-    is_pt_tf_cross_test,
     require_pandas,
     require_sentencepiece,
     require_tokenizers,
@@ -54,6 +51,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_tokenizers
 @require_pandas
 class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/udop-large"
     tokenizer_class = UdopTokenizer
     rust_tokenizer_class = UdopTokenizerFast
     test_rust_tokenizer = True
@@ -93,15 +91,16 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         return questions, words, boxes
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = UdopTokenizer(SAMPLE_VOCAB, keep_accents=True)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
-        input_text = "UNwant\u00E9d,running"
+        input_text = "UNwant\u00e9d,running"
         output_text = "unwanted, running"
         return input_text, output_text
 
@@ -109,7 +108,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # this tokenizer
     def test_save_sentencepiece_tokenizer(self) -> None:
         if not self.test_sentencepiece or not self.test_slow_tokenizer:
-            return
+            self.skipTest(reason="test_sentencepiece or test_slow_tokenizer is set to False")
         # We want to verify that we will be able to save the tokenizer even if the original files that were used to
         # build the tokenizer have been deleted in the meantime.
         words, boxes = self.get_words_and_boxes()
@@ -161,7 +160,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert encoded_pair == text + [1] + text_2 + [1]
 
     def test_add_special_tokens(self):
-        tokenizers: List[UdopTokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[UdopTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 special_token = "[SPECIAL_TOKEN]"
@@ -177,7 +176,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token not in decoded)
 
     def test_add_tokens_tokenizer(self):
-        tokenizers: List[UdopTokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[UdopTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 vocab_size = tokenizer.vocab_size
@@ -456,8 +455,8 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding(self, max_length=50):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
@@ -686,7 +685,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_padding_warning_message_fast_tokenizer(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         words, boxes = self.get_words_and_boxes_batch()
 
@@ -707,7 +706,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         if not self.test_slow_tokenizer:
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         tokenizer_slow = self.get_tokenizer()
 
@@ -816,7 +815,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         encoded_sequences_batch_padded_2[key],
                     )
 
-    @unittest.skip("batch_encode_plus does not handle overflowing tokens.")
+    @unittest.skip(reason="batch_encode_plus does not handle overflowing tokens.")
     def test_batch_encode_plus_overflowing_tokens(self):
         pass
 
@@ -877,7 +876,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.pad_token is None:
-                    self.skipTest("No padding token.")
+                    self.skipTest(reason="No padding token.")
                 else:
                     words, boxes = self.get_words_and_boxes()
 
@@ -918,12 +917,12 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_build_inputs_with_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 # Input tokens id
                 words, boxes = self.get_words_and_boxes()
@@ -1007,7 +1006,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 shutil.rmtree(tmpdirname)
 
-    @unittest.skip("Not implemented")
+    @unittest.skip(reason="Not implemented")
     def test_right_and_left_truncation(self):
         pass
 
@@ -1109,7 +1108,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_offsets_mapping(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 text = ["a", "wonderful", "test"]
                 boxes = [[1, 8, 12, 20] for _ in range(len(text))]
@@ -1152,6 +1151,22 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Assert there is online added_tokens special_tokens
                 self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
 
+    @unittest.skip(reason="Chat template tests don't play well with table/layout models.")
+    def test_chat_template(self):
+        pass
+
+    @unittest.skip(reason="Chat template tests don't play well with table/layout models.")
+    def test_chat_template_return_assistant_tokens_mask(self):
+        pass
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template_return_assistant_tokens_mask_truncated(self):
+        pass
+
+    @unittest.skip(reason="Chat template tests don't play well with table/layout models.")
+    def test_chat_template_batched(self):
+        pass
+
     @require_torch
     @slow
     def test_torch_encode_plus_sent_to_model(self):
@@ -1165,13 +1180,13 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    return
+                    self.skipTest(f"{tokenizer.__class__} not in MODEL_TOKENIZER_MAPPING")
 
                 config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    return
+                    self.skipTest(reason="Model is an encoder-decoder or has no padding token set.")
 
                 model = model_class(config)
 
@@ -1197,11 +1212,11 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -1219,12 +1234,12 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_tokenization_python_rust_equals(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 words, boxes = self.get_words_and_boxes()
 
@@ -1273,12 +1288,12 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_embeded_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 words, boxes = self.get_words_and_boxes()
                 tokens_r = tokenizer_r.encode_plus_boxes(
                     words,
@@ -1304,7 +1319,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_compare_add_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 simple_num_special_tokens_to_add = tokenizer_r.num_special_tokens_to_add(pair=False)
 
@@ -1357,54 +1372,6 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(new_encoded_inputs, dropped_encoded_inputs)
         self.assertLessEqual(len(new_encoded_inputs), 20)
 
-    @is_pt_tf_cross_test
-    def test_batch_encode_plus_tensors(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, boxes = self.get_words_and_boxes_batch()
-
-                # A Tensor cannot be build by sequences which are not the same size
-                self.assertRaises(
-                    ValueError, tokenizer.batch_encode_plus_boxes, words, boxes=boxes, return_tensors="pt"
-                )
-                self.assertRaises(
-                    ValueError, tokenizer.batch_encode_plus_boxes, words, boxes=boxes, return_tensors="tf"
-                )
-
-                if tokenizer.pad_token_id is None:
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus_boxes,
-                        words,
-                        boxes=boxes,
-                        padding=True,
-                        return_tensors="pt",
-                    )
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus_boxes,
-                        words,
-                        boxes=boxes,
-                        padding="longest",
-                        return_tensors="tf",
-                    )
-                else:
-                    pytorch_tensor = tokenizer.batch_encode_plus_boxes(
-                        words, boxes=boxes, padding=True, return_tensors="pt"
-                    )
-                    tensorflow_tensor = tokenizer.batch_encode_plus_boxes(
-                        words, boxes=boxes, padding="longest", return_tensors="tf"
-                    )
-                    encoded_sequences = tokenizer.batch_encode_plus_boxes(words, boxes=boxes, padding=True)
-
-                    for key in encoded_sequences.keys():
-                        pytorch_value = pytorch_tensor[key].tolist()
-                        tensorflow_value = tensorflow_tensor[key].numpy().tolist()
-                        encoded_value = encoded_sequences[key]
-
-                        self.assertEqual(pytorch_value, tensorflow_value, encoded_value)
-
     def test_sequence_ids(self):
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
@@ -1434,7 +1401,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_r = self.get_rust_tokenizer(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )
                 words = "Hey this is a <special> token".split()
@@ -1448,7 +1415,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token_id in r_output)
 
                 if self.test_slow_tokenizer:
-                    tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
+                    tokenizer_cr = self.get_rust_tokenizer(
                         pretrained_name, additional_special_tokens=added_tokens, **kwargs, from_slow=True
                     )
                     tokenizer_p = self.tokenizer_class.from_pretrained(
@@ -1469,7 +1436,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_rust_tokenizer()
         new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
@@ -1506,7 +1473,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer_with_special_tokens_change(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_rust_tokenizer()
         # Test with a special tokens map
@@ -1525,7 +1492,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         special_tokens_map = {}
         for token in special_tokens_list:
             # Get the private one to avoid unnecessary warnings.
-            if getattr(tokenizer, f"_{token}") is not None:
+            if getattr(tokenizer, token) is not None:
                 special_token = getattr(tokenizer, token)
                 special_tokens_map[special_token] = f"{special_token}a"
 
@@ -1537,7 +1504,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Check the changes
         for token in special_tokens_list:
             # Get the private one to avoid unnecessary warnings.
-            if getattr(tokenizer, f"_{token}") is None:
+            if getattr(tokenizer, token) is None:
                 continue
             special_token = getattr(tokenizer, token)
             if special_token in special_tokens_map:
@@ -1619,12 +1586,12 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding_different_model_input_name(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
 
@@ -1713,31 +1680,27 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         self.assertEqual(len(tokens[key].shape), 3)
                         self.assertEqual(tokens[key].shape[-1], 4)
 
-    @unittest.skip("TO DO: overwrite this very extensive test.")
+    @unittest.skip(reason="TO DO: overwrite this very extensive test.")
     def test_alignement_methods(self):
         pass
 
-    @unittest.skip("#TODO will be removed in main")
-    def test_pretrained_model_lists(self):
-        pass
-
-    @unittest.skip("UDOP tokenizer requires boxes besides sequences.")
+    @unittest.skip(reason="UDOP tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_pair_input(self):
         pass
 
-    @unittest.skip("UDOP tokenizer requires boxes besides sequences.")
+    @unittest.skip(reason="UDOP tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_single_input(self):
         pass
 
-    @unittest.skip("UDOP tokenizer requires boxes besides sequences.")
+    @unittest.skip(reason="UDOP tokenizer requires boxes besides sequences.")
     def test_pretokenized_inputs(self):
         pass
 
-    @unittest.skip("UDOP tokenizer always expects pretokenized inputs.")
+    @unittest.skip(reason="UDOP tokenizer always expects pretokenized inputs.")
     def test_compare_pretokenized_inputs(self):
         pass
 
-    @unittest.skip("UDOP fast tokenizer does not support prepare_for_model")
+    @unittest.skip(reason="UDOP fast tokenizer does not support prepare_for_model")
     def test_compare_prepare_for_model(self):
         pass
 
@@ -1858,15 +1821,15 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
-    @unittest.skip("Doesn't support another framework than PyTorch")
+    @unittest.skip(reason="Doesn't support another framework than PyTorch")
     def test_np_encode_plus_sent_to_model(self):
         pass
 
-    @unittest.skip("Doesn't use SentencePiece")
+    @unittest.skip(reason="Doesn't use SentencePiece")
     def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
         pass
 
-    @unittest.skip("Doesn't use SentencePiece")
+    @unittest.skip(reason="Doesn't use SentencePiece")
     def test_sentencepiece_tokenize_and_decode(self):
         pass
 
@@ -1888,3 +1851,76 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(encoding_p["attention_mask"], [1, 1, 1])
         self.assertDictEqual(dict(encoding_p), dict(encoding_r))
         self.assertEqual(tokenizer_p.decode(encoding_p["input_ids"]), expected_decoding)
+
+    def test_special_tokens(self):
+        tokenizer_p = UdopTokenizer.from_pretrained("microsoft/udop-large")
+        tokenizer_r = UdopTokenizerFast.from_pretrained("microsoft/udop-large")
+
+        # encode
+        text = "paragraph<loc_58>. Hey"
+        encoding_p = tokenizer_p.encode(text)
+        encoding_r = tokenizer_r.encode(text)
+
+        assert encoding_p == encoding_r == [8986, 32942, 3, 5, 9459, 1]
+
+        # decode
+        # this is different between slow/fast tokenizer
+        # due tothe former having  `spaces_between_special_tokens=True` by default
+        ids = [0, 8986, 32942, 32966, 32554, 32551, 1]
+
+        # test slow tokenizer
+        decoding = tokenizer_p.decode(ids, spaces_between_special_tokens=False)
+
+        excepted_decoding = "<pad>paragraph<loc_58><loc_34><loc_446><loc_449></s>"
+        assert decoding == excepted_decoding
+
+        # test fast tokenizer
+        decoding = tokenizer_r.decode(ids)
+
+        excepted_decoding = "<pad> paragraph<loc_58><loc_34><loc_446><loc_449></s>"
+        assert decoding == excepted_decoding
+
+    def test_split_special_tokens(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            special_token = "<my_new_token>"
+            special_sentence = f"Hey this is a {special_token} token"
+            _, _, boxes = self.get_question_words_and_boxes()
+
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_rust = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
+                )
+                tokenizer_py = self.tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
+                )
+
+                special_token_id = tokenizer_py.convert_tokens_to_ids(special_token)
+                encoded_special_token_unsplit = tokenizer_py.encode(
+                    special_token, add_special_tokens=False, split_special_tokens=False
+                )
+                self.assertTrue(special_token_id in encoded_special_token_unsplit)
+
+                encoded_special_token_split = tokenizer_py.encode(special_token, add_special_tokens=False)
+                self.assertTrue(special_token_id not in encoded_special_token_split)
+
+                py_tokens_output = tokenizer_py.tokenize(special_sentence)
+                rust_tokens_output = tokenizer_rust.tokenize(special_sentence)
+
+                self.assertTrue(special_token not in py_tokens_output)
+                self.assertTrue(special_token not in rust_tokens_output)
+
+                py_tokens_output_unsplit = tokenizer_py.tokenize(special_sentence, split_special_tokens=False)
+                rust_tokens_output_unsplit = tokenizer_rust.tokenize(special_sentence, split_special_tokens=False)
+
+                self.assertTrue(special_token in py_tokens_output_unsplit)
+                self.assertTrue(special_token in rust_tokens_output_unsplit)
+
+                tmpdirname = tempfile.mkdtemp()
+                tokenizer_py.save_pretrained(tmpdirname)
+                fast_from_saved = self.tokenizer_class.from_pretrained(tmpdirname)
+
+                output_tokens_reloaded_split = fast_from_saved.tokenize(special_sentence)
+                self.assertTrue(special_token not in output_tokens_reloaded_split)
+
+                output_tokens_reloaded_unsplit = fast_from_saved.tokenize(special_sentence, split_special_tokens=False)
+                self.assertTrue(special_token in output_tokens_reloaded_unsplit)

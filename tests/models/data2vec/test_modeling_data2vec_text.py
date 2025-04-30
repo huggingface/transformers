@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Data2VecAudio model. """
+"""Testing suite for the PyTorch Data2VecAudio model."""
 
 import unittest
 
@@ -39,7 +38,6 @@ if is_torch_available():
         Data2VecTextModel,
     )
     from transformers.models.data2vec.modeling_data2vec_text import (
-        DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
         Data2VecTextForTextEmbeddings,
         create_position_ids_from_input_ids,
     )
@@ -374,7 +372,6 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (Data2VecTextForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Data2VecTextModel,
@@ -412,7 +409,6 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -470,13 +466,12 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Data2VecTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/data2vec-text-base"
+        model = Data2VecTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is Data2VecTextForTextEmbeddings.padding_idx + 1
@@ -494,8 +489,7 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
     def test_create_position_ids_from_inputs_embeds(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is Data2VecTextForTextEmbeddings.padding_idx + 1
@@ -530,7 +524,7 @@ class Data2VecTextModelIntegrationTest(TestCasePlus):
         # compare the actual values for a slice.
         expected_slice = torch.tensor([[[0.2328, 0.0000, 1.1710], [2.2525, 0.0000, 1.9937], [2.1280, 0.0000, 1.8691]]])
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_no_head(self):
@@ -544,4 +538,4 @@ class Data2VecTextModelIntegrationTest(TestCasePlus):
             [[[0.1998, -0.0379, 0.0024], [-0.0971, -0.2214, -0.1798], [-0.0789, -0.2400, -0.1898]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

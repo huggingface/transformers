@@ -40,6 +40,7 @@ from .flax_logits_process import (
     FlaxForceTokensLogitsProcessor,
     FlaxLogitsProcessorList,
     FlaxMinLengthLogitsProcessor,
+    FlaxNoRepeatNGramLogitsProcessor,
     FlaxSuppressTokensAtBeginLogitsProcessor,
     FlaxSuppressTokensLogitsProcessor,
     FlaxTemperatureLogitsWarper,
@@ -62,7 +63,7 @@ class FlaxGreedySearchOutput(ModelOutput):
             The generated sequences.
     """
 
-    sequences: jnp.ndarray = None
+    sequences: Optional[jnp.ndarray] = None
 
 
 @flax.struct.dataclass
@@ -76,7 +77,7 @@ class FlaxSampleOutput(ModelOutput):
             The generated sequences.
     """
 
-    sequences: jnp.ndarray = None
+    sequences: Optional[jnp.ndarray] = None
 
 
 @flax.struct.dataclass
@@ -92,8 +93,8 @@ class FlaxBeamSearchOutput(ModelOutput):
             The scores (log probabilities) of the generated sequences.
     """
 
-    sequences: jnp.ndarray = None
-    scores: jnp.ndarray = None
+    sequences: Optional[jnp.ndarray] = None
+    scores: Optional[jnp.ndarray] = None
 
 
 @flax.struct.dataclass
@@ -170,8 +171,8 @@ class FlaxGenerationMixin:
     def _prepare_decoder_input_ids_for_generation(
         self,
         batch_size: int,
-        decoder_start_token_id: int = None,
-        bos_token_id: int = None,
+        decoder_start_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
         model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
     ) -> jnp.ndarray:
         if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
@@ -182,7 +183,9 @@ class FlaxGenerationMixin:
         decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
         return jnp.array(decoder_start_token_id, dtype="i4").reshape(1, -1).repeat(batch_size, axis=0)
 
-    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
+    def _get_decoder_start_token_id(
+        self, decoder_start_token_id: Optional[int] = None, bos_token_id: Optional[int] = None
+    ) -> int:
         # retrieve decoder_start_token_id for encoder-decoder models
         # fall back to bos_token_id if necessary
         decoder_start_token_id = (
@@ -346,7 +349,6 @@ class FlaxGenerationMixin:
             eos_token_id = generation_config.eos_token_id
             if isinstance(eos_token_id, list):
                 eos_token_id = eos_token_id[0]
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
             generation_config.pad_token_id = eos_token_id
 
         if generation_config.decoder_start_token_id is None and self.config.is_encoder_decoder:
@@ -396,6 +398,12 @@ class FlaxGenerationMixin:
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
+        else:  # by default let's always generate 20 new tokens
+            if generation_config.max_length == GenerationConfig().max_length:
+                generation_config.max_length = generation_config.max_length + input_ids_seq_length
+                max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
+                if max_position_embeddings is not None:
+                    generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
 
         if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
             raise ValueError(
@@ -534,6 +542,8 @@ class FlaxGenerationMixin:
                 [input_ids_seq_length + i[0] - 1, i[1]] for i in generation_config.forced_decoder_ids
             ]
             processors.append(FlaxForceTokensLogitsProcessor(forced_decoder_ids))
+        if generation_config.no_repeat_ngram_size is not None and generation_config.no_repeat_ngram_size > 0:
+            processors.append(FlaxNoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
 
         return processors
@@ -911,7 +921,7 @@ class FlaxGenerationMixin:
             # add new logprobs to existing running logprobs scores.
             log_probs = jax.nn.log_softmax(logits)
             log_probs = logits_processor(
-                flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), state.cur_len
+                flatten_beam_dim(state.running_sequences), flatten_beam_dim(log_probs), state.cur_len
             )
             log_probs = unflatten_beam_dim(log_probs, batch_size, num_beams)
             log_probs = log_probs + jnp.expand_dims(state.running_scores, axis=2)

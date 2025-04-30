@@ -28,6 +28,7 @@ that new pipelines are properly added as metadata (as used in `make repo-consist
 python utils/update_metadata.py --check-only
 ```
 """
+
 import argparse
 import collections
 import os
@@ -55,7 +56,7 @@ transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 _re_tf_models = re.compile(r"TF(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
 _re_flax_models = re.compile(r"Flax(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
 # Will match any TF or Flax model too so need to be in an else branch afterthe two previous regexes.
-_re_pt_models = re.compile(r"(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
+_re_pt_models = re.compile(r"(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration|ForRetrieval)")
 
 
 # Fill this with tuples (pipeline_tag, model_mapping, auto_model)
@@ -68,6 +69,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("automatic-speech-recognition", "MODEL_FOR_CTC_MAPPING_NAMES", "AutoModelForCTC"),
     ("image-classification", "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES", "AutoModelForImageClassification"),
     ("image-segmentation", "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES", "AutoModelForImageSegmentation"),
+    ("image-text-to-text", "MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES", "AutoModelForImageTextToText"),
     ("image-to-image", "MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES", "AutoModelForImageToImage"),
     ("fill-mask", "MODEL_FOR_MASKED_LM_MAPPING_NAMES", "AutoModelForMaskedLM"),
     ("object-detection", "MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES", "AutoModelForObjectDetection"),
@@ -130,7 +132,7 @@ def camel_case_split(identifier: str) -> List[str]:
         identifier (`str`): The camel-cased name to parse.
 
     Returns:
-        `List[str]`: The list of words in the identifier (as seprated by capital letters).
+        `List[str]`: The list of words in the identifier (as separated by capital letters).
 
     Example:
 
@@ -213,7 +215,7 @@ def get_frameworks_table() -> pd.DataFrame:
 
 def update_pipeline_and_auto_class_table(table: Dict[str, Tuple[str, str]]) -> Dict[str, Tuple[str, str]]:
     """
-    Update the table maping models to pipelines and auto classes without removing old keys if they don't exist anymore.
+    Update the table mapping models to pipelines and auto classes without removing old keys if they don't exist anymore.
 
     Args:
         table (`Dict[str, Tuple[str, str]]`):
@@ -245,7 +247,7 @@ def update_pipeline_and_auto_class_table(table: Dict[str, Tuple[str, str]]) -> D
                     model_names.extend(list(name))
 
             # Add pipeline tag and auto model class for those models
-            table.update({model_name: (pipeline_tag, cls) for model_name in model_names})
+            table.update(dict.fromkeys(model_names, (pipeline_tag, cls)))
 
     return table
 
@@ -282,9 +284,39 @@ def update_metadata(token: str, commit_sha: str):
     )
     tags_dataset = Dataset.from_pandas(tags_table)
 
+    hub_frameworks_json = hf_hub_download(
+        repo_id="huggingface/transformers-metadata",
+        filename="frameworks.json",
+        repo_type="dataset",
+        token=token,
+    )
+    with open(hub_frameworks_json) as f:
+        hub_frameworks_json = f.read()
+
+    hub_pipeline_tags_json = hf_hub_download(
+        repo_id="huggingface/transformers-metadata",
+        filename="pipeline_tags.json",
+        repo_type="dataset",
+        token=token,
+    )
+    with open(hub_pipeline_tags_json) as f:
+        hub_pipeline_tags_json = f.read()
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         frameworks_dataset.to_json(os.path.join(tmp_dir, "frameworks.json"))
         tags_dataset.to_json(os.path.join(tmp_dir, "pipeline_tags.json"))
+
+        with open(os.path.join(tmp_dir, "frameworks.json")) as f:
+            frameworks_json = f.read()
+        with open(os.path.join(tmp_dir, "pipeline_tags.json")) as f:
+            pipeline_tags_json = f.read()
+
+        frameworks_equal = hub_frameworks_json == frameworks_json
+        hub_pipeline_tags_equal = hub_pipeline_tags_json == pipeline_tags_json
+
+        if frameworks_equal and hub_pipeline_tags_equal:
+            print("No updates on the Hub, not pushing the metadata files.")
+            return
 
         if commit_sha is not None:
             commit_message = (

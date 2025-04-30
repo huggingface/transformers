@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +30,6 @@ if is_tf_available():
 
     from transformers import GPT2Tokenizer
     from transformers.models.gpt2.modeling_tf_gpt2 import (
-        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFGPT2DoubleHeadsModel,
         TFGPT2ForSequenceClassification,
         TFGPT2LMHeadModel,
@@ -422,9 +420,9 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFGPT2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai-community/gpt2"
+        model = TFGPT2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     # overwrite from common since ONNX runtime optimization doesn't work with tf.gather() when the argument
     # `batch_dims` > 0"
@@ -452,7 +450,7 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
             onnxruntime.InferenceSession(onnx_model_proto.SerializeToString())
 
     # TODO (Joao): fix me
-    @unittest.skip("Onnx compliancy broke with TF 2.10")
+    @unittest.skip("Onnx compliance broke with TF 2.10")
     def test_onnx_compliancy(self):
         pass
 
@@ -549,7 +547,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_lm_generate_distilgpt2_left_padding(self):
-        """Tests that the generated text is the same, regarless of left padding"""
+        """Tests that the generated text is the same, regardless of left padding"""
         model = TFGPT2LMHeadModel.from_pretrained("distilbert/distilgpt2")
         tokenizer = GPT2Tokenizer.from_pretrained("distilbert/distilgpt2")
 

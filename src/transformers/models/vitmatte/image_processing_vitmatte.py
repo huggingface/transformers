@@ -31,10 +31,9 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 
 
 logger = logging.get_logger(__name__)
@@ -88,20 +87,6 @@ class VitMatteImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.size_divisibility = size_divisibility
-        self._valid_processor_keys = [
-            "images",
-            "trimaps",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_pad",
-            "size_divisibility",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     def pad_image(
         self,
@@ -133,9 +118,9 @@ class VitMatteImageProcessor(BaseImageProcessor):
 
         height, width = get_image_size(image, input_data_format)
 
-        if height % size_divisibility != 0 or width % size_divisibility != 0:
-            pad_height = size_divisibility - height % size_divisibility
-            pad_width = size_divisibility - width % size_divisibility
+        pad_height = 0 if height % size_divisibility == 0 else size_divisibility - height % size_divisibility
+        pad_width = 0 if width % size_divisibility == 0 else size_divisibility - width % size_divisibility
+        if pad_width + pad_height > 0:
             padding = ((0, pad_height), (0, pad_width))
             image = pad(image, padding=padding, data_format=data_format, input_data_format=input_data_format)
 
@@ -144,6 +129,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
 
         return image
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -158,7 +144,6 @@ class VitMatteImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ):
         """
         Preprocess an image or batch of images.
@@ -213,8 +198,6 @@ class VitMatteImageProcessor(BaseImageProcessor):
         images = make_list_of_images(images)
         trimaps = make_list_of_images(trimaps, expected_ndims=2)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
         if not valid_images(trimaps):
             raise ValueError(
                 "Invalid trimap type. Must be of type PIL.Image.Image, numpy.ndarray, "
@@ -240,7 +223,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in images]
         trimaps = [to_numpy_array(trimap) for trimap in trimaps]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -267,8 +250,10 @@ class VitMatteImageProcessor(BaseImageProcessor):
             ]
 
         # concatenate images and trimaps
+        axis = -1 if input_data_format == ChannelDimension.LAST else 0
         images = [
-            np.concatenate([image, np.expand_dims(trimap, axis=-1)], axis=-1) for image, trimap in zip(images, trimaps)
+            np.concatenate([image, np.expand_dims(trimap, axis=axis)], axis=axis)
+            for image, trimap in zip(images, trimaps)
         ]
 
         if do_pad:
@@ -284,3 +269,6 @@ class VitMatteImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["VitMatteImageProcessor"]

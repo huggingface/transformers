@@ -33,7 +33,7 @@ logger = logging.get_logger(__name__)
 class MaskGenerationPipeline(ChunkPipeline):
     """
     Automatic mask generation for images using `SamForMaskGeneration`. This pipeline predicts binary masks for an
-    image, given an image. It is a `ChunkPipeline` because you can seperate the points in a mini-batch in order to
+    image, given an image. It is a `ChunkPipeline` because you can separate the points in a mini-batch in order to
     avoid OOM issues. Use the `points_per_batch` argument to control the number of points that will be processed at the
     same time. Default is `64`.
 
@@ -181,13 +181,25 @@ class MaskGenerationPipeline(ChunkPipeline):
             image, target_size, crops_n_layers, crop_overlap_ratio, points_per_crop, crop_n_points_downscale_factor
         )
         model_inputs = self.image_processor(images=cropped_images, return_tensors="pt")
+        if self.framework == "pt":
+            model_inputs = model_inputs.to(self.torch_dtype)
 
         with self.device_placement():
             if self.framework == "pt":
                 inference_context = self.get_inference_context()
                 with inference_context():
                     model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
-                    image_embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
+                    embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
+
+                    # Handle both SAM (single tensor) and SAM-HQ (tuple) outputs
+                    if isinstance(embeddings, tuple):
+                        image_embeddings, intermediate_embeddings = embeddings
+                        model_inputs["intermediate_embeddings"] = intermediate_embeddings
+                    else:
+                        image_embeddings = embeddings
+                    # TODO: Identifying the model by the type of its returned embeddings is brittle.
+                    #       Consider using a more robust method for distinguishing model types here.
+
                     model_inputs["image_embeddings"] = image_embeddings
 
         n_points = grid_points.shape[1]

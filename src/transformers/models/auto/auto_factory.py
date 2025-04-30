@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Factory function to build auto-model classes."""
+
 import copy
 import importlib
 import json
-import os
 import warnings
 from collections import OrderedDict
 
@@ -29,10 +29,15 @@ from ...utils import (
     extract_commit_hash,
     find_adapter_config_file,
     is_peft_available,
+    is_torch_available,
     logging,
     requires_backends,
 )
 from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
+
+
+if is_torch_available():
+    from ...generation import GenerationMixin
 
 
 logger = logging.get_logger(__name__)
@@ -122,9 +127,9 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received files. Will attempt to resume the download if such a
-                file exists.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -221,9 +226,9 @@ FROM_PRETRAINED_TF_DOCSTRING = """
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received files. Will attempt to resume the download if such a
-                file exists.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -320,9 +325,9 @@ FROM_PRETRAINED_FLAX_DOCSTRING = """
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received files. Will attempt to resume the download if such a
-                file exists.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -426,11 +431,9 @@ class _BaseAutoModelClass:
             else:
                 repo_id = config.name_or_path
             model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
-            if os.path.isdir(config._name_or_path):
-                model_class.register_for_auto_class(cls.__name__)
-            else:
-                cls.register(config.__class__, model_class, exist_ok=True)
+            cls.register(config.__class__, model_class, exist_ok=True)
             _ = kwargs.pop("code_revision", None)
+            model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class._from_config(config, **kwargs)
         elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
@@ -440,6 +443,11 @@ class _BaseAutoModelClass:
             f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
             f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping.keys())}."
         )
+
+    @classmethod
+    def _prepare_config_for_auto_class(cls, config: PretrainedConfig) -> PretrainedConfig:
+        """Additional autoclass-specific config post-loading manipulation. May be overridden in subclasses."""
+        return config
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -551,15 +559,15 @@ class _BaseAutoModelClass:
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
             )
             _ = hub_kwargs.pop("code_revision", None)
-            if os.path.isdir(pretrained_model_name_or_path):
-                model_class.register_for_auto_class(cls.__name__)
-            else:
-                cls.register(config.__class__, model_class, exist_ok=True)
+            cls.register(config.__class__, model_class, exist_ok=True)
+            model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
         elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
+            if model_class.config_class == config.sub_configs.get("text_config", None):
+                config = config.get_text_config()
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
@@ -579,7 +587,7 @@ class _BaseAutoModelClass:
             model_class ([`PreTrainedModel`]):
                 The model to register.
         """
-        if hasattr(model_class, "config_class") and model_class.config_class != config_class:
+        if hasattr(model_class, "config_class") and model_class.config_class.__name__ != config_class.__name__:
             raise ValueError(
                 "The model class you are passing has a `config_class` attribute that is not consistent with the "
                 f"config class you passed (model has {model_class.config_class} and you passed {config_class}. Fix "
@@ -704,6 +712,38 @@ def getattribute_from_module(module, attr):
         raise ValueError(f"Could not find {attr} in {transformers_module}!")
 
 
+def add_generation_mixin_to_remote_model(model_class):
+    """
+    Adds `GenerationMixin` to the inheritance of `model_class`, if `model_class` is a PyTorch model.
+
+    This function is used for backwards compatibility purposes: in v4.45, we've started a deprecation cycle to make
+    `PreTrainedModel` stop inheriting from `GenerationMixin`. Without this function, older models dynamically loaded
+    from the Hub may not have the `generate` method after we remove the inheritance.
+    """
+    # 1. If it is not a PT model (i.e. doesn't inherit Module), do nothing
+    if "torch.nn.modules.module.Module" not in str(model_class.__mro__):
+        return model_class
+
+    # 2. If it already **directly** inherits from GenerationMixin, do nothing
+    if "GenerationMixin" in str(model_class.__bases__):
+        return model_class
+
+    # 3. Prior to v4.45, we could detect whether a model was `generate`-compatible if it had its own `generate` and/or
+    # `prepare_inputs_for_generation` method.
+    has_custom_generate = hasattr(model_class, "generate") and "GenerationMixin" not in str(
+        getattr(model_class, "generate")
+    )
+    has_custom_prepare_inputs = hasattr(model_class, "prepare_inputs_for_generation") and "GenerationMixin" not in str(
+        getattr(model_class, "prepare_inputs_for_generation")
+    )
+    if has_custom_generate or has_custom_prepare_inputs:
+        model_class_with_generation_mixin = type(
+            model_class.__name__, (model_class, GenerationMixin), {**model_class.__dict__}
+        )
+        return model_class_with_generation_mixin
+    return model_class
+
+
 class _LazyAutoMapping(OrderedDict):
     """
     " A mapping config to object (model or tokenizer for instance) that will load keys and values when it is accessed.
@@ -804,3 +844,6 @@ class _LazyAutoMapping(OrderedDict):
                 raise ValueError(f"'{key}' is already used by a Transformers model.")
 
         self._extra_content[key] = value
+
+
+__all__ = ["get_values"]

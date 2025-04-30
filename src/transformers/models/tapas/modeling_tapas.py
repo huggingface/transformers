@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch TAPAS model."""
 
-
 import enum
 import math
 import os
@@ -32,7 +31,6 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import (
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
-    is_torch_greater_or_equal_than_1_12,
     prune_linear_layer,
 )
 from ...utils import (
@@ -47,48 +45,9 @@ from .configuration_tapas import TapasConfig
 
 logger = logging.get_logger(__name__)
 
-if not is_torch_greater_or_equal_than_1_12:
-    logger.warning(
-        f"You are using torch=={torch.__version__}, but torch>=1.12.0 is required to use "
-        "TapasModel. Please upgrade torch."
-    )
-
 _CONFIG_FOR_DOC = "TapasConfig"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
 
-TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # large models
-    "google/tapas-large",
-    "google/tapas-large-finetuned-sqa",
-    "google/tapas-large-finetuned-wtq",
-    "google/tapas-large-finetuned-wikisql-supervised",
-    "google/tapas-large-finetuned-tabfact",
-    # base models
-    "google/tapas-base",
-    "google/tapas-base-finetuned-sqa",
-    "google/tapas-base-finetuned-wtq",
-    "google/tapas-base-finetuned-wikisql-supervised",
-    "google/tapas-base-finetuned-tabfact",
-    # small models
-    "google/tapas-small",
-    "google/tapas-small-finetuned-sqa",
-    "google/tapas-small-finetuned-wtq",
-    "google/tapas-small-finetuned-wikisql-supervised",
-    "google/tapas-small-finetuned-tabfact",
-    # mini models
-    "google/tapas-mini",
-    "google/tapas-mini-finetuned-sqa",
-    "google/tapas-mini-finetuned-wtq",
-    "google/tapas-mini-finetuned-wikisql-supervised",
-    "google/tapas-mini-finetuned-tabfact",
-    # tiny models
-    "google/tapas-tiny",
-    "google/tapas-tiny-finetuned-sqa",
-    "google/tapas-tiny-finetuned-wtq",
-    "google/tapas-tiny-finetuned-wikisql-supervised",
-    "google/tapas-tiny-finetuned-tabfact",
-    # See all TAPAS models at https://huggingface.co/models?filter=tapas
-]
 
 EPSILON_ZERO_DIVISION = 1e-10
 CLOSE_ENOUGH_TO_LOG_ZERO = -10000.0
@@ -118,8 +77,8 @@ class TableQuestionAnsweringOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    logits_aggregation: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    logits_aggregation: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -729,6 +688,9 @@ class TapasLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -755,8 +717,9 @@ class TapasPreTrainedModel(PreTrainedModel):
     config_class = TapasConfig
     base_model_prefix = "tapas"
     supports_gradient_checkpointing = True
+    _supports_param_buffer_assignment = False
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
+    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with Bert->Tapas
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -772,6 +735,8 @@ class TapasPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, TapasLMPredictionHead):
+            module.bias.data.zero_()
 
 
 TAPAS_START_DOCSTRING = r"""
@@ -1008,6 +973,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1277,8 +1243,8 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         if table_mask is None:
             table_mask = torch.where(row_ids > 0, torch.ones_like(row_ids), torch.zeros_like(row_ids))
         # torch.FloatTensor[batch_size, seq_length]
-        input_mask_float = attention_mask.float().to(device)
-        table_mask_float = table_mask.float().to(device)
+        input_mask_float = attention_mask.to(device=device, dtype=torch.float)
+        table_mask_float = table_mask.to(device=device, dtype=torch.float)
         # Mask for cells that exist in the table (i.e. that are not padding).
         cell_mask, _ = reduce_mean(input_mask_float, cell_index)
 
@@ -1320,9 +1286,9 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 aggregate_mask = None
             else:
                 if float_answer is not None:
-                    assert (
-                        labels.shape[0] == float_answer.shape[0]
-                    ), "Make sure the answers are a FloatTensor of shape (batch_size,)"
+                    assert labels.shape[0] == float_answer.shape[0], (
+                        "Make sure the answers are a FloatTensor of shape (batch_size,)"
+                    )
                     # <float32>[batch_size]
                     aggregate_mask = _calculate_aggregate_mask(
                         float_answer,
@@ -1372,9 +1338,9 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 if is_supervised:
                     # Note that `aggregate_mask` is None if the setting is supervised.
                     if aggregation_labels is not None:
-                        assert (
-                            labels.shape[0] == aggregation_labels.shape[0]
-                        ), "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
+                        assert labels.shape[0] == aggregation_labels.shape[0], (
+                            "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
+                        )
                         per_example_additional_loss = _calculate_aggregation_loss(
                             logits_aggregation,
                             aggregate_mask,
@@ -1579,7 +1545,7 @@ class AverageApproximationFunction(str, enum.Enum):
 # Beginning of everything related to segmented tensors
 
 
-class IndexMap(object):
+class IndexMap:
     """Index grouping entries within a tensor."""
 
     def __init__(self, indices, num_segments, batch_dims=0):
@@ -1597,7 +1563,7 @@ class IndexMap(object):
                 batch dimensions. Segments in different batch elements are always distinct even if they have the same
                 index.
         """
-        self.indices = torch.as_tensor(indices)
+        self.indices = torch.as_tensor(indices, device=indices.device)
         self.num_segments = torch.as_tensor(num_segments, device=indices.device)
         self.batch_dims = batch_dims
 
@@ -1727,11 +1693,14 @@ def range_index_map(batch_shape, num_segments, name="range_index_map"):
     Returns:
         (`IndexMap`): IndexMap of shape batch_shape with elements equal to range(num_segments).
     """
+    device = num_segments.device if torch.is_tensor(num_segments) else "cpu"
     batch_shape = torch.as_tensor(
-        batch_shape, dtype=torch.long
+        batch_shape, dtype=torch.long, device=device
     )  # create a rank 1 tensor vector containing batch_shape (e.g. [2])
     assert len(batch_shape.size()) == 1
-    num_segments = torch.as_tensor(num_segments)  # create a rank 0 tensor (scalar) containing num_segments (e.g. 64)
+    num_segments = torch.as_tensor(
+        num_segments, device=device
+    )  # create a rank 0 tensor (scalar) containing num_segments (e.g. 64)
     assert len(num_segments.size()) == 0
 
     indices = torch.arange(
@@ -1745,7 +1714,7 @@ def range_index_map(batch_shape, num_segments, name="range_index_map"):
     new_shape = [int(x) for x in new_tensor.tolist()]
     indices = indices.view(new_shape)
 
-    multiples = torch.cat([batch_shape, torch.as_tensor([1])], dim=0)
+    multiples = torch.cat([batch_shape, torch.as_tensor([1], device=device)], dim=0)
     indices = indices.repeat(multiples.tolist())
     # equivalent (in Numpy:)
     # indices = torch.as_tensor(np.tile(indices.numpy(), multiples.tolist()))
@@ -1786,12 +1755,13 @@ def _segment_reduce(values, index, segment_reduce_fn, name):
         dim=0, index=flat_index.indices.long(), src=flat_values.float(), reduce=segment_reduce_fn, include_self=False
     )
 
+    device = index.num_segments.device
     # Unflatten the values.
     new_shape = torch.cat(
         [
-            torch.as_tensor(index.batch_shape(), dtype=torch.long),
-            torch.as_tensor([index.num_segments], dtype=torch.long),
-            torch.as_tensor(vector_shape, dtype=torch.long),
+            torch.as_tensor(index.batch_shape(), dtype=torch.long, device=device),
+            torch.as_tensor([index.num_segments], dtype=torch.long, device=device),
+            torch.as_tensor(vector_shape, dtype=torch.long, device=device),
         ],
         dim=0,
     )
@@ -2416,3 +2386,13 @@ def _calculate_regression_loss(
     per_example_answer_loss_scaled = config.answer_loss_importance * (per_example_answer_loss * aggregate_mask)
 
     return per_example_answer_loss_scaled, large_answer_loss_mask
+
+
+__all__ = [
+    "TapasForMaskedLM",
+    "TapasForQuestionAnswering",
+    "TapasForSequenceClassification",
+    "TapasModel",
+    "TapasPreTrainedModel",
+    "load_tf_weights_in_tapas",
+]

@@ -32,10 +32,10 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -45,6 +45,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class PerceiverImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Perceiver image processor.
@@ -87,9 +88,9 @@ class PerceiverImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -114,22 +115,6 @@ class PerceiverImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
-        self._valid_processor_keys = [
-            "images",
-            "do_center_crop",
-            "crop_size",
-            "do_resize",
-            "size",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     def center_crop(
         self,
@@ -224,6 +209,7 @@ class PerceiverImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -240,7 +226,6 @@ class PerceiverImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -303,8 +288,6 @@ class PerceiverImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
@@ -326,7 +309,7 @@ class PerceiverImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -365,3 +348,6 @@ class PerceiverImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["PerceiverImageProcessor"]

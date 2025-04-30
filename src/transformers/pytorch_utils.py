@@ -11,28 +11,39 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
 import inspect
-from typing import Callable, List, Optional, Set, Tuple, Union
+from functools import lru_cache, wraps
+from typing import Callable
 
 import torch
-from packaging import version
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .utils import is_torch_tpu_available, logging
+from .utils import is_torch_greater_or_equal, is_torch_xla_available, is_torchdynamo_compiling, logging
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
 
 logger = logging.get_logger(__name__)
 
-parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
+is_torch_greater_or_equal_than_2_6 = is_torch_greater_or_equal("2.6", accept_dev=True)
+is_torch_greater_or_equal_than_2_4 = is_torch_greater_or_equal("2.4", accept_dev=True)
+is_torch_greater_or_equal_than_2_3 = is_torch_greater_or_equal("2.3", accept_dev=True)
+is_torch_greater_or_equal_than_2_2 = is_torch_greater_or_equal("2.2", accept_dev=True)
 
-is_torch_greater_or_equal_than_2_2 = parsed_torch_version_base >= version.parse("2.2")
-is_torch_greater_or_equal_than_2_1 = parsed_torch_version_base >= version.parse("2.1")
-is_torch_greater_or_equal_than_2_0 = parsed_torch_version_base >= version.parse("2.0")
-is_torch_greater_or_equal_than_1_13 = parsed_torch_version_base >= version.parse("1.13")
-is_torch_greater_or_equal_than_1_12 = parsed_torch_version_base >= version.parse("1.12")
+# For backwards compatibility (e.g. some remote codes on Hub using those variables).
+is_torch_greater_or_equal_than_2_1 = is_torch_greater_or_equal("2.1", accept_dev=True)
+is_torch_greater_or_equal_than_2_0 = is_torch_greater_or_equal("2.0", accept_dev=True)
+is_torch_greater_or_equal_than_1_13 = is_torch_greater_or_equal("1.13", accept_dev=True)
+is_torch_greater_or_equal_than_1_12 = is_torch_greater_or_equal("1.12", accept_dev=True)
+
+# Cache this result has it's a C FFI call which can be pretty time-consuming
+_torch_distributed_available = torch.distributed.is_available()
+
+if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+    pass
 
 
 def softmax_backward_data(parent, grad_output, output, dim, self):
@@ -61,12 +72,12 @@ def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) 
         `torch.nn.Linear`: The pruned layer as a new layer with `requires_grad=True`.
     """
     index = index.to(layer.weight.device)
-    W = layer.weight.index_select(dim, index).clone().detach()
+    W = layer.weight.index_select(dim, index).detach().clone()
     if layer.bias is not None:
         if dim == 1:
-            b = layer.bias.clone().detach()
+            b = layer.bias.detach().clone()
         else:
-            b = layer.bias[index].clone().detach()
+            b = layer.bias[index].detach().clone()
     new_size = list(layer.weight.size())
     new_size[dim] = len(index)
     new_layer = nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None).to(layer.weight.device)
@@ -94,9 +105,13 @@ class Conv1D(nn.Module):
     def __init__(self, nf, nx):
         super().__init__()
         self.nf = nf
+        self.nx = nx
         self.weight = nn.Parameter(torch.empty(nx, nf))
         self.bias = nn.Parameter(torch.zeros(nf))
         nn.init.normal_(self.weight, std=0.02)
+
+    def __repr__(self) -> str:
+        return "Conv1D(nf={nf}, nx={nx})".format(**self.__dict__)
 
     def forward(self, x):
         size_out = x.size()[:-1] + (self.nf,)
@@ -121,11 +136,11 @@ def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> 
         [`~pytorch_utils.Conv1D`]: The pruned layer as a new layer with `requires_grad=True`.
     """
     index = index.to(layer.weight.device)
-    W = layer.weight.index_select(dim, index).clone().detach()
+    W = layer.weight.index_select(dim, index).detach().clone()
     if dim == 0:
-        b = layer.bias.clone().detach()
+        b = layer.bias.detach().clone()
     else:
-        b = layer.bias[index].clone().detach()
+        b = layer.bias[index].detach().clone()
     new_size = list(layer.weight.size())
     new_size[dim] = len(index)
     new_layer = Conv1D(new_size[1], new_size[0]).to(layer.weight.device)
@@ -138,9 +153,7 @@ def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> 
     return new_layer
 
 
-def prune_layer(
-    layer: Union[nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None
-) -> Union[nn.Linear, Conv1D]:
+def prune_layer(layer: nn.Linear | Conv1D, index: torch.LongTensor, dim: int | None = None) -> nn.Linear | Conv1D:
     """
     Prune a Conv1D or linear layer to keep only entries in index.
 
@@ -163,7 +176,10 @@ def prune_layer(
 
 
 def apply_chunking_to_forward(
-    forward_fn: Callable[..., torch.Tensor], chunk_size: int, chunk_dim: int, *input_tensors
+    forward_fn: Callable[..., torch.Tensor],
+    chunk_size: int,
+    chunk_dim: int,
+    *input_tensors,
 ) -> torch.Tensor:
     """
     This function chunks the `input_tensors` into smaller input tensor parts of size `chunk_size` over the dimension
@@ -238,8 +254,8 @@ def apply_chunking_to_forward(
 
 
 def find_pruneable_heads_and_indices(
-    heads: List[int], n_heads: int, head_size: int, already_pruned_heads: Set[int]
-) -> Tuple[Set[int], torch.LongTensor]:
+    heads: list[int], n_heads: int, head_size: int, already_pruned_heads: set[int]
+) -> tuple[set[int], torch.LongTensor]:
     """
     Finds the heads and their indices taking `already_pruned_heads` into account.
 
@@ -264,9 +280,7 @@ def find_pruneable_heads_and_indices(
     return heads, index
 
 
-def meshgrid(
-    *tensors: Union[torch.Tensor, List[torch.Tensor]], indexing: Optional[str] = None
-) -> Tuple[torch.Tensor, ...]:
+def meshgrid(*tensors: torch.Tensor | list[torch.Tensor], indexing: str | None = None) -> tuple[torch.Tensor, ...]:
     """
     Wrapper around torch.meshgrid to avoid warning messages about the introduced `indexing` argument.
 
@@ -275,14 +289,14 @@ def meshgrid(
     return torch.meshgrid(*tensors, indexing=indexing)
 
 
-def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
+def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     """
     Unique identifier to a tensor storage. Multiple different tensors can share the same underlying storage. For
     example, "meta" tensors all share the same storage, and thus their identifier will all be equal. This identifier is
     guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
     non-overlapping lifetimes may have the same id.
     """
-    if tensor.device.type == "xla" and is_torch_tpu_available():
+    if tensor.device.type == "xla" and is_torch_xla_available():
         # NOTE: xla tensors dont have storage
         # use some other unique id to distinguish.
         # this is a XLA tensor, it must be created using torch_xla's
@@ -294,3 +308,53 @@ def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
         unique_id = storage_ptr(tensor)
 
     return tensor.device, unique_id, storage_size(tensor)
+
+
+def isin_mps_friendly(elements: torch.Tensor, test_elements: torch.Tensor | int) -> torch.Tensor:
+    """
+    Same as `torch.isin` without flags, but MPS-friendly. We can remove this function when we stop supporting
+    torch <= 2.3. See https://github.com/pytorch/pytorch/issues/77764#issuecomment-2067838075
+
+    Args:
+        elements (`torch.Tensor`): Input elements
+        test_elements (`torch.Tensor` or `int`): The elements to check against.
+
+    Returns:
+        `torch.Tensor`: A boolean tensor of the same shape as `elements` that is True for `elements` in `test_elements`
+        and False otherwise
+    """
+
+    if elements.device.type == "mps" and not is_torch_greater_or_equal_than_2_4:
+        test_elements = torch.tensor(test_elements)
+        if test_elements.ndim == 0:
+            test_elements = test_elements.unsqueeze(0)
+        return elements.tile(test_elements.shape[0], 1).eq(test_elements.unsqueeze(1)).sum(dim=0).bool().squeeze()
+    else:
+        # Note: don't use named arguments in `torch.isin`, see https://github.com/pytorch/pytorch/issues/126045
+        return torch.isin(elements, test_elements)
+
+
+def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
+    """
+    LRU cache decorator from standard functools library, but with a workaround to disable
+    caching when torchdynamo is compiling. Expected to work with class methods.
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if not is_torchdynamo_compiling():
+                # Cache the function only if the model is not being compiled
+                # check if the function is already cached, otherwise create it
+                if not hasattr(self, f"_cached_{func.__name__}"):
+                    self.__setattr__(
+                        f"_cached_{func.__name__}", lru_cache(*lru_args, **lru_kwargs)(func.__get__(self))
+                    )
+                return self.__getattribute__(f"_cached_{func.__name__}")(*args, **kwargs)
+            else:
+                # Otherwise, just call the original function
+                return func(self, *args, **kwargs)
+
+        return wrapper
+
+    return decorator

@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BART model configuration"""
+"""BART model configuration"""
+
 import warnings
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
@@ -25,11 +26,6 @@ from ...utils import TensorType, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
-
-BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/bart-large": "https://huggingface.co/facebook/bart-large/resolve/main/config.json",
-    # See all BART models at https://huggingface.co/models?filter=bart
-}
 
 
 class BartConfig(PretrainedConfig):
@@ -404,3 +400,6 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
             flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
                 flattened_output, name, idx, t
             )
+
+
+__all__ = ["BartConfig", "BartOnnxConfig"]

@@ -12,19 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
 import shutil
 import tempfile
 import unittest
-from typing import List
-
-import numpy as np
 
 from transformers import (
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
+    UdopProcessor,
     UdopTokenizer,
     UdopTokenizerFast,
 )
@@ -35,7 +31,9 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available, is_torch_available
+from transformers.utils import cached_property, is_pytesseract_available, is_torch_available
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_torch_available():
@@ -45,65 +43,65 @@ if is_torch_available():
 if is_pytesseract_available():
     from PIL import Image
 
-    from transformers import LayoutLMv3ImageProcessor, UdopProcessor
+    from transformers import LayoutLMv3ImageProcessor
 
 
 @require_pytesseract
 @require_sentencepiece
 @require_tokenizers
-class UdopProcessorTest(unittest.TestCase):
+class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tokenizer_class = UdopTokenizer
     rust_tokenizer_class = UdopTokenizerFast
+    processor_class = UdopProcessor
     maxDiff = None
 
-    def setUp(self):
-        image_processor_map = {
-            "do_resize": True,
-            "size": 224,
-            "apply_ocr": True,
-        }
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
+        image_processor = LayoutLMv3ImageProcessor(
+            do_resize=True,
+            size=224,
+            apply_ocr=True,
+        )
+        tokenizer = UdopTokenizer.from_pretrained("microsoft/udop-large")
+        processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        processor.save_pretrained(cls.tmpdirname)
 
-        self.tmpdirname = tempfile.mkdtemp()
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(image_processor_map) + "\n")
+        cls.tokenizer_pretrained_name = "microsoft/udop-large"
 
-        self.tokenizer_pretrained_name = "microsoft/udop-large"
+        image_processor = cls.get_image_processor()
+        tokenizer = cls.get_tokenizers()[0]
+        processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        processor.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, **kwargs) -> PreTrainedTokenizer:
+        return cls.tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
+    @classmethod
+    def get_image_processor(cls, **kwargs):
+        return LayoutLMv3ImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
-    def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
-        return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
+    @classmethod
+    def get_rust_tokenizer(cls, **kwargs) -> PreTrainedTokenizerFast:
+        return cls.rust_tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
 
-    def get_image_processor(self, **kwargs):
-        return LayoutLMv3ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_tokenizers(cls, **kwargs) -> list[PreTrainedTokenizerBase]:
+        return [cls.get_tokenizer(**kwargs), cls.get_rust_tokenizer(**kwargs)]
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
-
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_save_load_pretrained_default(self):
         image_processor = self.get_image_processor()
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
-
-            processor.save_pretrained(self.tmpdirname)
-            processor = UdopProcessor.from_pretrained(self.tmpdirname)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                processor.save_pretrained(tmpdir)
+                processor = UdopProcessor.from_pretrained(tmpdir)
 
             self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
             self.assertIsInstance(processor.tokenizer, (UdopTokenizer, UdopTokenizerFast))
@@ -112,21 +110,22 @@ class UdopProcessorTest(unittest.TestCase):
             self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = UdopProcessor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = UdopProcessor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
+            processor.save_pretrained(tmpdir)
 
-        # slow tokenizer
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
+            # slow tokenizer
+            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+            image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
 
-        processor = UdopProcessor.from_pretrained(
-            self.tmpdirname,
-            use_fast=False,
-            bos_token="(BOS)",
-            eos_token="(EOS)",
-            do_resize=False,
-            size=30,
-        )
+            processor = UdopProcessor.from_pretrained(
+                tmpdir,
+                use_fast=False,
+                bos_token="(BOS)",
+                eos_token="(EOS)",
+                do_resize=False,
+                size=30,
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, UdopTokenizer)
@@ -157,7 +156,7 @@ class UdopProcessorTest(unittest.TestCase):
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input)
+        inputs = processor(images=image_input, text=input_str)
 
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
@@ -185,7 +184,7 @@ class UdopProcessorTest(unittest.TestCase):
         from datasets import load_dataset
 
         # set up
-        datasets = load_dataset("nielsr/funsd")
+        datasets = load_dataset("nielsr/funsd", trust_remote_code=True)
         processor = UdopProcessor.from_pretrained("microsoft/udop-large", apply_ocr=False)
 
         def preprocess_data(examples):
@@ -223,7 +222,7 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
         # we verify our implementation on 2 document images from the DocVQA dataset
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
 
         image_1 = Image.open(ds[0]["file"]).convert("RGB")
         image_2 = Image.open(ds[1]["file"]).convert("RGB")
@@ -286,7 +285,7 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             # verify input_ids
             # this was obtained with Tesseract 4.1.1
             # fmt: off
-            expected_decoding = "7 ITC Limited REPORT AND ACCOUNTS 2013 ITC’s Brands: An Asset for the Nation The consumer needs and aspirations they fulfil, the benefit they generate for millions across ITC’s value chains, the future-ready capabilities that support them, and the value that they create for the country, have made ITC’s brands national assets, adding to India’s competitiveness. It is ITC’s aspiration to be the No 1 FMCG player in the country, driven by its new FMCG businesses. A recent Nielsen report has highlighted that ITC's new FMCG businesses are the fastest growing among the top consumer goods companies operating in India. ITC takes justifiable pride that, along with generating economic value, these celebrated Indian brands also drive the creation of larger societal capital through the virtuous cycle of sustainable and inclusive growth. DI WILLS * ; LOVE DELIGHTFULLY SOFT SKIN? aia Ans Source: https://www.industrydocuments.ucsf.edu/docs/snbx0223</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>"  # noqa: E231
+            expected_decoding = "7 ITC Limited REPORT AND ACCOUNTS 2013 ITC’s Brands: An Asset for the Nation The consumer needs and aspirations they fulfil, the benefit they generate for millions across ITC’s value chains, the future-ready capabilities that support them, and the value that they create for the country, have made ITC’s brands national assets, adding to India’s competitiveness. It is ITC’s aspiration to be the No 1 FMCG player in the country, driven by its new FMCG businesses. A recent Nielsen report has highlighted that ITC's new FMCG businesses are the fastest growing among the top consumer goods companies operating in India. ITC takes justifiable pride that, along with generating economic value, these celebrated Indian brands also drive the creation of larger societal capital through the virtuous cycle of sustainable and inclusive growth. DI WILLS * ; LOVE DELIGHTFULLY SOFT SKIN? aia Ans Source: https://www.industrydocuments.ucsf.edu/docs/snbx0223</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>"  # noqa: E231
             # fmt: on
             decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
@@ -476,7 +475,7 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             question = "What's his name?"
             words = ["hello", "world"]
             boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
-            input_processor = processor(images[0], question, words, boxes, return_tensors="pt")
+            input_processor = processor(images[0], question, text_pair=words, boxes=boxes, return_tensors="pt")
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
@@ -492,7 +491,9 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             questions = ["How old is he?", "what's the time"]
             words = [["hello", "world"], ["my", "name", "is", "niels"]]
             boxes = [[[1, 2, 3, 4], [5, 6, 7, 8]], [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]]]
-            input_processor = processor(images, questions, words, boxes, padding=True, return_tensors="pt")
+            input_processor = processor(
+                images, questions, text_pair=words, boxes=boxes, padding=True, return_tensors="pt"
+            )
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]

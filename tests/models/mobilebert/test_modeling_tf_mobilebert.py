@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -84,7 +83,7 @@ class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
 
         return inputs_dict
 
-    class TFMobileBertModelTester(object):
+    class TFMobileBertModelTester:
         def __init__(
             self,
             parent,
@@ -313,7 +312,7 @@ class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     @slow
     def test_model_from_pretrained(self):
-        # for model_name in TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        #     model_name = 'google/mobilebert-uncased'
         for model_name in ["google/mobilebert-uncased"]:
             model = TFMobileBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

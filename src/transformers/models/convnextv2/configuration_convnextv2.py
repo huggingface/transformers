@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ConvNeXTV2 model configuration"""
-
+"""ConvNeXTV2 model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -21,10 +20,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 
 logger = logging.get_logger(__name__)
-
-CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/convnextv2-tiny-1k-224": "https://huggingface.co/facebook/convnextv2-tiny-1k-224/resolve/main/config.json",
-}
 
 
 class ConvNextV2Config(BackboneConfigMixin, PretrainedConfig):
@@ -40,9 +35,9 @@ class ConvNextV2Config(BackboneConfigMixin, PretrainedConfig):
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        patch_size (`int`, optional, defaults to 4):
+        patch_size (`int`, *optional*, defaults to 4):
             Patch size to use in the patch embedding layer.
-        num_stages (`int`, optional, defaults to 4):
+        num_stages (`int`, *optional*, defaults to 4):
             The number of stages in the model.
         hidden_sizes (`List[int]`, *optional*, defaults to `[96, 192, 384, 768]`):
             Dimensionality (hidden size) at each stage.
@@ -57,6 +52,8 @@ class ConvNextV2Config(BackboneConfigMixin, PretrainedConfig):
             The epsilon used by the layer normalization layers.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop rate for stochastic depth.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
@@ -116,3 +113,6 @@ class ConvNextV2Config(BackboneConfigMixin, PretrainedConfig):
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
+
+
+__all__ = ["ConvNextV2Config"]

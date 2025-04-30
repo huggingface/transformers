@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- TF 2.0 Transformer XL model.
+TF 2.0 Transformer XL model.
 """
 
 from __future__ import annotations
@@ -50,11 +50,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "transfo-xl/transfo-xl-wt103"
 _CONFIG_FOR_DOC = "TransfoXLConfig"
-
-TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "transfo-xl/transfo-xl-wt103",
-    # See all Transformer XL models at https://huggingface.co/models?filter=transfo-xl
-]
 
 
 class TFPositionalEmbedding(keras.layers.Layer):
@@ -695,7 +690,7 @@ class TFTransfoXLModelOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     mems: List[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
@@ -728,7 +723,7 @@ class TFTransfoXLLMHeadModelOutput(ModelOutput):
             heads.
     """
 
-    prediction_scores: tf.Tensor = None
+    prediction_scores: Optional[tf.Tensor] = None
     mems: List[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
@@ -762,7 +757,7 @@ class TFTransfoXLSequenceClassifierOutputWithPast(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     mems: List[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
@@ -1089,7 +1084,7 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
                 in_logits = tf.gather(logits, sequence_lengths, batch_dims=1, axis=1)
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
@@ -1100,9 +1095,9 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
                 batch_size, sequence_length = shape_list(input_ids)[:2]
             else:
                 batch_size, sequence_length = shape_list(inputs_embeds)[:2]
-            assert (
-                self.config.pad_token_id is not None or batch_size == 1
-            ), "Cannot handle batch sizes > 1 if no padding token is defined."
+            assert self.config.pad_token_id is not None or batch_size == 1, (
+                "Cannot handle batch sizes > 1 if no padding token is defined."
+            )
 
             if not tf.is_tensor(sequence_lengths):
                 in_logits = logits[0:batch_size, sequence_lengths]
@@ -1122,3 +1117,13 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+
+__all__ = [
+    "TFAdaptiveEmbedding",
+    "TFTransfoXLForSequenceClassification",
+    "TFTransfoXLLMHeadModel",
+    "TFTransfoXLMainLayer",
+    "TFTransfoXLModel",
+    "TFTransfoXLPreTrainedModel",
+]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch CLIP model. """
-
+"""Testing suite for the PyTorch CLIP model."""
 
 import inspect
 import os
@@ -22,25 +20,32 @@ import unittest
 
 import numpy as np
 import requests
+from parameterized import parameterized
+from pytest import mark
 
-import transformers
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from transformers.testing_utils import (
-    is_flax_available,
-    is_pt_flax_cross_test,
+    require_flash_attn,
     require_torch,
+    require_torch_gpu,
+    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import (
+    is_torch_available,
+    is_vision_available,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     _config_zero_init,
     floats_tensor,
     ids_tensor,
+    is_flaky,
     random_attention_mask,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -58,22 +63,11 @@ if is_torch_available():
         CLIPVisionModel,
         CLIPVisionModelWithProjection,
     )
-    from transformers.models.clip.modeling_clip import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
-
 
 if is_vision_available():
     from PIL import Image
 
     from transformers import CLIPProcessor
-
-
-if is_flax_available():
-    import jax.numpy as jnp
-
-    from transformers.modeling_flax_pytorch_utils import (
-        convert_pytorch_state_dict_to_flax,
-        load_flax_weights_in_pytorch_model,
-    )
 
 
 class CLIPVisionModelTester:
@@ -168,9 +162,53 @@ class CLIPVisionModelTester:
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @require_torch_sdpa
+    def test_eager_matches_sdpa_inference(self, *args):
+        return getattr(ModelTesterMixin, self._testMethodName)(self)
+
+
+class CLIPModelTesterMixin(ModelTesterMixin):
+    """
+    Subclass of ModelTesterMixin with methods specific to testing CLIP models.
+    The SDPA equivalence test is overridden here because CLIP models may have test/vision/text+vision inputs,
+    different output logits, and are not supposed to be used or tested with padding_side="left".
+    """
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # Load the model with SDPA (it is the default, but we explicit it for clarity)
+                model_sdpa = model_class.from_pretrained(tmpdirname, attn_implementation="sdpa")
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                # Load model with eager attention
+                model_eager = model_class.from_pretrained(
+                    tmpdirname,
+                    attn_implementation="eager",
+                )
+                model_eager = model_eager.eval().to(torch_device)
+
+            if hasattr(model_sdpa, "vision_model"):
+                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
+
+            if hasattr(model_sdpa, "text_model"):
+                self.assertTrue(model_sdpa.text_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model_eager.text_model.config._attn_implementation == "eager")
+
+            self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+            self.assertTrue(model_eager.config._attn_implementation == "eager")
+
 
 @require_torch
-class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
+class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as CLIP does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -193,7 +231,7 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -222,44 +260,49 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="CLIPVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="CLIPVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLIPVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai/clip-vit-base-patch32"
+        model = CLIPVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLIPVisionModelWithProjection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "visual_projection"))
+        model_name = "openai/clip-vit-base-patch32"
+        model = CLIPVisionModelWithProjection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertTrue(hasattr(model, "visual_projection"))
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @require_torch_sdpa
+    @is_flaky()
+    def test_eager_matches_sdpa_inference(self, *args):
+        # adding only flaky decorator here and call the parent test method
+        return getattr(ModelTesterMixin, self._testMethodName)(self)
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        super().test_sdpa_can_dispatch_composite_models()
 
 
 class CLIPTextModelTester:
@@ -361,7 +404,7 @@ class CLIPTextModelTester:
 
 
 @require_torch
-class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
+class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
     all_model_classes = (CLIPTextModel, CLIPTextModelWithProjection) if is_torch_available() else ()
     fx_compatible = True
     test_pruning = False
@@ -383,20 +426,22 @@ class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -405,26 +450,34 @@ class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="CLIPTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="CLIPTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLIPTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai/clip-vit-base-patch32"
+        model = CLIPTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLIPTextModelWithProjection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "text_projection"))
+        model_name = "openai/clip-vit-base-patch32"
+        model = CLIPTextModelWithProjection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertTrue(hasattr(model, "text_projection"))
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @require_torch_sdpa
+    @slow
+    @is_flaky()
+    def test_eager_matches_sdpa_inference(self, *args):
+        # adding only flaky decorator here and call the parent test method
+        return getattr(ModelTesterMixin, self._testMethodName)(self)
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        super().test_sdpa_can_dispatch_composite_models()
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_on_flash(self):
+        self.skipTest(reason="CLIPTextModel has two attention masks: `causal_attention_mask` and `attention_mask`")
 
 
 class CLIPModelTester:
@@ -437,6 +490,7 @@ class CLIPModelTester:
         self.parent = parent
         self.text_model_tester = CLIPTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = CLIPVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -476,7 +530,7 @@ class CLIPModelTester:
 
 
 @require_torch
-class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CLIPModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": CLIPModel, "image-feature-extraction": CLIPVisionModel} if is_torch_available() else {}
@@ -486,13 +540,21 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = CLIPModelTester(self)
+        common_properties = ["projection_dim", "logit_scale_init_value"]
+        self.config_tester = ConfigTester(
+            self, config_class=CLIPConfig, has_text_modality=False, common_properties=common_properties
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -507,10 +569,10 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="CLIPModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for CLIP
+    # override as the `logit_scale` parameter initialization is different for CLIP
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -519,7 +581,7 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
+                    # check if `logit_scale` is initialized as per the original implementation
                     if name == "logit_scale":
                         self.assertAlmostEqual(
                             param.data.item(),
@@ -536,7 +598,7 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -620,129 +682,121 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             text_config = CLIPTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
-    # overwrite from common since FlaxCLIPModel returns nested output
-    # which is not supported in the common test
-    @is_pt_flax_cross_test
-    def test_equivalence_pt_to_flax(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                # load PyTorch class
-                pt_model = model_class(config).eval()
-                # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    return
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load Flax class
-                fx_model = fx_model_class(config, dtype=jnp.float32)
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
-                fx_model.params = fx_state
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs).to_tuple()
-
-                # convert inputs to Flax
-                fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-                fx_outputs = fx_model(**fx_inputs).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
-                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    pt_model.save_pretrained(tmpdirname)
-                    fx_model_loaded = fx_model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                fx_outputs_loaded = fx_model_loaded(**fx_inputs).to_tuple()
-                self.assertEqual(
-                    len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
-                )
-                for fx_output_loaded, pt_output in zip(fx_outputs_loaded[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
-
-    # overwrite from common since FlaxCLIPModel returns nested output
-    # which is not supported in the common test
-    @is_pt_flax_cross_test
-    def test_equivalence_flax_to_pt(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                # load corresponding PyTorch class
-                pt_model = model_class(config).eval()
-
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    # no flax model exists for this class
-                    return
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load Flax class
-                fx_model = fx_model_class(config, dtype=jnp.float32)
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
-
-                # make sure weights are tied in PyTorch
-                pt_model.tie_weights()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs).to_tuple()
-
-                fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-
-                fx_outputs = fx_model(**fx_inputs).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
-
-                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = model_class.from_pretrained(tmpdirname, from_flax=True)
-
-                with torch.no_grad():
-                    pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
-
-                self.assertEqual(
-                    len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
-                )
-                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs_loaded[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
-
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLIPModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai/clip-vit-base-patch32"
+        model = CLIPModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @require_torch_sdpa
+    @slow
+    @is_flaky()
+    def test_eager_matches_sdpa_inference(self, *args):
+        # adding only flaky decorator here and call the parent test method
+        return getattr(ModelTesterMixin, self._testMethodName)(self)
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        super().test_sdpa_can_dispatch_composite_models()
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_on_flash(self):
+        self.skipTest(reason="CLIP text tower has two attention masks: `causal_attention_mask` and `attention_mask`")
+
+    @require_torch_sdpa
+    def test_sdpa_can_compile_dynamic(self):
+        self.skipTest(reason="CLIP model can't be compiled dynamic, error in clip_loss`")
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_inference_equivalence(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model.to(torch_device)
+
+                dummy_pixel_values = inputs_dict["pixel_values"].to(torch.bfloat16)
+                dummy_input_ids = inputs_dict["input_ids"]
+
+                outputs = model(pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True)
+                outputs_fa = model_fa(
+                    pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True
+                )
+
+                self.assertTrue(
+                    torch.allclose(outputs.logits_per_image, outputs_fa.logits_per_image, atol=4e-2, rtol=4e-2),
+                    f"Image logits max diff: {torch.max(torch.abs(outputs.logits_per_image - outputs_fa.logits_per_image))}",
+                )
+                self.assertTrue(
+                    torch.allclose(outputs.logits_per_text, outputs_fa.logits_per_text, atol=4e-2, rtol=4e-2),
+                    f"Text logits max diff: {torch.max(torch.abs(outputs.logits_per_text - outputs_fa.logits_per_text))}",
+                )
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="eager"
+                )
+                model.to(torch_device)
+
+                dummy_pixel_values = inputs_dict["pixel_values"].to(torch.bfloat16)
+                dummy_input_ids = inputs_dict["input_ids"]
+                dummy_pixel_mask = inputs_dict["attention_mask"]
+
+                # right padding
+                dummy_pixel_mask[:] = 1
+                dummy_pixel_mask[:, -1:] = 0
+
+                outputs = model(pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True)
+                outputs_fa = model_fa(
+                    pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True
+                )
+
+                logits_per_image_eager = outputs.logits_per_image[:, :-1]
+                logits_per_text_eager = outputs.logits_per_text[:, :-1]
+
+                logits_per_image_sdpa = outputs_fa.logits_per_image[:, :-1]
+                logits_per_text_sdpa = outputs_fa.logits_per_text[:, :-1]
+
+                self.assertTrue(
+                    torch.allclose(logits_per_image_eager, logits_per_image_sdpa, atol=4e-2, rtol=4e-2),
+                    f"Image logits max diff: {torch.max(torch.abs(logits_per_image_eager - logits_per_image_sdpa))}",
+                )
+                self.assertTrue(
+                    torch.allclose(logits_per_text_eager, logits_per_text_sdpa, atol=4e-2, rtol=4e-2),
+                    f"Text logits max diff: {torch.max(torch.abs(logits_per_text_eager - logits_per_text_sdpa))}",
+                )
 
 
 class CLIPForImageClassificationModelTester(CLIPModelTester):
@@ -767,7 +821,7 @@ class CLIPForImageClassificationModelTester(CLIPModelTester):
 
 
 @require_torch
-class CLIPForImageClassificationModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class CLIPForImageClassificationModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CLIPForImageClassification,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": CLIPForImageClassification} if is_torch_available() else {}
     fx_compatible = False
@@ -775,6 +829,7 @@ class CLIPForImageClassificationModelTest(ModelTesterMixin, PipelineTesterMixin,
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = CLIPForImageClassificationModelTester(self)
@@ -784,7 +839,7 @@ class CLIPForImageClassificationModelTest(ModelTesterMixin, PipelineTesterMixin,
         pass
 
     @unittest.skip(reason="CLIPForImageClassification does not support inputs_embeds")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="CLIPForImageClassification does not support gradient checkpointing yet")
@@ -803,6 +858,18 @@ class CLIPForImageClassificationModelTest(ModelTesterMixin, PipelineTesterMixin,
     def test_initialization(self):
         pass
 
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @require_torch_sdpa
+    @slow
+    @is_flaky()
+    def test_eager_matches_sdpa_inference(self, *args):
+        # adding only flaky decorator here and call the parent test method
+        return getattr(ModelTesterMixin, self._testMethodName)(self)
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        super().test_sdpa_can_dispatch_composite_models()
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -817,7 +884,7 @@ class CLIPModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "openai/clip-vit-base-patch32"
-        model = CLIPModel.from_pretrained(model_name).to(torch_device)
+        model = CLIPModel.from_pretrained(model_name, attn_implementation="sdpa").to(torch_device)
         processor = CLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()
@@ -841,4 +908,41 @@ class CLIPModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        torch.testing.assert_close(outputs.logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # CLIP models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(torch_device)
+
+        processor = CLIPProcessor.from_pretrained(
+            "openai/clip-vit-base-patch32", size={"height": 180, "width": 180}, crop_size={"height": 180, "width": 180}
+        )
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+
+        # interpolate_pos_encodiung false should return value error
+        with self.assertRaises(ValueError, msg="doesn't match model"):
+            with torch.no_grad():
+                model(**inputs, interpolate_pos_encoding=False)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 26, 768))
+
+        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[-0.1538, 0.0322, -0.3235], [0.2893, 0.1135, -0.5708], [0.0461, 0.1540, -0.6018]]
+        ).to(torch_device)
+
+        torch.testing.assert_close(
+            outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=6e-3, atol=4e-4
+        )

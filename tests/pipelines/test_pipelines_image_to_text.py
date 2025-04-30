@@ -15,10 +15,12 @@
 import unittest
 
 import requests
+from huggingface_hub import ImageToTextOutput
 
 from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, TF_MODEL_FOR_VISION_2_SEQ_MAPPING, is_vision_available
-from transformers.pipelines import pipeline
+from transformers.pipelines import ImageToTextPipeline, pipeline
 from transformers.testing_utils import (
+    compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     require_tf,
     require_torch,
@@ -45,8 +47,23 @@ class ImageToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VISION_2_SEQ_MAPPING
     tf_model_mapping = TF_MODEL_FOR_VISION_2_SEQ_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor):
-        pipe = pipeline("image-to-text", model=model, tokenizer=tokenizer, image_processor=processor)
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        pipe = ImageToTextPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         examples = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -101,6 +118,9 @@ class ImageToTextPipelineTests(unittest.TestCase):
             [{"generated_text": "growth"}],
         )
 
+        for single_output in outputs:
+            compare_pipeline_output_to_hub_spec(single_output, ImageToTextOutput)
+
     @require_torch
     def test_small_model_pt(self):
         pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2")
@@ -141,6 +161,35 @@ class ImageToTextPipelineTests(unittest.TestCase):
 
         outputs = pipe(image, prompt=prompt)
         self.assertTrue(outputs[0]["generated_text"].startswith(prompt))
+
+    @require_torch
+    def test_consistent_batching_behaviour(self):
+        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-BlipForConditionalGeneration")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        prompt = "a photo of"
+
+        outputs = pipe([image, image], prompt=prompt)
+        self.assertTrue(outputs[0][0]["generated_text"].startswith(prompt))
+        self.assertTrue(outputs[1][0]["generated_text"].startswith(prompt))
+
+        outputs = pipe([image, image], prompt=prompt, batch_size=2)
+        self.assertTrue(outputs[0][0]["generated_text"].startswith(prompt))
+        self.assertTrue(outputs[1][0]["generated_text"].startswith(prompt))
+
+        from torch.utils.data import Dataset
+
+        class MyDataset(Dataset):
+            def __len__(self):
+                return 5
+
+            def __getitem__(self, i):
+                return "./tests/fixtures/tests_samples/COCO/000000039769.png"
+
+        dataset = MyDataset()
+        for batch_size in (1, 2, 4):
+            outputs = pipe(dataset, prompt=prompt, batch_size=batch_size if batch_size > 1 else None)
+            self.assertTrue(list(outputs)[0][0]["generated_text"].startswith(prompt))
+            self.assertTrue(list(outputs)[1][0]["generated_text"].startswith(prompt))
 
     @slow
     @require_torch
@@ -261,7 +310,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
             outputs,
             [
                 {
-                    "generated_text": "<image> \nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud?\nASSISTANT: Lava"
+                    "generated_text": "\nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud?\nASSISTANT: Lava"
                 }
             ],
         )

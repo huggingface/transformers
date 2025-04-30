@@ -16,7 +16,6 @@
 
 import json
 import os
-import sys
 from dataclasses import dataclass
 from itertools import groupby
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
@@ -53,21 +52,8 @@ VOCAB_FILES_NAMES = {
     "tokenizer_config_file": "tokenizer_config.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/wav2vec2-lv-60-espeak-cv-ft": (
-            "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft/resolve/main/vocab.json"
-        ),
-    },
-    "tokenizer_config_file": {
-        "facebook/wav2vec2-lv-60-espeak-cv-ft": (
-            "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft/resolve/main/tokenizer_config.json"
-        ),
-    },
-}
 
 # Wav2Vec2Phoneme has no max input length
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/wav2vec2-lv-60-espeak-cv-ft": sys.maxsize}
 
 
 ListOfDict = List[Dict[str, Union[int, str]]]
@@ -83,7 +69,7 @@ class Wav2Vec2PhonemeCTCTokenizerOutput(ModelOutput):
             Decoded logits in text from. Usually the speech transcription.
         char_offsets (list of `List[Dict[str, Union[int, str]]]` or `List[Dict[str, Union[int, str]]]`):
             Offsets of the decoded characters. In combination with sampling rate and model downsampling rate char
-            offsets can be used to compute time stamps for each charater. Total logit score of the beam associated with
+            offsets can be used to compute time stamps for each character. Total logit score of the beam associated with
             produced text.
     """
 
@@ -92,7 +78,6 @@ class Wav2Vec2PhonemeCTCTokenizerOutput(ModelOutput):
 
 
 class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
-
     """
     Constructs a Wav2Vec2PhonemeCTC tokenizer.
 
@@ -125,8 +110,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -425,7 +408,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         group_tokens: bool = True,
         filter_word_delimiter_token: bool = True,
         spaces_between_special_tokens: bool = False,
@@ -472,7 +455,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         output_char_offsets: bool = False,
         **kwargs,
     ) -> str:
@@ -528,7 +511,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self,
         sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         output_char_offsets: bool = False,
         **kwargs,
     ) -> List[str]:
@@ -592,3 +575,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return (vocab_file,)
+
+
+__all__ = ["Wav2Vec2PhonemeCTCTokenizer"]

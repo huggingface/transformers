@@ -55,10 +55,10 @@ Di seguito sono riportate alcune note per aiutarvi a utilizzare questo modulo, o
 Dopo aver installato le librerie necessarie, per caricare il tuo modello mixed 8-bit è il seguente:
 
 ```py
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 model_name = "bigscience/bloom-2b5"
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 ```
 
 Per la generazione di testo, si consiglia di:
@@ -69,11 +69,11 @@ Per la generazione di testo, si consiglia di:
 Ecco un semplice esempio:
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 model_name = "bigscience/bloom-2b5"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 
 text = "Hello, my llama is cute"
 inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
@@ -87,7 +87,7 @@ outputs = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 Usare il seguente modo caricare il modello mixed-8bit su più GPU (stesso comando della configurazione a GPU singola):
 ```py
 model_name = "bigscience/bloom-2b5"
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 ```
 Puoi controllare la RAM della GPU che si vuole allocare su ogni GPU usando `accelerate`. Utilizzare l'argomento `max_memory` come segue:
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,7 @@ import time
 from dataclasses import field
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import datasets
 import evaluate
@@ -39,7 +38,7 @@ from flax import jax_utils, traverse_util
 from flax.jax_utils import pad_shard_unpad, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -60,7 +59,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risk.
-check_min_version("4.39.0.dev0")
+check_min_version("4.52.0.dev0")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/flax/speech-recognition/requirements.txt")
 
@@ -100,7 +99,7 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+            "help": "Will use the token generated when running `transformers login` (necessary to use this script "
             "with private models)."
         },
     )
@@ -135,6 +134,16 @@ class DataTrainingArguments:
     )
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+    )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
+            )
+        },
     )
     text_column: Optional[str] = field(
         default=None,
@@ -255,7 +264,7 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
     Data collator that will dynamically pad the inputs received.
     Args:
         processor ([`Wav2Vec2Processor`])
-            The processor used for proccessing the data.
+            The processor used for processing the data.
         decoder_start_token_id (:obj: `int`)
             The begin-of-sentence of the decoder.
         input_padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
@@ -293,7 +302,7 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
     pad_input_to_multiple_of: Optional[int] = None
     pad_target_to_multiple_of: Optional[int] = None
 
-    def __call__(self, features: List[Dict[str, Union[List[int], np.ndarray]]]) -> Dict[str, np.ndarray]:
+    def __call__(self, features: list[dict[str, Union[list[int], np.ndarray]]]) -> dict[str, np.ndarray]:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         model_input_name = self.processor.model_input_names[0]
@@ -427,8 +436,9 @@ def main():
             )
         else:
             repo_name = training_args.hub_model_id
-        create_repo(repo_name, exist_ok=True, token=training_args.hub_token)
-        repo = Repository(training_args.output_dir, clone_from=repo_name, token=training_args.hub_token)
+        # Create repo and retrieve repo_id
+        api = HfApi()
+        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
 
     # 3. Load dataset
     raw_datasets = DatasetDict()
@@ -441,6 +451,7 @@ def main():
             cache_dir=data_args.dataset_cache_dir,
             num_proc=data_args.preprocessing_num_workers,
             token=True if model_args.use_auth_token else None,
+            trust_remote_code=data_args.trust_remote_code,
         )
 
     if training_args.do_eval:
@@ -451,6 +462,7 @@ def main():
             cache_dir=data_args.dataset_cache_dir,
             num_proc=data_args.preprocessing_num_workers,
             token=True if model_args.use_auth_token else None,
+            trust_remote_code=data_args.trust_remote_code,
         )
 
     if not training_args.do_train and not training_args.do_eval:
@@ -852,7 +864,13 @@ def main():
             model.save_pretrained(training_args.output_dir, params=params)
             tokenizer.save_pretrained(training_args.output_dir)
             if training_args.push_to_hub:
-                repo.push_to_hub(commit_message=f"Saving weights and logs of epoch {epoch}", blocking=False)
+                api.upload_folder(
+                    commit_message=f"Saving weights and logs of epoch {epoch}",
+                    folder_path=training_args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=training_args.hub_token,
+                )
 
 
 if __name__ == "__main__":

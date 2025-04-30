@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 మీరు ప్రారంభించడానికి ముందు, మీరు అవసరమైన అన్ని లైబ్రరీలను ఇన్‌స్టాల్ చేశారని నిర్ధారించుకోండి:
 
 ```bash
-!pip install transformers datasets
+!pip install transformers datasets evaluate accelerate
 ```
 
 మీరు మీ ప్రాధాన్య యంత్ర అభ్యాస ఫ్రేమ్‌వర్క్‌ను కూడా ఇన్‌స్టాల్ చేయాలి:
@@ -142,7 +142,7 @@ label: NEGATIVE, with score: 0.5309
 ```
 
 <frameworkcontent>
-<pt> 
+<pt>
 ముందుగా శిక్షణ పొందిన మోడల్‌ను లోడ్ చేయడానికి [`AutoModelForSequenceClassification`] మరియు [`AutoTokenizer`]ని ఉపయోగించండి మరియు దాని అనుబంధిత టోకెనైజర్ (తదుపరి విభాగంలో `AutoClass`పై మరిన్ని):
 
 ```py
@@ -154,7 +154,7 @@ label: NEGATIVE, with score: 0.5309
 </pt>
 <tf>
 ముందుగా శిక్షణ పొందిన మోడల్‌ను లోడ్ చేయడానికి [`TFAutoModelForSequenceClassification`] మరియు [`AutoTokenizer`]ని ఉపయోగించండి మరియు దాని అనుబంధిత టోకెనైజర్ (తదుపరి విభాగంలో `TFAutoClass`పై మరిన్ని):
-  
+
 ```py
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
@@ -329,7 +329,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 <frameworkcontent>
 <pt>
 మీ మోడల్ చక్కగా ట్యూన్ చేయబడిన తర్వాత, మీరు దానిని [`PreTrainedModel.save_pretrained`]ని ఉపయోగించి దాని టోకెనైజర్‌తో సేవ్ చేయవచ్చు:
-  
+
 ```py
 >>> pt_save_directory = "./pt_save_pretrained"
 >>> tokenizer.save_pretrained(pt_save_directory)  # doctest: +IGNORE_RESULT
@@ -344,7 +344,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 </pt>
 <tf>
 మీ మోడల్ చక్కగా ట్యూన్ చేయబడిన తర్వాత, మీరు దానిని [`TFPreTrainedModel.save_pretrained`]ని ఉపయోగించి దాని టోకెనైజర్‌తో సేవ్ చేయవచ్చు:
-  
+
 ```py
 >>> tf_save_directory = "./tf_save_pretrained"
 >>> tokenizer.save_pretrained(tf_save_directory)  # doctest: +IGNORE_RESULT
@@ -366,8 +366,8 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```py
 >>> from transformers import AutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
->>> pt_model = AutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
+>>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
+>>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
 </pt>
 <tf>
@@ -375,8 +375,8 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```py
 >>> from transformers import TFAutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
+>>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
+>>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
 ```
 </tf>
 </frameworkcontent>
@@ -395,7 +395,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 <frameworkcontent>
 <pt>
 [`AutoModel.from_config`]తో మీ అనుకూల కాన్ఫిగరేషన్ నుండి మోడల్‌ను సృష్టించండి:
-  
+
 ```py
 >>> from transformers import AutoModel
 
@@ -404,7 +404,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 </pt>
 <tf>
 [`TFAutoModel.from_config`]తో మీ అనుకూల కాన్ఫిగరేషన్ నుండి మోడల్‌ను సృష్టించండి:
-  
+
 ```py
 >>> from transformers import TFAutoModel
 
@@ -465,7 +465,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ```
 
    ఆపై దానిని [`~datasets.Dataset.map`]తో మొత్తం డేటాసెట్‌లో వర్తింపజేయండి:
-   
+
    ```py
    >>> dataset = dataset.map(tokenize_dataset, batched=True)
    ```
@@ -488,7 +488,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ...     args=training_args,
 ...     train_dataset=dataset["train"],
 ...     eval_dataset=dataset["test"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=data_collator,
 ... )  # doctest: +SKIP
 ```
@@ -507,7 +507,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 మీరు [`Trainer`] లోపల ఉన్న పద్ధతులను ఉపవర్గీకరించడం ద్వారా శిక్షణ లూప్ ప్రవర్తనను అనుకూలీకరించవచ్చు. ఇది లాస్ ఫంక్షన్, ఆప్టిమైజర్ మరియు షెడ్యూలర్ వంటి లక్షణాలను అనుకూలీకరించడానికి మిమ్మల్ని అనుమతిస్తుంది. ఉపవర్గీకరించబడే పద్ధతుల కోసం [`Trainer`] సూచనను పరిశీలించండి.
 
-శిక్షణ లూప్‌ను అనుకూలీకరించడానికి మరొక మార్గం [కాల్‌బ్యాక్‌లు](./main_classes/callbacks). మీరు ఇతర లైబ్రరీలతో అనుసంధానం చేయడానికి కాల్‌బ్యాక్‌లను ఉపయోగించవచ్చు మరియు పురోగతిపై నివేదించడానికి శిక్షణ లూప్‌ను తనిఖీ చేయవచ్చు లేదా శిక్షణను ముందుగానే ఆపవచ్చు. శిక్షణ లూప్‌లోనే కాల్‌బ్యాక్‌లు దేనినీ సవరించవు. లాస్ ఫంక్షన్ వంటివాటిని అనుకూలీకరించడానికి, మీరు బదులుగా [`Trainer`]ని ఉపవర్గం చేయాలి.
+శిక్షణ లూప్‌ను అనుకూలీకరించడానికి మరొక మార్గం [కాల్‌బ్యాక్‌లు](./main_classes/callback). మీరు ఇతర లైబ్రరీలతో అనుసంధానం చేయడానికి కాల్‌బ్యాక్‌లను ఉపయోగించవచ్చు మరియు పురోగతిపై నివేదించడానికి శిక్షణ లూప్‌ను తనిఖీ చేయవచ్చు లేదా శిక్షణను ముందుగానే ఆపవచ్చు. శిక్షణ లూప్‌లోనే కాల్‌బ్యాక్‌లు దేనినీ సవరించవు. లాస్ ఫంక్షన్ వంటివాటిని అనుకూలీకరించడానికి, మీరు బదులుగా [`Trainer`]ని ఉపవర్గం చేయాలి.
 
 ## TensorFlowతో శిక్షణ పొందండి
 

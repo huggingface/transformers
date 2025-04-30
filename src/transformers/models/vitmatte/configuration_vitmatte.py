@@ -12,21 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" VitMatte model configuration"""
+"""VitMatte model configuration"""
 
 import copy
 from typing import List
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto.configuration_auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "hustvl/vitmatte-small-composition-1k": "https://huggingface.co/hustvl/vitmatte-small-composition-1k/resolve/main/config.json",
-}
 
 
 class VitMatteConfig(PretrainedConfig):
@@ -98,12 +95,6 @@ class VitMatteConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        if use_pretrained_backbone:
-            raise ValueError("Pretrained backbones are not supported yet.")
-
-        if backbone_config is not None and backbone is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
-
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `VitDet` backbone.")
             backbone_config = CONFIG_MAPPING["vitdet"](out_features=["stage4"])
@@ -112,8 +103,13 @@ class VitMatteConfig(PretrainedConfig):
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
 
-        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+        verify_backbone_config_arguments(
+            use_timm_backbone=use_timm_backbone,
+            use_pretrained_backbone=use_pretrained_backbone,
+            backbone=backbone,
+            backbone_config=backbone_config,
+            backbone_kwargs=backbone_kwargs,
+        )
 
         self.backbone_config = backbone_config
         self.backbone = backbone
@@ -135,3 +131,6 @@ class VitMatteConfig(PretrainedConfig):
         output["backbone_config"] = self.backbone_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
+
+
+__all__ = ["VitMatteConfig"]

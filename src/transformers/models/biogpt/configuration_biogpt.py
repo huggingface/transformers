@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BioGPT model configuration"""
+"""BioGPT model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-BIOGPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/biogpt": "https://huggingface.co/microsoft/biogpt/resolve/main/config.json",
-    # See all BioGPT models at https://huggingface.co/models?filter=biogpt
-}
 
 
 class BioGptConfig(PretrainedConfig):
@@ -134,3 +129,6 @@ class BioGptConfig(PretrainedConfig):
         self.layerdrop = layerdrop
         self.activation_dropout = activation_dropout
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+
+__all__ = ["BioGptConfig"]

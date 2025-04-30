@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch FNet model."""
+"""PyTorch FNet model."""
 
 import warnings
 from dataclasses import dataclass
@@ -58,12 +58,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/fnet-base"
 _CONFIG_FOR_DOC = "FNetConfig"
-
-FNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/fnet-base",
-    "google/fnet-large",
-    # See all FNet models at https://huggingface.co/models?filter=fnet
-]
 
 
 # Adapted from https://github.com/google-research/google-research/blob/master/f_net/fourier.py
@@ -358,9 +352,13 @@ class FNetLMPredictionHead(nn.Module):
         hidden_states = self.decoder(hidden_states)
         return hidden_states
 
-    def _tie_weights(self):
-        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        self.bias = self.decoder.bias
+    def _tie_weights(self) -> None:
+        # For accelerate compatibility and to not break backward compatibility
+        if self.decoder.bias.device.type == "meta":
+            self.decoder.bias = self.bias
+        else:
+            # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
+            self.bias = self.decoder.bias
 
 
 class FNetOnlyMLMHead(nn.Module):
@@ -446,8 +444,8 @@ class FNetForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_logits: torch.FloatTensor = None
-    seq_relationship_logits: torch.FloatTensor = None
+    prediction_logits: Optional[torch.FloatTensor] = None
+    seq_relationship_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -627,6 +625,7 @@ class FNetForPreTraining(FNetPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(FNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=FNetForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -652,7 +651,7 @@ class FNetForPreTraining(FNetPreTrainedModel):
 
             - 0 indicates sequence B is a continuation of sequence A,
             - 1 indicates sequence B is a random sequence.
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
 
         Returns:
@@ -721,6 +720,7 @@ class FNetForMaskedLM(FNetPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(FNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1183,3 +1183,17 @@ class FNetForQuestionAnswering(FNetPreTrainedModel):
         return QuestionAnsweringModelOutput(
             loss=total_loss, start_logits=start_logits, end_logits=end_logits, hidden_states=outputs.hidden_states
         )
+
+
+__all__ = [
+    "FNetForMaskedLM",
+    "FNetForMultipleChoice",
+    "FNetForNextSentencePrediction",
+    "FNetForPreTraining",
+    "FNetForQuestionAnswering",
+    "FNetForSequenceClassification",
+    "FNetForTokenClassification",
+    "FNetLayer",
+    "FNetModel",
+    "FNetPreTrainedModel",
+]

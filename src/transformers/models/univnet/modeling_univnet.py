@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch UnivNetModel model."""
+"""PyTorch UnivNetModel model."""
 
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
@@ -20,7 +20,8 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...modeling_utils import ModelOutput, PreTrainedModel
+from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_univnet import UnivNetConfig
 
@@ -31,11 +32,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "UnivNetConfig"
 
 _CHECKPOINT_FOR_DOC = "dg845/univnet-dev"
-
-UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "dg845/univnet-dev",
-    # See all UnivNet models at https://huggingface.co/models?filter=univnet
-]
 
 
 @dataclass
@@ -51,8 +47,8 @@ class UnivNetModelOutput(ModelOutput):
             The batched length in samples of each unpadded waveform in `waveforms`.
     """
 
-    waveforms: torch.FloatTensor = None
-    waveform_lengths: torch.FloatTensor = None
+    waveforms: Optional[torch.FloatTensor] = None
+    waveform_lengths: Optional[torch.FloatTensor] = None
 
 
 class UnivNetKernelPredictorResidualBlock(nn.Module):
@@ -92,8 +88,12 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
         return hidden_states + residual
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.conv1)
-        nn.utils.weight_norm(self.conv2)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.conv1)
+        weight_norm(self.conv2)
 
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.conv1)
@@ -202,11 +202,15 @@ class UnivNetKernelPredictor(nn.Module):
         return kernels, biases
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.input_conv)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.input_conv)
         for layer in self.resblocks:
             layer.apply_weight_norm()
-        nn.utils.weight_norm(self.kernel_conv)
-        nn.utils.weight_norm(self.bias_conv)
+        weight_norm(self.kernel_conv)
+        weight_norm(self.bias_conv)
 
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.input_conv)
@@ -333,7 +337,11 @@ class UnivNetLvcResidualBlock(nn.Module):
         return output_hidden_states
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.conv)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.conv)
 
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.conv)
@@ -403,7 +411,11 @@ class UnivNetLvcBlock(nn.Module):
         return hidden_states
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.convt_pre)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.convt_pre)
         self.kernel_predictor.apply_weight_norm()
         for layer in self.resblocks:
             layer.apply_weight_norm()
@@ -624,13 +636,20 @@ class UnivNetModel(PreTrainedModel):
                 module.bias.data.zero_()
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.conv_pre)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.conv_pre)
         for layer in self.resblocks:
             layer.apply_weight_norm()
-        nn.utils.weight_norm(self.conv_post)
+        weight_norm(self.conv_post)
 
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.conv_pre)
         for layer in self.resblocks:
             layer.remove_weight_norm()
         nn.utils.remove_weight_norm(self.conv_post)
+
+
+__all__ = ["UnivNetModel"]

@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert TrOCR checkpoints from the unilm repository."""
 
-
 import argparse
 from pathlib import Path
 

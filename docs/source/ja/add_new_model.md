@@ -20,12 +20,6 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 Hugging Faceでは、コミュニティの多くの人々に積極的にモデルを追加する力を与えようと努力しており、
 このガイドをまとめて、PyTorchモデルを追加するプロセスを説明します（[PyTorchがインストールされていることを確認してください](https://pytorch.org/get-started/locally/)）。
 
-<Tip>
-
-TensorFlowモデルを実装する興味がある場合は、[🤗 TransformersモデルをTensorFlowに変換する方法](add_tensorflow_model)ガイドを参照してみてください！
-
-</Tip>
-
 この過程で、以下のことを学びます：
 
 - オープンソースのベストプラクティスに関する洞察
@@ -313,14 +307,15 @@ cd transformers
 [このセクション](#write-a-conversion-script)で説明されているように、変換スクリプトを追加するだけで済みます。
 この場合、既存のモデルの完全なモデルアーキテクチャを再利用できます。
 
-それ以外の場合、新しいモデルの生成を開始します。ここで2つの選択肢があります：
 
-- `transformers-cli add-new-model-like`を使用して既存のモデルのような新しいモデルを追加します
-- `transformers-cli add-new-model`を使用して、テンプレートから新しいモデルを追加します（モデルのタイプに応じてBERTまたはBartのように見えます）
+それ以外の場合は、新しいモデルの生成を開始しましょう。 次のスクリプトを使用して、以下から始まるモデルを追加することをお勧めします。
+既存のモデル:
 
-どちらの場合でも、モデルの基本情報を入力するための質問事項が表示されます。
-2番目のコマンドを実行するには、`cookiecutter`をインストールする必要があります。
-詳細については[こちら](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model)をご覧ください。
+```bash
+transformers add-new-model-like
+```
+
+モデルの基本情報を入力するためのアンケートが表示されます。
 
 **主要な huggingface/transformers リポジトリでプルリクエストを開く**
 
@@ -522,7 +517,7 @@ tensor([[-0.0818,  0.2207, -0.0749, -0.0030,  0.0045, -0.1569, -0.1598,  0.0212,
 
 スクリプト内の変換スクリプトでは、ランダムに初期化された重みを、対応するチェックポイント内の正確な重みで埋める必要があります。例えば、以下のように翻訳します：
 
- 
+
 ```python
 # retrieve matching layer weights, e.g. by
 # recursive algorithm
@@ -752,5 +747,3 @@ brand_new_bert.push_to_hub("brand_new_bert")
 さあ、コミュニティからあなたの作業に対する評価を得る時が来ました！モデルの追加を完了することは、TransformersおよびNLPコミュニティにとって重要な貢献です。あなたのコードとポートされた事前学習済みモデルは、何百人、何千人という開発者や研究者によって確実に使用されるでしょう。あなたの仕事に誇りを持ち、コミュニティとあなたの成果を共有しましょう。
 
 **あなたはコミュニティの誰でも簡単にアクセスできる別のモデルを作成しました！ 🤯**
-
-

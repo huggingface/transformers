@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MobileNetV2 model configuration"""
+"""MobileNetV2 model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -25,14 +25,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/mobilenet_v2_1.4_224": "https://huggingface.co/google/mobilenet_v2_1.4_224/resolve/main/config.json",
-    "google/mobilenet_v2_1.0_224": "https://huggingface.co/google/mobilenet_v2_1.0_224/resolve/main/config.json",
-    "google/mobilenet_v2_0.75_160": "https://huggingface.co/google/mobilenet_v2_0.75_160/resolve/main/config.json",
-    "google/mobilenet_v2_0.35_96": "https://huggingface.co/google/mobilenet_v2_0.35_96/resolve/main/config.json",
-    # See all MobileNetV2 models at https://huggingface.co/models?filter=mobilenet_v2
-}
 
 
 class MobileNetV2Config(PretrainedConfig):
@@ -157,3 +149,6 @@ class MobileNetV2OnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+
+__all__ = ["MobileNetV2Config", "MobileNetV2OnnxConfig"]

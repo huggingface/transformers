@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MobileViTV2 model. """
-
+"""Testing suite for the PyTorch MobileViTV2 model."""
 
 import unittest
 
@@ -31,7 +29,6 @@ if is_torch_available():
 
     from transformers import MobileViTV2ForImageClassification, MobileViTV2ForSemanticSegmentation, MobileViTV2Model
     from transformers.models.mobilevitv2.modeling_mobilevitv2 import (
-        MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST,
         make_divisible,
     )
 
@@ -202,6 +199,7 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = MobileViTV2ModelTester(self)
@@ -215,7 +213,7 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         pass
 
     @unittest.skip(reason="MobileViTV2 does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="MobileViTV2 does not output attentions")
@@ -279,9 +277,9 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MobileViTV2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "apple/mobilevitv2-1.0-imagenet1k-256"
+        model = MobileViTV2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -321,7 +319,7 @@ class MobileViTV2ModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-1.6336e00, -7.3204e-02, -5.1883e-01]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_semantic_segmentation(self):
@@ -351,7 +349,7 @@ class MobileViTV2ModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_post_processing_semantic_segmentation(self):

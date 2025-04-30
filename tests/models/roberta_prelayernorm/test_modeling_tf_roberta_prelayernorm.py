@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +30,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.roberta_prelayernorm.modeling_tf_roberta_prelayernorm import (
-        TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFRobertaPreLayerNormForCausalLM,
         TFRobertaPreLayerNormForMaskedLM,
         TFRobertaPreLayerNormForMultipleChoice,
@@ -551,7 +549,7 @@ class TFRobertaPreLayerNormModelTester:
 
 
 @require_tf
-# Copied from tests.models.roberta.test_modeling_tf_roberta.TFRobertaModelTest with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm
+# Copied from tests.models.roberta.test_modeling_tf_roberta.TFRobertaModelTest with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,FacebookAI/roberta-base->andreasmadsen/efficient_mlm_m0.15
 class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
@@ -596,7 +594,7 @@ class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, PipelineTesterMixin, un
     def test_causal_lm_base_model(self):
         """Test the base model of the causal LM model
 
-        is_deocder=True, no cross_attention, no encoder outputs
+        is_decoder=True, no cross_attention, no encoder outputs
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_causal_lm_base_model(*config_and_inputs)
@@ -604,7 +602,7 @@ class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, PipelineTesterMixin, un
     def test_model_as_decoder(self):
         """Test the base model as a decoder (of an encoder-decoder architecture)
 
-        is_deocder=True + cross_attention + pass encoder outputs
+        is_decoder=True + cross_attention + pass encoder outputs
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
@@ -657,9 +655,9 @@ class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, PipelineTesterMixin, un
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFRobertaPreLayerNormModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "andreasmadsen/efficient_mlm_m0.15"
+        model = TFRobertaPreLayerNormModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf

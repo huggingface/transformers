@@ -12,8 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch RegNet model."""
+"""PyTorch RegNet model."""
 
+import math
 from typing import Optional
 
 import torch
@@ -45,11 +46,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 1088, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/regnet-y-040"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/regnet-y-040",
-    # See all regnet models at https://huggingface.co/models?filter=regnet
-]
 
 
 class RegNetConvLayer(nn.Module):
@@ -84,7 +80,7 @@ class RegNetConvLayer(nn.Module):
 
 class RegNetEmbeddings(nn.Module):
     """
-    RegNet Embedddings (stem) composed of a single aggressive convolution.
+    RegNet Embeddings (stem) composed of a single aggressive convolution.
     """
 
     def __init__(self, config: RegNetConfig):
@@ -283,11 +279,19 @@ class RegNetPreTrainedModel(PreTrainedModel):
     config_class = RegNetConfig
     base_model_prefix = "regnet"
     main_input_name = "pixel_values"
+    _no_split_modules = ["RegNetYLayer"]
 
     # Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel._init_weights
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+        # copied from the `reset_parameters` method of `class Linear(Module)` in `torch`.
+        elif isinstance(module, nn.Linear):
+            nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+            if module.bias is not None:
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
+                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+                nn.init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
             nn.init.constant_(module.weight, 1)
             nn.init.constant_(module.bias, 0)
@@ -445,3 +449,6 @@ class RegNetForImageClassification(RegNetPreTrainedModel):
             return (loss,) + output if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+
+__all__ = ["RegNetForImageClassification", "RegNetModel", "RegNetPreTrainedModel"]

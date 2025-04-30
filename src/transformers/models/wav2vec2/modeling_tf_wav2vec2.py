@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow Wav2Vec2 model."""
-
+"""TensorFlow Wav2Vec2 model."""
 
 from __future__ import annotations
 
@@ -52,13 +51,6 @@ _HIDDEN_STATES_START_POSITION = 2
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
 
-TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/wav2vec2-base-960h",
-    "facebook/wav2vec2-large-960h",
-    "facebook/wav2vec2-large-960h-lv60",
-    "facebook/wav2vec2-large-960h-lv60-self",
-    # See all Wav2Vec2 models at https://huggingface.co/models?filter=wav2vec2
-]
 
 LARGE_NEGATIVE = -1e8
 
@@ -86,8 +78,8 @@ class TFWav2Vec2BaseModelOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: tf.Tensor = None
-    extract_features: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
+    extract_features: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 
@@ -622,7 +614,7 @@ class TFWav2Vec2FeatureEncoder(keras.layers.Layer):
 
         if config.feat_extract_norm == "group":
             conv_layers = [TFWav2Vec2GroupNormConvLayer(config, layer_id=0, name=f"conv_layers.{0}")] + [
-                TFWav2Vec2NoLayerNormConvLayer(config, layer_id=i + 1, name=f"conv_layers.{i+1}")
+                TFWav2Vec2NoLayerNormConvLayer(config, layer_id=i + 1, name=f"conv_layers.{i + 1}")
                 for i in range(config.num_feat_extract_layers - 1)
             ]
         elif config.feat_extract_norm == "layer":
@@ -1405,7 +1397,7 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
         return attention_mask
 
 
-WAV_2_VEC_2_START_DOCSTRING = r"""
+WAV2VEC2_START_DOCSTRING = r"""
 
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1447,7 +1439,7 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
+WAV2VEC2_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
@@ -1504,8 +1496,8 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare TFWav2Vec2 Model transformer outputing raw hidden-states without any specific head on top.",
-    WAV_2_VEC_2_START_DOCSTRING,
+    "The bare TFWav2Vec2 Model transformer outputting raw hidden-states without any specific head on top.",
+    WAV2VEC2_START_DOCSTRING,
 )
 class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config, *inputs, **kwargs):
@@ -1513,7 +1505,7 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         self.config = config
         self.wav2vec2 = TFWav2Vec2MainLayer(config, name="wav2vec2")
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV2VEC2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutput, config_class=_CONFIG_FOR_DOC)
     @unpack_inputs
     def call(
@@ -1587,7 +1579,7 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
 
 @add_start_docstrings(
     """TFWav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    WAV_2_VEC_2_START_DOCSTRING,
+    WAV2VEC2_START_DOCSTRING,
 )
 class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config, *inputs, **kwargs):
@@ -1620,7 +1612,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         self.wav2vec2.feature_extractor.trainable = False
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV2VEC2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFCausalLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
@@ -1679,6 +1671,8 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
 
         >>> loss = model(input_values, labels=labels).loss
         ```"""
+        if labels is not None and tf.reduce_max(labels) >= self.config.vocab_size:
+            raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
         outputs = self.wav2vec2(
             input_values=input_values,
@@ -1698,9 +1692,6 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         logits = self.lm_head(hidden_states)
 
         if labels is not None:
-            if tf.reduce_max(labels) >= self.config.vocab_size:
-                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
-
             attention_mask = (
                 attention_mask if attention_mask is not None else tf.ones_like(input_values, dtype=tf.float32)
             )
@@ -1862,3 +1853,6 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.classifier_proj_size])
+
+
+__all__ = ["TFWav2Vec2ForCTC", "TFWav2Vec2Model", "TFWav2Vec2PreTrainedModel", "TFWav2Vec2ForSequenceClassification"]

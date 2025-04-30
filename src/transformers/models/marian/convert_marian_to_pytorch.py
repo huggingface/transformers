@@ -65,10 +65,10 @@ def find_pretrained_model(src_lang: str, tgt_lang: str) -> List[str]:
     """Find models that can accept src_lang as input and return tgt_lang as output."""
     prefix = "Helsinki-NLP/opus-mt-"
     model_list = list_models()
-    model_ids = [x.modelId for x in model_list if x.modelId.startswith("Helsinki-NLP")]
+    model_ids = [x.id for x in model_list if x.id.startswith("Helsinki-NLP")]
     src_and_targ = [
         remove_prefix(m, prefix).lower().split("-") for m in model_ids if "+" not in m
-    ]  # + cant be loaded.
+    ]  # + can't be loaded.
     matching = [f"{prefix}{a}-{b}" for (a, b) in src_and_targ if src_lang in a and tgt_lang in b]
     return matching
 
@@ -622,6 +622,10 @@ class OpusState:
             bias_tensor = nn.Parameter(torch.FloatTensor(self.final_bias))
             model.model.decoder.embed_tokens.weight = decoder_wemb_tensor
 
+        # handle tied embeddings, otherwise "from_pretrained" loads them incorrectly
+        if self.cfg["tied-embeddings"]:
+            model.lm_head.weight.data = model.model.decoder.embed_tokens.weight.data.clone()
+
         model.final_logits_bias = bias_tensor
 
         if "Wpos" in state_dict:
@@ -697,7 +701,12 @@ if __name__ == "__main__":
     """
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument("--src", type=str, help="path to marian model sub dir", default="en-de")
+    parser.add_argument(
+        "--src",
+        type=str,
+        help="path to marian model sub dir. yaml.load will be used to load the configuration file, please be wary of which file you're loading.",
+        default="en-de",
+    )
     parser.add_argument("--dest", type=str, default=None, help="Path to the output PyTorch model.")
     args = parser.parse_args()
 

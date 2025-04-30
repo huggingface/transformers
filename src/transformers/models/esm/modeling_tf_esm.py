@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ESM model."""
-
+"""PyTorch ESM model."""
 
 from __future__ import annotations
 
@@ -51,13 +50,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/esm2_t6_8M_UR50D"
 _CONFIG_FOR_DOC = "EsmConfig"
-
-TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/esm2_t6_8M_UR50D",
-    "facebook/esm2_t12_35M_UR50D",
-    # This is not a complete list of all ESM models!
-    # See all ESM models at https://huggingface.co/models?filter=esm
-]
 
 
 def rotate_half(x):
@@ -1240,7 +1232,7 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1572,3 +1564,12 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = tf.cast(input_ids != padding_idx, tf.int64)
     incremental_indices = (tf.cumsum(mask, axis=1) + past_key_values_length) * mask
     return incremental_indices + padding_idx
+
+
+__all__ = [
+    "TFEsmForMaskedLM",
+    "TFEsmForSequenceClassification",
+    "TFEsmForTokenClassification",
+    "TFEsmModel",
+    "TFEsmPreTrainedModel",
+]

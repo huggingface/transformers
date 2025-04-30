@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -183,7 +182,6 @@ class TFBlenderbotModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
     all_generative_model_classes = (TFBlenderbotForConditionalGeneration,) if is_tf_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": TFBlenderbotForConditionalGeneration,
             "feature-extraction": TFBlenderbotModel,
             "summarization": TFBlenderbotForConditionalGeneration,
             "text2text-generation": TFBlenderbotForConditionalGeneration,

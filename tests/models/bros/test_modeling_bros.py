@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Bros model. """
+"""Testing suite for the PyTorch Bros model."""
 
 import copy
 import unittest
 
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
@@ -34,9 +33,6 @@ if is_torch_available():
         BrosModel,
         BrosSpadeEEForTokenClassification,
         BrosSpadeELForTokenClassification,
-    )
-    from transformers.models.bros.modeling_bros import (
-        BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
@@ -288,7 +284,6 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = () if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": BrosModel, "token-classification": BrosForTokenClassification}
         if is_torch_available()
@@ -298,7 +293,14 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # BROS requires `bbox` in the inputs which doesn't fit into the above 2 pipelines' input formats.
     # see https://github.com/huggingface/transformers/pull/26294
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
 
@@ -347,6 +349,7 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
         super().test_multi_gpu_data_parallel_forward()
 
@@ -370,9 +373,9 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BROS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BrosModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "jinho8345/bros-base-uncased"
+        model = BrosModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 def prepare_bros_batch_inputs():
@@ -447,4 +450,4 @@ class BrosModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         torch.set_printoptions(sci_mode=False)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

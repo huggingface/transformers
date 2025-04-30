@@ -12,20 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SAM model configuration"""
-
+"""SAM model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-SAM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/sam-vit-huge": "https://huggingface.co/facebook/sam-vit-huge/resolve/main/config.json",
-    "facebook/sam-vit-large": "https://huggingface.co/facebook/sam-vit-large/resolve/main/config.json",
-    "facebook/sam-vit-base": "https://huggingface.co/facebook/sam-vit-base/resolve/main/config.json",
-}
 
 
 class SamPromptEncoderConfig(PretrainedConfig):
@@ -52,6 +45,8 @@ class SamPromptEncoderConfig(PretrainedConfig):
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the encoder and pooler.
     """
+
+    base_config_key = "prompt_encoder_config"
 
     def __init__(
         self,
@@ -108,6 +103,8 @@ class SamMaskDecoderConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
 
     """
+
+    base_config_key = "mask_decoder_config"
 
     def __init__(
         self,
@@ -186,7 +183,27 @@ class SamVisionConfig(PretrainedConfig):
         mlp_dim (`int`, *optional*):
             The dimensionality of the MLP layer in the Transformer encoder. If `None`, defaults to `mlp_ratio *
             hidden_size`.
-    """
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     SamVisionConfig,
+    ...     SamVisionModel,
+    ... )
+
+    >>> # Initializing a SamVisionConfig with `"facebook/sam-vit-huge"` style configuration
+    >>> configuration = SamVisionConfig()
+
+    >>> # Initializing a SamVisionModel (with random weights) from the `"facebook/sam-vit-huge"` style configuration
+    >>> model = SamVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    base_config_key = "vision_config"
+    model_type = "sam_vision_model"
 
     def __init__(
         self,
@@ -285,6 +302,11 @@ class SamConfig(PretrainedConfig):
     ```"""
 
     model_type = "sam"
+    sub_configs = {
+        "prompt_encoder_config": SamPromptEncoderConfig,
+        "mask_decoder_config": SamMaskDecoderConfig,
+        "vision_config": SamVisionConfig,
+    }
 
     def __init__(
         self,
@@ -310,3 +332,6 @@ class SamConfig(PretrainedConfig):
         self.prompt_encoder_config = SamPromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = SamMaskDecoderConfig(**mask_decoder_config)
         self.initializer_range = initializer_range
+
+
+__all__ = ["SamConfig", "SamMaskDecoderConfig", "SamPromptEncoderConfig", "SamVisionConfig"]

@@ -26,6 +26,7 @@ from torch.cuda.amp import autocast
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -33,7 +34,13 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+    torch_float,
+)
 from .configuration_imagegpt import ImageGPTConfig
 
 
@@ -41,13 +48,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "openai/imagegpt-small"
 _CONFIG_FOR_DOC = "ImageGPTConfig"
-
-IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/imagegpt-small",
-    "openai/imagegpt-medium",
-    "openai/imagegpt-large",
-    # See all Image GPT models at https://huggingface.co/models?filter=imagegpt
-]
 
 
 def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
@@ -164,13 +164,11 @@ class ImageGPTLayerNorm(nn.Module):
         self.eps = eps
         self.weight = nn.Parameter(torch.Tensor(hidden_size))
 
-    def forward(self, tensor: torch.Tensor) -> tuple:
+    def forward(self, tensor: torch.Tensor) -> torch.Tensor:
         # input is not mean centered
-        return (
-            tensor
-            / torch.sqrt(torch.mean(torch.square(tensor), axis=-1, keepdim=True) + self.eps)
-            * self.weight.data[..., :]
-        )
+        tensor = tensor / torch.sqrt(torch.mean(torch.square(tensor), axis=-1, keepdim=True) + self.eps)
+        tensor = tensor * self.weight
+        return tensor
 
 
 class ImageGPTAttention(nn.Module):
@@ -236,7 +234,7 @@ class ImageGPTAttention(nn.Module):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         if self.scale_attn_weights:
-            attn_weights = attn_weights / (float(value.size(-1)) ** 0.5)
+            attn_weights = attn_weights / torch_float(value.size(-1) ** 0.5)
 
         # Layer-wise attention scaling
         if self.scale_attn_by_inverse_layer_idx:
@@ -249,7 +247,7 @@ class ImageGPTAttention(nn.Module):
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
             attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
@@ -299,7 +297,7 @@ class ImageGPTAttention(nn.Module):
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
             attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
@@ -495,6 +493,7 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["ImageGPTBlock"]
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -544,7 +543,7 @@ IMAGEGPT_START_DOCSTRING = r"""
 
 IMAGEGPT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
             `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
@@ -565,7 +564,7 @@ IMAGEGPT_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
             1]`:
 
@@ -573,7 +572,7 @@ IMAGEGPT_INPUTS_DOCSTRING = r"""
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        position_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
 
@@ -584,7 +583,7 @@ IMAGEGPT_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, input_ids_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -662,7 +661,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         **kwargs: Any,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`torch.LongTensor` of shape `(batch_size, input_ids_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
@@ -689,8 +688,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
         if "pixel_values" in kwargs:
             warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
-                " instead.",
+                "The `pixel_values` argument is deprecated and will be removed in v4.47, use `input_ids` instead.",
                 FutureWarning,
             )
 
@@ -775,7 +773,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
         position_embeds = self.wpe(position_ids)
-        hidden_states = inputs_embeds + position_embeds
+        hidden_states = inputs_embeds + position_embeds.to(inputs_embeds.device)
 
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
@@ -880,7 +878,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
     """,
     IMAGEGPT_START_DOCSTRING,
 )
-class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
+class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: ImageGPTConfig):
@@ -899,43 +897,6 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-
-    def prepare_inputs_for_generation(self, input_ids: torch.Tensor, past_key_values: Optional[bool] = None, **kwargs):
-        token_type_ids = kwargs.get("token_type_ids", None)
-        # Omit tokens covered by past_key_values
-        if past_key_values:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-            if token_type_ids is not None:
-                token_type_ids = token_type_ids[:, -input_ids.shape[1] :]
-
-        attention_mask = kwargs.get("attention_mask", None)
-        position_ids = kwargs.get("position_ids", None)
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-        else:
-            position_ids = None
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-        }
 
     @add_start_docstrings_to_model_forward(IMAGEGPT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
@@ -958,7 +919,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
         **kwargs: Any,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`torch.LongTensor` of shape `(batch_size, input_ids_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
@@ -990,7 +951,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
         >>> height = image_processor.size["height"]
         >>> width = image_processor.size["width"]
 
-        >>> samples = output[:, 1:].cpu().detach().numpy()
+        >>> samples = output[:, 1:].detach().cpu().numpy()
         >>> samples_img = [
         ...     np.reshape(np.rint(127.5 * (clusters[s] + 1.0)), [height, width, 3]).astype(np.uint8) for s in samples
         ... ]  # convert color cluster tokens back to pixels
@@ -1003,8 +964,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
 
         if "pixel_values" in kwargs:
             warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
-                " instead.",
+                "The `pixel_values` argument is deprecated and will be removed in v4.47, use `input_ids` instead.",
                 FutureWarning,
             )
 
@@ -1136,8 +1096,7 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
 
         if "pixel_values" in kwargs:
             warnings.warn(
-                "The `pixel_values` argument is deprecated and will be removed in a future version, use `input_ids`"
-                " instead.",
+                "The `pixel_values` argument is deprecated and will be removed in v4.47, use `input_ids` instead.",
                 FutureWarning,
             )
 
@@ -1202,3 +1161,12 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+
+__all__ = [
+    "ImageGPTForCausalImageModeling",
+    "ImageGPTForImageClassification",
+    "ImageGPTModel",
+    "ImageGPTPreTrainedModel",
+    "load_tf_weights_in_imagegpt",
+]

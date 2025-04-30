@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -14,14 +13,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Conditional text generation with the auto-regressive models of the library (GPT/GPT-2/CTRL/Transformer-XL/XLNet)
-"""
-
+"""Conditional text generation with the auto-regressive models of the library (GPT/GPT-2/CTRL/Transformer-XL/XLNet)"""
 
 import argparse
 import inspect
 import logging
-from typing import Tuple
 
 import torch
 from accelerate import PartialState
@@ -42,8 +38,6 @@ from transformers import (
     OpenAIGPTLMHeadModel,
     OpenAIGPTTokenizer,
     OPTForCausalLM,
-    TransfoXLLMHeadModel,
-    TransfoXLTokenizer,
     XLMTokenizer,
     XLMWithLMHeadModel,
     XLNetLMHeadModel,
@@ -66,7 +60,6 @@ MODEL_CLASSES = {
     "ctrl": (CTRLLMHeadModel, CTRLTokenizer),
     "openai-gpt": (OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),
     "xlnet": (XLNetLMHeadModel, XLNetTokenizer),
-    "transfo-xl": (TransfoXLLMHeadModel, TransfoXLTokenizer),
     "xlm": (XLMWithLMHeadModel, XLMTokenizer),
     "gptj": (GPTJForCausalLM, AutoTokenizer),
     "bloom": (BloomForCausalLM, BloomTokenizerFast),
@@ -273,8 +266,8 @@ class _ModelFallbackWrapper(GenerationMixin):
         )
 
     def _reorder_cache(
-        self, past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
-    ) -> Tuple[Tuple[torch.Tensor]]:
+        self, past_key_values: tuple[tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> tuple[tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PretrainedModel.beam_search`] or
         [`~PretrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
@@ -324,7 +317,7 @@ def main():
     parser.add_argument(
         "--use_cpu",
         action="store_true",
-        help="Whether or not to use cpu. If set to False, " "we will use gpu/npu or mps device if available",
+        help="Whether or not to use cpu. If set to False, we will use gpu/npu or mps device if available",
     )
     parser.add_argument("--num_return_sequences", type=int, default=1, help="The number of samples to generate.")
     parser.add_argument(
@@ -372,10 +365,7 @@ def main():
         prepare_input = PREPROCESSING_FUNCTIONS.get(args.model_type)
         preprocessed_prompt_text = prepare_input(args, model, tokenizer, prompt_text)
 
-        if model.__class__.__name__ in ["TransfoXLLMHeadModel"]:
-            tokenizer_kwargs = {"add_space_before_punct_symbol": True}
-        else:
-            tokenizer_kwargs = {}
+        tokenizer_kwargs = {}
 
         encoded_prompt = tokenizer.encode(
             preprocessed_prompt_text, add_special_tokens=False, return_tensors="pt", **tokenizer_kwargs

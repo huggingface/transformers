@@ -13,7 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" RoBERTa configuration"""
+"""RoBERTa configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 
@@ -23,15 +24,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "FacebookAI/roberta-base": "https://huggingface.co/FacebookAI/roberta-base/resolve/main/config.json",
-    "FacebookAI/roberta-large": "https://huggingface.co/FacebookAI/roberta-large/resolve/main/config.json",
-    "FacebookAI/roberta-large-mnli": "https://huggingface.co/FacebookAI/roberta-large-mnli/resolve/main/config.json",
-    "distilbert/distilroberta-base": "https://huggingface.co/distilbert/distilroberta-base/resolve/main/config.json",
-    "openai-community/roberta-base-openai-detector": "https://huggingface.co/openai-community/roberta-base-openai-detector/resolve/main/config.json",
-    "openai-community/roberta-large-openai-detector": "https://huggingface.co/openai-community/roberta-large-openai-detector/resolve/main/config.json",
-}
 
 
 class RobertaConfig(PretrainedConfig):
@@ -158,3 +150,6 @@ class RobertaOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+
+__all__ = ["RobertaConfig", "RobertaOnnxConfig"]

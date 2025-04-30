@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 OPT model."""
-
+"""TF 2.0 OPT model."""
 
 from __future__ import annotations
 
@@ -1093,3 +1092,6 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         if getattr(self, "model", None) is not None:
             with tf.name_scope(self.model.name):
                 self.model.build(None)
+
+
+__all__ = ["TFOPTForCausalLM", "TFOPTModel", "TFOPTPreTrainedModel"]

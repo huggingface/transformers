@@ -17,7 +17,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Tuple
+from typing import Optional
 from unittest.mock import patch
 
 from parameterized import parameterized
@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     get_torch_dist_unique_port,
     require_apex,
     require_bitsandbytes,
+    require_non_xpu,
     require_torch,
     require_torch_gpu,
     require_torch_multi_accelerator,
@@ -62,6 +63,7 @@ class TestTrainerExt(TestCasePlus):
         do_train=True,
         do_eval=True,
         do_predict=True,
+        n_gpus_to_use=None,
     ):
         output_dir = self.run_trainer(
             eval_steps=1,
@@ -74,11 +76,12 @@ class TestTrainerExt(TestCasePlus):
             do_train=do_train,
             do_eval=do_eval,
             do_predict=do_predict,
+            n_gpus_to_use=n_gpus_to_use,
         )
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
 
         if not do_eval:
-            return
+            self.skipTest(reason="do_eval is False")
 
         eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
 
@@ -104,6 +107,7 @@ class TestTrainerExt(TestCasePlus):
     def test_run_seq2seq_ddp(self):
         self.run_seq2seq_quick(distributed=True)
 
+    @require_non_xpu
     @require_apex
     @require_torch_gpu
     def test_run_seq2seq_apex(self):
@@ -138,7 +142,13 @@ class TestTrainerExt(TestCasePlus):
         }
 
         data = experiments[experiment_id]
-        kwargs = {"distributed": True, "predict_with_generate": False, "do_eval": False, "do_predict": False}
+        kwargs = {
+            "distributed": True,
+            "predict_with_generate": False,
+            "do_eval": False,
+            "do_predict": False,
+            "n_gpus_to_use": 2,
+        }
         log_info_string = "Running training"
         with CaptureStderr() as cl:
             self.run_seq2seq_quick(**kwargs, extra_args_str=data["extra_args_str"])
@@ -176,7 +186,7 @@ class TestTrainerExt(TestCasePlus):
     def test_run_seq2seq_bnb(self):
         from transformers.training_args import OptimizerNames
 
-        def train_and_return_metrics(optim: str) -> Tuple[int, float]:
+        def train_and_return_metrics(optim: str) -> tuple[int, float]:
             extra_args = "--skip_memory_metrics 0"
 
             output_dir = self.run_trainer(
@@ -261,13 +271,13 @@ class TestTrainerExt(TestCasePlus):
         learning_rate: float = 3e-3,
         optim: str = "adafactor",
         distributed: bool = False,
-        extra_args_str: str = None,
+        extra_args_str: Optional[str] = None,
         eval_steps: int = 0,
         predict_with_generate: bool = True,
         do_train: bool = True,
         do_eval: bool = True,
         do_predict: bool = True,
-        n_gpus_to_use: int = None,
+        n_gpus_to_use: Optional[int] = None,
     ):
         data_dir = self.test_file_dir / "../fixtures/tests_samples/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
@@ -293,6 +303,7 @@ class TestTrainerExt(TestCasePlus):
             --label_smoothing_factor 0.1
             --target_lang ro_RO
             --source_lang en_XX
+            --report_to none
         """.split()
 
         args_eval = f"""
@@ -300,7 +311,7 @@ class TestTrainerExt(TestCasePlus):
             --per_device_eval_batch_size 4
             --max_eval_samples 8
             --val_max_target_length {max_len}
-            --evaluation_strategy steps
+            --eval_strategy steps
             --eval_steps {str(eval_steps)}
         """.split()
 

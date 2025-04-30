@@ -12,28 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" FastSpeech2Conformer model configuration"""
+"""FastSpeech2Conformer model configuration"""
 
-from typing import Dict
+from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-
-FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "espnet/fastspeech2_conformer": "https://huggingface.co/espnet/fastspeech2_conformer/raw/main/config.json",
-}
-
-FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "espnet/fastspeech2_conformer_hifigan": "https://huggingface.co/espnet/fastspeech2_conformer_hifigan/raw/main/config.json",
-}
-
-FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "espnet/fastspeech2_conformer_with_hifigan": "https://huggingface.co/espnet/fastspeech2_conformer_with_hifigan/raw/main/config.json",
-}
 
 
 class FastSpeech2ConformerConfig(PretrainedConfig):
@@ -155,7 +142,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
             speaker id embedding layer.
         num_languages (`int`, *optional*):
             Number of languages. If set to > 1, assume that the language ids will be provided as the input and use the
-            languge id embedding layer.
+            language id embedding layer.
         speaker_embed_dim (`int`, *optional*):
             Speaker embedding dimension. If set to > 0, assume that speaker_embedding will be provided as the input.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
@@ -177,6 +164,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
     ```"""
 
     model_type = "fastspeech2_conformer"
+    base_config_key = "model_config"
     attribute_map = {"num_hidden_layers": "encoder_layers", "num_attention_heads": "encoder_num_attention_heads"}
 
     def __init__(
@@ -390,6 +378,7 @@ class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
     ```"""
 
     model_type = "hifigan"
+    base_config_key = "vocoder_config"
 
     def __init__(
         self,
@@ -466,12 +455,12 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
     """
 
     model_type = "fastspeech2_conformer_with_hifigan"
-    is_composition = True
+    sub_configs = {"model_config": FastSpeech2ConformerConfig, "vocoder_config": FastSpeech2ConformerHifiGanConfig}
 
     def __init__(
         self,
-        model_config: Dict = None,
-        vocoder_config: Dict = None,
+        model_config: Optional[Dict] = None,
+        vocoder_config: Optional[Dict] = None,
         **kwargs,
     ):
         if model_config is None:
@@ -486,3 +475,6 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
         self.vocoder_config = FastSpeech2ConformerHifiGanConfig(**vocoder_config)
 
         super().__init__(**kwargs)
+
+
+__all__ = ["FastSpeech2ConformerConfig", "FastSpeech2ConformerHifiGanConfig", "FastSpeech2ConformerWithHifiGanConfig"]

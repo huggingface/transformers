@@ -16,7 +16,6 @@
 
 import json
 import os
-import sys
 import warnings
 from dataclasses import dataclass
 from itertools import groupby
@@ -56,19 +55,8 @@ VOCAB_FILES_NAMES = {
     "tokenizer_config_file": "tokenizer_config.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/vocab.json",
-    },
-    "tokenizer_config_file": {
-        "facebook/wav2vec2-base-960h": (
-            "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer_config.json"
-        ),
-    },
-}
 
 # Wav2Vec2 has no max input length
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/wav2vec2-base-960h": sys.maxsize}
 
 WAV2VEC2_KWARGS_DOCSTRING = r"""
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
@@ -112,7 +100,7 @@ class Wav2Vec2CTCTokenizerOutput(ModelOutput):
             Decoded logits in text from. Usually the speech transcription.
         char_offsets (list of `List[Dict[str, Union[int, str]]]` or `List[Dict[str, Union[int, str]]]`):
             Offsets of the decoded characters. In combination with sampling rate and model downsampling rate char
-            offsets can be used to compute time stamps for each charater. Total logit score of the beam associated with
+            offsets can be used to compute time stamps for each character. Total logit score of the beam associated with
             produced text.
         word_offsets (list of `List[Dict[str, Union[int, str]]]` or `List[Dict[str, Union[int, str]]]`):
             Offsets of the decoded words. In combination with sampling rate and model downsampling rate word offsets
@@ -125,7 +113,6 @@ class Wav2Vec2CTCTokenizerOutput(ModelOutput):
 
 
 class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
-
     """
     Constructs a Wav2Vec2CTC tokenizer.
 
@@ -157,8 +144,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -419,7 +404,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         group_tokens: bool = True,
         spaces_between_special_tokens: bool = False,
         output_word_offsets: Optional[bool] = False,
@@ -434,7 +419,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         result = []
         for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_ids:
+            if skip_special_tokens and (
+                token in self.all_special_ids or (token != self.pad_token and token in self.all_special_tokens)
+            ):
                 continue
             result.append(token)
 
@@ -472,7 +459,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self,
         sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         output_char_offsets: bool = False,
         output_word_offsets: bool = False,
         **kwargs,
@@ -542,7 +529,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         output_char_offsets: bool = False,
         output_word_offsets: bool = False,
         **kwargs,
@@ -603,7 +590,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
 
         >>> # load first sample of English common_voice
-        >>> dataset = load_dataset("mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True)
+        >>> dataset = load_dataset("mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True, trust_remote_code=True)
         >>> dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
         >>> dataset_iter = iter(dataset)
         >>> sample = next(dataset_iter)
@@ -794,6 +781,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         verbose: bool = True,
         **kwargs,
@@ -807,6 +795,10 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy array or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
+
+            padding_side (`str`, *optional*):
+                The side on which the model should have padding applied. Should be selected between ['right', 'left'].
+                Default value is picked from the class attribute of the same name.
         """
 
         is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
@@ -838,6 +830,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             padding=padding,
             max_length=max_length,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_attention_mask=self.return_attention_mask,
             return_tensors=return_tensors,
             verbose=verbose,
@@ -883,7 +876,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
     ) -> str:
         """
@@ -895,7 +888,9 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
 
         result = []
         for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_ids:
+            if skip_special_tokens and (
+                token in self.all_special_ids or (token != self.pad_token and token in self.all_special_tokens)
+            ):
                 continue
             result.append(token)
 
@@ -924,3 +919,6 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return (vocab_file,)
+
+
+__all__ = ["Wav2Vec2CTCTokenizer", "Wav2Vec2Tokenizer"]

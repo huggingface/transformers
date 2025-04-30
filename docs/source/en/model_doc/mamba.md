@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # Mamba
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The Mamba model was proposed in [Mamba: Linear-Time Sequence Modeling with Selective State Spaces](https://arxiv.org/abs/2312.00752) by Albert Gu and Tri Dao.
@@ -39,16 +43,13 @@ The original code can be found [here](https://github.com/state-spaces/mamba).
 
 # Usage
 
-### A simple generation example: 
-```python 
+### A simple generation example:
+```python
 from transformers import MambaConfig, MambaForCausalLM, AutoTokenizer
 import torch
 
-tokenizer = AutoTokenizer.from_pretrained("ArthurZ/mamba-130m")
-tokenizer.pad_token = tokenizer.eos_token
-
-model = MambaForCausalLM.from_pretrained("ArthurZ/mamba-130m", vocab_size=50280, num_hidden_layers=24, torch_dtype=torch.float32)
-model.config.use_cache = True
+tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
+model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf")
 input_ids = tokenizer("Hey how are you doing?", return_tensors= "pt")["input_ids"]
 
 out = model.generate(input_ids, max_new_tokens=10)
@@ -58,13 +59,13 @@ print(tokenizer.batch_decode(out))
 ### Peft finetuning
 The slow version is not very stable for training, and the fast one needs `float32`!
 
-```python 
+```python
 from datasets import load_dataset
 from trl import SFTTrainer
 from peft import LoraConfig
 from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments
-model_id = "ArthurZ/mamba-2.8b"
-tokenizer = AutoTokenizer.from_pretrained(model_id, pad_token ="<s>")
+model_id = "state-spaces/mamba-130m-hf"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id)
 dataset = load_dataset("Abirate/english_quotes", split="train")
 training_args = TrainingArguments(
@@ -77,13 +78,13 @@ training_args = TrainingArguments(
 )
 lora_config =  LoraConfig(
         r=8,
-        target_modules="all-linear",
+        target_modules=["x_proj", "embeddings", "in_proj", "out_proj"],
         task_type="CAUSAL_LM",
         bias="none"
 )
 trainer = SFTTrainer(
     model=model,
-    tokenizer=tokenizer,
+    processing_class=tokenizer,
     args=training_args,
     peft_config=lora_config,
     train_dataset=dataset,

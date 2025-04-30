@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 ConvNextV2 model."""
-
+"""TF 2.0 ConvNextV2 model."""
 
 from __future__ import annotations
 
@@ -60,11 +59,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/convnextv2-tiny-1k-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/convnextv2-tiny-1k-224",
-    # See all ConvNextV2 models at https://huggingface.co/models?filter=convnextv2
-]
 
 
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextDropPath with ConvNext->ConvNextV2
@@ -181,7 +175,7 @@ class TFConvNextV2Layer(keras.layers.Layer):
             Model configuration class.
         dim (`int`):
             Number of input channels.
-        drop_path (`float`, defaults to 0.0):
+        drop_path (`float`, *optional*, defaults to 0.0):
             Stochastic depth rate.
     """
 
@@ -684,3 +678,6 @@ class TFConvNextV2ForImageClassification(TFConvNextV2PreTrainedModel, TFSequence
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_sizes[-1]])
+
+
+__all__ = ["TFConvNextV2ForImageClassification", "TFConvNextV2Model", "TFConvNextV2PreTrainedModel"]

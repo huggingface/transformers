@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 LED model."""
-
+"""TF 2.0 LED model."""
 
 from __future__ import annotations
 
@@ -183,12 +182,12 @@ class TFLEDEncoderSelfAttention(keras.layers.Layer):
         self.layer_id = layer_id
         attention_window = config.attention_window[self.layer_id]
 
-        assert (
-            attention_window % 2 == 0
-        ), f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
-        assert (
-            attention_window > 0
-        ), f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        assert attention_window % 2 == 0, (
+            f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
+        )
+        assert attention_window > 0, (
+            f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        )
 
         self.one_sided_attn_window_size = attention_window // 2
 
@@ -1471,7 +1470,7 @@ class TFLEDEncoderBaseModelOutput(ModelOutput):
             in the sequence.
     """
 
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
     global_attentions: Tuple[tf.Tensor, ...] | None = None
@@ -1534,7 +1533,7 @@ class TFLEDSeq2SeqModelOutput(ModelOutput):
             in the sequence.
     """
 
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     past_key_values: List[tf.Tensor] | None = None
     decoder_hidden_states: Tuple[tf.Tensor, ...] | None = None
     decoder_attentions: Tuple[tf.Tensor, ...] | None = None
@@ -1601,7 +1600,7 @@ class TFLEDSeq2SeqLMOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     past_key_values: List[tf.Tensor] | None = None
     decoder_hidden_states: Tuple[tf.Tensor, ...] | None = None
     decoder_attentions: Tuple[tf.Tensor, ...] | None = None
@@ -2662,3 +2661,6 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         if getattr(self, "bias_layer", None) is not None:
             with tf.name_scope(self.bias_layer.name):
                 self.bias_layer.build(None)
+
+
+__all__ = ["TFLEDForConditionalGeneration", "TFLEDModel", "TFLEDPreTrainedModel"]

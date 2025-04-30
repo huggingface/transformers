@@ -13,21 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """OneFormer model configuration"""
+
 from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "shi-labs/oneformer_ade20k_swin_tiny": (
-        "https://huggingface.co/shi-labs/oneformer_ade20k_swin_tiny/blob/main/config.json"
-    ),
-    # See all OneFormer models at https://huggingface.co/models?filter=oneformer
-}
 
 
 class OneFormerConfig(PretrainedConfig):
@@ -79,7 +74,7 @@ class OneFormerConfig(PretrainedConfig):
         importance_sample_ratio (`float`, *optional*, defaults to 0.75):
             Ratio of points that are sampled via importance sampling.
         init_std (`float`, *optional*, defaults to 0.02):
-            Standard deviation for normal intialization.
+            Standard deviation for normal initialization.
         init_xavier_std (`float`, *optional*, defaults to 1.0):
             Standard deviation for xavier uniform initialization.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -202,17 +197,11 @@ class OneFormerConfig(PretrainedConfig):
         common_stride: int = 4,
         **kwargs,
     ):
-        if use_pretrained_backbone:
-            raise ValueError("Pretrained backbones are not supported yet.")
-
-        if backbone_config is not None and backbone is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
-
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is unset. Initializing the config with the default `Swin` backbone.")
             backbone_config = CONFIG_MAPPING["swin"](
                 image_size=224,
-                in_channels=3,
+                num_channels=3,
                 patch_size=4,
                 embed_dim=96,
                 depths=[2, 2, 6, 2],
@@ -227,8 +216,13 @@ class OneFormerConfig(PretrainedConfig):
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
 
-        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+        verify_backbone_config_arguments(
+            use_timm_backbone=use_timm_backbone,
+            use_pretrained_backbone=use_pretrained_backbone,
+            backbone=backbone,
+            backbone_config=backbone_config,
+            backbone_kwargs=backbone_kwargs,
+        )
 
         self.backbone_config = backbone_config
         self.backbone = backbone
@@ -278,3 +272,6 @@ class OneFormerConfig(PretrainedConfig):
         self.num_hidden_layers = decoder_layers
 
         super().__init__(**kwargs)
+
+
+__all__ = ["OneFormerConfig"]

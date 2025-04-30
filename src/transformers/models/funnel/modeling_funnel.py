@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Funnel Transformer model."""
+"""PyTorch Funnel Transformer model."""
 
 import os
 from dataclasses import dataclass
@@ -49,18 +49,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "FunnelConfig"
 _CHECKPOINT_FOR_DOC = "funnel-transformer/small"
 
-FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "funnel-transformer/small",  # B4-4-4H768
-    "funnel-transformer/small-base",  # B4-4-4H768, no decoder
-    "funnel-transformer/medium",  # B6-3x2-3x2H768
-    "funnel-transformer/medium-base",  # B6-3x2-3x2H768, no decoder
-    "funnel-transformer/intermediate",  # B6-6-6H768
-    "funnel-transformer/intermediate-base",  # B6-6-6H768, no decoder
-    "funnel-transformer/large",  # B8-8-8H1024
-    "funnel-transformer/large-base",  # B8-8-8H1024, no decoder
-    "funnel-transformer/xlarge-base",  # B10-10-10H1024
-    "funnel-transformer/xlarge",  # B10-10-10H1024, no decoder
-]
 
 INF = 1e6
 
@@ -776,7 +764,7 @@ class FunnelDiscriminatorPredictions(nn.Module):
     def forward(self, discriminator_hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(discriminator_hidden_states)
         hidden_states = ACT2FN[self.config.hidden_act](hidden_states)
-        logits = self.dense_prediction(hidden_states).squeeze()
+        logits = self.dense_prediction(hidden_states).squeeze(-1)
         return logits
 
 
@@ -812,7 +800,7 @@ class FunnelPreTrainedModel(PreTrainedModel):
             std = 1.0 if self.config.initializer_std is None else self.config.initializer_std
             nn.init.normal_(module.word_embeddings.weight, std=std)
             if module.word_embeddings.padding_idx is not None:
-                module.word_embeddings.weight.data[module.padding_idx].zero_()
+                module.word_embeddings.weight.data[module.word_embeddings.padding_idx].zero_()
 
 
 class FunnelClassificationHead(nn.Module):
@@ -853,7 +841,7 @@ class FunnelForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -981,8 +969,7 @@ class FunnelBaseModel(FunnelPreTrainedModel):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         # TODO: deal with head_mask
-        if inputs_embeds is None:
-            inputs_embeds = self.embeddings(input_ids)
+        inputs_embeds = self.embeddings(input_ids, inputs_embeds=inputs_embeds)
 
         encoder_outputs = self.encoder(
             inputs_embeds,
@@ -1057,8 +1044,7 @@ class FunnelModel(FunnelPreTrainedModel):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         # TODO: deal with head_mask
-        if inputs_embeds is None:
-            inputs_embeds = self.embeddings(input_ids)
+        inputs_embeds = self.embeddings(input_ids, inputs_embeds=inputs_embeds)
 
         encoder_outputs = self.encoder(
             inputs_embeds,
@@ -1606,3 +1592,17 @@ class FunnelForQuestionAnswering(FunnelPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "FunnelBaseModel",
+    "FunnelForMaskedLM",
+    "FunnelForMultipleChoice",
+    "FunnelForPreTraining",
+    "FunnelForQuestionAnswering",
+    "FunnelForSequenceClassification",
+    "FunnelForTokenClassification",
+    "FunnelModel",
+    "FunnelPreTrainedModel",
+    "load_tf_weights_in_funnel",
+]

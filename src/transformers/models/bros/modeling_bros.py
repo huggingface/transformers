@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Bros model."""
-
+"""PyTorch Bros model."""
 
 import math
 from dataclasses import dataclass
@@ -47,11 +46,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "jinho8345/bros-base-uncased"
 _CONFIG_FOR_DOC = "BrosConfig"
 
-BROS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "jinho8345/bros-base-uncased",
-    "jinho8345/bros-large-uncased",
-    # See all Bros models at https://huggingface.co/models?filter=bros
-]
 
 BROS_START_DOCSTRING = r"""
     This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
@@ -158,8 +152,8 @@ class BrosSpadeOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    initial_token_logits: torch.FloatTensor = None
-    subsequent_token_logits: torch.FloatTensor = None
+    initial_token_logits: Optional[torch.FloatTensor] = None
+    subsequent_token_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1164,7 +1158,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         subsequent_token_logits = subsequent_token_logits.masked_fill(
             invalid_token_mask[:, None, :], torch.finfo(subsequent_token_logits.dtype).min
         )
-        self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
+        self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device=device, dtype=torch.bool)
         subsequent_token_logits = subsequent_token_logits.masked_fill(
             self_token_mask[None, :, :], torch.finfo(subsequent_token_logits.dtype).min
         )
@@ -1293,13 +1287,13 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             batch_size, max_seq_length = attention_mask.shape
             device = attention_mask.device
 
-            self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
+            self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device=device, dtype=torch.bool)
 
             mask = bbox_first_token_mask.view(-1)
             bbox_first_token_mask = torch.cat(
                 [
                     ~bbox_first_token_mask,
-                    torch.zeros([batch_size, 1], dtype=torch.bool).to(device),
+                    torch.zeros([batch_size, 1], dtype=torch.bool, device=device),
                 ],
                 axis=1,
             )
@@ -1318,3 +1312,12 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "BrosPreTrainedModel",
+    "BrosModel",
+    "BrosForTokenClassification",
+    "BrosSpadeEEForTokenClassification",
+    "BrosSpadeELForTokenClassification",
+]

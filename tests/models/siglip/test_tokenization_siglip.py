@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,12 +16,13 @@ import json
 import os
 import tempfile
 import unittest
+from functools import lru_cache
 
 from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, SiglipTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 from transformers.utils import cached_property, is_tf_available, is_torch_available
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
@@ -38,18 +38,19 @@ else:
 @require_sentencepiece
 @require_tokenizers
 class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/siglip-base-patch16-224"
     tokenizer_class = SiglipTokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
 
-    # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.setUp with T5->Siglip
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = SiglipTokenizer(SAMPLE_VOCAB)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.test_convert_token_and_id with T5->Siglip
     def test_convert_token_and_id(self):
@@ -134,14 +135,17 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def siglip_tokenizer(self):
         return SiglipTokenizer.from_pretrained("google/siglip-base-patch16-224")
 
-    # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.get_tokenizer with T5->Siglip
-    def get_tokenizer(self, **kwargs) -> SiglipTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> SiglipTokenizer:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.test_rust_and_python_full_tokenizers with T5->Siglip
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -226,10 +230,10 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [f"<extra_id_{i}>" for i in range(100)] + [AddedToken("<special>", lstrip=True)]
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_r = self.get_rust_tokenizer(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )
-                tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_cr = self.get_rust_tokenizer(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs, from_slow=True
                 )
                 tokenizer_p = self.tokenizer_class.from_pretrained(
@@ -316,7 +320,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
         """Test ``_tokenize`` and ``convert_tokens_to_string``."""
         if not self.test_sentencepiece:
-            return
+            self.skipTest(reason="test_sentencepiece is set to False")
 
         tokenizer = self.get_tokenizer()
         text = "This is text to test the tokenizer."
@@ -346,14 +350,6 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             rust_tokenizer = self.get_rust_tokenizer()
             special_tokens_string_rust = rust_tokenizer.convert_tokens_to_string(special_tokens)
             self.assertEqual(special_tokens_string, special_tokens_string_rust)
-
-    # overwritten from `test_tokenization_common` since Siglip has no max length
-    # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.test_pretrained_model_lists with T5->Siglip
-    def test_pretrained_model_lists(self):
-        # We should have at least one default checkpoint for each tokenizer
-        # We should specify the max input length as well (used in some part to list the pretrained checkpoints)
-        self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
-        self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
 
     @slow
     def test_tokenizer_integration(self):

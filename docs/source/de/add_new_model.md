@@ -17,12 +17,6 @@ rendered properly in your Markdown viewer.
 
 Die 🤗 Transformers-Bibliothek ist dank der Beiträge der Community oft in der Lage, neue Modelle anzubieten. Aber das kann ein anspruchsvolles Projekt sein und erfordert eine eingehende Kenntnis der 🤗 Transformers-Bibliothek und des zu implementierenden Modells. Bei Hugging Face versuchen wir, mehr Mitgliedern der Community die Möglichkeit zu geben, aktiv Modelle hinzuzufügen, und wir haben diese Anleitung zusammengestellt, die Sie durch den Prozess des Hinzufügens eines PyTorch-Modells führt (stellen Sie sicher, dass Sie [PyTorch installiert haben](https://pytorch.org/get-started/locally/)).
 
-<Tip>
-
-Wenn Sie daran interessiert sind, ein TensorFlow-Modell zu implementieren, werfen Sie einen Blick in die Anleitung [How to convert a 🤗 Transformers model to TensorFlow](add_tensorflow_model)!
-
-</Tip>
-
 Auf dem Weg dorthin, werden Sie:
 
 - Einblicke in bewährte Open-Source-Verfahren erhalten
@@ -101,7 +95,7 @@ wie der Code geschrieben werden sollte :-)
 1. Der Vorwärtsdurchlauf Ihres Modells sollte vollständig in die Modellierungsdatei geschrieben werden und dabei völlig unabhängig von anderen
    Modellen in der Bibliothek. Wenn Sie einen Block aus einem anderen Modell wiederverwenden möchten, kopieren Sie den Code und fügen ihn mit einem
    `# Kopiert von` ein (siehe [hier](https://github.com/huggingface/transformers/blob/v4.17.0/src/transformers/models/roberta/modeling_roberta.py#L160)
-   für ein gutes Beispiel und [hier](pr_checks#check-copies) für weitere Dokumentation zu Copied from). 
+   für ein gutes Beispiel und [hier](pr_checks#check-copies) für weitere Dokumentation zu Copied from).
 2. Der Code sollte vollständig verständlich sein, auch für einen Nicht-Muttersprachler. Das heißt, Sie sollten
    beschreibende Variablennamen wählen und Abkürzungen vermeiden. Ein Beispiel: `activation` ist `act` vorzuziehen.
    Von Variablennamen mit nur einem Buchstaben wird dringend abgeraten, es sei denn, es handelt sich um einen Index in einer for-Schleife.
@@ -404,12 +398,14 @@ In dem speziellen Fall, dass Sie ein Modell hinzufügen, dessen Architektur gena
 Modells übereinstimmt, müssen Sie nur ein Konvertierungsskript hinzufügen, wie in [diesem Abschnitt](#write-a-conversion-script) beschrieben.
 In diesem Fall können Sie einfach die gesamte Modellarchitektur des bereits vorhandenen Modells wiederverwenden.
 
-Andernfalls beginnen wir mit der Erstellung eines neuen Modells. Sie haben hier zwei Möglichkeiten:
+Andernfalls beginnen wir mit der Erstellung eines neuen Modells. Wir empfehlen die Verwendung des folgenden Skripts, um ein Modell hinzuzufügen
+ein bestehendes Modell:
 
-- `transformers-cli add-new-model-like`, um ein neues Modell wie ein bestehendes hinzuzufügen
-- `transformers-cli add-new-model`, um ein neues Modell aus unserer Vorlage hinzuzufügen (sieht dann aus wie BERT oder Bart, je nachdem, welche Art von Modell Sie wählen)
+```bash
+transformers add-new-model-like
+```
 
-In beiden Fällen werden Sie mit einem Fragebogen aufgefordert, die grundlegenden Informationen zu Ihrem Modell auszufüllen. Für den zweiten Befehl müssen Sie `cookiecutter` installieren, weitere Informationen dazu finden Sie [hier](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model).
+Sie werden mit einem Fragebogen aufgefordert, die grundlegenden Informationen Ihres Modells einzugeben.
 
 **Eröffnen Sie einen Pull Request auf dem Haupt-Repositorium huggingface/transformers**
 

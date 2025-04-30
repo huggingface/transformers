@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import contextlib
 import importlib.util
+import io
 import os
 import platform
 from argparse import ArgumentParser
@@ -20,12 +23,15 @@ from argparse import ArgumentParser
 import huggingface_hub
 
 from .. import __version__ as version
+from ..integrations.deepspeed import is_deepspeed_available
 from ..utils import (
     is_accelerate_available,
     is_flax_available,
     is_safetensors_available,
     is_tf_available,
     is_torch_available,
+    is_torch_hpu_available,
+    is_torch_npu_available,
 )
 from . import BaseTransformersCLICommand
 
@@ -88,6 +94,9 @@ class EnvironmentCommand(BaseTransformersCLICommand):
 
             pt_version = torch.__version__
             pt_cuda_available = torch.cuda.is_available()
+            pt_xpu_available = torch.xpu.is_available()
+            pt_npu_available = is_torch_npu_available()
+            pt_hpu_available = is_torch_hpu_available()
 
         tf_version = "not installed"
         tf_cuda_available = "NA"
@@ -101,6 +110,13 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             except AttributeError:
                 # returns list of devices, convert to bool
                 tf_cuda_available = bool(tf.config.list_physical_devices("GPU"))
+
+        deepspeed_version = "not installed"
+        if is_deepspeed_available():
+            # Redirect command line output to silence deepspeed import output.
+            with contextlib.redirect_stdout(io.StringIO()):
+                import deepspeed
+            deepspeed_version = deepspeed.__version__
 
         flax_version = "not installed"
         jax_version = "not installed"
@@ -124,14 +140,28 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             "Safetensors version": f"{safetensors_version}",
             "Accelerate version": f"{accelerate_version}",
             "Accelerate config": f"{accelerate_config_str}",
+            "DeepSpeed version": f"{deepspeed_version}",
             "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
             "Tensorflow version (GPU?)": f"{tf_version} ({tf_cuda_available})",
             "Flax version (CPU?/GPU?/TPU?)": f"{flax_version} ({jax_backend})",
             "Jax version": f"{jax_version}",
             "JaxLib version": f"{jaxlib_version}",
-            "Using GPU in script?": "<fill in>",
             "Using distributed or parallel set-up in script?": "<fill in>",
         }
+        if is_torch_available():
+            if pt_cuda_available:
+                info["Using GPU in script?"] = "<fill in>"
+                info["GPU type"] = torch.cuda.get_device_name()
+            elif pt_xpu_available:
+                info["Using XPU in script?"] = "<fill in>"
+                info["XPU type"] = torch.xpu.get_device_name()
+            elif pt_hpu_available:
+                info["Using HPU in script?"] = "<fill in>"
+                info["HPU type"] = torch.hpu.get_device_name()
+            elif pt_npu_available:
+                info["Using NPU in script?"] = "<fill in>"
+                info["NPU type"] = torch.npu.get_device_name()
+                info["CANN version"] = torch.version.cann
 
         print("\nCopy-and-paste the text below in your GitHub issue and FILL OUT the two last points.\n")
         print(self.format_dict(info))

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,44 +16,55 @@
 import json
 import os
 import unittest
+from functools import lru_cache
 
 from transformers import CLIPTokenizer, CLIPTokenizerFast
 from transformers.models.clip.tokenization_clip import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_ftfy, require_tokenizers
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 @require_tokenizers
 class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "openai/clip-vit-base-patch32"
     tokenizer_class = CLIPTokenizer
     rust_tokenizer_class = CLIPTokenizerFast
     test_rust_tokenizer = True
     from_pretrained_kwargs = {}
     test_seq2seq = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "lo", "l</w>", "w</w>", "r</w>", "t</w>", "low</w>", "er</w>", "lowest</w>", "newer</w>", "wider", "<unk>", "<|startoftext|>", "<|endoftext|>"]  # fmt: skip
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "l o", "lo w</w>", "e r</w>"]
-        self.special_tokens_map = {"unk_token": "<unk>"}
+        cls.special_tokens_map = {"unk_token": "<unk>"}
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
+        with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return CLIPTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return CLIPTokenizer.from_pretrained(pretrained_name, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return CLIPTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return CLIPTokenizerFast.from_pretrained(pretrained_name, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
@@ -76,8 +86,8 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_check_encoding_slow_fast(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_s = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_s = self.get_tokenizer(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 text = "A\n'll 11p223RF☆ho!!to?'d'd''d of a cat to-$''d."
                 text_tokenized_s = tokenizer_s.tokenize(text)
@@ -96,11 +106,11 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Test that the tokenization is identical on unicode of space type
                 spaces_unicodes = [
                     "\u0009",  # (horizontal tab, '\t')
-                    "\u000B",  # (vertical tab)
-                    "\u000C",  # (form feed)
+                    "\u000b",  # (vertical tab)
+                    "\u000c",  # (form feed)
                     "\u0020",  # (space, ' ')
-                    "\u200E",  # (left-to-right mark):w
-                    "\u200F",  # (right-to-left mark)
+                    "\u200e",  # (left-to-right mark):w
+                    "\u200f",  # (right-to-left mark)
                 ]
                 for unicode_seq in spaces_unicodes:
                     text_tokenized_s = tokenizer_s.tokenize(unicode_seq)
@@ -110,11 +120,11 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Test that the tokenization is identical on unicode of line break type
                 line_break_unicodes = [
-                    "\u000A",  # (line feed, '\n')
+                    "\u000a",  # (line feed, '\n')
                     "\r\n",  # (carriage return and line feed, '\r\n')
-                    "\u000D",  # (carriage return, '\r')
+                    "\u000d",  # (carriage return, '\r')
                     "\r",  # (carriage return, '\r')
-                    "\u000D",  # (carriage return, '\r')
+                    "\u000d",  # (carriage return, '\r')
                     "\u2028",  # (line separator)
                     "\u2029",  # (paragraph separator)
                     # "\u0085", # (next line)
@@ -137,7 +147,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 text_of_1_token = "hello"  # `hello` is a token in the vocabulary of `pretrained_name`
                 text = f"{text_of_1_token} {text_of_1_token}"
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_r = self.get_rust_tokenizer(
                     pretrained_name,
                     use_fast=True,
                 )
@@ -150,7 +160,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 text = f" {text}"
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_r = self.get_rust_tokenizer(
                     pretrained_name,
                     use_fast=True,
                 )
@@ -165,7 +175,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Test related to the breaking change introduced in transformers v4.17.0
         # We need to check that an error in raised when the user try to load a previous version of the tokenizer.
         with self.assertRaises(ValueError) as context:
-            self.rust_tokenizer_class.from_pretrained("robot-test/old-clip-tokenizer")
+            self.get_rust_tokenizer("robot-test/old-clip-tokenizer")
 
         self.assertTrue(
             context.exception.args[0].startswith(
@@ -177,7 +187,6 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_tokenization_python_rust_equals(self):
         super().test_tokenization_python_rust_equals()
 
-    # overwrite common test
+    @unittest.skip(reason="CLIP always lower cases letters")
     def test_added_tokens_do_lower_case(self):
-        # CLIP always lower cases letters
         pass

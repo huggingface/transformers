@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the MgpstrProcessor. """
+"""Testing suite for the MgpstrProcessor."""
 
 import json
 import os
@@ -70,6 +69,17 @@ class MgpstrProcessorTest(unittest.TestCase):
         with open(self.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
 
+    # We copy here rather than use the ProcessorTesterMixin as this processor has a `char_tokenizer` instead of a
+    # tokenizer attribute, which means all the tests would need to be overridden.
+    @require_vision
+    def prepare_image_inputs(self):
+        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
+        or a list of PyTorch tensors if one specifies torchify=True.
+        """
+        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
+        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+        return image_inputs
+
     def get_tokenizer(self, **kwargs):
         return MgpstrTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
@@ -78,15 +88,6 @@ class MgpstrProcessorTest(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
-
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images."""
-
-        image_input = np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)
-
-        image_input = Image.fromarray(np.moveaxis(image_input, 0, -1))
-
-        return image_input
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()

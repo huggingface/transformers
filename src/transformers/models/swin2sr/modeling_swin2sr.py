@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Swin2SR Transformer model."""
-
+"""PyTorch Swin2SR Transformer model."""
 
 import collections.abc
 import math
@@ -49,12 +48,6 @@ _CHECKPOINT_FOR_DOC = "caidas/swin2SR-classical-sr-x2-64"
 _EXPECTED_OUTPUT_SHAPE = [1, 180, 488, 648]
 
 
-SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "caidas/swin2SR-classical-sr-x2-64",
-    # See all Swin2SR models at https://huggingface.co/models?filter=swin2sr
-]
-
-
 @dataclass
 class Swin2SREncoderOutput(ModelOutput):
     """
@@ -76,7 +69,7 @@ class Swin2SREncoderOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -301,13 +294,15 @@ class Swin2SRSelfAttention(nn.Module):
         if pretrained_window_size[0] > 0:
             relative_coords_table[:, :, :, 0] /= pretrained_window_size[0] - 1
             relative_coords_table[:, :, :, 1] /= pretrained_window_size[1] - 1
-        else:
+        elif window_size > 1:
             relative_coords_table[:, :, :, 0] /= self.window_size[0] - 1
             relative_coords_table[:, :, :, 1] /= self.window_size[1] - 1
         relative_coords_table *= 8  # normalize to -8, 8
         relative_coords_table = (
             torch.sign(relative_coords_table) * torch.log2(torch.abs(relative_coords_table) + 1.0) / math.log2(8)
         )
+        # set to same dtype as mlp weight
+        relative_coords_table = relative_coords_table.to(next(self.continuous_position_bias_mlp.parameters()).dtype)
         self.register_buffer("relative_coords_table", relative_coords_table, persistent=False)
 
         # get pair-wise relative position index for each token inside the window
@@ -487,7 +482,9 @@ class Swin2SROutput(nn.Module):
 
 # Copied from transformers.models.swinv2.modeling_swinv2.Swinv2Layer with Swinv2->Swin2SR
 class Swin2SRLayer(nn.Module):
-    def __init__(self, config, dim, input_resolution, num_heads, shift_size=0, pretrained_window_size=0):
+    def __init__(
+        self, config, dim, input_resolution, num_heads, drop_path_rate=0.0, shift_size=0, pretrained_window_size=0
+    ):
         super().__init__()
         self.input_resolution = input_resolution
         window_size, shift_size = self._compute_window_shift(
@@ -505,7 +502,7 @@ class Swin2SRLayer(nn.Module):
             else (pretrained_window_size, pretrained_window_size),
         )
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.drop_path = Swin2SRDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = Swin2SRDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.intermediate = Swin2SRIntermediate(config, dim)
         self.output = Swin2SROutput(config, dim)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
@@ -685,7 +682,7 @@ class Swin2SREncoder(nn.Module):
         super().__init__()
         self.num_stages = len(config.depths)
         self.config = config
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
         self.stages = nn.ModuleList(
             [
                 Swin2SRStage(
@@ -816,10 +813,11 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         self.config = config
 
         if config.num_channels == 3 and config.num_channels_out == 3:
-            rgb_mean = (0.4488, 0.4371, 0.4040)
-            self.mean = torch.Tensor(rgb_mean).view(1, 3, 1, 1)
+            mean = torch.tensor([0.4488, 0.4371, 0.4040]).view(1, 3, 1, 1)
         else:
-            self.mean = torch.zeros(1, 1, 1, 1)
+            mean = torch.zeros(1, 1, 1, 1)
+        self.register_buffer("mean", mean, persistent=False)
+
         self.img_range = config.img_range
 
         self.first_convolution = nn.Conv2d(config.num_channels, config.embed_dim, 3, 1, 1)
@@ -854,8 +852,8 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         pixel_values = nn.functional.pad(pixel_values, (0, modulo_pad_width, 0, modulo_pad_height), "reflect")
 
         # 2. normalize
-        self.mean = self.mean.type_as(pixel_values)
-        pixel_values = (pixel_values - self.mean) * self.img_range
+        mean = self.mean.type_as(pixel_values)
+        pixel_values = (pixel_values - mean) * self.img_range
 
         return pixel_values
 
@@ -1135,6 +1133,10 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not supported at the moment")
+
         height, width = pixel_values.shape[2:]
 
         if self.config.upsampler == "pixelshuffle_aux":
@@ -1166,10 +1168,6 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         reconstruction = reconstruction / self.swin2sr.img_range + self.swin2sr.mean
         reconstruction = reconstruction[:, :, : height * self.upscale, : width * self.upscale]
 
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Training is not supported at the moment")
-
         if not return_dict:
             output = (reconstruction,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
@@ -1180,3 +1178,6 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["Swin2SRForImageSuperResolution", "Swin2SRModel", "Swin2SRPreTrainedModel"]

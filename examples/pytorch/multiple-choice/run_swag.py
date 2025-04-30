@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright The HuggingFace Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,14 +20,12 @@ Fine-tuning the library models for multiple choice.
 import logging
 import os
 import sys
-import warnings
 from dataclasses import dataclass, field
 from itertools import chain
-from typing import Optional, Union
+from typing import Optional
 
 import datasets
 import numpy as np
-import torch
 from datasets import load_dataset
 
 import transformers
@@ -36,19 +33,19 @@ from transformers import (
     AutoConfig,
     AutoModelForMultipleChoice,
     AutoTokenizer,
+    DataCollatorForMultipleChoice,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
     default_data_collator,
     set_seed,
 )
-from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import PaddingStrategy, check_min_version, send_example_telemetry
+from transformers.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.39.0.dev0")
+check_min_version("4.52.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -87,12 +84,6 @@ class ModelArguments:
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
                 "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
             )
-        },
-    )
-    use_auth_token: bool = field(
-        default=None,
-        metadata={
-            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
         },
     )
     trust_remote_code: bool = field(
@@ -172,63 +163,6 @@ class DataTrainingArguments:
             assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
 
 
-@dataclass
-class DataCollatorForMultipleChoice:
-    """
-    Data collator that will dynamically pad the inputs for multiple choice received.
-
-    Args:
-        tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
-            The tokenizer used for encoding the data.
-        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
-            Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
-            among:
-
-            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
-              if provided).
-            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-              acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-              lengths).
-        max_length (`int`, *optional*):
-            Maximum length of the returned list and optionally padding length (see above).
-        pad_to_multiple_of (`int`, *optional*):
-            If set will pad the sequence to a multiple of the provided value.
-
-            This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
-            7.5 (Volta).
-    """
-
-    tokenizer: PreTrainedTokenizerBase
-    padding: Union[bool, str, PaddingStrategy] = True
-    max_length: Optional[int] = None
-    pad_to_multiple_of: Optional[int] = None
-
-    def __call__(self, features):
-        label_name = "label" if "label" in features[0].keys() else "labels"
-        labels = [feature.pop(label_name) for feature in features]
-        batch_size = len(features)
-        num_choices = len(features[0]["input_ids"])
-        flattened_features = [
-            [{k: v[i] for k, v in feature.items()} for i in range(num_choices)] for feature in features
-        ]
-        flattened_features = list(chain(*flattened_features))
-
-        batch = self.tokenizer.pad(
-            flattened_features,
-            padding=self.padding,
-            max_length=self.max_length,
-            pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors="pt",
-        )
-
-        # Un-flatten
-        batch = {k: v.view(batch_size, num_choices, -1) for k, v in batch.items()}
-        # Add back labels
-        batch["labels"] = torch.tensor(labels, dtype=torch.int64)
-        return batch
-
-
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -241,15 +175,6 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
-    if model_args.use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
-            FutureWarning,
-        )
-        if model_args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        model_args.token = model_args.use_auth_token
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
@@ -441,7 +366,9 @@ def main():
     data_collator = (
         default_data_collator
         if data_args.pad_to_max_length
-        else DataCollatorForMultipleChoice(tokenizer=tokenizer, pad_to_multiple_of=8 if training_args.fp16 else None)
+        else DataCollatorForMultipleChoice(
+            tokenizer=tokenizer, pad_to_multiple_of=8 if training_args.fp16 else None, return_tensors="pt"
+        )
     )
 
     # Metric
@@ -456,7 +383,7 @@ def main():
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
     )

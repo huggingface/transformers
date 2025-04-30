@@ -95,15 +95,15 @@ def convert_state_dict(orig_state_dict, model):
             dim = model.swin.encoder.layers[layer_num].blocks[block_num].attention.self.all_head_size
 
             if "weight" in key:
-                orig_state_dict[
-                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"
-                ] = val[:dim, :]
+                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"] = (
+                    val[:dim, :]
+                )
                 orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"] = val[
                     dim : dim * 2, :
                 ]
-                orig_state_dict[
-                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"
-                ] = val[-dim:, :]
+                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"] = (
+                    val[-dim:, :]
+                )
             else:
                 orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"] = val[
                     :dim
@@ -121,7 +121,7 @@ def convert_state_dict(orig_state_dict, model):
 
 
 def convert_swin_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub):
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
 
     config = get_swin_config(model_name)
     model = SwinForMaskedImageModeling(config)

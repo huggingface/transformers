@@ -36,23 +36,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "microsoft/tapex-base": "https://huggingface.co/microsoft/tapex-base/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "microsoft/tapex-base": "https://huggingface.co/microsoft/tapex-base/resolve/main/merges.txt",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/tapex-base": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "microsoft/tapex-base": {"do_lower_case": True},
-}
-
 
 class TapexTruncationStrategy(ExplicitEnum):
     """
@@ -264,9 +247,6 @@ class TapexTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -517,7 +497,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         self,
         table: Union["pd.DataFrame", List["pd.DataFrame"]] = None,
         query: Optional[Union[TextInput, List[TextInput]]] = None,
-        answer: Union[str, List[str]] = None,
+        answer: Optional[Union[str, List[str]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -594,7 +574,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         self,
         table: Union["pd.DataFrame", List["pd.DataFrame"]],
         query: Optional[Union[TextInput, List[TextInput]]] = None,
-        answer: Union[str, List[str]] = None,
+        answer: Optional[Union[str, List[str]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -682,10 +662,10 @@ class TapexTokenizer(PreTrainedTokenizer):
         self,
         table: Union["pd.DataFrame", List["pd.DataFrame"]],
         query: Optional[List[TextInput]] = None,
-        answer: List[str] = None,
+        answer: Optional[List[str]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str] = None,
+        truncation: Optional[Union[bool, str]] = None,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -904,7 +884,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: Optional[str] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str] = None,
+        truncation: Optional[Union[bool, str]] = None,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -1073,7 +1053,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: List[str],
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str] = None,
+        truncation: Optional[Union[bool, str]] = None,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -1217,7 +1197,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: str,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str] = None,
+        truncation: Optional[Union[bool, str]] = None,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -1485,3 +1465,6 @@ class TapexTokenizer(PreTrainedTokenizer):
         # only when the drop ratio is too large, logging for warning.
         if "id" in table_content and len(drop_row_indices) > 0:
             logger.warning("Delete {:.2f} rows in table {}".format(len(drop_row_indices), table_content["id"]))
+
+
+__all__ = ["TapexTokenizer"]

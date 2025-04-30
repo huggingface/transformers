@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DeBERTa-v2 model configuration"""
+"""DeBERTa-v2 model configuration"""
+
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 
@@ -26,17 +27,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
-
-DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/deberta-v2-xlarge": "https://huggingface.co/microsoft/deberta-v2-xlarge/resolve/main/config.json",
-    "microsoft/deberta-v2-xxlarge": "https://huggingface.co/microsoft/deberta-v2-xxlarge/resolve/main/config.json",
-    "microsoft/deberta-v2-xlarge-mnli": (
-        "https://huggingface.co/microsoft/deberta-v2-xlarge-mnli/resolve/main/config.json"
-    ),
-    "microsoft/deberta-v2-xxlarge-mnli": (
-        "https://huggingface.co/microsoft/deberta-v2-xxlarge-mnli/resolve/main/config.json"
-    ),
-}
 
 
 class DebertaV2Config(PretrainedConfig):
@@ -85,13 +75,16 @@ class DebertaV2Config(PretrainedConfig):
             as `max_position_embeddings`.
         pad_token_id (`int`, *optional*, defaults to 0):
             The value used to pad input_ids.
-        position_biased_input (`bool`, *optional*, defaults to `False`):
+        position_biased_input (`bool`, *optional*, defaults to `True`):
             Whether add absolute position embedding to content embedding.
         pos_att_type (`List[str]`, *optional*):
             The type of relative position attention, it can be a combination of `["p2c", "c2p"]`, e.g. `["p2c"]`,
             `["p2c", "c2p"]`, `["p2c", "c2p"]`.
-        layer_norm_eps (`float`, optional, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        legacy (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should use the legacy `LegacyDebertaOnlyMLMHead`, which does not work properly
+            for mask infilling tasks.
 
     Example:
 
@@ -131,6 +124,7 @@ class DebertaV2Config(PretrainedConfig):
         pos_att_type=None,
         pooler_dropout=0,
         pooler_hidden_act="gelu",
+        legacy=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -161,6 +155,7 @@ class DebertaV2Config(PretrainedConfig):
         self.pooler_hidden_size = kwargs.get("pooler_hidden_size", hidden_size)
         self.pooler_dropout = pooler_dropout
         self.pooler_hidden_act = pooler_hidden_act
+        self.legacy = legacy
 
 
 class DebertaV2OnnxConfig(OnnxConfig):
@@ -198,3 +193,6 @@ class DebertaV2OnnxConfig(OnnxConfig):
         if self._config.type_vocab_size == 0 and "token_type_ids" in dummy_inputs:
             del dummy_inputs["token_type_ids"]
         return dummy_inputs
+
+
+__all__ = ["DebertaV2Config", "DebertaV2OnnxConfig"]

@@ -29,6 +29,7 @@ from torch.autograd.function import Function
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
@@ -49,12 +50,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/reformer-crime-and-punishment"
 _CONFIG_FOR_DOC = "ReformerConfig"
-
-REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/reformer-crime-and-punishment",
-    "google/reformer-enwik8",
-    # See all Reformer models at https://huggingface.co/models?filter=reformer
-]
 
 
 # Define named tuples for nn.Modules here
@@ -451,12 +446,12 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # free memory
         del hidden_states
 
-        assert (
-            query_key_vectors.shape[-1] == self.attention_head_size
-        ), f"last dim of query_key_vectors is {query_key_vectors.shape[-1]} but should be {self.attention_head_size}."
-        assert (
-            value_vectors.shape[-1] == self.attention_head_size
-        ), f"last dim of value_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
+        assert query_key_vectors.shape[-1] == self.attention_head_size, (
+            f"last dim of query_key_vectors is {query_key_vectors.shape[-1]} but should be {self.attention_head_size}."
+        )
+        assert value_vectors.shape[-1] == self.attention_head_size, (
+            f"last dim of value_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
+        )
 
         do_standard_self_attention = (sequence_length <= self.chunk_length) or (
             use_cache and past_buckets_states[1] is not None
@@ -475,9 +470,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 # make sure buckets has correct shape for LSH attention
                 buckets = buckets.view(batch_size, self.num_attention_heads, num_hashes * sequence_length)
 
-            assert (
-                int(buckets.shape[-1]) == num_hashes * sequence_length
-            ), f"last dim of buckets is {buckets.shape[-1]}, but should be {num_hashes * sequence_length}"
+            assert int(buckets.shape[-1]) == num_hashes * sequence_length, (
+                f"last dim of buckets is {buckets.shape[-1]}, but should be {num_hashes * sequence_length}"
+            )
 
             sorted_bucket_idx, undo_sorted_bucket_idx = self._get_sorted_bucket_idx_and_undo_sorted_bucket_idx(
                 sequence_length, buckets, num_hashes
@@ -617,18 +612,18 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # We sample a different random rotation for each round of hashing to
         # decrease the probability of hash misses.
         if isinstance(self.num_buckets, int):
-            assert (
-                self.num_buckets % 2 == 0
-            ), f"There should be an even number of buckets, but `self.num_buckets`: {self.num_buckets}"
+            assert self.num_buckets % 2 == 0, (
+                f"There should be an even number of buckets, but `self.num_buckets`: {self.num_buckets}"
+            )
             rotation_size = self.num_buckets
             num_buckets = self.num_buckets
         else:
             # Factorize the hash if self.num_buckets is a list or tuple
             rotation_size, num_buckets = 0, 1
             for bucket_factor in self.num_buckets:
-                assert (
-                    bucket_factor % 2 == 0
-                ), f"The number of buckets should be even, but `num_bucket`: {bucket_factor}"
+                assert bucket_factor % 2 == 0, (
+                    f"The number of buckets should be even, but `num_bucket`: {bucket_factor}"
+                )
                 rotation_size = rotation_size + bucket_factor
                 num_buckets = num_buckets * bucket_factor
 
@@ -1095,15 +1090,15 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         key_vectors = self._split_hidden_size_dim(key_vectors, self.num_attention_heads, self.attention_head_size)
         value_vectors = self._split_hidden_size_dim(value_vectors, self.num_attention_heads, self.attention_head_size)
 
-        assert (
-            query_vectors.shape[-1] == self.attention_head_size
-        ), f"last dim of query_key_vectors is {query_vectors.shape[-1]} but should be {self.attention_head_size}."
-        assert (
-            key_vectors.shape[-1] == self.attention_head_size
-        ), f"last dim of query_key_vectors is {key_vectors.shape[-1]} but should be {self.attention_head_size}."
-        assert (
-            value_vectors.shape[-1] == self.attention_head_size
-        ), f"last dim of query_key_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
+        assert query_vectors.shape[-1] == self.attention_head_size, (
+            f"last dim of query_key_vectors is {query_vectors.shape[-1]} but should be {self.attention_head_size}."
+        )
+        assert key_vectors.shape[-1] == self.attention_head_size, (
+            f"last dim of query_key_vectors is {key_vectors.shape[-1]} but should be {self.attention_head_size}."
+        )
+        assert value_vectors.shape[-1] == self.attention_head_size, (
+            f"last dim of query_key_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
+        )
 
         if self.chunk_length is None:
             assert self.num_chunks_before == 0 and self.num_chunks_after == 0, (
@@ -1771,9 +1766,13 @@ class ReformerOnlyLMHead(nn.Module):
         hidden_states = self.decoder(hidden_states)
         return hidden_states
 
-    def _tie_weights(self):
-        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        self.bias = self.decoder.bias
+    def _tie_weights(self) -> None:
+        # For accelerate compatibility and to not break backward compatibility
+        if self.decoder.bias.device.type == "meta":
+            self.decoder.bias = self.bias
+        else:
+            # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
+            self.bias = self.decoder.bias
 
 
 class ReformerPreTrainedModel(PreTrainedModel):
@@ -1886,7 +1885,7 @@ class ReformerModelWithLMHeadOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     past_buckets_states: Optional[List[Tuple[torch.LongTensor, torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1977,9 +1976,9 @@ class ReformerModel(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        assert (
-            self.config.num_hidden_layers > 0
-        ), "`config.attn_layers` is empty. Select at least one attn layer form ['lsh', 'local']"
+        assert self.config.num_hidden_layers > 0, (
+            "`config.attn_layers` is empty. Select at least one attn layer form ['lsh', 'local']"
+        )
 
         self.embeddings = ReformerEmbeddings(config)
         self.encoder = ReformerEncoder(config)
@@ -2040,9 +2039,9 @@ class ReformerModel(ReformerPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        assert (
-            len(input_shape) == 2
-        ), f"`input_ids` have be of shape `[batch_size, sequence_length]`, but got shape: {input_shape}"
+        assert len(input_shape) == 2, (
+            f"`input_ids` have be of shape `[batch_size, sequence_length]`, but got shape: {input_shape}"
+        )
 
         if past_buckets_states is not None:
             assert not self.training, "`past_buckets_states` can only be used for inference, not for training`."
@@ -2185,7 +2184,7 @@ class ReformerModel(ReformerPreTrainedModel):
 
 
 @add_start_docstrings("""Reformer Model with a `language modeling` head on top.""", REFORMER_START_DOCSTRING)
-class ReformerModelWithLMHead(ReformerPreTrainedModel):
+class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     def __init__(self, config):
@@ -2211,6 +2210,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
+        self.lm_head.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -2232,6 +2232,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -2260,12 +2261,12 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
+            loss = self.loss_function(
+                logits,
+                labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (logits,) + reformer_outputs[1:]
@@ -2282,6 +2283,8 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, **kwargs
     ):
+        # Overitten -- different expected inputs/outputs
+
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
@@ -2331,6 +2334,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
+        self.lm_head.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -2680,3 +2684,15 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
             hidden_states=reformer_outputs.hidden_states,
             attentions=reformer_outputs.attentions,
         )
+
+
+__all__ = [
+    "ReformerAttention",
+    "ReformerForMaskedLM",
+    "ReformerForQuestionAnswering",
+    "ReformerForSequenceClassification",
+    "ReformerLayer",
+    "ReformerModel",
+    "ReformerModelWithLMHead",
+    "ReformerPreTrainedModel",
+]

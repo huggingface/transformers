@@ -159,7 +159,7 @@ conda install conda-forge::transformers
 
 Les modèles pré-entraînés sont téléchargés et mis en cache localement dans le dossier suivant : `~/.cache/huggingface/hub`. C'est le dossier par défaut donné par la variable d'environnement `TRANSFORMERS_CACHE`. Sur Windows, le dossier par défaut est `C:\Users\nom_utilisateur\.cache\huggingface\hub`. Vous pouvez modifier les variables d'environnement indiquées ci-dessous - par ordre de priorité - pour spécifier un dossier de cache différent :
 
-1. Variable d'environnement (par défaut) : `HUGGINGFACE_HUB_CACHE` ou `TRANSFORMERS_CACHE`.
+1. Variable d'environnement (par défaut) : `HF_HUB_CACHE` ou `TRANSFORMERS_CACHE`.
 2. Variable d'environnement : `HF_HOME`.
 3. Variable d'environnement : `XDG_CACHE_HOME` + `/huggingface`.
 
@@ -171,7 +171,7 @@ Les modèles pré-entraînés sont téléchargés et mis en cache localement dan
 
 ## Mode hors ligne
 
-🤗 Transformers peut fonctionner dans un environnement cloisonné ou hors ligne en n'utilisant que des fichiers locaux. Définissez la variable d'environnement `TRANSFORMERS_OFFLINE=1` pour activer ce mode.
+🤗 Transformers peut fonctionner dans un environnement cloisonné ou hors ligne en n'utilisant que des fichiers locaux. Définissez la variable d'environnement `HF_HUB_OFFLINE=1` pour activer ce mode.
 
 <Tip>
 
@@ -180,7 +180,7 @@ Ajoutez [🤗 Datasets](https://huggingface.co/docs/datasets/) à votre processu
 </Tip>
 
 ```bash
-HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
 python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Table Transformer model. """
-
+"""Testing suite for the PyTorch Table Transformer model."""
 
 import inspect
 import math
@@ -24,7 +22,6 @@ from huggingface_hub import hf_hub_download
 from transformers import ResNetConfig, TableTransformerConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -190,7 +187,7 @@ class TableTransformerModelTester:
 
 
 @require_torch
-class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TableTransformerModel,
@@ -209,6 +206,8 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    zero_init_hidden_state = True
+    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -260,8 +259,12 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="Table Transformer does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(reason="Table Transformer does not have a get_input_embeddings method")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="Table Transformer is not a generative model")
@@ -273,8 +276,8 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         pass
 
     @slow
+    @unittest.skip(reason="TODO Niels: fix me!")
     def test_model_outputs_equivalence(self):
-        # TODO Niels: fix me!
         pass
 
     def test_attention_outputs(self):
@@ -455,6 +458,9 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 
         # let's pick a random timm backbone
         config.backbone = "tf_mobilenetv3_small_075"
+        config.backbone_config = None
+        config.use_timm_backbone = True
+        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -470,6 +476,43 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
                     self.model_tester.num_labels + 1,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propagated to backbone
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+            else:
+                # Confirm out_indices was propagated to backbone
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+
+            self.assertTrue(outputs)
+
+    def test_hf_backbone(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Load a pretrained HF checkpoint as backbone
+        config.backbone = "microsoft/resnet-18"
+        config.backbone_config = None
+        config.use_timm_backbone = False
+        config.use_pretrained_backbone = True
+        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if model_class.__name__ == "TableTransformerForObjectDetection":
+                expected_shape = (
+                    self.model_tester.batch_size,
+                    self.model_tester.num_queries,
+                    self.model_tester.num_labels + 1,
+                )
+                self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propagated to backbone
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+            else:
+                # Confirm out_indices was propagated to backbone
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
 
@@ -551,9 +594,9 @@ class TableTransformerModelIntegrationTests(unittest.TestCase):
             [[-6.7329, -16.9590, 6.7447], [-8.0038, -22.3071, 6.9288], [-7.2445, -20.9855, 7.3465]],
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
 
         expected_boxes = torch.tensor(
             [[0.4868, 0.1764, 0.6729], [0.6674, 0.4621, 0.3864], [0.4720, 0.1757, 0.6362]], device=torch_device
         )
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-3))
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-3, atol=1e-3)

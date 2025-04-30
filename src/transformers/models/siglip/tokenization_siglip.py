@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for SigLIP model."""
+"""Tokenization class for SigLIP model."""
 
 import os
 import re
@@ -31,25 +31,18 @@ from ...tokenization_utils_base import AddedToken
 if TYPE_CHECKING:
     from ...tokenization_utils_base import TextInput
 from ...utils import logging, requires_backends
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/siglip-base-patch16-224": "https://huggingface.co/google/siglip-base-patch16-224/resolve/main/spiece.model",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/siglip-base-patch16-224": 256,
-}
 
 SPIECE_UNDERLINE = "▁"
 
 
+@requires(backends=("sentencepiece",))
 class SiglipTokenizer(PreTrainedTokenizer):
     """
     Construct a Siglip tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -92,8 +85,6 @@ class SiglipTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -384,3 +375,6 @@ class SiglipTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["SiglipTokenizer"]

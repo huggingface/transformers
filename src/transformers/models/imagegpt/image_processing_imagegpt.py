@@ -29,10 +29,10 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -57,6 +57,7 @@ def color_quantize(x, clusters):
     return np.argmin(d, axis=1)
 
 
+@requires(backends=("vision",))
 class ImageGPTImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ImageGPT image processor. This image processor can be used to resize images to a smaller resolution
@@ -65,7 +66,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
     Args:
         clusters (`np.ndarray` or `List[List[int]]`, *optional*):
-            The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overriden by `clusters`
+            The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overridden by `clusters`
             in `preprocess`.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's dimensions to `(size["height"], size["width"])`. Can be overridden by
@@ -88,7 +89,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         # clusters is a first argument to maintain backwards compatibility with the old ImageGPTImageProcessor
         clusters: Optional[Union[List[List[int]], np.ndarray]] = None,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_normalize: bool = True,
         do_color_quantize: bool = True,
@@ -103,18 +104,6 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         self.resample = resample
         self.do_normalize = do_normalize
         self.do_color_quantize = do_color_quantize
-        self._valid_processor_keys = [
-            "images",
-            "do_resize",
-            "size",
-            "resample",
-            "do_normalize",
-            "do_color_quantize",
-            "clusters",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
@@ -186,19 +175,19 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         image = image - 1
         return image
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
-        do_normalize: bool = None,
+        do_normalize: Optional[bool] = None,
         do_color_quantize: Optional[bool] = None,
         clusters: Optional[Union[List[List[int]], np.ndarray]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -251,8 +240,6 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
@@ -273,7 +260,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_normalize:
+        if do_normalize and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If you wish to do this, "
                 "make sure to set `do_normalize` to `False` and that pixel values are between [-1, 1].",
@@ -312,3 +299,6 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
         data = {"input_ids": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["ImageGPTImageProcessor"]

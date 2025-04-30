@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021-2023 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -50,7 +49,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
-class EnCodecFeatureExtractionTester(unittest.TestCase):
+class EnCodecFeatureExtractionTester:
     def __init__(
         self,
         parent,
@@ -158,8 +157,8 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         input_audio = self._load_datasamples(1)
         feature_extractor = EncodecFeatureExtractor()
         input_values = feature_extractor(input_audio, return_tensors="pt").input_values
-        self.assertEquals(input_values.shape, (1, 1, 93680))
-        self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-6))
+        self.assertEqual(input_values.shape, (1, 1, 93680))
+        torch.testing.assert_close(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, rtol=1e-6, atol=1e-6)
 
     def test_integration_stereo(self):
         # fmt: off
@@ -177,9 +176,9 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         input_audio[0][1] *= 0.5
         feature_extractor = EncodecFeatureExtractor(feature_size=2)
         input_values = feature_extractor(input_audio, return_tensors="pt").input_values
-        self.assertEquals(input_values.shape, (1, 2, 93680))
-        self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-6))
-        self.assertTrue(torch.allclose(input_values[0, 1, :30], EXPECTED_INPUT_VALUES * 0.5, atol=1e-6))
+        self.assertEqual(input_values.shape, (1, 2, 93680))
+        torch.testing.assert_close(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, rtol=1e-6, atol=1e-6)
+        torch.testing.assert_close(input_values[0, 1, :30], EXPECTED_INPUT_VALUES * 0.5, rtol=1e-6, atol=1e-6)
 
     def test_truncation_and_padding(self):
         input_audio = self._load_datasamples(2)
@@ -197,27 +196,27 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
 
         # truncate to chunk
         truncated_outputs = feature_extractor(input_audio, truncation=True, return_tensors="pt").input_values
-        self.assertEquals(truncated_outputs.shape, (2, 1, 71520))  # 2 chunks
+        self.assertEqual(truncated_outputs.shape, (2, 1, 71520))  # 2 chunks
 
         # force truncate to max_length
         truncated_outputs = feature_extractor(
             input_audio, truncation=True, max_length=48000, return_tensors="pt"
         ).input_values
-        self.assertEquals(truncated_outputs.shape, (2, 1, 48000))
+        self.assertEqual(truncated_outputs.shape, (2, 1, 48000))
 
         # pad to chunk
         padded_outputs = feature_extractor(input_audio, padding=True, return_tensors="pt").input_values
-        self.assertEquals(padded_outputs.shape, (2, 1, 95280))
+        self.assertEqual(padded_outputs.shape, (2, 1, 95280))
 
         # pad to chunk
         truncated_outputs = feature_extractor(input_audio, return_tensors="pt").input_values
-        self.assertEquals(truncated_outputs.shape, (2, 1, 95280))
+        self.assertEqual(truncated_outputs.shape, (2, 1, 95280))
 
         # force pad to max length
         truncated_outputs = feature_extractor(
             input_audio, padding="max_length", max_length=100000, return_tensors="pt"
         ).input_values
-        self.assertEquals(truncated_outputs.shape, (2, 1, 100000))
+        self.assertEqual(truncated_outputs.shape, (2, 1, 100000))
 
         # force no pad
         with self.assertRaisesRegex(
@@ -227,7 +226,7 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
 
         truncated_outputs = feature_extractor(input_audio[0], padding=False, return_tensors="pt").input_values
-        self.assertEquals(truncated_outputs.shape, (1, 1, 93680))
+        self.assertEqual(truncated_outputs.shape, (1, 1, 93680))
 
         # no pad if no chunk_length_s
         feature_extractor.chunk_length_s = None
@@ -238,7 +237,7 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
 
         truncated_outputs = feature_extractor(input_audio[0], padding=False, return_tensors="pt").input_values
-        self.assertEquals(truncated_outputs.shape, (1, 1, 93680))
+        self.assertEqual(truncated_outputs.shape, (1, 1, 93680))
 
         # no pad if no overlap
         feature_extractor.chunk_length_s = 2
@@ -250,4 +249,4 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
 
         truncated_outputs = feature_extractor(input_audio[0], padding=False, return_tensors="pt").input_values
-        self.assertEquals(truncated_outputs.shape, (1, 1, 93680))
+        self.assertEqual(truncated_outputs.shape, (1, 1, 93680))

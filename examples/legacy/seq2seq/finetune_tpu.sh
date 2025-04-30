@@ -20,7 +20,7 @@ python xla_spawn.py --num_cores $TPU_NUM_CORES \
     finetune_trainer.py \
     --learning_rate=3e-5 \
     --do_train --do_eval \
-    --evaluation_strategy steps \
+    --eval_strategy steps \
     --prediction_loss_only \
     --n_val 1000 \
     "$@"

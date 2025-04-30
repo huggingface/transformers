@@ -12,14 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch VideoMAE (masked autoencoder) model."""
-
+"""PyTorch VideoMAE (masked autoencoder) model."""
 
 import collections.abc
-import math
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional, Set, Tuple, Union
+from typing import Callable, Optional, Set, Tuple, Union
 
 import numpy as np
 import torch
@@ -29,7 +27,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
@@ -46,11 +44,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "VideoMAEConfig"
 _CHECKPOINT_FOR_DOC = "MCG-NJU/videomae-base"
-
-VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "MCG-NJU/videomae-base",
-    # See all VideoMAE models at https://huggingface.co/models?filter=videomae
-]
 
 
 @dataclass
@@ -71,7 +64,7 @@ class VideoMAEDecoderOutput(ModelOutput):
             the self-attention heads.
     """
 
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -97,7 +90,7 @@ class VideoMAEForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -138,8 +131,9 @@ class VideoMAEEmbeddings(nn.Module):
         embeddings = self.patch_embeddings(pixel_values)
 
         # add position embeddings
-        embeddings = embeddings + self.position_embeddings.type_as(embeddings).to(embeddings.device).clone().detach()
-
+        embeddings = embeddings + self.position_embeddings.detach().type_as(embeddings).to(
+            device=embeddings.device, copy=True
+        )
         # only keep visible patches
         # ~bool_masked_pos means visible
         if bool_masked_pos is not None:
@@ -203,18 +197,52 @@ class VideoMAEPatchEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.vit.modeling_vit.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+
+    # Normalize the attention scores to probabilities.
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+
+    # This is actually dropping out entire tokens to attend to, which might
+    # seem a bit unusual, but is taken from the original Transformer paper.
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    # Mask heads if we want to
+    if attention_mask is not None:
+        attn_weights = attn_weights * attention_mask
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class VideoMAESelfAttention(nn.Module):
     def __init__(self, config: VideoMAEConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
-
+        self.config = config
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
@@ -226,8 +254,6 @@ class VideoMAESelfAttention(nn.Module):
         else:
             self.q_bias = None
             self.v_bias = None
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -246,27 +272,29 @@ class VideoMAESelfAttention(nn.Module):
         value_layer = self.transpose_for_scores(values)
         query_layer = self.transpose_for_scores(queries)
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        context_layer, attention_probs = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            head_mask,
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.dropout_prob,
+        )
 
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
+        context_layer = context_layer.reshape(new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -365,7 +393,7 @@ class VideoMAEOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->VideoMAE
+# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->VideoMAE,VIT->VIDEOMAE
 class VideoMAELayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -470,6 +498,8 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
     base_model_prefix = "videomae"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -828,7 +858,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         if bool_masked_pos is None:
             raise ValueError("One must provided a boolean mask ")
         expanded_position_embeddings = self.position_embeddings.expand(batch_size, -1, -1).type_as(pixel_values)
-        expanded_position_embeddings = expanded_position_embeddings.to(pixel_values.device).clone().detach()
+        expanded_position_embeddings = expanded_position_embeddings.detach().to(device=pixel_values.device, copy=True)
         pos_emb_visible = expanded_position_embeddings[~bool_masked_pos].reshape(batch_size, -1, num_channels)
         pos_emb_mask = expanded_position_embeddings[bool_masked_pos].reshape(batch_size, -1, num_channels)
 
@@ -1095,3 +1125,6 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["VideoMAEForPreTraining", "VideoMAEModel", "VideoMAEPreTrainedModel", "VideoMAEForVideoClassification"]

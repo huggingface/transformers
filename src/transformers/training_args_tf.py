@@ -14,7 +14,7 @@
 
 import warnings
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
+from typing import Optional
 
 from .training_args import TrainingArguments
 from .utils import cached_property, is_tf_available, logging, requires_backends
@@ -49,7 +49,7 @@ class TFTrainingArguments(TrainingArguments):
             by your training/evaluation scripts instead. See the [example
             scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
         do_eval (`bool`, *optional*):
-            Whether to run evaluation on the validation set or not. Will be set to `True` if `evaluation_strategy` is
+            Whether to run evaluation on the validation set or not. Will be set to `True` if `eval_strategy` is
             different from `"no"`. This argument is not directly used by [`Trainer`], it's intended to be used by your
             training/evaluation scripts instead. See the [example
             scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
@@ -57,7 +57,7 @@ class TFTrainingArguments(TrainingArguments):
             Whether to run predictions on the test set or not. This argument is not directly used by [`Trainer`], it's
             intended to be used by your training/evaluation scripts instead. See the [example
             scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
-        evaluation_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
+        eval_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
             The evaluation strategy to adopt during training. Possible values are:
 
                 - `"no"`: No evaluation is done during training.
@@ -114,7 +114,7 @@ class TFTrainingArguments(TrainingArguments):
             Whether to log and evaluate the first `global_step` or not.
         logging_steps (`int`, *optional*, defaults to 500):
             Number of update steps between two logs if `logging_strategy="steps"`.
-        save_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
+        save_strategy (`str` or [`~trainer_utils.SaveStrategy`], *optional*, defaults to `"steps"`):
             The checkpoint save strategy to adopt during training. Possible values are:
 
                 - `"no"`: No save is done during training.
@@ -160,7 +160,7 @@ class TFTrainingArguments(TrainingArguments):
             Google Cloud Project name for the Cloud TPU-enabled project. If not specified, we will attempt to
             automatically detect from metadata.
         run_name (`str`, *optional*):
-            A descriptor for the run. Notably used for wandb logging.
+            A descriptor for the run. Notably used for wandb, mlflow, comet and swanlab logging.
         xla (`bool`, *optional*):
             Whether to activate the XLA compilation or not.
     """
@@ -189,7 +189,7 @@ class TFTrainingArguments(TrainingArguments):
     xla: bool = field(default=False, metadata={"help": "Whether to activate the XLA compilation or not"})
 
     @cached_property
-    def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", int]:
+    def _setup_strategy(self) -> tuple["tf.distribute.Strategy", int]:
         requires_backends(self, ["tf"])
         logger.info("Tensorflow: setting up strategy")
 

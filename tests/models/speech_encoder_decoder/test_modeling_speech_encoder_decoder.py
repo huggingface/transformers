@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,12 +17,17 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_deterministic_for_xpu,
+    require_torch,
+    require_torch_sdpa,
+    slow,
+    torch_device,
+)
 
 from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from ..bert.test_modeling_bert import BertModelTester
 from ..speech_to_text.test_modeling_speech_to_text import Speech2TextModelTester
-from ..speech_to_text_2.test_modeling_speech_to_text_2 import Speech2Text2StandaloneDecoderModelTester
 from ..wav2vec2.test_modeling_wav2vec2 import Wav2Vec2ModelTester
 
 
@@ -33,7 +37,6 @@ if is_torch_available():
 
     from transformers import (
         BertLMHeadModel,
-        Speech2Text2ForCausalLM,
         SpeechEncoderDecoderConfig,
         SpeechEncoderDecoderModel,
         Wav2Vec2Model,
@@ -262,7 +265,10 @@ class EncoderDecoderMixin:
             out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
-            with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
+            with (
+                tempfile.TemporaryDirectory() as encoder_tmp_dirname,
+                tempfile.TemporaryDirectory() as decoder_tmp_dirname,
+            ):
                 enc_dec_model.encoder.save_pretrained(encoder_tmp_dirname)
                 enc_dec_model.decoder.save_pretrained(decoder_tmp_dirname)
                 SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -358,7 +364,9 @@ class EncoderDecoderMixin:
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(
-            inputs, decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id
+            inputs,
+            decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
+            max_length=decoder_config.max_length,
         )
         self.assertEqual(generated_output.shape, (inputs.shape[0],) + (decoder_config.max_length,))
 
@@ -422,6 +430,7 @@ class EncoderDecoderMixin:
         loss.backward()
 
     @slow
+    @require_deterministic_for_xpu
     def test_real_model_save_load_from_pretrained(self):
         model_2, inputs = self.get_pretrained_model_and_inputs()
         model_2.to(torch_device)
@@ -441,6 +450,57 @@ class EncoderDecoderMixin:
                 out_1[np.isnan(out_1)] = 0
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        inputs_dict = self.prepare_config_and_inputs()
+        encoder_config, decoder_config = inputs_dict["config"], inputs_dict["decoder_config"]
+        config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(
+            encoder_config=encoder_config, decoder_config=decoder_config
+        )
+        model = SpeechEncoderDecoderModel(config=config)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model_sdpa = SpeechEncoderDecoderModel.from_pretrained(tmpdirname)
+            model_sdpa = model_sdpa.eval().to(torch_device)
+
+            # see https://github.com/huggingface/transformers/pull/32238
+            # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+            encoder_attn = "sdpa" if model.encoder._supports_sdpa else "eager"
+            decoder_attn = "sdpa" if model.decoder._supports_sdpa else "eager"
+            self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+            self.assertTrue(model_sdpa.encoder.config._attn_implementation == encoder_attn)
+            self.assertTrue(model_sdpa.decoder.config._attn_implementation == decoder_attn)
+
+            # Also test that nothing break if we request SDPA explicitly, when both sub-parts support it.
+            # If the model supports sdpa (i.e. all of sub-models supports it) we'll dispatch safely
+            # Otherwise we should raise error that SDPA is not supported, as some of the sub-models doesn't support
+            if encoder_attn == "sdpa" and decoder_attn == "sdpa":
+                model_sdpa_explicit = SpeechEncoderDecoderModel.from_pretrained(tmpdirname, attn_implementation="sdpa")
+                model_sdpa_explicit = model_sdpa_explicit.eval().to(torch_device)
+
+                self.assertTrue(model_sdpa_explicit.config._attn_implementation == "sdpa")
+            else:
+                with self.assertRaises(ValueError):
+                    model_sdpa_explicit = SpeechEncoderDecoderModel.from_pretrained(
+                        tmpdirname, attn_implementation="sdpa"
+                    )
+
+            model_eager = SpeechEncoderDecoderModel.from_pretrained(
+                tmpdirname,
+                attn_implementation="eager",
+            )
+            model_eager = model_eager.eval().to(torch_device)
+
+            self.assertTrue(model_eager.config._attn_implementation == "eager")
+            self.assertTrue(model_eager.encoder.config._attn_implementation == "eager")
+            self.assertTrue(model_eager.decoder.config._attn_implementation == "eager")
+
+            for name, submodule in model_eager.named_modules():
+                class_name = submodule.__class__.__name__
+                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    raise ValueError("The eager model should not have SDPA attention layers")
 
 
 @require_torch
@@ -570,54 +630,16 @@ class Speech2TextBertModelTest(EncoderDecoderMixin, unittest.TestCase):
             "labels": decoder_token_labels,
         }
 
-    # can't save full model for now because Speech2TextModel != Speech2TextEncoder
+    @unittest.skip(reason="Cannot save full model as Speech2TextModel != Speech2TextEncoder")
     def test_encoder_decoder_model_from_pretrained_configs(self):
         pass
 
-    # can't save full model for now because Speech2TextModel != Speech2TextEncoder
+    @require_deterministic_for_xpu
+    @unittest.skip(reason="Cannot save full model as Speech2TextModel != Speech2TextEncoder")
     def test_save_and_load_from_pretrained(self):
         pass
 
-    # all published pretrained models are Speech2TextModel != Speech2TextEncoder
-    def test_real_model_save_load_from_pretrained(self):
-        pass
-
-
-@require_torch
-class Wav2Vec2Speech2Text2(EncoderDecoderMixin, unittest.TestCase):
-    def get_encoder_decoder_model(self, config, decoder_config):
-        encoder_model = Wav2Vec2Model(config).eval()
-        decoder_model = Speech2Text2ForCausalLM(decoder_config).eval()
-        return encoder_model, decoder_model
-
-    def prepare_config_and_inputs(self):
-        model_tester_encoder = Wav2Vec2ModelTester(self, batch_size=13)
-        model_tester_decoder = Speech2Text2StandaloneDecoderModelTester(
-            self, batch_size=13, d_model=32, max_position_embeddings=512
-        )
-        encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
-        (
-            config,
-            input_values,
-            input_mask,
-        ) = encoder_config_and_inputs
-        (decoder_config, decoder_input_ids, decoder_attention_mask, _) = decoder_config_and_inputs
-
-        # make sure that cross attention layers are added
-        decoder_config.add_cross_attention = True
-        #  disable cache for now
-        decoder_config.use_cache = False
-        return {
-            "config": config,
-            "input_values": input_values,
-            "attention_mask": input_mask,
-            "decoder_config": decoder_config,
-            "decoder_input_ids": decoder_input_ids,
-            "decoder_attention_mask": decoder_attention_mask,
-            "labels": decoder_input_ids,
-        }
-
-    # there are no published pretrained Speech2Text2ForCausalLM for now
+    @require_deterministic_for_xpu
+    @unittest.skip(reason="Cannot save full model as Speech2TextModel != Speech2TextEncoder")
     def test_real_model_save_load_from_pretrained(self):
         pass

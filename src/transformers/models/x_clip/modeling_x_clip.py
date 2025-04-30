@@ -12,12 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch X-CLIP model."""
+"""PyTorch X-CLIP model."""
 
-
-from copy import copy
+import copy
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -26,13 +25,14 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 
@@ -40,11 +40,6 @@ from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfi
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/xclip-base-patch32"
-
-XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/xclip-base-patch32",
-    # See all X-CLIP models at https://huggingface.co/models?filter=x-clip
-]
 
 
 # contrastive loss function, adapted from
@@ -86,10 +81,10 @@ class XCLIPOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits_per_video: torch.FloatTensor = None
-    logits_per_text: torch.FloatTensor = None
-    text_embeds: torch.FloatTensor = None
-    video_embeds: torch.FloatTensor = None
+    logits_per_video: Optional[torch.FloatTensor] = None
+    logits_per_text: Optional[torch.FloatTensor] = None
+    text_embeds: Optional[torch.FloatTensor] = None
+    video_embeds: Optional[torch.FloatTensor] = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
     mit_output: BaseModelOutputWithPooling = None
@@ -127,15 +122,63 @@ class XCLIPVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+
+        num_patches = embeddings.shape[1] - 1
+        position_embedding = self.position_embedding.weight.unsqueeze(0)
+        num_positions = position_embedding.shape[1] - 1
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embedding(self.position_ids)
+
+        class_pos_embed = position_embedding[:, :1]
+        patch_pos_embed = position_embedding[:, 1:]
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+        batch_size, _, height, width = pixel_values.shape
+        if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size}*{self.image_size})."
+            )
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
 
 
@@ -160,6 +203,13 @@ class XCLIPTextEmbeddings(nn.Module):
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+        max_position_embedding = self.position_embedding.weight.shape[0]
+
+        if seq_length > max_position_embedding:
+            raise ValueError(
+                f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
+                f"{seq_length} and max_position_embeddings: {max_position_embedding}"
+            )
 
         if position_ids is None:
             position_ids = self.position_ids[:, :seq_length]
@@ -173,7 +223,29 @@ class XCLIPTextEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->XCLIP
+# Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
 class XCLIPAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -190,14 +262,12 @@ class XCLIPAttention(nn.Module):
             )
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
+        self.is_causal = False
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
@@ -205,80 +275,57 @@ class XCLIPAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
-        bsz, tgt_len, embed_dim = hidden_states.size()
+        batch_size, seq_length, embed_dim = hidden_states.shape
 
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scale
-        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
-
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        # apply the causal_attention_mask first
-        if causal_attention_mask is not None:
-            if causal_attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
-                    f" {causal_attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if output_attentions:
-            # this operation is a bit akward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        # CLIP text model uses both `causal_attention_mask` and `attention_mask`
+        # in case FA2 kernel is called, `is_causal` should be inferred from `causal_attention_mask`
+        if self.config._attn_implementation != "flash_attention_2":
+            if attention_mask is not None and causal_attention_mask is not None:
+                attention_mask = attention_mask + causal_attention_mask
+            elif causal_attention_mask is not None:
+                attention_mask = causal_attention_mask
         else:
-            attn_weights_reshaped = None
+            self.is_causal = causal_attention_mask is not None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_output = torch.bmm(attn_probs, value_states)
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+        )
 
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
-
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
+        if not output_attentions:
+            attn_weights = None
 
-        return attn_output, attn_weights_reshaped
+        return attn_output, attn_weights
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->XCLIP
 class XCLIPMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -294,7 +341,7 @@ class XCLIPMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->XCLIP
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->XCLIP
 class XCLIPEncoderLayer(nn.Module):
     def __init__(self, config: XCLIPConfig):
         super().__init__()
@@ -573,6 +620,8 @@ X_CLIP_VISION_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -610,12 +659,14 @@ X_CLIP_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->XCLIP
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->XCLIP
 class XCLIPEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -960,6 +1011,7 @@ class XCLIPVisionTransformer(nn.Module):
         pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
@@ -972,7 +1024,7 @@ class XCLIPVisionTransformer(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.pre_layernorm(hidden_states)
 
         encoder_outputs = self.encoder(
@@ -1248,13 +1300,13 @@ class XCLIPModel(XCLIPPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, XCLIPTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type XCLIPTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, XCLIPVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type XCLIPVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
@@ -1275,8 +1327,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
 
         self.prompts_visual_layernorm = nn.LayerNorm(self.vision_embed_dim, eps=config.vision_config.layer_norm_eps)
         self.prompts_visual_projection = nn.Parameter(torch.randn(self.vision_embed_dim, self.projection_dim))
-
-        mit_config = copy(vision_config)
+        mit_config = copy.copy(vision_config)
         mit_config.hidden_size = vision_config.mit_hidden_size
         mit_config.intermediate_size = vision_config.mit_intermediate_size
         mit_config.num_hidden_layers = vision_config.mit_num_hidden_layers
@@ -1461,6 +1512,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, XCLIPOutput]:
         r"""
@@ -1561,6 +1613,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
@@ -1625,3 +1678,6 @@ class XCLIPModel(XCLIPPreTrainedModel):
             vision_model_output=vision_outputs,
             mit_output=mit_outputs,
         )
+
+
+__all__ = ["XCLIPModel", "XCLIPPreTrainedModel", "XCLIPTextModel", "XCLIPVisionModel"]

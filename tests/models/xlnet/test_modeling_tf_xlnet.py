@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,7 +31,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.xlnet.modeling_tf_xlnet import (
-        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFXLNetForMultipleChoice,
         TFXLNetForQuestionAnsweringSimple,
         TFXLNetForSequenceClassification,
@@ -373,7 +371,14 @@ class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         # Exception encountered when calling layer '...'
         return True
@@ -415,9 +420,9 @@ class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFXLNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "xlnet/xlnet-base-cased"
+        model = TFXLNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip("Some of the XLNet models misbehave with flexible input shapes.")
     def test_compile_tf_model(self):

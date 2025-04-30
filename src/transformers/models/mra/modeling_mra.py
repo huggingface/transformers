@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MRA model."""
-
+"""PyTorch MRA model."""
 
 import math
 from pathlib import Path
@@ -53,10 +52,6 @@ _CHECKPOINT_FOR_DOC = "uw-madison/mra-base-512-4"
 _CONFIG_FOR_DOC = "MraConfig"
 _TOKENIZER_FOR_DOC = "AutoTokenizer"
 
-MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "uw-madison/mra-base-512-4",
-    # See all Mra models at https://huggingface.co/models?filter=mra
-]
 
 mra_cuda_kernel = None
 
@@ -810,6 +805,9 @@ class MraLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -1043,6 +1041,7 @@ class MraForMaskedLM(MraPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(MRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1479,3 +1478,15 @@ class MraForQuestionAnswering(MraPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "MraForMaskedLM",
+    "MraForMultipleChoice",
+    "MraForQuestionAnswering",
+    "MraForSequenceClassification",
+    "MraForTokenClassification",
+    "MraLayer",
+    "MraModel",
+    "MraPreTrainedModel",
+]

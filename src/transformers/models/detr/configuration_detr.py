@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DETR model configuration"""
+"""DETR model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -22,15 +22,11 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/detr-resnet-50": "https://huggingface.co/facebook/detr-resnet-50/resolve/main/config.json",
-    # See all DETR models at https://huggingface.co/models?filter=detr
-}
 
 
 class DetrConfig(PretrainedConfig):
@@ -56,7 +52,7 @@ class DetrConfig(PretrainedConfig):
             Number of object queries, i.e. detection slots. This is the maximal number of objects [`DetrModel`] can
             detect in a single image. For COCO, we recommend 100 queries.
         d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers.
+            This parameter is a general dimension parameter, defining dimensions for components such as the encoder layer and projection parameters in the decoder layer, among others.
         encoder_layers (`int`, *optional*, defaults to 6):
             Number of encoder layers.
         decoder_layers (`int`, *optional*, defaults to 6):
@@ -181,21 +177,16 @@ class DetrConfig(PretrainedConfig):
         eos_coefficient=0.1,
         **kwargs,
     ):
-        if not use_timm_backbone and use_pretrained_backbone:
-            raise ValueError(
-                "Loading pretrained backbone weights from the transformers library is not supported yet. `use_timm_backbone` must be set to `True` when `use_pretrained_backbone=True`"
-            )
-
-        if backbone_config is not None and backbone is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
-
-        if backbone_config is not None and use_timm_backbone:
-            raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
-
-        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
-
-        if not use_timm_backbone:
+        # We default to values which were previously hard-coded in the model. This enables configurability of the config
+        # while keeping the default behavior the same.
+        if use_timm_backbone and backbone_kwargs is None:
+            backbone_kwargs = {}
+            if dilation:
+                backbone_kwargs["output_stride"] = 16
+            backbone_kwargs["out_indices"] = [1, 2, 3, 4]
+            backbone_kwargs["in_chans"] = num_channels
+        # Backwards compatibility
+        elif not use_timm_backbone and backbone in (None, "resnet50"):
             if backbone_config is None:
                 logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
                 backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
@@ -203,8 +194,17 @@ class DetrConfig(PretrainedConfig):
                 backbone_model_type = backbone_config.get("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
+            backbone = None
             # set timm attributes to None
-            dilation, backbone, use_pretrained_backbone = None, None, None
+            dilation = None
+
+        verify_backbone_config_arguments(
+            use_timm_backbone=use_timm_backbone,
+            use_pretrained_backbone=use_pretrained_backbone,
+            backbone=backbone,
+            backbone_config=backbone_config,
+            backbone_kwargs=backbone_kwargs,
+        )
 
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
@@ -284,3 +284,6 @@ class DetrOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
+
+
+__all__ = ["DetrConfig", "DetrOnnxConfig"]

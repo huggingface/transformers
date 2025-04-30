@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch FocalNet model. """
+"""Testing suite for the PyTorch FocalNet model."""
 
 import collections
 import unittest
@@ -37,7 +36,6 @@ if is_torch_available():
         FocalNetForMaskedImageModeling,
         FocalNetModel,
     )
-    from transformers.models.focalnet.modeling_focalnet import FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -248,22 +246,20 @@ class FocalNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = FocalNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FocalNetConfig, embed_dim=37, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=FocalNetConfig,
+            embed_dim=37,
+            has_text_modality=False,
+            common_properties=["image_size", "patch_size", "num_channels", "hidden_sizes"],
+        )
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
+        self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -289,7 +285,7 @@ class FocalNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_feed_forward_chunking(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes[:-1]:
@@ -387,9 +383,9 @@ class FocalNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FocalNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/focalnet-tiny"
+        model = FocalNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -430,7 +426,7 @@ class FocalNetModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
         expected_slice = torch.tensor([0.2166, -0.4368, 0.2191]).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
         self.assertTrue(outputs.logits.argmax(dim=-1).item(), 281)
 
 

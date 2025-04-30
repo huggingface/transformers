@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ResNet model configuration"""
+"""ResNet model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -26,10 +26,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 
 logger = logging.get_logger(__name__)
-
-RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/resnet-50": "https://huggingface.co/microsoft/resnet-50/blob/main/config.json",
-}
 
 
 class ResNetConfig(BackboneConfigMixin, PretrainedConfig):
@@ -135,3 +131,6 @@ class ResNetOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-3
+
+
+__all__ = ["ResNetConfig", "ResNetOnnxConfig"]

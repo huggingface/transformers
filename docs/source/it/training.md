@@ -121,12 +121,12 @@ Richiama `compute` su `metric` per calcolare l'accuratezza delle tue previsioni.
 ...     return metric.compute(predictions=predictions, references=labels)
 ```
 
-Se preferisci monitorare le tue metriche di valutazione durante il fine-tuning, specifica il parametro `evaluation_strategy` nei tuoi training arguments per restituire le metriche di valutazione ad ogni epoca di addestramento:
+Se preferisci monitorare le tue metriche di valutazione durante il fine-tuning, specifica il parametro `eval_strategy` nei tuoi training arguments per restituire le metriche di valutazione ad ogni epoca di addestramento:
 
 ```py
 >>> from transformers import TrainingArguments, Trainer
 
->>> training_args = TrainingArguments(output_dir="test_trainer", evaluation_strategy="epoch")
+>>> training_args = TrainingArguments(output_dir="test_trainer", eval_strategy="epoch")
 ```
 
 ### Trainer

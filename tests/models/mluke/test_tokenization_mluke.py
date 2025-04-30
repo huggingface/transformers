@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +14,12 @@
 
 
 import unittest
-from typing import Tuple
+from functools import lru_cache
 
 from transformers.models.mluke.tokenization_mluke import MLukeTokenizer
 from transformers.testing_utils import get_tests_dir, require_torch, slow
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
@@ -28,17 +27,22 @@ SAMPLE_ENTITY_VOCAB = get_tests_dir("fixtures/test_entity_vocab.json")
 
 
 class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "studio-ousia/mluke-base"
     tokenizer_class = MLukeTokenizer
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"cls_token": "<s>"}
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
-        self.special_tokens_map = {"entity_token_1": "<ent>", "entity_token_2": "<ent2>"}
+        cls.special_tokens_map = {"entity_token_1": "<ent>", "entity_token_2": "<ent2>"}
 
-    def get_tokenizer(self, task=None, **kwargs):
-        kwargs.update(self.special_tokens_map)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, task=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
         kwargs.update({"task": task})
         tokenizer = MLukeTokenizer(vocab_file=SAMPLE_VOCAB, entity_vocab_file=SAMPLE_ENTITY_VOCAB, **kwargs)
         return tokenizer
@@ -87,19 +91,20 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(encoded_sentence, encoded_text_from_decode)
         self.assertEqual(encoded_pair, encoded_pair_from_decode)
 
-    def get_clean_sequence(self, tokenizer, max_length=20) -> Tuple[str, list]:
+    def get_clean_sequence(self, tokenizer, max_length=20) -> tuple[str, list]:
         txt = "Beyonce lives in Los Angeles"
         ids = tokenizer.encode(txt, add_special_tokens=False)
         return txt, ids
 
+    @unittest.skip
     def test_pretokenized_inputs(self):
         pass
 
     def test_embeded_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 sentence = "A, <mask> AllenNLP sentence."
                 tokens_r = tokenizer_r.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
                 tokens_p = tokenizer_p.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
@@ -107,17 +112,15 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 # token_type_ids should put 0 everywhere
                 self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
 
-                # token_type_ids should put 0 everywhere
-                self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
-
                 # attention_mask should put 1 everywhere, so sum over length should be 1
                 self.assertEqual(
+                    sum(tokens_r["attention_mask"]) / len(tokens_r["attention_mask"]),
                     sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"]),
                 )
 
                 tokens_p_str = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
 
-                # Rust correctly handles the space before the mask while python doesnt
+                # Rust correctly handles the space before the mask while python doesn't
                 self.assertSequenceEqual(tokens_p["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
 
                 self.assertSequenceEqual(
@@ -149,7 +152,7 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             tokenizer(sentence, entities=tuple(entities), entity_spans=spans)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             tokenizer(sentence, entities=entities, entity_spans=tuple(spans))
 
         with self.assertRaises(ValueError):

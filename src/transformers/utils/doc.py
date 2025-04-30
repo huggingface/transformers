@@ -16,8 +16,21 @@ Doc utilities: Utilities related to documentation
 """
 
 import functools
+import inspect
 import re
+import textwrap
 import types
+
+
+def get_docstring_indentation_level(func):
+    """Return the indentation level of the start of the docstring of a class or function (or method)."""
+    # We assume classes are always defined in the global scope
+    if inspect.isclass(func):
+        return 4
+    source = inspect.getsource(func)
+    first_line = source.splitlines()[0]
+    function_def_level = len(first_line) - len(first_line.lstrip())
+    return 4 + function_def_level
 
 
 def add_start_docstrings(*docstr):
@@ -30,10 +43,8 @@ def add_start_docstrings(*docstr):
 
 def add_start_docstrings_to_model_forward(*docstr):
     def docstring_decorator(fn):
-        docstring = "".join(docstr) + (fn.__doc__ if fn.__doc__ is not None else "")
         class_name = f"[`{fn.__qualname__.split('.')[0]}`]"
-        intro = f"   The {class_name} forward method, overrides the `__call__` special method."
-        note = r"""
+        intro = rf"""    The {class_name} forward method, overrides the `__call__` special method.
 
     <Tip>
 
@@ -44,7 +55,23 @@ def add_start_docstrings_to_model_forward(*docstr):
     </Tip>
 """
 
-        fn.__doc__ = intro + note + docstring
+        correct_indentation = get_docstring_indentation_level(fn)
+        current_doc = fn.__doc__ if fn.__doc__ is not None else ""
+        try:
+            first_non_empty = next(line for line in current_doc.splitlines() if line.strip() != "")
+            doc_indentation = len(first_non_empty) - len(first_non_empty.lstrip())
+        except StopIteration:
+            doc_indentation = correct_indentation
+
+        docs = docstr
+        # In this case, the correct indentation level (class method, 2 Python levels) was respected, and we should
+        # correctly reindent everything. Otherwise, the doc uses a single indentation level
+        if doc_indentation == 4 + correct_indentation:
+            docs = [textwrap.indent(textwrap.dedent(doc), " " * correct_indentation) for doc in docstr]
+            intro = textwrap.indent(textwrap.dedent(intro), " " * correct_indentation)
+
+        docstring = "".join(docs) + current_doc
+        fn.__doc__ = intro + docstring
         return fn
 
     return docstring_decorator
@@ -385,7 +412,7 @@ PT_SPEECH_BASE_MODEL_SAMPLE = r"""
     >>> import torch
     >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -411,7 +438,7 @@ PT_SPEECH_CTC_SAMPLE = r"""
     >>> from datasets import load_dataset
     >>> import torch
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -446,7 +473,7 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     >>> from datasets import load_dataset
     >>> import torch
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -482,7 +509,7 @@ PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
     >>> from datasets import load_dataset
     >>> import torch
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -511,7 +538,7 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
     >>> from datasets import load_dataset
     >>> import torch
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -546,7 +573,7 @@ PT_VISION_BASE_MODEL_SAMPLE = r"""
     >>> import torch
     >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> dataset = load_dataset("huggingface/cats-image", trust_remote_code=True)
     >>> image = dataset["test"]["image"][0]
 
     >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
@@ -571,7 +598,7 @@ PT_VISION_SEQ_CLASS_SAMPLE = r"""
     >>> import torch
     >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> dataset = load_dataset("huggingface/cats-image", trust_remote_code=True)
     >>> image = dataset["test"]["image"][0]
 
     >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
@@ -803,7 +830,7 @@ TF_SPEECH_BASE_MODEL_SAMPLE = r"""
     >>> from transformers import AutoProcessor, {model_class}
     >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -828,7 +855,7 @@ TF_SPEECH_CTC_SAMPLE = r"""
     >>> from datasets import load_dataset
     >>> import tensorflow as tf
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -863,7 +890,7 @@ TF_VISION_BASE_MODEL_SAMPLE = r"""
     >>> from transformers import AutoImageProcessor, {model_class}
     >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> dataset = load_dataset("huggingface/cats-image", trust_remote_code=True)
     >>> image = dataset["test"]["image"][0]
 
     >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
@@ -886,7 +913,7 @@ TF_VISION_SEQ_CLASS_SAMPLE = r"""
     >>> import tensorflow as tf
     >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> dataset = load_dataset("huggingface/cats-image", trust_remote_code=True)
     >>> image = dataset["test"]["image"][0]
 
     >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
@@ -1153,6 +1180,7 @@ def add_code_sample_docstrings(
             built_doc = built_doc.replace(
                 f'from_pretrained("{checkpoint}")', f'from_pretrained("{checkpoint}", revision="{revision}")'
             )
+
         fn.__doc__ = func_doc + output_doc + built_doc
         return fn
 

@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" UMT5 model configuration"""
+"""UMT5 model configuration"""
+
 from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
@@ -21,11 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-UMT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/umt5-small": "https://huggingface.co/google/umt5-small/resolve/main/config.json",
-    # See all umt5 models at https://huggingface.co/models?filter=umt5
-}
 
 
 class UMT5Config(PretrainedConfig):
@@ -76,7 +72,12 @@ class UMT5Config(PretrainedConfig):
 
     model_type = "umt5"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
+        "head_dim": "d_kv",
+    }
 
     def __init__(
         self,
@@ -175,3 +176,6 @@ class UMT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def atol_for_validation(self) -> float:
         return 5e-4
+
+
+__all__ = ["UMT5Config", "UMT5OnnxConfig"]

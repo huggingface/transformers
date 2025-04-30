@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Leon Derczynski. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the MobileBERT tokenizer. """
-
+"""Testing suite for the MobileBERT tokenizer."""
 
 import os
 import unittest
@@ -34,6 +32,7 @@ from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 @require_tokenizers
 class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "mobilebert-uncased"
     tokenizer_class = MobileBertTokenizer
     rust_tokenizer_class = MobileBertTokenizerFast
     test_rust_tokenizer = True
@@ -41,8 +40,9 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_filter = filter_non_english
     pre_trained_model_path = "google/mobilebert-uncased"
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab_tokens = [
             "[UNK]",
@@ -61,18 +61,18 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "low",
             "lowest",
         ]
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-        self.tokenizers_list = [
-            (tokenizer_def[0], self.pre_trained_model_path, tokenizer_def[2])  # else the 'google/' prefix is stripped
-            for tokenizer_def in self.tokenizers_list
+        cls.tokenizers_list = [
+            (tokenizer_def[0], cls.pre_trained_model_path, tokenizer_def[2])  # else the 'google/' prefix is stripped
+            for tokenizer_def in cls.tokenizers_list
         ]
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.get_input_output_texts
     def get_input_output_texts(self, tokenizer):
-        input_text = "UNwant\u00E9d,running"
+        input_text = "UNwant\u00e9d,running"
         output_text = "unwanted, running"
         return input_text, output_text
 
@@ -80,19 +80,19 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_full_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file)
 
-        tokens = tokenizer.tokenize("UNwant\u00E9d,running")
+        tokens = tokenizer.tokenize("UNwant\u00e9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [9, 6, 7, 12, 10, 11])
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_rust_and_python_full_tokenizers
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
 
-        sequence = "UNwant\u00E9d,running"
+        sequence = "UNwant\u00e9d,running"
 
         tokens = tokenizer.tokenize(sequence)
         rust_tokens = rust_tokenizer.tokenize(sequence)
@@ -111,7 +111,7 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer(do_lower_case=True)
         rust_tokenizer = self.get_rust_tokenizer(do_lower_case=True)
 
-        sequence = "UNwant\u00E9d,running"
+        sequence = "UNwant\u00e9d,running"
 
         tokens = tokenizer.tokenize(sequence)
         rust_tokens = rust_tokenizer.tokenize(sequence)
@@ -130,7 +130,7 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_chinese(self):
         tokenizer = BasicTokenizer()
 
-        self.assertListEqual(tokenizer.tokenize("ah\u535A\u63A8zz"), ["ah", "\u535A", "\u63A8", "zz"])
+        self.assertListEqual(tokenizer.tokenize("ah\u535a\u63a8zz"), ["ah", "\u535a", "\u63a8", "zz"])
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_lower
     def test_basic_tokenizer_lower(self):
@@ -139,7 +139,7 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tHeLLo!how  \n Are yoU?  "), ["hello", "!", "how", "are", "you", "?"]
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["hello"])
+        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_lower_strip_accents_false
     def test_basic_tokenizer_lower_strip_accents_false(self):
@@ -148,7 +148,7 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hällo", "!", "how", "are", "you", "?"]
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["h\u00E9llo"])
+        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["h\u00e9llo"])
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_lower_strip_accents_true
     def test_basic_tokenizer_lower_strip_accents_true(self):
@@ -157,7 +157,7 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hallo", "!", "how", "are", "you", "?"]
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["hello"])
+        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_lower_strip_accents_default
     def test_basic_tokenizer_lower_strip_accents_default(self):
@@ -166,7 +166,7 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hallo", "!", "how", "are", "you", "?"]
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["hello"])
+        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_no_lower
     def test_basic_tokenizer_no_lower(self):
@@ -221,7 +221,7 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertTrue(_is_whitespace("\t"))
         self.assertTrue(_is_whitespace("\r"))
         self.assertTrue(_is_whitespace("\n"))
-        self.assertTrue(_is_whitespace("\u00A0"))
+        self.assertTrue(_is_whitespace("\u00a0"))
 
         self.assertFalse(_is_whitespace("A"))
         self.assertFalse(_is_whitespace("-"))
@@ -275,7 +275,7 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_offsets_with_special_characters(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 sentence = f"A, naïve {tokenizer_r.mask_token} AllenNLP sentence."
                 tokens = tokenizer_r.encode_plus(
@@ -331,8 +331,8 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 kwargs["tokenize_chinese_chars"] = True
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 ids_without_spe_char_p = tokenizer_p.encode(text_with_chinese_char, add_special_tokens=False)
                 ids_without_spe_char_r = tokenizer_r.encode(text_with_chinese_char, add_special_tokens=False)
@@ -345,8 +345,8 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertListEqual(tokens_without_spe_char_r, list_of_commun_chinese_char)
 
                 kwargs["tokenize_chinese_chars"] = False
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 ids_without_spe_char_r = tokenizer_r.encode(text_with_chinese_char, add_special_tokens=False)
                 ids_without_spe_char_p = tokenizer_p.encode(text_with_chinese_char, add_special_tokens=False)

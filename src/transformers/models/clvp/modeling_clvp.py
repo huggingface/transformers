@@ -13,21 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" PyTorch CLVP model."""
-
+"""PyTorch CLVP model."""
 
 import copy
 import math
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
+from typing import Callable, Dict, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ...activations import ACT2FN
-from ...generation import GenerationConfig
+from ...activations import ACT2FN, get_activation
+from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -35,8 +34,8 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithCrossAttentions,
 )
-from ...modeling_utils import PreTrainedModel, SequenceSummary
-from ...pytorch_utils import Conv1D
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import Conv1D, isin_mps_friendly
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -54,11 +53,6 @@ from .configuration_clvp import (
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "susnato/clvp_dev"
-
-CLVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "susnato/clvp_dev",
-    # See all Clvp models at https://huggingface.co/models?filter=clvp
-]
 
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss
@@ -138,7 +132,7 @@ def _pad_extra_bos_eos_tokens(
         )
         for i, each_input_id in enumerate(input_ids):
             # locate where the valid tokens end and then add the eos token
-            if torch.isin(each_input_id, pad_token_id).sum():
+            if isin_mps_friendly(each_input_id, pad_token_id).sum():
                 pos = torch.where(each_input_id == pad_token_id)[0].min()
                 modified_input_ids[i] = torch.concatenate(
                     [each_input_id[:pos], torch.tensor([eos_token_id], device=input_ids.device), each_input_id[pos:]]
@@ -177,7 +171,7 @@ class ClvpEncoderOutput(ModelOutput):
     """
 
     embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -217,15 +211,15 @@ class ClvpOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     speech_ids: Optional[torch.LongTensor] = None
-    logits_per_speech: torch.FloatTensor = None
-    logits_per_text: torch.FloatTensor = None
-    text_embeds: torch.FloatTensor = None
-    speech_embeds: torch.FloatTensor = None
+    logits_per_speech: Optional[torch.FloatTensor] = None
+    logits_per_text: Optional[torch.FloatTensor] = None
+    text_embeds: Optional[torch.FloatTensor] = None
+    speech_embeds: Optional[torch.FloatTensor] = None
     text_model_output: BaseModelOutputWithPooling = None
     speech_model_output: BaseModelOutputWithPooling = None
-    decoder_hidden_states: torch.FloatTensor = None
-    text_encoder_hidden_states: torch.FloatTensor = None
-    speech_encoder_hidden_states: torch.FloatTensor = None
+    decoder_hidden_states: Optional[torch.FloatTensor] = None
+    text_encoder_hidden_states: Optional[torch.FloatTensor] = None
+    speech_encoder_hidden_states: Optional[torch.FloatTensor] = None
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Clvp
@@ -244,6 +238,9 @@ class ClvpRMSNorm(nn.Module):
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class ClvpRotaryPositionalEmbedding(nn.Module):
@@ -306,7 +303,6 @@ class ClvpSelfAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
-    # Copied from transformers.models.clip.modeling_clip.CLIPAttention._shape
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
@@ -501,6 +497,106 @@ class ClvpEncoderLayer(nn.Module):
             outputs += (attention_outputs[-1],)
 
         return outputs
+
+
+# Copied from transformers.models.xlm.modeling_xlm.XLMSequenceSummary with XLM->Clvp
+class ClvpSequenceSummary(nn.Module):
+    r"""
+    Compute a single vector summary of a sequence hidden states.
+
+    Args:
+        config ([`ClvpConfig`]):
+            The config used by the model. Relevant arguments in the config class of the model are (refer to the actual
+            config class of your model for the default values it uses):
+
+            - **summary_type** (`str`) -- The method to use to make this summary. Accepted values are:
+
+                - `"last"` -- Take the last token hidden state (like XLNet)
+                - `"first"` -- Take the first token hidden state (like Bert)
+                - `"mean"` -- Take the mean of all tokens hidden states
+                - `"cls_index"` -- Supply a Tensor of classification token position (GPT/GPT-2)
+                - `"attn"` -- Not implemented now, use multi-head attention
+
+            - **summary_use_proj** (`bool`) -- Add a projection after the vector extraction.
+            - **summary_proj_to_labels** (`bool`) -- If `True`, the projection outputs to `config.num_labels` classes
+              (otherwise to `config.hidden_size`).
+            - **summary_activation** (`Optional[str]`) -- Set to `"tanh"` to add a tanh activation to the output,
+              another string or `None` will add no activation.
+            - **summary_first_dropout** (`float`) -- Optional dropout probability before the projection and activation.
+            - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and activation.
+    """
+
+    def __init__(self, config: ClvpConfig):
+        super().__init__()
+
+        self.summary_type = getattr(config, "summary_type", "last")
+        if self.summary_type == "attn":
+            # We should use a standard multi-head attention module with absolute positional embedding for that.
+            # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
+            # We can probably just use the multi-head attention module of PyTorch >=1.1.0
+            raise NotImplementedError
+
+        self.summary = nn.Identity()
+        if hasattr(config, "summary_use_proj") and config.summary_use_proj:
+            if hasattr(config, "summary_proj_to_labels") and config.summary_proj_to_labels and config.num_labels > 0:
+                num_classes = config.num_labels
+            else:
+                num_classes = config.hidden_size
+            self.summary = nn.Linear(config.hidden_size, num_classes)
+
+        activation_string = getattr(config, "summary_activation", None)
+        self.activation: Callable = get_activation(activation_string) if activation_string else nn.Identity()
+
+        self.first_dropout = nn.Identity()
+        if hasattr(config, "summary_first_dropout") and config.summary_first_dropout > 0:
+            self.first_dropout = nn.Dropout(config.summary_first_dropout)
+
+        self.last_dropout = nn.Identity()
+        if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
+            self.last_dropout = nn.Dropout(config.summary_last_dropout)
+
+    def forward(
+        self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None
+    ) -> torch.FloatTensor:
+        """
+        Compute a single vector summary of a sequence hidden states.
+
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_len, hidden_size]`):
+                The hidden states of the last layer.
+            cls_index (`torch.LongTensor` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
+                Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
+
+        Returns:
+            `torch.FloatTensor`: The summary of the sequence hidden states.
+        """
+        if self.summary_type == "last":
+            output = hidden_states[:, -1]
+        elif self.summary_type == "first":
+            output = hidden_states[:, 0]
+        elif self.summary_type == "mean":
+            output = hidden_states.mean(dim=1)
+        elif self.summary_type == "cls_index":
+            if cls_index is None:
+                cls_index = torch.full_like(
+                    hidden_states[..., :1, :],
+                    hidden_states.shape[-2] - 1,
+                    dtype=torch.long,
+                )
+            else:
+                cls_index = cls_index.unsqueeze(-1).unsqueeze(-1)
+                cls_index = cls_index.expand((-1,) * (cls_index.dim() - 1) + (hidden_states.size(-1),))
+            # shape of cls_index: (bsz, XX, 1, hidden_size) where XX are optional leading dim of hidden_states
+            output = hidden_states.gather(-2, cls_index).squeeze(-2)  # shape (bsz, XX, hidden_size)
+        elif self.summary_type == "attn":
+            raise NotImplementedError
+
+        output = self.first_dropout(output)
+        output = self.summary(output)
+        output = self.activation(output)
+        output = self.last_dropout(output)
+
+        return output
 
 
 # Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP with GPT2->ClvpDecoderMLP
@@ -738,7 +834,7 @@ class ClvpPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.fc1.proj.weight if getattr(module.fc1, "proj") else module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, ClvpEncoder):
-            config = self.config.text_config if hasattr(self.config, "text_config") else self.config
+            config = self.config.get_text_config()
             factor = config.initializer_factor
             module.projection.weight.data.normal_(mean=0.0, std=factor * (config.hidden_size**-0.5))
         elif isinstance(module, ClvpConditioningEncoder):
@@ -839,7 +935,7 @@ CLVP_DECODER_INPUTS_DOCSTRING = r"""
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        position_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
 
@@ -850,7 +946,7 @@ CLVP_DECODER_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, input_ids_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -888,7 +984,7 @@ class ClvpEncoder(ClvpPreTrainedModel):
         self.rotary_pos_emb = ClvpRotaryPositionalEmbedding(config) if config.use_rotary_embedding else None
         self.layers = nn.ModuleList([ClvpEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
-        self.sequence_summary = SequenceSummary(config)
+        self.sequence_summary = ClvpSequenceSummary(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
@@ -1281,7 +1377,7 @@ class ClvpModel(ClvpPreTrainedModel):
     "The CLVP decoder model with a language modelling head on top.",
     CLVP_START_DOCSTRING,
 )
-class ClvpForCausalLM(ClvpPreTrainedModel):
+class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
 
@@ -1349,8 +1445,8 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
             if hasattr(model_kwargs, "attention_mask"):
                 position_ids = model_kwargs["attention_mask"].long().cumsum(-1) - 1
             else:
-                position_ids = torch.range(
-                    0, conditioning_embeds.shape[1] - 1, dtype=torch.long, device=conditioning_embeds.device
+                position_ids = torch.arange(
+                    0, conditioning_embeds.shape[1], dtype=torch.long, device=conditioning_embeds.device
                 )
             position_ids = position_ids.unsqueeze(0).repeat(conditioning_embeds.shape[0], 1)
 
@@ -1370,6 +1466,8 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, inputs_embeds=None, conditioning_embeds=None, **kwargs
     ):
+        # Overwritten: has `conditioning_embeds`-related logic
+
         input_ids_length = input_ids.shape[-1]
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
@@ -1491,7 +1589,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
         )
 
     @staticmethod
-    # Copied from transformers.models.gpt2.modeling_gpt2.GPT2LMHeadModel._reorder_cache
     def _reorder_cache(
         past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
     ) -> Tuple[Tuple[torch.Tensor]]:
@@ -1512,26 +1609,26 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
     "together to filter out the best speech_ids.",
     CLVP_START_DOCSTRING,
 )
-class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
+class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
     config_class = ClvpConfig
 
     def __init__(self, config: ClvpConfig):
         super().__init__(config)
 
         if not isinstance(config.text_config, ClvpEncoderConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type `ClvpEncoderConfig` but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.speech_config, ClvpEncoderConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.speech_config is expected to be of type `ClvpEncoderConfig` but is of type"
                 f" {type(config.speech_config)}."
             )
 
         if not isinstance(config.decoder_config, ClvpDecoderConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.decoder_config is expected to be of type `ClvpDecoderConfig` but is of type"
                 f" {type(config.decoder_config)}."
             )
@@ -1738,8 +1835,8 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
     @replace_return_docstrings(output_type=ClvpOutput, config_class=ClvpConfig)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        input_features: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
         conditioning_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         text_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
@@ -1869,8 +1966,8 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
     @torch.no_grad()
     def generate(
         self,
-        input_ids: torch.LongTensor = None,
-        input_features: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         generation_config: Optional[GenerationConfig] = None,
         pad_to_max_mel_tokens: Optional[int] = None,
@@ -2022,3 +2119,13 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             text_encoder_hidden_states=text_outputs.hidden_states,
             speech_encoder_hidden_states=speech_outputs.hidden_states,
         )
+
+
+__all__ = [
+    "ClvpModelForConditionalGeneration",
+    "ClvpForCausalLM",
+    "ClvpModel",
+    "ClvpPreTrainedModel",
+    "ClvpEncoder",
+    "ClvpDecoder",
+]

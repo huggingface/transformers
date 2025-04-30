@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Splinter model."""
-
+"""PyTorch Splinter model."""
 
 import math
 from dataclasses import dataclass
@@ -36,14 +35,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "tau/splinter-base"
 _CONFIG_FOR_DOC = "SplinterConfig"
-
-SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "tau/splinter-base",
-    "tau/splinter-base-qass",
-    "tau/splinter-large",
-    "tau/splinter-large-qass",
-    # See all Splinter models at https://huggingface.co/models?filter=splinter
-]
 
 
 class SplinterEmbeddings(nn.Module):
@@ -250,11 +241,18 @@ class SplinterSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Splinter
+SPLINTER_SELF_ATTENTION_CLASSES = {
+    "eager": SplinterSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Splinter,BERT->SPLINTER
 class SplinterAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = SplinterSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = SPLINTER_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = SplinterSelfOutput(config)
         self.pruned_heads = set()
 
@@ -522,7 +520,6 @@ class SplinterPreTrainedModel(PreTrainedModel):
     base_model_prefix = "splinter"
     supports_gradient_checkpointing = True
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -967,8 +964,8 @@ class SplinterForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    start_logits: torch.FloatTensor = None
-    end_logits: torch.FloatTensor = None
+    start_logits: Optional[torch.FloatTensor] = None
+    end_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1107,3 +1104,12 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
         cols = torch.cat([torch.arange(n) for n in num_questions])
         positions[rows, cols] = flat_positions
         return positions
+
+
+__all__ = [
+    "SplinterForQuestionAnswering",
+    "SplinterForPreTraining",
+    "SplinterLayer",
+    "SplinterModel",
+    "SplinterPreTrainedModel",
+]

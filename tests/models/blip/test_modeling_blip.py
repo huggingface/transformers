@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Blip model. """
-
+"""Testing suite for the PyTorch Blip model."""
 
 import inspect
 import os
@@ -57,7 +55,6 @@ if is_torch_available():
         BlipTextModel,
         BlipVisionModel,
     )
-    from transformers.models.blip.modeling_blip import BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -170,7 +167,7 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -195,37 +192,31 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="BlipVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="BlipVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = BlipVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class BlipTextModelTester:
@@ -337,20 +328,22 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -359,22 +352,11 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="BlipTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="BlipTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-
-    def test_pt_tf_model_equivalence(self):
-        super().test_pt_tf_model_equivalence(allow_missing_keys=True)
+        model_name = "Salesforce/blip-vqa-base"
+        model = BlipTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class BlipModelTester:
@@ -387,6 +369,7 @@ class BlipModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -433,6 +416,7 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             "feature-extraction": BlipModel,
             "image-to-text": BlipForConditionalGeneration,
             "visual-question-answering": BlipForQuestionAnswering,
+            "image-text-to-text": BlipForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -440,15 +424,22 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
-    test_resize_embeddings = False
+    test_resize_embeddings = True
     test_attention_outputs = False
 
     def setUp(self):
         self.model_tester = BlipModelTester(self)
+        common_properties = ["logit_scale_init_value", "image_text_hidden_size", "projection_dim", "label_smoothing"]
+        self.config_tester = ConfigTester(
+            self, config_class=BlipConfig, has_text_modality=False, common_properties=common_properties
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -463,10 +454,10 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="BlipModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for Blip
+    # override as the `logit_scale` parameter initialization is different for Blip
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -475,7 +466,7 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
+                    # check if `logit_scale` is initialized as per the original implementation
                     if name == "logit_scale":
                         self.assertAlmostEqual(
                             param.data.item(),
@@ -492,7 +483,7 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -578,12 +569,66 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = BlipModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
-    def test_pt_tf_model_equivalence(self):
-        super().test_pt_tf_model_equivalence(allow_missing_keys=True)
+    def test_get_image_features(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        keys_to_pop = ["input_ids", "attention_mask", "return_loss"]
+
+        for key in keys_to_pop:
+            inputs_dict.pop(key)
+
+        model = BlipModel(config).to(torch_device)
+        model.eval()
+        image_features = model.get_image_features(**inputs_dict)
+        self.assertEqual(
+            image_features.shape,
+            (
+                self.model_tester.batch_size,
+                model.projection_dim,
+            ),
+        )
+
+    def test_get_text_features(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        keys_to_pop = ["pixel_values", "return_loss"]
+
+        for key in keys_to_pop:
+            inputs_dict.pop(key)
+
+        model = BlipModel(config).to(torch_device)
+        model.eval()
+        text_features = model.get_text_features(**inputs_dict)
+        self.assertEqual(
+            text_features.shape,
+            (
+                self.model_tester.batch_size,
+                model.projection_dim,
+            ),
+        )
+
+    def test_get_multimodal_features(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        keys_to_pop = ["return_loss"]
+
+        for key in keys_to_pop:
+            inputs_dict.pop(key)
+
+        model = BlipModel(config).to(torch_device)
+        model.eval()
+        multimodal_features = model.get_multimodal_features(**inputs_dict)
+        self.assertEqual(
+            multimodal_features.shape,
+            (
+                self.model_tester.batch_size,
+                model.projection_dim,
+            ),
+        )
 
 
 class BlipTextRetrievalModelTester:
@@ -596,6 +641,7 @@ class BlipTextRetrievalModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -643,6 +689,8 @@ class BlipTextImageModelsModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.seq_length = self.text_model_tester.seq_length  # need seq_length for pt-tf equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -674,7 +722,6 @@ class BlipTextImageModelsModelTester:
         config, input_ids, attention_mask, pixel_values = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
-            "labels": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
         }
@@ -691,6 +738,7 @@ class BlipVQAModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -722,10 +770,10 @@ class BlipVQAModelTester:
         config, input_ids, attention_mask, pixel_values = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
-            "labels": input_ids,
             "decoder_input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
+            "labels": input_ids,
         }
         return config, inputs_dict
 
@@ -734,10 +782,12 @@ class BlipVQAModelTester:
 @require_vision
 class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BlipForQuestionAnswering,) if is_torch_available() else ()
+    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
+    all_generative_model_classes = ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
-    test_resize_embeddings = False
+    test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False
 
@@ -746,7 +796,6 @@ class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
 
     def _prepare_inputs_for_vqa(self):
         _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        inputs_dict["labels"] = inputs_dict["input_ids"]
         inputs_dict["decoder_input_ids"] = inputs_dict["input_ids"]
         inputs_dict.pop("return_loss")
         return inputs_dict
@@ -807,7 +856,7 @@ class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="BlipModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
 
@@ -817,7 +866,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
-    test_resize_embeddings = False
+    test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False
 
@@ -841,7 +890,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="BlipModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_forward_signature(self):
@@ -872,7 +921,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="ModelTester is not setup for training")
 
         for model_class in self.all_model_classes[:-1]:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -891,7 +940,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_training_gradient_checkpointing(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="ModelTester is not setup for training")
 
         for model_class in self.all_model_classes[:-1]:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -911,18 +960,18 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             loss.backward()
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for Blip
+    # override as the `logit_scale` parameter initialization is different for Blip
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -931,7 +980,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
+                    # check if `logit_scale` is initialized as per the original implementation
                     if name == "logit_scale":
                         self.assertAlmostEqual(
                             param.data.item(),
@@ -948,7 +997,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -1034,18 +1083,20 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = BlipModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
 class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BlipForConditionalGeneration,) if is_torch_available() else ()
+    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
+    all_generative_model_classes = ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
-    test_resize_embeddings = False
+    test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False
 
@@ -1069,7 +1120,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="BlipModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_forward_signature(self):
@@ -1100,7 +1151,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="ModelTester is not setup for training")
 
         for model_class in self.all_model_classes[:-1]:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1119,7 +1170,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_training_gradient_checkpointing(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="ModelTester is not setup for training")
 
         for model_class in self.all_model_classes[:-1]:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1138,7 +1189,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
-    # override as the `logit_scale` parameter initilization is different for Blip
+    # override as the `logit_scale` parameter initialization is different for Blip
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1147,7 +1198,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
+                    # check if `logit_scale` is initialized as per the original implementation
                     if name == "logit_scale":
                         self.assertAlmostEqual(
                             param.data.item(),
@@ -1164,7 +1215,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -1250,9 +1301,9 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = BlipModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -1320,6 +1371,20 @@ class BlipModelIntegrationTest(unittest.TestCase):
             [30522, 1037, 3861, 1997, 1037, 2450, 1998, 2014, 3899, 2006, 1996, 3509, 102],
         )
 
+    def test_inference_interpolate_pos_encoding(self):
+        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(torch_device)
+        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        processor.image_processor.size = {"height": 500, "width": 500}
+
+        image = prepare_img()
+        inputs = processor(images=image, return_tensors="pt").to(torch_device)
+
+        predictions = model.generate(**inputs, interpolate_pos_encoding=True)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
+        self.assertEqual(predictions[0].tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 1037, 3899, 102])
+        self.assertEqual(generated_text, "a woman sitting on the beach with a dog")
+
     def test_inference_vqa(self):
         model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base").to(torch_device)
         processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
@@ -1347,5 +1412,5 @@ class BlipModelIntegrationTest(unittest.TestCase):
 
         expected_scores = torch.Tensor([[0.0029, 0.9971]])
 
-        self.assertTrue(torch.allclose(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores, rtol=1e-3, atol=1e-3))
-        self.assertTrue(torch.allclose(out[0].cpu(), torch.Tensor([[0.5162]]), rtol=1e-3, atol=1e-3))
+        torch.testing.assert_close(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(out[0].cpu(), torch.Tensor([[0.5162]]), rtol=1e-3, atol=1e-3)

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" YOLOS model configuration"""
+"""YOLOS model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -25,11 +25,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "hustvl/yolos-small": "https://huggingface.co/hustvl/yolos-small/resolve/main/config.json",
-    # See all YOLOS models at https://huggingface.co/models?filter=yolos
-}
 
 
 class YolosConfig(PretrainedConfig):
@@ -178,3 +173,6 @@ class YolosOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
+
+
+__all__ = ["YolosConfig", "YolosOnnxConfig"]

@@ -15,6 +15,7 @@
 """Convert Flax ViViT checkpoints from the original repository to PyTorch. URL:
 https://github.com/google-research/scenic/tree/main/scenic/projects/vivit
 """
+
 import argparse
 import json
 import os.path
@@ -72,7 +73,7 @@ def transform_attention(current: np.ndarray):
         return transform_attention_kernel(current)
 
     else:
-        raise Exception(f"Invalid number of dimesions: {np.ndim(current)}")
+        raise Exception(f"Invalid number of dimensions: {np.ndim(current)}")
 
 
 def transform_attention_bias(current: np.ndarray):

@@ -14,6 +14,7 @@
 # limitations under the License.
 
 """Protein data type."""
+
 import dataclasses
 import re
 import string

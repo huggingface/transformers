@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,12 +29,14 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_bpe_char.model")
 @require_sentencepiece
 @require_tokenizers
 class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/speecht5_asr"
     tokenizer_class = SpeechT5Tokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = SpeechT5Tokenizer(SAMPLE_VOCAB)
@@ -45,7 +46,7 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.add_special_tokens({"mask_token": mask_token})
         tokenizer.add_tokens(["<ctc_blank>"])
 
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "this is a test"
@@ -142,9 +143,11 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(tokens[0], tokenizer.eos_token_id)
                 self.assertEqual(tokens[-3], tokenizer.pad_token_id)
 
+    @unittest.skip
     def test_pickle_subword_regularization_tokenizer(self):
         pass
 
+    @unittest.skip
     def test_subword_regularization_tokenizer(self):
         pass
 

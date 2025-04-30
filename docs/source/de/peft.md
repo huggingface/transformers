@@ -86,10 +86,10 @@ model.load_adapter(peft_model_id)
 Die `bitsandbytes`-Integration unterstützt Datentypen mit 8bit und 4bit Genauigkeit, was für das Laden großer Modelle nützlich ist, weil es Speicher spart (lesen Sie den `bitsandbytes`-Integrations [guide](./quantization#bitsandbytes-integration), um mehr zu erfahren). Fügen Sie die Parameter `load_in_8bit` oder `load_in_4bit` zu [`~PreTrainedModel.from_pretrained`] hinzu und setzen Sie `device_map="auto"`, um das Modell effektiv auf Ihre Hardware zu verteilen:
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 peft_model_id = "ybelkada/opt-350m-lora"
-model = AutoModelForCausalLM.from_pretrained(peft_model_id, device_map="auto", load_in_8bit=True)
+model = AutoModelForCausalLM.from_pretrained(peft_model_id, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 ```
 
 ## Einen neuen Adapter hinzufügen

@@ -76,8 +76,6 @@ _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "lordtt13/emo-mobilebert"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'others'"
 _SEQ_CLASS_EXPECTED_LOSS = "4.72"
 
-MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = ["google/mobilebert-uncased"]
-
 
 def load_tf_weights_in_mobilebert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
@@ -146,9 +144,9 @@ def load_tf_weights_in_mobilebert(model, config, tf_checkpoint_path):
         elif m_name == "kernel":
             array = np.transpose(array)
         try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+            assert pointer.shape == array.shape, (
+                f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+            )
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -649,6 +647,9 @@ class MobileBertLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self) -> None:
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.transform(hidden_states)
         hidden_states = hidden_states.matmul(torch.cat([self.decoder.weight.t(), self.dense.weight], dim=0))
@@ -685,7 +686,6 @@ class MobileBertPreTrainedModel(PreTrainedModel):
     """
 
     config_class = MobileBertConfig
-    pretrained_model_archive_map = MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST
     load_tf_weights = load_tf_weights_in_mobilebert
     base_model_prefix = "mobilebert"
 
@@ -704,6 +704,8 @@ class MobileBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.LayerNorm, NoNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, MobileBertLMPredictionHead):
+            module.bias.data.zero_()
 
 
 @dataclass
@@ -734,8 +736,8 @@ class MobileBertForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_logits: torch.FloatTensor = None
-    seq_relationship_logits: torch.FloatTensor = None
+    prediction_logits: Optional[torch.FloatTensor] = None
+    seq_relationship_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -938,8 +940,9 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
-    def set_output_embeddings(self, new_embeddigs):
-        self.cls.predictions.decoder = new_embeddigs
+    def set_output_embeddings(self, new_embeddings):
+        self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         # resize dense output embedings at first
@@ -1047,8 +1050,9 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
-    def set_output_embeddings(self, new_embeddigs):
-        self.cls.predictions.decoder = new_embeddigs
+    def set_output_embeddings(self, new_embeddings):
+        self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         # resize dense output embedings at first
@@ -1615,3 +1619,18 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "MobileBertForMaskedLM",
+    "MobileBertForMultipleChoice",
+    "MobileBertForNextSentencePrediction",
+    "MobileBertForPreTraining",
+    "MobileBertForQuestionAnswering",
+    "MobileBertForSequenceClassification",
+    "MobileBertForTokenClassification",
+    "MobileBertLayer",
+    "MobileBertModel",
+    "MobileBertPreTrainedModel",
+    "load_tf_weights_in_mobilebert",
+]

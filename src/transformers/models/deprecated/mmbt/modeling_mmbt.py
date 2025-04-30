@@ -15,7 +15,6 @@
 # limitations under the License.
 """PyTorch MMBT model."""
 
-
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
@@ -406,3 +405,6 @@ class MMBTForClassification(nn.Module):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["MMBTForClassification", "MMBTModel", "ModalEmbeddings"]

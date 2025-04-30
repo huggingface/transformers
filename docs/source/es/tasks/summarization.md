@@ -140,7 +140,7 @@ En este punto, solo faltan tres pasos:
 ```py
 >>> training_args = Seq2SeqTrainingArguments(
 ...     output_dir="./results",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     learning_rate=2e-5,
 ...     per_device_train_batch_size=16,
 ...     per_device_eval_batch_size=16,
@@ -155,7 +155,7 @@ En este punto, solo faltan tres pasos:
 ...     args=training_args,
 ...     train_dataset=tokenized_billsum["train"],
 ...     eval_dataset=tokenized_billsum["test"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=data_collator,
 ... )
 

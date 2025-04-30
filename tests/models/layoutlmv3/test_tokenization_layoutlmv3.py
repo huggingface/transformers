@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,9 @@ import re
 import shutil
 import tempfile
 import unittest
-from typing import List
+from functools import lru_cache
+
+from parameterized import parameterized
 
 from transformers import (
     AddedToken,
@@ -32,7 +33,6 @@ from transformers import (
 )
 from transformers.models.layoutlmv3.tokenization_layoutlmv3 import VOCAB_FILES_NAMES, LayoutLMv3Tokenizer
 from transformers.testing_utils import (
-    is_pt_tf_cross_test,
     require_pandas,
     require_tf,
     require_tokenizers,
@@ -40,7 +40,12 @@ from transformers.testing_utils import (
     slow,
 )
 
-from ...test_tokenization_common import SMALL_TRAINING_CORPUS, TokenizerTesterMixin, merge_model_tokenizer_mappings
+from ...test_tokenization_common import (
+    SMALL_TRAINING_CORPUS,
+    TokenizerTesterMixin,
+    merge_model_tokenizer_mappings,
+    use_cache_if_possible,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -49,10 +54,11 @@ logger = logging.get_logger(__name__)
 @require_tokenizers
 @require_pandas
 class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/layoutlmv3-base"
     tokenizer_class = LayoutLMv3Tokenizer
     rust_tokenizer_class = LayoutLMv3TokenizerFast
     test_rust_tokenizer = True
-    # determined by the tokenization algortihm and the way it's decoded by the fast tokenizers
+    # determined by the tokenization algorithm and the way it's decoded by the fast tokenizers
     space_between_special_tokens = False
     test_seq2seq = False
     from_pretrained_kwargs = {"cls_token": "<s>"}
@@ -89,8 +95,9 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         return questions, words, boxes
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = [
@@ -117,27 +124,39 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
+        cls.special_tokens_map = {"unk_token": "<unk>"}
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
+        with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return LayoutLMv3TokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return LayoutLMv3TokenizerFast.from_pretrained(pretrained_name, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
         output_text = "lower newer"
         return input_text, output_text
+
+    @unittest.skip(reason="Chat template tests don't play well with table/layout models.")
+    def test_chat_template_batched(self):
+        pass
 
     def test_full_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file, self.merges_file, **self.special_tokens_map)
@@ -168,7 +187,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert encoded_pair == [0] + text + [2] + [2] + text_2 + [2]
 
     def test_add_special_tokens(self):
-        tokenizers: List[LayoutLMv3Tokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[LayoutLMv3Tokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 special_token = "[SPECIAL_TOKEN]"
@@ -184,7 +203,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token not in decoded)
 
     def test_add_tokens_tokenizer(self):
-        tokenizers: List[LayoutLMv3Tokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[LayoutLMv3Tokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 vocab_size = tokenizer.vocab_size
@@ -260,15 +279,16 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=self.space_between_special_tokens)
                 self.assertIn(decoded, [output, output.lower()])
 
-    @unittest.skip("Not implemented")
+    @unittest.skip(reason="Not implemented")
     def test_right_and_left_truncation(self):
         pass
 
-    @unittest.skip("Not implemented")
+    @unittest.skip(reason="Not implemented")
     def test_split_special_tokens(self):
         pass
 
-    def test_encode_plus_with_padding(self):
+    @parameterized.expand([(True,), (False,)])
+    def test_encode_plus_with_padding(self, use_padding_as_call_kwarg: bool):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
@@ -319,15 +339,18 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_tokens_mask == not_padded_special_tokens_mask)
 
                 # Test right padding
-                tokenizer.padding_side = "right"
+                tokenizer_kwargs_right = {
+                    "max_length": sequence_length + padding_size,
+                    "padding": "max_length",
+                    "return_special_tokens_mask": True,
+                }
 
-                right_padded_sequence = tokenizer.encode_plus(
-                    words,
-                    boxes=boxes,
-                    max_length=sequence_length + padding_size,
-                    padding="max_length",
-                    return_special_tokens_mask=True,
-                )
+                if not use_padding_as_call_kwarg:
+                    tokenizer.padding_side = "right"
+                else:
+                    tokenizer_kwargs_right["padding_side"] = "right"
+
+                right_padded_sequence = tokenizer.encode_plus(words, boxes=boxes, **tokenizer_kwargs_right)
                 right_padded_input_ids = right_padded_sequence["input_ids"]
 
                 right_padded_special_tokens_mask = right_padded_sequence["special_tokens_mask"]
@@ -338,14 +361,18 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_tokens_mask + [1] * padding_size == right_padded_special_tokens_mask)
 
                 # Test left padding
-                tokenizer.padding_side = "left"
-                left_padded_sequence = tokenizer.encode_plus(
-                    words,
-                    boxes=boxes,
-                    max_length=sequence_length + padding_size,
-                    padding="max_length",
-                    return_special_tokens_mask=True,
-                )
+                tokenizer_kwargs_left = {
+                    "max_length": sequence_length + padding_size,
+                    "padding": "max_length",
+                    "return_special_tokens_mask": True,
+                }
+
+                if not use_padding_as_call_kwarg:
+                    tokenizer.padding_side = "left"
+                else:
+                    tokenizer_kwargs_left["padding_side"] = "left"
+
+                left_padded_sequence = tokenizer.encode_plus(words, boxes=boxes, **tokenizer_kwargs_left)
                 left_padded_input_ids = left_padded_sequence["input_ids"]
                 left_padded_special_tokens_mask = left_padded_sequence["special_tokens_mask"]
                 left_padded_sequence_length = len(left_padded_input_ids)
@@ -471,8 +498,8 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding(self, max_length=50):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
@@ -689,7 +716,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_padding_warning_message_fast_tokenizer(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         words, boxes = self.get_words_and_boxes_batch()
 
@@ -710,7 +737,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         if not self.test_slow_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer_slow = self.get_tokenizer()
 
@@ -817,7 +844,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         encoded_sequences_batch_padded_2[key],
                     )
 
-    @unittest.skip("batch_encode_plus does not handle overflowing tokens.")
+    @unittest.skip(reason="batch_encode_plus does not handle overflowing tokens.")
     def test_batch_encode_plus_overflowing_tokens(self):
         pass
 
@@ -878,7 +905,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.pad_token is None:
-                    self.skipTest("No padding token.")
+                    self.skipTest(reason="No padding token.")
                 else:
                     words, boxes = self.get_words_and_boxes()
 
@@ -921,12 +948,12 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_build_inputs_with_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 # Input tokens id
                 words, boxes = self.get_words_and_boxes()
@@ -1163,13 +1190,13 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    return
+                    self.skipTest(f"{tokenizer.__class__} is not in the MODEL_TOKENIZER_MAPPING")
 
                 config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    return
+                    self.skipTest(reason="Model is an encoder-decoder or has no pad token id set.")
 
                 model = model_class(config)
 
@@ -1200,11 +1227,11 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -1222,12 +1249,12 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_tokenization_python_rust_equals(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 words, boxes = self.get_words_and_boxes()
 
@@ -1276,12 +1303,12 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_embeded_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 words, boxes = self.get_words_and_boxes()
                 tokens_r = tokenizer_r.encode_plus(
                     words,
@@ -1360,48 +1387,6 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(new_encoded_inputs, dropped_encoded_inputs)
         self.assertLessEqual(len(new_encoded_inputs), 20)
 
-    @is_pt_tf_cross_test
-    def test_batch_encode_plus_tensors(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, boxes = self.get_words_and_boxes_batch()
-
-                # A Tensor cannot be build by sequences which are not the same size
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, words, boxes=boxes, return_tensors="pt")
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, words, boxes=boxes, return_tensors="tf")
-
-                if tokenizer.pad_token_id is None:
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        words,
-                        boxes=boxes,
-                        padding=True,
-                        return_tensors="pt",
-                    )
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        words,
-                        boxes=boxes,
-                        padding="longest",
-                        return_tensors="tf",
-                    )
-                else:
-                    pytorch_tensor = tokenizer.batch_encode_plus(words, boxes=boxes, padding=True, return_tensors="pt")
-                    tensorflow_tensor = tokenizer.batch_encode_plus(
-                        words, boxes=boxes, padding="longest", return_tensors="tf"
-                    )
-                    encoded_sequences = tokenizer.batch_encode_plus(words, boxes=boxes, padding=True)
-
-                    for key in encoded_sequences.keys():
-                        pytorch_value = pytorch_tensor[key].tolist()
-                        tensorflow_value = tensorflow_tensor[key].numpy().tolist()
-                        encoded_value = encoded_sequences[key]
-
-                        self.assertEqual(pytorch_value, tensorflow_value, encoded_value)
-
     def test_sequence_ids(self):
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
@@ -1466,7 +1451,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_rust_tokenizer()
         new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
@@ -1503,7 +1488,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer_with_special_tokens_change(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_rust_tokenizer()
         # Test with a special tokens map
@@ -1522,7 +1507,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         special_tokens_map = {}
         for token in special_tokens_list:
             # Get the private one to avoid unnecessary warnings.
-            if getattr(tokenizer, f"_{token}") is not None:
+            if getattr(tokenizer, token) is not None:
                 special_token = getattr(tokenizer, token)
                 special_tokens_map[special_token] = f"{special_token}a"
 
@@ -1534,7 +1519,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Check the changes
         for token in special_tokens_list:
             # Get the private one to avoid unnecessary warnings.
-            if getattr(tokenizer, f"_{token}") is None:
+            if getattr(tokenizer, token) is None:
                 continue
             special_token = getattr(tokenizer, token)
             if special_token in special_tokens_map:
@@ -1616,12 +1601,12 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding_different_model_input_name(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
 
@@ -1715,7 +1700,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         self.assertEqual(len(tokens[key].shape), 3)
                         self.assertEqual(tokens[key].shape[-1], 4)
 
-    @unittest.skip("TO DO: overwrite this very extensive test.")
+    @unittest.skip(reason="TO DO: overwrite this very extensive test.")
     def test_alignement_methods(self):
         pass
 
@@ -2267,15 +2252,15 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     # self.assertEqual(bbox, sequence["bbox"][:-2])
                     # self.assertEqual(overflowing_bbox, sequence["bbox"][-(2 + stride) :])
 
-    @unittest.skip("LayoutLMv3 tokenizer requires boxes besides sequences.")
+    @unittest.skip(reason="LayoutLMv3 tokenizer requires boxes besides sequences.")
     def test_pretokenized_inputs(self):
         pass
 
-    @unittest.skip("LayoutLMv3 tokenizer always expects pretokenized inputs.")
+    @unittest.skip(reason="LayoutLMv3 tokenizer always expects pretokenized inputs.")
     def test_compare_pretokenized_inputs(self):
         pass
 
-    @unittest.skip("LayoutLMv3 fast tokenizer does not support prepare_for_model")
+    @unittest.skip(reason="LayoutLMv3 fast tokenizer does not support prepare_for_model")
     def test_compare_prepare_for_model(self):
         pass
 
@@ -2388,7 +2373,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
-    @unittest.skip("Doesn't support another framework than PyTorch")
+    @unittest.skip(reason="Doesn't support another framework than PyTorch")
     def test_np_encode_plus_sent_to_model(self):
         pass
 
@@ -2403,13 +2388,13 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    return
+                    self.skipTest(f"{tokenizer.__class__} is not in the MODEL_TOKENIZER_MAPPING")
 
                 config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    return
+                    self.skipTest(reason="Model is an encoder-decoder or has no pad token id set.")
 
                 model = model_class(config)
 
@@ -2428,6 +2413,14 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 model(encoded_sequence)
                 model(batch_encoded_sequence)
 
-    @unittest.skip("Chat is not supported")
+    @unittest.skip(reason="Chat is not supported")
     def test_chat_template(self):
+        pass
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template_return_assistant_tokens_mask(self):
+        pass
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template_return_assistant_tokens_mask_truncated(self):
         pass

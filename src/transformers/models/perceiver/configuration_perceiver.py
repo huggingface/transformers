@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Perceiver model configuration"""
+"""Perceiver model configuration"""
 
 from collections import OrderedDict
 from typing import Any, Mapping, Optional, Union
@@ -26,11 +26,6 @@ from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
-
-PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "deepmind/language-perceiver": "https://huggingface.co/deepmind/language-perceiver/resolve/main/config.json",
-    # See all Perceiver models at https://huggingface.co/models?filter=perceiver
-}
 
 
 class PerceiverConfig(PretrainedConfig):
@@ -244,3 +239,6 @@ class PerceiverOnnxConfig(OnnxConfig):
             raise ValueError(
                 "Unable to generate dummy inputs for the model. Please provide a tokenizer or a preprocessor."
             )
+
+
+__all__ = ["PerceiverConfig", "PerceiverOnnxConfig"]

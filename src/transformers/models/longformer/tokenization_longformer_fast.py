@@ -13,10 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Tokenization classes for Longformer."""
+
 import json
 from typing import List, Optional, Tuple
 
-from tokenizers import pre_tokenizers, processors
+from tokenizers import processors
 
 from ...tokenization_utils_base import AddedToken, BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -27,64 +28,6 @@ from .tokenization_longformer import LongformerTokenizer
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "allenai/longformer-base-4096": "https://huggingface.co/allenai/longformer-base-4096/resolve/main/vocab.json",
-        "allenai/longformer-large-4096": (
-            "https://huggingface.co/allenai/longformer-large-4096/resolve/main/vocab.json"
-        ),
-        "allenai/longformer-large-4096-finetuned-triviaqa": (
-            "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/vocab.json"
-        ),
-        "allenai/longformer-base-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/vocab.json"
-        ),
-        "allenai/longformer-large-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/vocab.json"
-        ),
-    },
-    "merges_file": {
-        "allenai/longformer-base-4096": "https://huggingface.co/allenai/longformer-base-4096/resolve/main/merges.txt",
-        "allenai/longformer-large-4096": (
-            "https://huggingface.co/allenai/longformer-large-4096/resolve/main/merges.txt"
-        ),
-        "allenai/longformer-large-4096-finetuned-triviaqa": (
-            "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/merges.txt"
-        ),
-        "allenai/longformer-base-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/merges.txt"
-        ),
-        "allenai/longformer-large-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/merges.txt"
-        ),
-    },
-    "tokenizer_file": {
-        "allenai/longformer-base-4096": (
-            "https://huggingface.co/allenai/longformer-base-4096/resolve/main/tokenizer.json"
-        ),
-        "allenai/longformer-large-4096": (
-            "https://huggingface.co/allenai/longformer-large-4096/resolve/main/tokenizer.json"
-        ),
-        "allenai/longformer-large-4096-finetuned-triviaqa": (
-            "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/tokenizer.json"
-        ),
-        "allenai/longformer-base-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/tokenizer.json"
-        ),
-        "allenai/longformer-large-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/tokenizer.json"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "allenai/longformer-base-4096": 4096,
-    "allenai/longformer-large-4096": 4096,
-    "allenai/longformer-large-4096-finetuned-triviaqa": 4096,
-    "allenai/longformer-base-4096-extra.pos.embd.only": 4096,
-    "allenai/longformer-large-4096-extra.pos.embd.only": 4096,
-}
 
 
 # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast with FacebookAI/roberta-base->allenai/longformer-base-4096, RoBERTa->Longformer all-casing, Roberta->Longformer
@@ -170,8 +113,6 @@ class LongformerTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = LongformerTokenizer
 
@@ -213,14 +154,6 @@ class LongformerTokenizerFast(PreTrainedTokenizerFast):
             trim_offsets=trim_offsets,
             **kwargs,
         )
-
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-
-        self.add_prefix_space = add_prefix_space
 
         tokenizer_component = "post_processor"
         tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
@@ -327,3 +260,6 @@ class LongformerTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+
+
+__all__ = ["LongformerTokenizerFast"]

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch NLLB-MoE model."""
-
+"""PyTorch NLLB-MoE model."""
 
 import math
 from typing import List, Optional, Tuple, Union
@@ -23,7 +22,9 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     MoEModelOutput,
@@ -53,10 +54,6 @@ _REAL_CHECKPOINT_FOR_DOC = "facebook/nllb-moe-54b"
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/nllb-moe-54b",
-    # See all NLLB-MOE models at https://huggingface.co/models?filter=nllb-moe
-]
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
@@ -135,6 +132,20 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
 
 
+# Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100ScaledWordEmbedding with M2M100->NllbMoe
+class NllbMoeScaledWordEmbedding(nn.Embedding):
+    """
+    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_scale = embed_scale
+
+    def forward(self, input_ids: torch.Tensor):
+        return super().forward(input_ids) * self.embed_scale
+
+
 # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding
 class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
@@ -177,7 +188,10 @@ class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
 
     @torch.no_grad()
     def forward(
-        self, input_ids: torch.Tensor = None, inputs_embeds: torch.Tensor = None, past_key_values_length: int = 0
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        past_key_values_length: int = 0,
     ):
         if input_ids is not None:
             bsz, seq_len = input_ids.size()
@@ -411,7 +425,7 @@ class NllbMoeSparseMLP(nn.Module):
         r"""
         The goal of this forward pass is to have the same number of operation as the equivalent `NllbMoeDenseActDense`
         (mlp) layer. This means that all of the hidden states should be processed at most twice ( since we are using a
-        top_2 gating mecanism). This means that we keep the complexity to O(batch_size x sequence_length x hidden_dim)
+        top_2 gating mechanism). This means that we keep the complexity to O(batch_size x sequence_length x hidden_dim)
         instead of O(num_experts x batch_size x sequence_length x hidden_dim).
 
         1- Get the `router_probs` from the `router`. The shape of the `router_mask` is `(batch_size X sequence_length,
@@ -994,9 +1008,11 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         embed_dim = config.d_model
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+        embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+        self.embed_tokens = NllbMoeScaledWordEmbedding(
+            config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
+        )
 
         if embed_tokens is not None:
             self.embed_tokens.weight = embed_tokens.weight
@@ -1087,7 +1103,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         embed_pos = self.embed_positions(input_ids, inputs_embeds)
         embed_pos = embed_pos.to(inputs_embeds.device)
@@ -1180,9 +1196,11 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+        self.embed_tokens = NllbMoeScaledWordEmbedding(
+            config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
+        )
 
         if embed_tokens is not None:
             self.embed_tokens.weight = embed_tokens.weight
@@ -1311,7 +1329,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1337,7 +1355,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting" " `use_cache=False`..."
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
 
@@ -1356,7 +1374,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                         f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
                         f" {head_mask.size()[0]}."
                     )
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -1366,13 +1384,13 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
+            if not skip_the_layer or synced_gpus:
                 layer_head_mask = head_mask[idx] if head_mask is not None else None
                 cross_attn_layer_head_mask = cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
 
                 past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-                # under deepspeed zero3 all gpus must run in sync
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
                     if use_cache:
                         logger.warning_once(
@@ -1460,7 +1478,8 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         super().__init__(config)
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
+        embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.shared = NllbMoeScaledWordEmbedding(vocab_size, config.d_model, padding_idx, embed_scale=embed_scale)
 
         self.encoder = NllbMoeEncoder(config, self.shared)
         self.decoder = NllbMoeDecoder(config, self.shared)
@@ -1590,7 +1609,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
 @add_start_docstrings(
     "The NllbMoe Model with a language modeling head. Can be used for summarization.", NLLB_MOE_START_DOCSTRING
 )
-class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
+class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
@@ -1746,44 +1765,6 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
         total_expert_indexes = torch.stack(total_expert_indexes, dim=1) if len(total_expert_indexes) > 0 else None
         return total_router_logits, total_expert_indexes
 
-    # Copied from transfomers.models.switch_transformers.SwitchTransformersForConditionalGeneration.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
-    ):
-        # cut decoder_input_ids if past is used
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if decoder_input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = decoder_input_ids.shape[1] - 1
-
-            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
-
-        return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
-        }
-
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
@@ -1792,3 +1773,12 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+
+__all__ = [
+    "NllbMoeForConditionalGeneration",
+    "NllbMoeModel",
+    "NllbMoePreTrainedModel",
+    "NllbMoeTop2Router",
+    "NllbMoeSparseMLP",
+]

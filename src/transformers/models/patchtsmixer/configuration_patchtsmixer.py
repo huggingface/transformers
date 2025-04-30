@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PatchTSMixer model configuration"""
+"""PatchTSMixer model configuration"""
 
 from typing import List, Optional, Union
 
@@ -21,10 +21,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ibm/patchtsmixer-etth1-pretrain": "https://huggingface.co/ibm/patchtsmixer-etth1-pretrain/resolve/main/config.json",
-}
 
 
 class PatchTSMixerConfig(PretrainedConfig):
@@ -189,10 +185,10 @@ class PatchTSMixerConfig(PretrainedConfig):
         distribution_output: str = "student_t",
         # Prediction head configuration
         prediction_length: int = 16,
-        prediction_channel_indices: list = None,
+        prediction_channel_indices: Optional[list] = None,
         # Classification/Regression configuration
         num_targets: int = 3,
-        output_range: list = None,
+        output_range: Optional[list] = None,
         head_aggregation: str = "max_pool",
         **kwargs,
     ):
@@ -234,3 +230,6 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.unmasked_channel_indices = unmasked_channel_indices
         self.norm_eps = norm_eps
         super().__init__(**kwargs)
+
+
+__all__ = ["PatchTSMixerConfig"]

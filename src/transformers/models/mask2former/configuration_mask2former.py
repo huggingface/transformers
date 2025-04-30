@@ -12,20 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Mask2Former model configuration"""
+"""Mask2Former model configuration"""
+
 from typing import Dict, List, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
 
-
-MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/mask2former-swin-small-coco-instance": (
-        "https://huggingface.co/facebook/mask2former-swin-small-coco-instance/blob/main/config.json"
-    )
-    # See all Mask2Former models at https://huggingface.co/models?filter=mask2former
-}
 
 logger = logging.get_logger(__name__)
 
@@ -165,24 +160,18 @@ class Mask2FormerConfig(PretrainedConfig):
         init_xavier_std: float = 1.0,
         use_auxiliary_loss: bool = True,
         feature_strides: List[int] = [4, 8, 16, 32],
-        output_auxiliary_logits: bool = None,
+        output_auxiliary_logits: Optional[bool] = None,
         backbone: Optional[str] = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
         backbone_kwargs: Optional[Dict] = None,
         **kwargs,
     ):
-        if use_pretrained_backbone:
-            raise ValueError("Pretrained backbones are not supported yet.")
-
-        if backbone_config is not None and backbone is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
-
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
             backbone_config = CONFIG_MAPPING["swin"](
                 image_size=224,
-                in_channels=3,
+                num_channels=3,
                 patch_size=4,
                 embed_dim=96,
                 depths=[2, 2, 18, 2],
@@ -192,15 +181,18 @@ class Mask2FormerConfig(PretrainedConfig):
                 use_absolute_embeddings=False,
                 out_features=["stage1", "stage2", "stage3", "stage4"],
             )
-
-        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
-
-        if isinstance(backbone_config, dict):
+        elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.pop("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
 
+        verify_backbone_config_arguments(
+            use_timm_backbone=use_timm_backbone,
+            use_pretrained_backbone=use_pretrained_backbone,
+            backbone=backbone,
+            backbone_config=backbone_config,
+            backbone_kwargs=backbone_kwargs,
+        )
         # verify that the backbone is supported
         if backbone_config is not None and backbone_config.model_type not in self.backbones_supported:
             logger.warning_once(
@@ -259,3 +251,6 @@ class Mask2FormerConfig(PretrainedConfig):
             backbone_config=backbone_config,
             **kwargs,
         )
+
+
+__all__ = ["Mask2FormerConfig"]

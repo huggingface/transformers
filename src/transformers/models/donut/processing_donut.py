@@ -15,11 +15,23 @@
 """
 Processor class for Donut.
 """
+
 import re
 import warnings
 from contextlib import contextmanager
+from typing import List, Optional, Union
 
-from ...processing_utils import ProcessorMixin
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
+
+
+class DonutProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
+
+
+logger = logging.get_logger(__name__)
 
 
 class DonutProcessor(ProcessorMixin):
@@ -62,37 +74,46 @@ class DonutProcessor(ProcessorMixin):
         self.current_processor = self.image_processor
         self._in_target_context_manager = False
 
-    def __call__(self, *args, **kwargs):
+    def __call__(
+        self,
+        images: ImageInput = None,
+        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[DonutProcessorKwargs],
+    ):
         """
         When used in normal mode, this method forwards all its arguments to AutoImageProcessor's
         [`~AutoImageProcessor.__call__`] and returns its output. If used in the context
         [`~DonutProcessor.as_target_processor`] this method forwards all its arguments to DonutTokenizer's
-        [`~DonutTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
+        [`~DonutTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
-        # For backward compatibility
         if self._in_target_context_manager:
-            return self.current_processor(*args, **kwargs)
-
-        images = kwargs.pop("images", None)
-        text = kwargs.pop("text", None)
-        if len(args) > 0:
-            images = args[0]
-            args = args[1:]
+            return self.current_processor(images, text, **kwargs)
 
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
+        output_kwargs = self._merge_kwargs(
+            DonutProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
         if images is not None:
-            inputs = self.image_processor(images, *args, **kwargs)
+            inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
+            if images is not None:
+                output_kwargs["text_kwargs"].setdefault("add_special_tokens", False)
+            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         if text is None:
             return inputs
         elif images is None:
             return encodings
         else:
-            inputs["labels"] = encodings["input_ids"]
+            inputs["labels"] = encodings["input_ids"]  # for BC
+            inputs["input_ids"] = encodings["input_ids"]
             return inputs
 
     def batch_decode(self, *args, **kwargs):
@@ -149,7 +170,9 @@ class DonutProcessor(ProcessorMixin):
                 end_token = end_token.group()
                 start_token_escaped = re.escape(start_token)
                 end_token_escaped = re.escape(end_token)
-                content = re.search(f"{start_token_escaped}(.*?){end_token_escaped}", tokens, re.IGNORECASE)
+                content = re.search(
+                    f"{start_token_escaped}(.*?){end_token_escaped}", tokens, re.IGNORECASE | re.DOTALL
+                )
                 if content is not None:
                     content = content.group(1).strip()
                     if r"<s_" in content and r"</s_" in content:  # non-leaf node
@@ -192,3 +215,6 @@ class DonutProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
+
+__all__ = ["DonutProcessor"]

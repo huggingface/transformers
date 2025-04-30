@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 ALBERT model."""
-
+"""TF 2.0 ALBERT model."""
 
 from __future__ import annotations
 
@@ -64,18 +63,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "albert/albert-base-v2"
 _CONFIG_FOR_DOC = "AlbertConfig"
-
-TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "albert/albert-base-v1",
-    "albert/albert-large-v1",
-    "albert/albert-xlarge-v1",
-    "albert/albert-xxlarge-v1",
-    "albert/albert-base-v2",
-    "albert/albert-large-v2",
-    "albert/albert-xlarge-v2",
-    "albert/albert-xxlarge-v2",
-    # See all ALBERT models at https://huggingface.co/models?filter=albert
-]
 
 
 class TFAlbertPreTrainingLoss:
@@ -177,10 +164,10 @@ class TFAlbertEmbeddings(keras.layers.Layer):
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.call
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         past_key_values_length=0,
         training: bool = False,
     ) -> tf.Tensor:
@@ -762,9 +749,9 @@ class TFAlbertForPreTrainingOutput(ModelOutput):
             heads.
     """
 
-    loss: tf.Tensor = None
-    prediction_logits: tf.Tensor = None
-    sop_logits: tf.Tensor = None
+    loss: Optional[tf.Tensor] = None
+    prediction_logits: Optional[tf.Tensor] = None
+    sop_logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 
@@ -1571,3 +1558,16 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFAlbertPreTrainedModel",
+    "TFAlbertModel",
+    "TFAlbertForPreTraining",
+    "TFAlbertForMaskedLM",
+    "TFAlbertForSequenceClassification",
+    "TFAlbertForTokenClassification",
+    "TFAlbertForQuestionAnswering",
+    "TFAlbertForMultipleChoice",
+    "TFAlbertMainLayer",
+]

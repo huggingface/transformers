@@ -14,9 +14,8 @@
 # ==============================================================================
 """Functions and classes related to optimization (weight updates)."""
 
-
 import re
-from typing import Callable, List, Optional, Union
+from typing import Callable, Optional, Union
 
 import tensorflow as tf
 
@@ -60,7 +59,7 @@ class WarmUp(schedules.LearningRateSchedule):
         decay_schedule_fn: Callable,
         warmup_steps: int,
         power: float = 1.0,
-        name: str = None,
+        name: Optional[str] = None,
     ):
         super().__init__()
         self.initial_learning_rate = initial_learning_rate
@@ -106,7 +105,7 @@ def create_optimizer(
     adam_global_clipnorm: Optional[float] = None,
     weight_decay_rate: float = 0.0,
     power: float = 1.0,
-    include_in_weight_decay: Optional[List[str]] = None,
+    include_in_weight_decay: Optional[list[str]] = None,
 ):
     """
     Creates an optimizer with a learning rate schedule using a warmup phase followed by a linear decay.
@@ -225,8 +224,8 @@ class AdamWeightDecay(Adam):
         epsilon: float = 1e-7,
         amsgrad: bool = False,
         weight_decay_rate: float = 0.0,
-        include_in_weight_decay: Optional[List[str]] = None,
-        exclude_from_weight_decay: Optional[List[str]] = None,
+        include_in_weight_decay: Optional[list[str]] = None,
+        exclude_from_weight_decay: Optional[list[str]] = None,
         name: str = "AdamWeightDecay",
         **kwargs,
     ):
@@ -239,10 +238,10 @@ class AdamWeightDecay(Adam):
     def from_config(cls, config):
         """Creates an optimizer from its config with WarmUp custom object."""
         custom_objects = {"WarmUp": WarmUp}
-        return super(AdamWeightDecay, cls).from_config(config, custom_objects=custom_objects)
+        return super().from_config(config, custom_objects=custom_objects)
 
     def _prepare_local(self, var_device, var_dtype, apply_state):
-        super(AdamWeightDecay, self)._prepare_local(var_device, var_dtype, apply_state)
+        super()._prepare_local(var_device, var_dtype, apply_state)
         apply_state[(var_device, var_dtype)]["weight_decay_rate"] = tf.constant(
             self.weight_decay_rate, name="adam_weight_decay_rate"
         )
@@ -258,7 +257,7 @@ class AdamWeightDecay(Adam):
 
     def apply_gradients(self, grads_and_vars, name=None, **kwargs):
         grads, tvars = list(zip(*grads_and_vars))
-        return super(AdamWeightDecay, self).apply_gradients(zip(grads, tvars), name=name, **kwargs)
+        return super().apply_gradients(zip(grads, tvars), name=name, **kwargs)
 
     def _get_lr(self, var_device, var_dtype, apply_state):
         """Retrieves the learning rate with the given state."""
@@ -277,13 +276,13 @@ class AdamWeightDecay(Adam):
         lr_t, kwargs = self._get_lr(var.device, var.dtype.base_dtype, apply_state)
         decay = self._decay_weights_op(var, lr_t, apply_state)
         with tf.control_dependencies([decay]):
-            return super(AdamWeightDecay, self)._resource_apply_dense(grad, var, **kwargs)
+            return super()._resource_apply_dense(grad, var, **kwargs)
 
     def _resource_apply_sparse(self, grad, var, indices, apply_state=None):
         lr_t, kwargs = self._get_lr(var.device, var.dtype.base_dtype, apply_state)
         decay = self._decay_weights_op(var, lr_t, apply_state)
         with tf.control_dependencies([decay]):
-            return super(AdamWeightDecay, self)._resource_apply_sparse(grad, var, indices, **kwargs)
+            return super()._resource_apply_sparse(grad, var, indices, **kwargs)
 
     def get_config(self):
         config = super().get_config()

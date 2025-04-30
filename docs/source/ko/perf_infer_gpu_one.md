@@ -127,10 +127,10 @@ Int8 혼합 정밀도 행렬 분해는 행렬 곱셈을 두 개의 스트림으�
 필요한 라이브러리를 설치한 후 혼합 8비트 모델을 가져오는 방법은 다음과 같습니다:
 
 ```py
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 model_name = "bigscience/bloom-2b5"
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 ```
 
 텍스트 생성의 경우:
@@ -141,11 +141,11 @@ model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto",
 다음은 간단한 예입니다:
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 model_name = "bigscience/bloom-2b5"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 
 prompt = "Hello, my llama is cute"
 inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
@@ -159,7 +159,7 @@ outputs = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 다중 GPU에서 혼합 8비트 모델을 로드하는 방법은 단일 GPU 설정과 동일합니다(동일한 명령어 사용):
 ```py
 model_name = "bigscience/bloom-2b5"
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 ```
 하지만 `accelerate`를 사용하여 각 GPU에 할당할 GPU RAM을 제어할 수 있습니다. 다음과 같이 `max_memory` 인수를 사용하세요:
 

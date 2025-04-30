@@ -171,32 +171,45 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
         elif isinstance(input_, float):
             return 0
         else:
-            raise ValueError("We expect lists of floats, nothing else")
+            raise TypeError("We expect lists of floats, nothing else")
         return shape
 
-    def get_test_pipeline(self, model, tokenizer, processor):
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
         if tokenizer is None:
-            self.skipTest("No tokenizer")
-            return
+            self.skipTest(reason="No tokenizer")
         elif (
             type(model.config) in FEATURE_EXTRACTOR_MAPPING
             or isinstance(model.config, LxmertConfig)
             or type(model.config) in IMAGE_PROCESSOR_MAPPING
         ):
-            self.skipTest("This is a bimodal model, we need to find a more consistent way to switch on those models.")
-            return
+            self.skipTest(
+                reason="This is a bimodal model, we need to find a more consistent way to switch on those models."
+            )
         elif model.config.is_encoder_decoder:
             self.skipTest(
                 """encoder_decoder models are trickier for this pipeline.
-                Do we want encoder + decoder inputs to get some featues?
+                Do we want encoder + decoder inputs to get some features?
                 Do we want encoder only features ?
                 For now ignore those.
                 """
             )
-
-            return
-        feature_extractor = FeatureExtractionPipeline(model=model, tokenizer=tokenizer, feature_extractor=processor)
-        return feature_extractor, ["This is a test", "This is another test"]
+        feature_extractor_pipeline = FeatureExtractionPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
+        return feature_extractor_pipeline, ["This is a test", "This is another test"]
 
     def run_pipeline_test(self, feature_extractor, examples):
         outputs = feature_extractor("This is a test")

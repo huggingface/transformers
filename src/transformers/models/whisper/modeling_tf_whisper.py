@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow Whisper model."""
-
+"""TensorFlow Whisper model."""
 
 from __future__ import annotations
 
@@ -51,11 +50,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "WhisperConfig"
 
-
-TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/whisper-base",
-    # See all Whisper models at https://huggingface.co/models?filter=whisper
-]
 
 LARGE_NEGATIVE = -1e8
 
@@ -1652,7 +1646,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             prompt_ids = prompt_ids.tolist()
             decoder_start_token_id, *text_prompt_ids = prompt_ids
             # Slicing the text prompt ids in a manner consistent with the OpenAI implementation
-            # to accomodate context space for the prefix (see https://github.com/openai/whisper/blob/c09a7ae299c4c34c5839a76380ae407e7d785914/whisper/decoding.py#L599)
+            # to accommodate context space for the prefix (see https://github.com/openai/whisper/blob/c09a7ae299c4c34c5839a76380ae407e7d785914/whisper/decoding.py#L599)
             text_prompt_ids = text_prompt_ids[-self.config.max_length // 2 - 1 :]
             # Set the decoder_start_token_id to <|startofprev|>
             kwargs.update({"decoder_start_token_id": decoder_start_token_id})
@@ -1762,3 +1756,6 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         if getattr(self, "model", None) is not None:
             with tf.name_scope(self.model.name):
                 self.model.build(None)
+
+
+__all__ = ["TFWhisperForConditionalGeneration", "TFWhisperModel", "TFWhisperPreTrainedModel"]

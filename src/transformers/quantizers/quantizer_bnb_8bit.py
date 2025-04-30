@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
-from typing import TYPE_CHECKING, Any, Dict, List, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from packaging import version
 
@@ -22,7 +22,14 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_bitsandbytes_available, is_torch_available, logging
+from ..utils import (
+    ACCELERATE_MIN_VERSION,
+    is_accelerate_available,
+    is_bitsandbytes_available,
+    is_torch_available,
+    is_torch_xpu_available,
+    logging,
+)
 from .quantizers_utils import get_module_from_name
 
 
@@ -58,20 +65,26 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
 
     def validate_environment(self, *args, **kwargs):
-        if not (is_accelerate_available() and is_bitsandbytes_available()):
+        if not is_accelerate_available():
             raise ImportError(
-                "Using `bitsandbytes` 8-bit quantization requires Accelerate: `pip install accelerate` "
-                "and the latest version of bitsandbytes: `pip install -i https://pypi.org/simple/ bitsandbytes`"
+                f"Using `bitsandbytes` 8-bit quantization requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
             )
+        if not is_bitsandbytes_available():
+            raise ImportError(
+                "Using `bitsandbytes` 8-bit quantization requires the latest version of bitsandbytes: `pip install -U bitsandbytes`"
+            )
+
+        from ..integrations import validate_bnb_backend_availability
+        from ..utils import is_bitsandbytes_multi_backend_available
+
+        bnb_multibackend_is_enabled = is_bitsandbytes_multi_backend_available()
+        validate_bnb_backend_availability(raise_exception=True)
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
             raise ValueError(
                 "Converting into 4-bit or 8-bit weights from tf/flax weights is currently not supported, please make"
                 " sure the weights are in PyTorch format."
             )
-
-        if not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
 
         device_map = kwargs.get("device_map", None)
         if (
@@ -82,16 +95,16 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             device_map_without_lm_head = {
                 key: device_map[key] for key in device_map.keys() if key not in self.modules_to_not_convert
             }
-            if "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
+            if set(device_map.values()) == {"cpu"} and bnb_multibackend_is_enabled:
+                pass
+            elif "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
                 raise ValueError(
-                    """
-                    Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit the
-                    quantized model. If you want to dispatch the model on the CPU or the disk while keeping these modules
-                    in 32-bit, you need to set `load_in_8bit_fp32_cpu_offload=True` and pass a custom `device_map` to
-                    `from_pretrained`. Check
-                    https://huggingface.co/docs/transformers/main/en/main_classes/quantization#offload-between-cpu-and-gpu
-                    for more details.
-                    """
+                    "Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit the "
+                    "quantized model. If you want to dispatch the model on the CPU or the disk while keeping these modules "
+                    "in 32-bit, you need to set `llm_int8_enable_fp32_cpu_offload=True` and pass a custom `device_map` to "
+                    "`from_pretrained`. Check "
+                    "https://huggingface.co/docs/transformers/main/en/main_classes/quantization#offload-between-cpu-and-gpu "
+                    "for more details. "
                 )
 
         if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.37.2"):
@@ -120,10 +133,15 @@ class Bnb8BitHfQuantizer(HfQuantizer):
 
     def update_device_map(self, device_map):
         if device_map is None:
-            device_map = {"": torch.cuda.current_device()}
+            if torch.cuda.is_available():
+                device_map = {"": torch.cuda.current_device()}
+            elif is_torch_xpu_available():
+                device_map = {"": f"xpu:{torch.xpu.current_device()}"}
+            else:
+                device_map = {"": "cpu"}
             logger.info(
                 "The device_map was not initialized. "
-                "Setting device_map to {'':torch.cuda.current_device()}. "
+                f"Setting device_map to {device_map}. "
                 "If you want to use the model for inference, please set device_map ='auto' "
             )
         return device_map
@@ -134,7 +152,12 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         return torch.int8
 
     def check_quantized_param(
-        self, model: "PreTrainedModel", param_value: "torch.Tensor", param_name: str, state_dict: Dict[str, Any]
+        self,
+        model: "PreTrainedModel",
+        param_value: "torch.Tensor",
+        param_name: str,
+        state_dict: Dict[str, Any],
+        **kwargs,
     ):
         import bitsandbytes as bnb
 
@@ -157,7 +180,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         param_name: str,
         target_device: "torch.device",
         state_dict: Dict[str, Any],
-        unexpected_keys: List[str],
+        unexpected_keys: Optional[List[str]] = None,
     ):
         """
         combines logic from _load_state_dict_into_meta_model and .integrations.bitsandbytes.py::set_module_quantized_tensor_to_device()
@@ -166,7 +189,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         import bitsandbytes as bnb
 
         fp16_statistics_key = param_name.replace("weight", "SCB")
+        fp16_weights_format_key = param_name.replace("weight", "weight_format")
+
         fp16_statistics = state_dict.get(fp16_statistics_key, None)
+        fp16_weights_format = state_dict.get(fp16_weights_format_key, None)
 
         module, tensor_name = get_module_from_name(model, param_name)
         if tensor_name not in module._parameters:
@@ -184,7 +210,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {target_device}.")
 
         new_value = param_value.to("cpu")
-        if self.pre_quantized and not self.is_serializable:
+        if self.pre_quantized and not self.is_serializable():
             raise ValueError(
                 "Detected int8 weights but the version of bitsandbytes is not compatible with int8 serialization. "
                 "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
@@ -202,40 +228,39 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         module._parameters[tensor_name] = new_value
         if fp16_statistics is not None:
             setattr(module.weight, "SCB", fp16_statistics.to(target_device))
-            unexpected_keys.remove(fp16_statistics_key)
+            if unexpected_keys is not None:
+                unexpected_keys.remove(fp16_statistics_key)
+
+        # We just need to pop the `weight_format` keys from the state dict to remove unneeded
+        # messages. The correct format is correctly retrieved during the first forward pass.
+        if fp16_weights_format is not None and unexpected_keys is not None:
+            unexpected_keys.remove(fp16_weights_format_key)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         model.is_loaded_in_8bit = True
-        model.is_8bit_serializable = self.is_serializable
+        model.is_8bit_serializable = self.is_serializable()
         return model
 
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
         device_map,
-        keep_in_fp32_modules: List[str] = [],
+        keep_in_fp32_modules: Optional[List[str]] = None,
         **kwargs,
     ):
-        from ..integrations import get_keys_to_not_convert, replace_with_bnb_linear
+        from ..integrations import replace_with_bnb_linear
 
-        load_in_8bit_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
+        llm_int8_enable_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
 
-        # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
-        if self.quantization_config.llm_int8_skip_modules is None:
-            self.modules_to_not_convert = get_keys_to_not_convert(model)
-        else:
-            self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
-
-        if not isinstance(self.modules_to_not_convert, list):
-            self.modules_to_not_convert = [self.modules_to_not_convert]
-
-        self.modules_to_not_convert.extend(keep_in_fp32_modules)
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.llm_int8_skip_modules, keep_in_fp32_modules
+        )
 
         # Extend `self.modules_to_not_convert` to keys that are supposed to be offloaded to `cpu` or `disk`
         if isinstance(device_map, dict) and len(device_map.keys()) > 1:
             keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
 
-            if len(keys_on_cpu) > 0 and not load_in_8bit_fp32_cpu_offload:
+            if len(keys_on_cpu) > 0 and not llm_int8_enable_fp32_cpu_offload:
                 raise ValueError(
                     "If you want to offload some keys to `cpu` or `disk`, you need to set "
                     "`llm_int8_enable_fp32_cpu_offload=True`. Note that these modules will not be "
@@ -250,8 +275,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
 
         model.config.quantization_config = self.quantization_config
 
-    @property
-    def is_serializable(self):
+    def is_serializable(self, safe_serialization=None):
         _bnb_supports_8bit_serialization = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse(
             "0.37.2"
         )
@@ -269,3 +293,11 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.37.0")
+
+    def _dequantize(self, model):
+        from ..integrations import dequantize_and_replace
+
+        model = dequantize_and_replace(
+            model, self.modules_to_not_convert, quantization_config=self.quantization_config
+        )
+        return model

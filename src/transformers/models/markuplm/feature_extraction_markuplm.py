@@ -68,7 +68,7 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
 
         for element in html_code.descendants:
             if isinstance(element, bs4.element.NavigableString):
-                if type(element.parent) != bs4.element.Tag:
+                if type(element.parent) is not bs4.element.Tag:
                     continue
 
                 text_in_this_tag = html.unescape(element).strip()
@@ -181,3 +181,6 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
         encoded_inputs = BatchFeature(data=data, tensor_type=None)
 
         return encoded_inputs
+
+
+__all__ = ["MarkupLMFeatureExtractor"]

@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PoolFormer model configuration"""
+"""PoolFormer model configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 
@@ -24,11 +25,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "sail/poolformer_s12": "https://huggingface.co/sail/poolformer_s12/resolve/main/config.json",
-    # See all PoolFormer models at https://huggingface.co/models?filter=poolformer
-}
 
 
 class PoolFormerConfig(PretrainedConfig):
@@ -147,3 +143,6 @@ class PoolFormerOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 2e-3
+
+
+__all__ = ["PoolFormerConfig", "PoolFormerOnnxConfig"]

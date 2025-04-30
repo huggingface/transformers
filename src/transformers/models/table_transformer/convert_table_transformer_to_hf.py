@@ -17,7 +17,6 @@
 URL: https://github.com/microsoft/table-transformer
 """
 
-
 import argparse
 from collections import OrderedDict
 from pathlib import Path

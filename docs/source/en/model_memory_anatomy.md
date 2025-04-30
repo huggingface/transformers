@@ -42,7 +42,7 @@ In total, we get 512 sequences each with length 512 and store them in a [`~datas
 >>> seq_len, dataset_size = 512, 512
 >>> dummy_data = {
 ...     "input_ids": np.random.randint(100, 30000, (dataset_size, seq_len)),
-...     "labels": np.random.randint(0, 1, (dataset_size)),
+...     "labels": np.random.randint(0, 2, (dataset_size)),
 ... }
 >>> ds = Dataset.from_dict(dummy_data)
 >>> ds.set_format("pt")
@@ -145,7 +145,7 @@ arguments:
 ```py
 default_args = {
     "output_dir": "tmp",
-    "evaluation_strategy": "steps",
+    "eval_strategy": "steps",
     "num_train_epochs": 1,
     "log_level": "error",
     "report_to": "none",
@@ -233,7 +233,7 @@ Let's look at the details.
 **Optimizer States:**
 
 - 8 bytes * number of parameters for normal AdamW (maintains 2 states)
-- 2 bytes * number of parameters for 8-bit AdamW optimizers like [bitsandbytes](https://github.com/TimDettmers/bitsandbytes)
+- 2 bytes * number of parameters for 8-bit AdamW optimizers like [bitsandbytes](https://github.com/bitsandbytes-foundation/bitsandbytes)
 - 4 bytes * number of parameters for optimizers like SGD with momentum (maintains only 1 state)
 
 **Gradients**

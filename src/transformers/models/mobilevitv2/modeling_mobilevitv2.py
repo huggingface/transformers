@@ -14,8 +14,7 @@
 # limitations under the License.
 #
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
-""" PyTorch MobileViTV2 model."""
-
+"""PyTorch MobileViTV2 model."""
 
 from typing import Optional, Tuple, Union
 
@@ -55,12 +54,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 512, 8, 8]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "apple/mobilevitv2-1.0-imagenet1k-256"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "apple/mobilevitv2-1.0-imagenet1k-256"
-    # See all MobileViTV2 models at https://huggingface.co/models?filter=mobilevitv2
-]
 
 
 # Copied from transformers.models.mobilevit.modeling_mobilevit.make_divisible
@@ -609,6 +602,7 @@ class MobileViTV2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilevitv2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["MobileViTV2Layer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -996,6 +990,9 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if labels is not None and self.config.num_labels == 1:
+            raise ValueError("The number of labels should be greater than one")
+
         outputs = self.mobilevitv2(
             pixel_values,
             output_hidden_states=True,  # we need the intermediate hidden states
@@ -1008,15 +1005,12 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.num_labels == 1:
-                raise ValueError("The number of labels should be greater than one")
-            else:
-                # upsample logits to the images' original size
-                upsampled_logits = nn.functional.interpolate(
-                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-                )
-                loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
-                loss = loss_fct(upsampled_logits, labels)
+            # upsample logits to the images' original size
+            upsampled_logits = nn.functional.interpolate(
+                logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            )
+            loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
+            loss = loss_fct(upsampled_logits, labels)
 
         if not return_dict:
             if output_hidden_states:
@@ -1031,3 +1025,11 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+
+__all__ = [
+    "MobileViTV2ForImageClassification",
+    "MobileViTV2ForSemanticSegmentation",
+    "MobileViTV2Model",
+    "MobileViTV2PreTrainedModel",
+]

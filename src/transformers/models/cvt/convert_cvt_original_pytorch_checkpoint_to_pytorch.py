@@ -16,13 +16,13 @@
 
 URL: https://github.com/microsoft/CvT"""
 
-
 import argparse
 import json
 from collections import OrderedDict
+from pathlib import Path
 
 import torch
-from huggingface_hub import cached_download, hf_hub_url
+from huggingface_hub import hf_hub_download
 
 from transformers import AutoImageProcessor, CvtConfig, CvtForImageClassification
 
@@ -277,14 +277,14 @@ def final():
 
 def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_folder):
     """
-    Fucntion to convert the microsoft cvt checkpoint to huggingface checkpoint
+    Function to convert the microsoft cvt checkpoint to huggingface checkpoint
     """
     img_labels_file = "imagenet-1k-id2label.json"
     num_labels = 1000
 
     repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, img_labels_file, repo_type="dataset")), "r"))
+    id2label = json.loads(Path(hf_hub_download(repo_id, img_labels_file, repo_type="dataset")).read_text())
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label
@@ -309,7 +309,7 @@ def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_fo
     model = CvtForImageClassification(config)
     image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k")
     image_processor.size["shortest_edge"] = image_size
-    original_weights = torch.load(cvt_file_name, map_location=torch.device("cpu"))
+    original_weights = torch.load(cvt_file_name, map_location=torch.device("cpu"), weights_only=True)
 
     huggingface_weights = OrderedDict()
     list_of_state_dict = []

@@ -14,7 +14,6 @@
 # limitations under the License.
 """TF 2.0 TAPAS model."""
 
-
 from __future__ import annotations
 
 import enum
@@ -50,7 +49,6 @@ from ...utils import (
     is_tensorflow_probability_available,
     logging,
     replace_return_docstrings,
-    requires_backends,
 )
 from .configuration_tapas import TapasConfig
 
@@ -71,43 +69,19 @@ if is_tensorflow_probability_available():
             "It seems you have `tensorflow_probability` installed with the wrong tensorflow version. "
             "Please try to reinstall it following the instructions here: https://github.com/tensorflow/probability."
         )
+else:
+    try:
+        import tensorflow_probability as tfp
+
+        # On the first call, check whether a compatible version of TensorFlow is installed
+        # TensorFlow Probability depends on a recent stable release of TensorFlow
+        _ = tfp.distributions.Normal(loc=0.0, scale=1.0)
+    except ImportError:
+        pass
 
 _CONFIG_FOR_DOC = "TapasConfig"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
 
-TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # large models
-    "google/tapas-large",
-    "google/tapas-large-finetuned-sqa",
-    "google/tapas-large-finetuned-wtq",
-    "google/tapas-large-finetuned-wikisql-supervised",
-    "google/tapas-large-finetuned-tabfact",
-    # base models
-    "google/tapas-base",
-    "google/tapas-base-finetuned-sqa",
-    "google/tapas-base-finetuned-wtq",
-    "google/tapas-base-finetuned-wikisql-supervised",
-    "google/tapas-base-finetuned-tabfact",
-    # small models
-    "google/tapas-small",
-    "google/tapas-small-finetuned-sqa",
-    "google/tapas-small-finetuned-wtq",
-    "google/tapas-small-finetuned-wikisql-supervised",
-    "google/tapas-small-finetuned-tabfact",
-    # mini models
-    "google/tapas-mini",
-    "google/tapas-mini-finetuned-sqa",
-    "google/tapas-mini-finetuned-wtq",
-    "google/tapas-mini-finetuned-wikisql-supervised",
-    "google/tapas-mini-finetuned-tabfact",
-    # tiny models
-    "google/tapas-tiny",
-    "google/tapas-tiny-finetuned-sqa",
-    "google/tapas-tiny-finetuned-wtq",
-    "google/tapas-tiny-finetuned-wikisql-supervised",
-    "google/tapas-tiny-finetuned-tabfact",
-    # See all TAPAS models at https://huggingface.co/models?filter=tapas
-]
 
 EPSILON_ZERO_DIVISION = 1e-10
 CLOSE_ENOUGH_TO_LOG_ZERO = -10000.0
@@ -137,7 +111,7 @@ class TFTableQuestionAnsweringOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     logits_aggregation: tf.Tensor | None = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
@@ -196,10 +170,10 @@ class TFTapasEmbeddings(keras.layers.Layer):
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         training: bool = False,
     ) -> tf.Tensor:
         """
@@ -860,7 +834,6 @@ class TFTapasMainLayer(keras.layers.Layer):
     config_class = TapasConfig
 
     def __init__(self, config: TapasConfig, add_pooling_layer: bool = True, **kwargs):
-        requires_backends(self, "tensorflow_probability")
         super().__init__(**kwargs)
 
         self.config = config
@@ -1589,9 +1562,9 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                 aggregate_mask = None
             else:
                 if float_answer is not None:
-                    assert (
-                        shape_list(labels)[0] == shape_list(float_answer)[0]
-                    ), "Make sure the answers are a FloatTensor of shape (batch_size,)"
+                    assert shape_list(labels)[0] == shape_list(float_answer)[0], (
+                        "Make sure the answers are a FloatTensor of shape (batch_size,)"
+                    )
                     # <float32>[batch_size]
                     aggregate_mask = _calculate_aggregate_mask(
                         float_answer,
@@ -1642,9 +1615,9 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                 if is_supervised:
                     # Note that `aggregate_mask` is None if the setting is supervised.
                     if aggregation_labels is not None:
-                        assert (
-                            shape_list(labels)[0] == shape_list(aggregation_labels)[0]
-                        ), "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
+                        assert shape_list(labels)[0] == shape_list(aggregation_labels)[0], (
+                            "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
+                        )
                         per_example_additional_loss = _calculate_aggregation_loss(
                             logits_aggregation,
                             aggregate_mask,
@@ -1857,7 +1830,7 @@ class AverageApproximationFunction(str, enum.Enum):
 # Beginning of everything related to segmented tensors
 
 
-class IndexMap(object):
+class IndexMap:
     """Index grouping entries within a tensor."""
 
     def __init__(self, indices, num_segments, batch_dims=0):
@@ -2371,11 +2344,11 @@ def _calculate_expected_result(
     if avg_approximation == AverageApproximationFunction.RATIO:
         average_result = sum_result / (count_result + EPSILON_ZERO_DIVISION)
     elif avg_approximation == AverageApproximationFunction.FIRST_ORDER:
-        # The sum of all probabilities exept that correspond to other cells
+        # The sum of all probabilities except that correspond to other cells
         ex = tf.reduce_sum(scaled_probability_per_cell, axis=1, keepdims=True) - scaled_probability_per_cell + 1
         average_result = tf.reduce_sum(numeric_values_masked * scaled_probability_per_cell / ex, axis=1)
     elif avg_approximation == AverageApproximationFunction.SECOND_ORDER:
-        # The sum of all probabilities exept that correspond to other cells
+        # The sum of all probabilities except that correspond to other cells
         ex = tf.reduce_sum(scaled_probability_per_cell, axis=1, keepdims=True) - scaled_probability_per_cell + 1
         pointwise_var = scaled_probability_per_cell * (1 - scaled_probability_per_cell)
         var = tf.reduce_sum(pointwise_var, axis=1, keepdims=True) - pointwise_var
@@ -2478,3 +2451,12 @@ def _calculate_regression_loss(
         )
     per_example_answer_loss_scaled = config.answer_loss_importance * (per_example_answer_loss * aggregate_mask)
     return per_example_answer_loss_scaled, large_answer_loss_mask
+
+
+__all__ = [
+    "TFTapasForMaskedLM",
+    "TFTapasForQuestionAnswering",
+    "TFTapasForSequenceClassification",
+    "TFTapasModel",
+    "TFTapasPreTrainedModel",
+]

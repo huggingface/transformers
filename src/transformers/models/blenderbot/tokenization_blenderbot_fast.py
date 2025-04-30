@@ -13,10 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Tokenization class for Blenderbot."""
+
 import json
 from typing import List, Optional, Tuple
 
-from tokenizers import pre_tokenizers, processors
+from tokenizers import processors
 
 from ...tokenization_utils_base import AddedToken, BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -32,16 +33,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
     "tokenizer_config_file": "tokenizer_config.json",
 }
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/vocab.json"},
-    "merges_file": {"facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/merges.txt"},
-    "tokenizer_config_file": {
-        "facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/tokenizer_config.json"
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/blenderbot-3B": 128}
 
 
 class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
@@ -126,8 +117,6 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = BlenderbotTokenizer
 
@@ -170,14 +159,6 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
             trim_offsets=trim_offsets,
             **kwargs,
         )
-
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-
-        self.add_prefix_space = add_prefix_space
 
         tokenizer_component = "post_processor"
         tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
@@ -299,23 +280,5 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         """
         return token_ids_0 + [self.eos_token_id]
 
-    @property
-    # Copied from transformers.models.blenderbot.tokenization_blenderbot.BlenderbotTokenizer.default_chat_template
-    def default_chat_template(self):
-        """
-        A very simple chat template that just adds whitespace between messages.
-        """
-        logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
-        )
-        return (
-            "{% for message in messages %}"
-            "{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}"
-            "{{ message['content'] }}"
-            "{% if not loop.last %}{{ '  ' }}{% endif %}"
-            "{% endfor %}"
-            "{{ eos_token }}"
-        )
+
+__all__ = ["BlenderbotTokenizerFast"]

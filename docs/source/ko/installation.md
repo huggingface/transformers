@@ -145,7 +145,7 @@ conda install conda-forge::transformers
 
 사전훈련된 모델은 다운로드된 후 로컬 경로 `~/.cache/huggingface/hub`에 캐시됩니다. 셸 환경 변수 `TRANSFORMERS_CACHE`의 기본 디렉터리입니다. Windows의 경우 기본 디렉터리는 `C:\Users\username\.cache\huggingface\hub`입니다. 아래의 셸 환경 변수를 (우선 순위) 순서대로 변경하여 다른 캐시 디렉토리를 지정할 수 있습니다.
 
-1. 셸 환경 변수 (기본): `HUGGINGFACE_HUB_CACHE` 또는 `TRANSFORMERS_CACHE`
+1. 셸 환경 변수 (기본): `HF_HUB_CACHE` 또는 `TRANSFORMERS_CACHE`
 2. 셸 환경 변수: `HF_HOME`
 3. 셸 환경 변수: `XDG_CACHE_HOME` + `/huggingface`
 
@@ -157,7 +157,7 @@ conda install conda-forge::transformers
 
 ## 오프라인 모드[[offline-mode]]
 
-🤗 Transformers를 로컬 파일만 사용하도록 해서 방화벽 또는 오프라인 환경에서 실행할 수 있습니다. 활성화하려면 `TRANSFORMERS_OFFLINE=1` 환경 변수를 설정하세요.
+🤗 Transformers를 로컬 파일만 사용하도록 해서 방화벽 또는 오프라인 환경에서 실행할 수 있습니다. 활성화하려면 `HF_HUB_OFFLINE=1` 환경 변수를 설정하세요.
 
 <Tip>
 
@@ -174,7 +174,7 @@ python examples/pytorch/translation/run_translation.py --model_name_or_path goog
 오프라인 기기에서 동일한 프로그램을 다음과 같이 실행할 수 있습니다.
 
 ```bash
-HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
 python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 

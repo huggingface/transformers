@@ -12,22 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DPT model configuration"""
+"""DPT model configuration"""
 
 import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto.configuration_auto import CONFIG_MAPPING
 from ..bit import BitConfig
 
 
 logger = logging.get_logger(__name__)
-
-DPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Intel/dpt-large": "https://huggingface.co/Intel/dpt-large/resolve/main/config.json",
-    # See all DPT models at https://huggingface.co/models?filter=dpt
-}
 
 
 class DPTConfig(PretrainedConfig):
@@ -123,6 +119,12 @@ class DPTConfig(PretrainedConfig):
         backbone_kwargs (`dict`, *optional*):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
             e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
+        pooler_output_size (`int`, *optional*):
+           Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
+        pooler_act (`str`, *optional*, defaults to `"tanh"`):
+           The activation function to be used by the pooler. Keys of ACT2FN are supported for Flax and
+           Pytorch, and elements of https://www.tensorflow.org/api_docs/python/tf/keras/activations are
+           supported for Tensorflow.
 
     Example:
 
@@ -177,6 +179,8 @@ class DPTConfig(PretrainedConfig):
         use_pretrained_backbone=False,
         use_timm_backbone=False,
         backbone_kwargs=None,
+        pooler_output_size=None,
+        pooler_act="tanh",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -184,13 +188,9 @@ class DPTConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.is_hybrid = is_hybrid
 
-        if use_pretrained_backbone:
-            raise ValueError("Pretrained backbones are not supported yet.")
-
         use_autobackbone = False
         if self.is_hybrid:
-            if backbone_config is None and backbone is None:
-                logger.info("Initializing the config with a `BiT` backbone.")
+            if backbone_config is None:
                 backbone_config = {
                     "global_padding": "same",
                     "layer_type": "bottleneck",
@@ -198,8 +198,8 @@ class DPTConfig(PretrainedConfig):
                     "out_features": ["stage1", "stage2", "stage3"],
                     "embedding_dynamic_padding": True,
                 }
-                backbone_config = BitConfig(**backbone_config)
-            elif isinstance(backbone_config, dict):
+
+            if isinstance(backbone_config, dict):
                 logger.info("Initializing the config with a `BiT` backbone.")
                 backbone_config = BitConfig(**backbone_config)
             elif isinstance(backbone_config, PretrainedConfig):
@@ -215,9 +215,8 @@ class DPTConfig(PretrainedConfig):
             if readout_type != "project":
                 raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
 
-        elif backbone_config is not None:
+        elif backbone is not None or backbone_config is not None:
             use_autobackbone = True
-
             if isinstance(backbone_config, dict):
                 backbone_model_type = backbone_config.get("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
@@ -226,31 +225,37 @@ class DPTConfig(PretrainedConfig):
             self.backbone_config = backbone_config
             self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
+
+            # We only use load_backbone when config.is_hydrid is False
+            verify_backbone_config_arguments(
+                use_timm_backbone=use_timm_backbone,
+                use_pretrained_backbone=use_pretrained_backbone,
+                backbone=backbone,
+                backbone_config=backbone_config,
+                backbone_kwargs=backbone_kwargs,
+            )
         else:
-            self.backbone_config = backbone_config
+            self.backbone_config = None
             self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
-
-        if use_autobackbone and backbone_config is not None and backbone is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
-
-        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
 
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = use_timm_backbone
         self.backbone_kwargs = backbone_kwargs
-        self.num_hidden_layers = None if use_autobackbone else num_hidden_layers
-        self.num_attention_heads = None if use_autobackbone else num_attention_heads
-        self.intermediate_size = None if use_autobackbone else intermediate_size
-        self.hidden_dropout_prob = None if use_autobackbone else hidden_dropout_prob
-        self.attention_probs_dropout_prob = None if use_autobackbone else attention_probs_dropout_prob
-        self.layer_norm_eps = None if use_autobackbone else layer_norm_eps
-        self.image_size = None if use_autobackbone else image_size
-        self.patch_size = None if use_autobackbone else patch_size
-        self.num_channels = None if use_autobackbone else num_channels
-        self.qkv_bias = None if use_autobackbone else qkv_bias
+
+        # ViT parameters used if not using a hybrid backbone
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.layer_norm_eps = layer_norm_eps
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.qkv_bias = qkv_bias
+        self.use_autobackbone = use_autobackbone
         self.backbone_out_indices = None if use_autobackbone else backbone_out_indices
 
         if readout_type not in ["ignore", "add", "project"]:
@@ -271,6 +276,8 @@ class DPTConfig(PretrainedConfig):
         self.auxiliary_loss_weight = auxiliary_loss_weight
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
         self.semantic_classifier_dropout = semantic_classifier_dropout
+        self.pooler_output_size = pooler_output_size if pooler_output_size else hidden_size
+        self.pooler_act = pooler_act
 
     def to_dict(self):
         """
@@ -284,3 +291,10 @@ class DPTConfig(PretrainedConfig):
 
         output["model_type"] = self.__class__.model_type
         return output
+
+    @property
+    def sub_configs(self):
+        return {"backbone_config": type(self.backbone_config)} if self.backbone_config is not None else {}
+
+
+__all__ = ["DPTConfig"]

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ProphetNet model, ported from ProphetNet repo(fairsequery_states version)."""
+"""PyTorch ProphetNet model, ported from ProphetNet repo(fairsequery_states version)."""
 
 import copy
 import math
@@ -26,6 +26,7 @@ from torch import Tensor, nn
 from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -42,11 +43,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ProphenetConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/prophetnet-large-uncased"
-
-PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/prophetnet-large-uncased",
-    # See all ProphetNet models at https://huggingface.co/models?filter=prophetnet
-]
 
 
 PROPHETNET_START_DOCSTRING = r"""
@@ -312,7 +308,7 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     logits_ngram: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -532,7 +528,7 @@ class ProphetNetDecoderLMOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     logits_ngram: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -592,9 +588,9 @@ class ProphetNetPositionalEmbeddings(nn.Embedding):
         super().__init__(config.max_position_embeddings, config.hidden_size, config.pad_token_id)
 
     def forward(self, inputs_shape, device, attention_mask=None, past_key_values=None, position_ids=None):
-        assert (position_ids is None) or (
-            self.padding_idx is None
-        ), "If position_ids is pre-computed then padding_idx should not be set."
+        assert (position_ids is None) or (self.padding_idx is None), (
+            "If position_ids is pre-computed then padding_idx should not be set."
+        )
 
         if position_ids is None:
             if past_key_values is not None:
@@ -788,9 +784,9 @@ class ProphetNetNgramSelfAttention(nn.Module):
         self.head_dim = config.hidden_size // self.num_attn_heads
         self.ngram = config.ngram
 
-        assert (
-            self.head_dim * self.num_attn_heads == config.hidden_size
-        ), "config.hidden_size must be divisible by num_attn_heads"
+        assert self.head_dim * self.num_attn_heads == config.hidden_size, (
+            "config.hidden_size must be divisible by num_attn_heads"
+        )
         # key, value, query projection
         self.key_proj = nn.Linear(config.hidden_size, config.hidden_size)
         self.value_proj = nn.Linear(config.hidden_size, config.hidden_size)
@@ -1045,9 +1041,9 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         if predict_relative_position_buckets is None:
             key_sequence_length = attn_weights.shape[-1]
-            assert (
-                position_ids[0][0] == key_sequence_length - 1
-            ), "`position_ids` are incorrect. They should be of the format 1 2 3 4 5 ... (key_sequence_length - 1)"
+            assert position_ids[0][0] == key_sequence_length - 1, (
+                "`position_ids` are incorrect. They should be of the format 1 2 3 4 5 ... (key_sequence_length - 1)"
+            )
             relative_positions = (
                 torch.arange(0, key_sequence_length)
                 .unsqueeze(0)
@@ -1317,9 +1313,9 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            assert head_mask.size()[0] == (len(self.layers)), (
+                f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            )
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_hidden_states = encoder_hidden_states + (hidden_states,)
@@ -1492,9 +1488,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         # prepare attention mask
         if past_key_values is not None:
-            assert (
-                hidden_states.size(1) == 1
-            ), "At the moment `use_cache` is only supported for `decoder_input_ids` of length 1"
+            assert hidden_states.size(1) == 1, (
+                "At the moment `use_cache` is only supported for `decoder_input_ids` of length 1"
+            )
 
             ngram_hidden_states = [
                 (ngram_embeddings[ngram - 1] + predicting_stream_pos_embed).repeat(batch_size, 1, 1)
@@ -1861,7 +1857,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     "The ProphetNet Model with a language modeling head. Can be used for sequence generation tasks.",
     PROPHETNET_START_DOCSTRING,
 )
-class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
+class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight", "lm_head.weight"]
 
     def __init__(self, config: ProphetNetConfig):
@@ -2022,35 +2018,6 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 
         return loss
 
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
-    ):
-        assert encoder_outputs is not None, "`encoder_outputs` have to be passed for generation."
-
-        if past_key_values:
-            decoder_input_ids = decoder_input_ids[:, -1:]
-        # first step, decoder_cached_states are empty
-        return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,
-        }
-
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
 
@@ -2078,7 +2045,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     " language modeling.",
     PROPHETNET_START_DOCSTRING,
 )
-class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
+class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = [
         "prophetnet.word_embeddings.weight",
         "prophetnet.decoder.word_embeddings.weight",
@@ -2294,6 +2261,8 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         use_cache=None,
         **kwargs,
     ):
+        # Overwritten -- our tests complain if we use GenerationMixin.prepare_inputs_for_generation
+
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
@@ -2340,3 +2309,13 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
+
+
+__all__ = [
+    "ProphetNetDecoder",
+    "ProphetNetEncoder",
+    "ProphetNetForCausalLM",
+    "ProphetNetForConditionalGeneration",
+    "ProphetNetModel",
+    "ProphetNetPreTrainedModel",
+]

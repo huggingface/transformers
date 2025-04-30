@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" CamemBERT configuration"""
+"""CamemBERT configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -24,16 +24,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "almanach/camembert-base": "https://huggingface.co/almanach/camembert-base/resolve/main/config.json",
-    "umberto-commoncrawl-cased-v1": (
-        "https://huggingface.co/Musixmatch/umberto-commoncrawl-cased-v1/resolve/main/config.json"
-    ),
-    "umberto-wikipedia-uncased-v1": (
-        "https://huggingface.co/Musixmatch/umberto-wikipedia-uncased-v1/resolve/main/config.json"
-    ),
-}
 
 
 class CamembertConfig(PretrainedConfig):
@@ -160,3 +150,6 @@ class CamembertOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+
+__all__ = ["CamembertConfig", "CamembertOnnxConfig"]

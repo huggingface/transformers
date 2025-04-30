@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright The HuggingFace Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,7 +35,7 @@ from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
 from filelock import FileLock
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
@@ -56,7 +55,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.39.0.dev0")
+check_min_version("4.52.0.dev0")
 
 logger = get_logger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
@@ -268,12 +267,11 @@ def parse_args():
     parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
     parser.add_argument(
         "--trust_remote_code",
-        type=bool,
-        default=False,
+        action="store_true",
         help=(
-            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-            "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-            "execute code present on the Hub on your local machine."
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
         ),
     )
     parser.add_argument(
@@ -375,9 +373,8 @@ def main():
             if repo_name is None:
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
-            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
-            # Clone repo locally
-            repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
+            api = HfApi()
+            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
 
             with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
                 if "step_*" not in gitignore:
@@ -399,7 +396,9 @@ def main():
     # download the dataset.
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
+        raw_datasets = load_dataset(
+            args.dataset_name, args.dataset_config_name, trust_remote_code=args.trust_remote_code
+        )
     else:
         data_files = {}
         if args.train_file is not None:
@@ -534,11 +533,17 @@ def main():
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
     label_pad_token_id = -100 if args.ignore_pad_token_for_loss else tokenizer.pad_token_id
+    if accelerator.mixed_precision == "fp8":
+        pad_to_multiple_of = 16
+    elif accelerator.mixed_precision != "no":
+        pad_to_multiple_of = 8
+    else:
+        pad_to_multiple_of = None
     data_collator = DataCollatorForSeq2Seq(
         tokenizer,
         model=model,
         label_pad_token_id=label_pad_token_id,
-        pad_to_multiple_of=8 if accelerator.use_fp16 else None,
+        pad_to_multiple_of=pad_to_multiple_of,
     )
 
     def postprocess_text(preds, labels):
@@ -688,7 +693,7 @@ def main():
                 completed_steps += 1
 
             if isinstance(checkpointing_steps, int):
-                if completed_steps % checkpointing_steps == 0:
+                if completed_steps % checkpointing_steps == 0 and accelerator.sync_gradients:
                     output_dir = f"step_{completed_steps}"
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
@@ -755,8 +760,12 @@ def main():
             )
             if accelerator.is_main_process:
                 tokenizer.save_pretrained(args.output_dir)
-                repo.push_to_hub(
-                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                api.upload_folder(
+                    commit_message=f"Training in progress epoch {epoch}",
+                    folder_path=args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=args.hub_token,
                 )
 
         if args.checkpointing_steps == "epoch":
@@ -774,7 +783,13 @@ def main():
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
-                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+                api.upload_folder(
+                    commit_message="End of training",
+                    folder_path=args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=args.hub_token,
+                )
 
             all_results = {f"eval_{k}": v for k, v in result.items()}
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:

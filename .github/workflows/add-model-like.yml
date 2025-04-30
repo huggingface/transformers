@@ -16,14 +16,14 @@ jobs:
     name: "Add new model like template tests"
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
           sudo apt -y update && sudo apt install -y libsndfile1-dev
 
       - name: Load cached virtual environment
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: cache
         with:
           path: ~/venv/
@@ -54,7 +54,7 @@ jobs:
       - name: Create model files
         run: |
           . ~/venv/bin/activate
-          transformers-cli add-new-model-like --config_file tests/fixtures/add_distilbert_like_config.json --path_to_repo .
+          transformers add-new-model-like --config_file tests/fixtures/add_distilbert_like_config.json --path_to_repo .
           make style
           make fix-copies
 
@@ -74,7 +74,7 @@ jobs:
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: run_all_tests_new_models_test_reports
           path: reports/tests_new_models

@@ -157,25 +157,42 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
         outputs = feature_extractor(img, return_tensors=True)
         self.assertTrue(tf.is_tensor(outputs))
 
-    def get_test_pipeline(self, model, tokenizer, processor):
-        if processor is None:
-            self.skipTest("No image processor")
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        if image_processor is None:
+            self.skipTest(reason="No image processor")
 
         elif type(model.config) in TOKENIZER_MAPPING:
-            self.skipTest("This is a bimodal model, we need to find a more consistent way to switch on those models.")
+            self.skipTest(
+                reason="This is a bimodal model, we need to find a more consistent way to switch on those models."
+            )
 
         elif model.config.is_encoder_decoder:
             self.skipTest(
                 """encoder_decoder models are trickier for this pipeline.
-                Do we want encoder + decoder inputs to get some featues?
+                Do we want encoder + decoder inputs to get some features?
                 Do we want encoder only features ?
                 For now ignore those.
                 """
             )
 
-        feature_extractor = ImageFeatureExtractionPipeline(model=model, image_processor=processor)
+        feature_extractor_pipeline = ImageFeatureExtractionPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         img = prepare_img()
-        return feature_extractor, [img, img]
+        return feature_extractor_pipeline, [img, img]
 
     def run_pipeline_test(self, feature_extractor, examples):
         imgs = examples

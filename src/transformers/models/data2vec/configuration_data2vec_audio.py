@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Data2VecText configuration"""
+"""Data2VecText configuration"""
 
 import math
 
@@ -21,11 +21,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/data2vec-base-960h": "https://huggingface.co/facebook/data2vec-audio-base-960h/resolve/main/config.json",
-    # See all Data2VecAudio models at https://huggingface.co/models?filter=data2vec-audio
-}
 
 
 class Data2VecAudioConfig(PretrainedConfig):
@@ -95,8 +90,8 @@ class Data2VecAudioConfig(PretrainedConfig):
             Number of groups of 1D convolutional positional embeddings layer.
         mask_time_prob (`float`, *optional*, defaults to 0.05):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
-            procecure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
-            reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
+            procedure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
+            reasoning from the probability of each feature vector to be chosen as the start of the vector span to be
             masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
         mask_time_length (`int`, *optional*, defaults to 10):
             Length of vector span along the time axis.
@@ -106,8 +101,8 @@ class Data2VecAudioConfig(PretrainedConfig):
             mask_time_min_masks''
         mask_feature_prob (`float`, *optional*, defaults to 0.0):
             Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
-            masking procecure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
-            the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
+            masking procedure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
+            the axis. If reasoning from the probability of each feature vector to be chosen as the start of the vector
             span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
             may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
             True`.
@@ -288,3 +283,6 @@ class Data2VecAudioConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return math.prod(self.conv_stride)
+
+
+__all__ = ["Data2VecAudioConfig"]

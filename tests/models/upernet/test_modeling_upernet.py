@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,15 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch UperNet framework. """
-
+"""Testing suite for the PyTorch UperNet framework."""
 
 import unittest
 
 from huggingface_hub import hf_hub_download
 
 from transformers import ConvNextConfig, UperNetConfig
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_timm,
+    require_torch,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -32,7 +37,6 @@ if is_torch_available():
     import torch
 
     from transformers import UperNetForSemanticSegmentation
-    from transformers.models.upernet.modeling_upernet import UPERNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -77,7 +81,6 @@ class UperNetModelTester:
         self.out_features = out_features
         self.num_labels = num_labels
         self.scope = scope
-        self.num_hidden_layers = num_stages
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -153,22 +156,20 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_head_masking = False
     test_torchscript = False
     has_attentions = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = UperNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=UperNetConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=UperNetConfig,
+            has_text_modality=False,
+            hidden_size=37,
+            common_properties=["hidden_size"],
+        )
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
+        self.config_tester.run_common_tests()
 
     def test_for_semantic_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -179,15 +180,7 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         pass
 
     @unittest.skip(reason="UperNet does not support input and output embeddings")
-    def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="UperNet does not have a base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="UperNet does not have a base model")
-    def test_save_load_fast_init_to_base(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @require_torch_multi_gpu
@@ -242,15 +235,42 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    @require_timm
+    def test_backbone_selection(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        config.backbone_config = None
+        config.backbone_kwargs = {"out_indices": [1, 2, 3]}
+        config.use_pretrained_backbone = True
+
+        # Load a timm backbone
+        # We can't load transformer checkpoint with timm backbone, as we can't specify features_only and out_indices
+        config.backbone = "resnet18"
+        config.use_timm_backbone = True
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            if model.__class__.__name__ == "UperNetForUniversalSegmentation":
+                self.assertEqual(model.backbone.out_indices, [1, 2, 3])
+
+        # Load a HF backbone
+        config.backbone = "microsoft/resnet-18"
+        config.use_timm_backbone = False
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            if model.__class__.__name__ == "UperNetForUniversalSegmentation":
+                self.assertEqual(model.backbone.out_indices, [1, 2, 3])
+
     @unittest.skip(reason="UperNet does not have tied weights")
     def test_tied_model_weights_key_ignore(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in UPERNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = UperNetForSemanticSegmentation.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openmmlab/upernet-convnext-tiny"
+        model = UperNetForSemanticSegmentation.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of ADE20k
@@ -282,7 +302,7 @@ class UperNetModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-7.5958, -7.5958, -7.4302], [-7.5958, -7.5958, -7.4302], [-7.4797, -7.4797, -7.3068]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_convnext_backbone(self):
         processor = AutoImageProcessor.from_pretrained("openmmlab/upernet-convnext-tiny")
@@ -300,4 +320,4 @@ class UperNetModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-8.8110, -8.8110, -8.6521], [-8.8110, -8.8110, -8.6521], [-8.7746, -8.7746, -8.6130]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

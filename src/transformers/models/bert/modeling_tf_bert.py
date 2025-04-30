@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 BERT model."""
-
+"""TF 2.0 BERT model."""
 
 from __future__ import annotations
 
@@ -89,30 +88,6 @@ _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ydshieh/bert-base-uncased-yelp-polari
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
 _SEQ_CLASS_EXPECTED_LOSS = 0.01
 
-TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google-bert/bert-base-uncased",
-    "google-bert/bert-large-uncased",
-    "google-bert/bert-base-cased",
-    "google-bert/bert-large-cased",
-    "google-bert/bert-base-multilingual-uncased",
-    "google-bert/bert-base-multilingual-cased",
-    "google-bert/bert-base-chinese",
-    "google-bert/bert-base-german-cased",
-    "google-bert/bert-large-uncased-whole-word-masking",
-    "google-bert/bert-large-cased-whole-word-masking",
-    "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad",
-    "google-bert/bert-large-cased-whole-word-masking-finetuned-squad",
-    "google-bert/bert-base-cased-finetuned-mrpc",
-    "cl-tohoku/bert-base-japanese",
-    "cl-tohoku/bert-base-japanese-whole-word-masking",
-    "cl-tohoku/bert-base-japanese-char",
-    "cl-tohoku/bert-base-japanese-char-whole-word-masking",
-    "TurkuNLP/bert-base-finnish-cased-v1",
-    "TurkuNLP/bert-base-finnish-uncased-v1",
-    "wietsedv/bert-base-dutch-cased",
-    # See all BERT models at https://huggingface.co/models?filter=bert
-]
-
 
 class TFBertPreTrainingLoss:
     """
@@ -186,10 +161,10 @@ class TFBertEmbeddings(keras.layers.Layer):
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         past_key_values_length=0,
         training: bool = False,
     ) -> tf.Tensor:
@@ -1073,8 +1048,8 @@ class TFBertForPreTrainingOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    prediction_logits: tf.Tensor = None
-    seq_relationship_logits: tf.Tensor = None
+    prediction_logits: Optional[tf.Tensor] = None
+    seq_relationship_logits: Optional[tf.Tensor] = None
     hidden_states: Optional[Union[Tuple[tf.Tensor], tf.Tensor]] = None
     attentions: Optional[Union[Tuple[tf.Tensor], tf.Tensor]] = None
 
@@ -1182,10 +1157,10 @@ BERT_INPUTS_DOCSTRING = r"""
     BERT_START_DOCSTRING,
 )
 class TFBertModel(TFBertPreTrainedModel):
-    def __init__(self, config: BertConfig, *inputs, **kwargs):
+    def __init__(self, config: BertConfig, add_pooling_layer: bool = True, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.bert = TFBertMainLayer(config, name="bert")
+        self.bert = TFBertMainLayer(config, add_pooling_layer, name="bert")
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1316,7 +1291,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
             - 0 indicates sequence B is a continuation of sequence A,
             - 1 indicates sequence B is a random sequence.
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
 
         Return:
@@ -2133,3 +2108,19 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFBertEmbeddings",
+    "TFBertForMaskedLM",
+    "TFBertForMultipleChoice",
+    "TFBertForNextSentencePrediction",
+    "TFBertForPreTraining",
+    "TFBertForQuestionAnswering",
+    "TFBertForSequenceClassification",
+    "TFBertForTokenClassification",
+    "TFBertLMHeadModel",
+    "TFBertMainLayer",
+    "TFBertModel",
+    "TFBertPreTrainedModel",
+]

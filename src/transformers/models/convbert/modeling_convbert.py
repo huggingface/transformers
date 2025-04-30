@@ -12,13 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ConvBERT model."""
-
+"""PyTorch ConvBERT model."""
 
 import math
 import os
 from operator import attrgetter
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -34,7 +33,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, SequenceSummary
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_convbert import ConvBertConfig
@@ -44,13 +43,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "YituTech/conv-bert-base"
 _CONFIG_FOR_DOC = "ConvBertConfig"
-
-CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "YituTech/conv-bert-base",
-    "YituTech/conv-bert-medium-small",
-    "YituTech/conv-bert-small",
-    # See all ConvBERT models at https://huggingface.co/models?filter=convbert
-]
 
 
 def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):
@@ -88,72 +80,72 @@ def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):
         group_dense_name = "dense"
 
     for j in range(config.num_hidden_layers):
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.query.weight"
-        ] = f"electra/encoder/layer_{j}/attention/self/query/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.query.bias"
-        ] = f"electra/encoder/layer_{j}/attention/self/query/bias"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.key.weight"
-        ] = f"electra/encoder/layer_{j}/attention/self/key/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.key.bias"
-        ] = f"electra/encoder/layer_{j}/attention/self/key/bias"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.value.weight"
-        ] = f"electra/encoder/layer_{j}/attention/self/value/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.value.bias"
-        ] = f"electra/encoder/layer_{j}/attention/self/value/bias"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.key_conv_attn_layer.depthwise.weight"
-        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_key/depthwise_kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.key_conv_attn_layer.pointwise.weight"
-        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_key/pointwise_kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.key_conv_attn_layer.bias"
-        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_key/bias"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.conv_kernel_layer.weight"
-        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_kernel/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.conv_kernel_layer.bias"
-        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_kernel/bias"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.conv_out_layer.weight"
-        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_point/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.conv_out_layer.bias"
-        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_point/bias"
-        param_mapping[
-            f"encoder.layer.{j}.attention.output.dense.weight"
-        ] = f"electra/encoder/layer_{j}/attention/output/dense/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.output.LayerNorm.weight"
-        ] = f"electra/encoder/layer_{j}/attention/output/LayerNorm/gamma"
-        param_mapping[
-            f"encoder.layer.{j}.attention.output.dense.bias"
-        ] = f"electra/encoder/layer_{j}/attention/output/dense/bias"
-        param_mapping[
-            f"encoder.layer.{j}.attention.output.LayerNorm.bias"
-        ] = f"electra/encoder/layer_{j}/attention/output/LayerNorm/beta"
-        param_mapping[
-            f"encoder.layer.{j}.intermediate.dense.weight"
-        ] = f"electra/encoder/layer_{j}/intermediate/{group_dense_name}/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.intermediate.dense.bias"
-        ] = f"electra/encoder/layer_{j}/intermediate/{group_dense_name}/bias"
-        param_mapping[
-            f"encoder.layer.{j}.output.dense.weight"
-        ] = f"electra/encoder/layer_{j}/output/{group_dense_name}/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.output.dense.bias"
-        ] = f"electra/encoder/layer_{j}/output/{group_dense_name}/bias"
-        param_mapping[
-            f"encoder.layer.{j}.output.LayerNorm.weight"
-        ] = f"electra/encoder/layer_{j}/output/LayerNorm/gamma"
+        param_mapping[f"encoder.layer.{j}.attention.self.query.weight"] = (
+            f"electra/encoder/layer_{j}/attention/self/query/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.query.bias"] = (
+            f"electra/encoder/layer_{j}/attention/self/query/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.key.weight"] = (
+            f"electra/encoder/layer_{j}/attention/self/key/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.key.bias"] = (
+            f"electra/encoder/layer_{j}/attention/self/key/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.value.weight"] = (
+            f"electra/encoder/layer_{j}/attention/self/value/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.value.bias"] = (
+            f"electra/encoder/layer_{j}/attention/self/value/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.key_conv_attn_layer.depthwise.weight"] = (
+            f"electra/encoder/layer_{j}/attention/self/conv_attn_key/depthwise_kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.key_conv_attn_layer.pointwise.weight"] = (
+            f"electra/encoder/layer_{j}/attention/self/conv_attn_key/pointwise_kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.key_conv_attn_layer.bias"] = (
+            f"electra/encoder/layer_{j}/attention/self/conv_attn_key/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.conv_kernel_layer.weight"] = (
+            f"electra/encoder/layer_{j}/attention/self/conv_attn_kernel/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.conv_kernel_layer.bias"] = (
+            f"electra/encoder/layer_{j}/attention/self/conv_attn_kernel/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.conv_out_layer.weight"] = (
+            f"electra/encoder/layer_{j}/attention/self/conv_attn_point/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.conv_out_layer.bias"] = (
+            f"electra/encoder/layer_{j}/attention/self/conv_attn_point/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.output.dense.weight"] = (
+            f"electra/encoder/layer_{j}/attention/output/dense/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.output.LayerNorm.weight"] = (
+            f"electra/encoder/layer_{j}/attention/output/LayerNorm/gamma"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.output.dense.bias"] = (
+            f"electra/encoder/layer_{j}/attention/output/dense/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.output.LayerNorm.bias"] = (
+            f"electra/encoder/layer_{j}/attention/output/LayerNorm/beta"
+        )
+        param_mapping[f"encoder.layer.{j}.intermediate.dense.weight"] = (
+            f"electra/encoder/layer_{j}/intermediate/{group_dense_name}/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.intermediate.dense.bias"] = (
+            f"electra/encoder/layer_{j}/intermediate/{group_dense_name}/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.output.dense.weight"] = (
+            f"electra/encoder/layer_{j}/output/{group_dense_name}/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.output.dense.bias"] = (
+            f"electra/encoder/layer_{j}/output/{group_dense_name}/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.output.LayerNorm.weight"] = (
+            f"electra/encoder/layer_{j}/output/LayerNorm/gamma"
+        )
         param_mapping[f"encoder.layer.{j}.output.LayerNorm.bias"] = f"electra/encoder/layer_{j}/output/LayerNorm/beta"
 
     for param in model.named_parameters():
@@ -250,7 +242,7 @@ class ConvBertPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -263,6 +255,11 @@ class ConvBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, SeparableConv1D):
+            module.bias.data.zero_()
+        elif isinstance(module, GroupedLinearLayer):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.bias.data.zero_()
 
 
 class SeparableConv1D(nn.Module):
@@ -686,6 +683,106 @@ class ConvBertPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.xlm.modeling_xlm.XLMSequenceSummary with XLM->ConvBert
+class ConvBertSequenceSummary(nn.Module):
+    r"""
+    Compute a single vector summary of a sequence hidden states.
+
+    Args:
+        config ([`ConvBertConfig`]):
+            The config used by the model. Relevant arguments in the config class of the model are (refer to the actual
+            config class of your model for the default values it uses):
+
+            - **summary_type** (`str`) -- The method to use to make this summary. Accepted values are:
+
+                - `"last"` -- Take the last token hidden state (like XLNet)
+                - `"first"` -- Take the first token hidden state (like Bert)
+                - `"mean"` -- Take the mean of all tokens hidden states
+                - `"cls_index"` -- Supply a Tensor of classification token position (GPT/GPT-2)
+                - `"attn"` -- Not implemented now, use multi-head attention
+
+            - **summary_use_proj** (`bool`) -- Add a projection after the vector extraction.
+            - **summary_proj_to_labels** (`bool`) -- If `True`, the projection outputs to `config.num_labels` classes
+              (otherwise to `config.hidden_size`).
+            - **summary_activation** (`Optional[str]`) -- Set to `"tanh"` to add a tanh activation to the output,
+              another string or `None` will add no activation.
+            - **summary_first_dropout** (`float`) -- Optional dropout probability before the projection and activation.
+            - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and activation.
+    """
+
+    def __init__(self, config: ConvBertConfig):
+        super().__init__()
+
+        self.summary_type = getattr(config, "summary_type", "last")
+        if self.summary_type == "attn":
+            # We should use a standard multi-head attention module with absolute positional embedding for that.
+            # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
+            # We can probably just use the multi-head attention module of PyTorch >=1.1.0
+            raise NotImplementedError
+
+        self.summary = nn.Identity()
+        if hasattr(config, "summary_use_proj") and config.summary_use_proj:
+            if hasattr(config, "summary_proj_to_labels") and config.summary_proj_to_labels and config.num_labels > 0:
+                num_classes = config.num_labels
+            else:
+                num_classes = config.hidden_size
+            self.summary = nn.Linear(config.hidden_size, num_classes)
+
+        activation_string = getattr(config, "summary_activation", None)
+        self.activation: Callable = get_activation(activation_string) if activation_string else nn.Identity()
+
+        self.first_dropout = nn.Identity()
+        if hasattr(config, "summary_first_dropout") and config.summary_first_dropout > 0:
+            self.first_dropout = nn.Dropout(config.summary_first_dropout)
+
+        self.last_dropout = nn.Identity()
+        if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
+            self.last_dropout = nn.Dropout(config.summary_last_dropout)
+
+    def forward(
+        self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None
+    ) -> torch.FloatTensor:
+        """
+        Compute a single vector summary of a sequence hidden states.
+
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_len, hidden_size]`):
+                The hidden states of the last layer.
+            cls_index (`torch.LongTensor` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
+                Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
+
+        Returns:
+            `torch.FloatTensor`: The summary of the sequence hidden states.
+        """
+        if self.summary_type == "last":
+            output = hidden_states[:, -1]
+        elif self.summary_type == "first":
+            output = hidden_states[:, 0]
+        elif self.summary_type == "mean":
+            output = hidden_states.mean(dim=1)
+        elif self.summary_type == "cls_index":
+            if cls_index is None:
+                cls_index = torch.full_like(
+                    hidden_states[..., :1, :],
+                    hidden_states.shape[-2] - 1,
+                    dtype=torch.long,
+                )
+            else:
+                cls_index = cls_index.unsqueeze(-1).unsqueeze(-1)
+                cls_index = cls_index.expand((-1,) * (cls_index.dim() - 1) + (hidden_states.size(-1),))
+            # shape of cls_index: (bsz, XX, 1, hidden_size) where XX are optional leading dim of hidden_states
+            output = hidden_states.gather(-2, cls_index).squeeze(-2)  # shape (bsz, XX, hidden_size)
+        elif self.summary_type == "attn":
+            raise NotImplementedError
+
+        output = self.first_dropout(output)
+        output = self.summary(output)
+        output = self.activation(output)
+        output = self.last_dropout(output)
+
+        return output
+
+
 CONVBERT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
@@ -1080,7 +1177,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
         super().__init__(config)
 
         self.convbert = ConvBertModel(config)
-        self.sequence_summary = SequenceSummary(config)
+        self.sequence_summary = ConvBertSequenceSummary(config)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         # Initialize weights and apply final processing
@@ -1339,3 +1436,16 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "ConvBertForMaskedLM",
+    "ConvBertForMultipleChoice",
+    "ConvBertForQuestionAnswering",
+    "ConvBertForSequenceClassification",
+    "ConvBertForTokenClassification",
+    "ConvBertLayer",
+    "ConvBertModel",
+    "ConvBertPreTrainedModel",
+    "load_tf_weights_in_convbert",
+]

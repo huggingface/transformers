@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 MobileBERT model."""
-
+"""TF 2.0 MobileBERT model."""
 
 from __future__ import annotations
 
@@ -83,11 +82,6 @@ _QA_TARGET_END_INDEX = 13
 _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "vumichien/emo-mobilebert"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'others'"
 _SEQ_CLASS_EXPECTED_LOSS = "4.72"
-
-TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/mobilebert-uncased",
-    # See all MobileBERT models at https://huggingface.co/models?filter=mobilebert
-]
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPreTrainingLoss
@@ -1069,8 +1063,8 @@ class TFMobileBertForPreTrainingOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    prediction_logits: tf.Tensor = None
-    seq_relationship_logits: tf.Tensor = None
+    prediction_logits: Optional[tf.Tensor] = None
+    seq_relationship_logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 
@@ -1970,3 +1964,17 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFMobileBertForMaskedLM",
+    "TFMobileBertForMultipleChoice",
+    "TFMobileBertForNextSentencePrediction",
+    "TFMobileBertForPreTraining",
+    "TFMobileBertForQuestionAnswering",
+    "TFMobileBertForSequenceClassification",
+    "TFMobileBertForTokenClassification",
+    "TFMobileBertMainLayer",
+    "TFMobileBertModel",
+    "TFMobileBertPreTrainedModel",
+]

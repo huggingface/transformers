@@ -12,22 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Pix2Struct model configuration"""
-
-import os
-from typing import Union
+"""Pix2Struct model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/pix2struct-textcaps-base": (
-        "https://huggingface.co/google/pix2struct-textcaps-base/resolve/main/config.json"
-    ),
-}
 
 
 class Pix2StructTextConfig(PretrainedConfig):
@@ -97,6 +88,10 @@ class Pix2StructTextConfig(PretrainedConfig):
         "hidden_size": "hidden_size",
         "num_attention_heads": "num_heads",
         "num_hidden_layers": "num_layers",
+        "decoder_attention_heads": "num_heads",
+        "encoder_attention_heads": "num_heads",
+        "encoder_layers": "num_layers",
+        "decoder_layers": "num_layers",
     }
 
     def __init__(
@@ -149,26 +144,6 @@ class Pix2StructTextConfig(PretrainedConfig):
             **kwargs,
         )
 
-    @classmethod
-    def from_pretrained(
-        cls, pretrainehidden_size_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrainehidden_size_name_or_path, **kwargs)
-
-        # get the text config dict if we are loading from Pix2StructConfig
-        if config_dict.get("model_type") == "pix2struct":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
 
 class Pix2StructVisionConfig(PretrainedConfig):
     r"""
@@ -195,7 +170,7 @@ class Pix2StructVisionConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
+            `"relu"`, `"selu"` and `"gelu_new"` `"gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         dropout_rate (`float`, *optional*, defaults to 0.0):
@@ -267,26 +242,6 @@ class Pix2StructVisionConfig(PretrainedConfig):
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance
         self.d_kv = d_kv
-
-    @classmethod
-    def from_pretrained(
-        cls, pretrainehidden_size_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrainehidden_size_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from Pix2StructConfig
-        if config_dict.get("model_type") == "pix2struct":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class Pix2StructConfig(PretrainedConfig):
@@ -360,6 +315,8 @@ class Pix2StructConfig(PretrainedConfig):
             vision_config = {}
             logger.info("vision_config is None. Initializing the Pix2StructVisionConfig with default values.")
 
+        text_config["is_encoder_decoder"] = is_encoder_decoder
+        text_config["tie_word_embeddings"] = tie_word_embeddings
         self.text_config = Pix2StructTextConfig(**text_config)
         self.vision_config = Pix2StructVisionConfig(**vision_config)
 
@@ -388,3 +345,6 @@ class Pix2StructConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+
+__all__ = ["Pix2StructConfig", "Pix2StructTextConfig", "Pix2StructVisionConfig"]

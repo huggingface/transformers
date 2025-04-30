@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +29,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.openai.modeling_tf_openai import (
-        TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFOpenAIGPTDoubleHeadsModel,
         TFOpenAIGPTForSequenceClassification,
         TFOpenAIGPTLMHeadModel,
@@ -218,9 +216,16 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "ZeroShotClassificationPipelineTests":
+        if pipeline_test_case_name == "ZeroShotClassificationPipelineTests":
             # Get `tokenizer does not have a padding token` error for both fast/slow tokenizers.
             # `OpenAIGPTConfig` was never used in pipeline tests, either because of a missing checkpoint or because a
             # tiny config could not be created.
@@ -253,9 +258,9 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFOpenAIGPTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai-community/openai-gpt"
+        model = TFOpenAIGPTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf

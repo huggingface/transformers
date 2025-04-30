@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # SAM
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+</div>
+
 ## Overview
 
 SAM (Segment Anything Model) was proposed in [Segment Anything](https://arxiv.org/pdf/2304.02643v1.pdf) by Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alex Berg, Wan-Yen Lo, Piotr Dollar, Ross Girshick.
@@ -34,7 +39,7 @@ Tips:
 - The model predicts much better results if input 2D points and/or input bounding boxes are provided
 - You can prompt multiple points for the same image, and predict a single mask. 
 - Fine-tuning the model is not supported yet
-- According to the paper, textual input should be also supported. However, at this time of writing this seems to be not supported according to [the official repository](https://github.com/facebookresearch/segment-anything/issues/4#issuecomment-1497626844). 
+- According to the paper, textual input should be also supported. However, at this time of writing this seems not to be supported according to [the official repository](https://github.com/facebookresearch/segment-anything/issues/4#issuecomment-1497626844). 
 
 
 This model was contributed by [ybelkada](https://huggingface.co/ybelkada) and [ArthurZ](https://huggingface.co/ArthurZ).
@@ -81,10 +86,10 @@ processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 mask_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-segmentation_map = Image.open(requests.get(mask_url, stream=True).raw).convert("RGB")
+segmentation_map = Image.open(requests.get(mask_url, stream=True).raw).convert("1")
 input_points = [[[450, 600]]]  # 2D location of a window in the image
 
-inputs = processor(raw_image, input_points=input_points, segmentation_maps=mask, return_tensors="pt").to(device)
+inputs = processor(raw_image, input_points=input_points, segmentation_maps=segmentation_map, return_tensors="pt").to(device)
 with torch.no_grad():
     outputs = model(**inputs)
 
@@ -93,7 +98,6 @@ masks = processor.image_processor.post_process_masks(
 )
 scores = outputs.iou_scores
 ```
-
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SAM.
@@ -108,6 +112,15 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 SlimSAM, a pruned version of SAM, was proposed in [0.1% Data Makes Segment Anything Slim](https://arxiv.org/abs/2312.05284) by Zigeng Chen et al. SlimSAM reduces the size of the SAM models considerably while maintaining the same performance.
 
 Checkpoints can be found on the [hub](https://huggingface.co/models?other=slimsam), and they can be used as a drop-in replacement of SAM.
+
+## Grounded SAM
+
+One can combine [Grounding DINO](grounding-dino) with SAM for text-based mask generation as introduced in [Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks](https://arxiv.org/abs/2401.14159). You can refer to this [demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Grounding%20DINO/GroundingDINO_with_Segment_Anything.ipynb) 🌍 for details.
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/grounded_sam.png"
+alt="drawing" width="900"/>
+
+<small> Grounded SAM overview. Taken from the <a href="https://github.com/IDEA-Research/Grounded-Segment-Anything">original repository</a>. </small>
 
 ## SamConfig
 
@@ -136,10 +149,22 @@ Checkpoints can be found on the [hub](https://huggingface.co/models?other=slimsa
 [[autodoc]] SamImageProcessor
 
 
+## SamVisionModel
+
+[[autodoc]] SamVisionModel
+    - forward
+
+
 ## SamModel
 
 [[autodoc]] SamModel
     - forward
+
+
+## TFSamVisionModel
+
+[[autodoc]] TFSamVisionModel
+    - call
 
 
 ## TFSamModel

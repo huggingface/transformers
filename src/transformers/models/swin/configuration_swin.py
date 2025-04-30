@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Swin Transformer model configuration"""
+"""Swin Transformer model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -26,13 +26,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 
 logger = logging.get_logger(__name__)
-
-SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/swin-tiny-patch4-window7-224": (
-        "https://huggingface.co/microsoft/swin-tiny-patch4-window7-224/resolve/main/config.json"
-    ),
-    # See all Swin models at https://huggingface.co/models?filter=swin
-}
 
 
 class SwinConfig(BackboneConfigMixin, PretrainedConfig):
@@ -181,3 +174,6 @@ class SwinOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+
+__all__ = ["SwinConfig", "SwinOnnxConfig"]

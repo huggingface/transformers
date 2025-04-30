@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Mask2Former model. """
+"""Testing suite for the PyTorch Mask2Former model."""
 
 import unittest
 
@@ -20,7 +19,9 @@ import numpy as np
 
 from tests.test_modeling_common import floats_tensor
 from transformers import Mask2FormerConfig, is_torch_available, is_vision_available
+from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import (
+    require_timm,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -203,6 +204,7 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = Mask2FormerModelTester(self)
@@ -224,7 +226,7 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         pass
 
     @unittest.skip(reason="Mask2Former does not have a get_input_embeddings method")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="Mask2Former is not a generative model")
@@ -275,7 +277,7 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         model_class = self.all_model_classes[1]
         config, pixel_values, pixel_mask, mask_labels, class_labels = self.model_tester.prepare_config_and_inputs()
@@ -316,6 +318,37 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         self.assertIsNotNone(pixel_decoder_hidden_states.grad)
         self.assertIsNotNone(transformer_decoder_hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
+
+    @require_timm
+    def test_backbone_selection(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        config.backbone_config = None
+        config.backbone_kwargs = {"out_indices": [1, 2, 3]}
+        config.use_pretrained_backbone = True
+
+        # Load a timm backbone
+        # We can't load transformer checkpoint with timm backbone, as we can't specify features_only and out_indices
+        config.backbone = "resnet18"
+        config.use_timm_backbone = True
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            if model.__class__.__name__ == "Mask2FormerModel":
+                self.assertEqual(model.pixel_level_module.encoder.out_indices, [1, 2, 3])
+            elif model.__class__.__name__ == "Mask2FormerForUniversalSegmentation":
+                self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
+
+        # Load a HF backbone
+        config.backbone = "microsoft/resnet-18"
+        config.use_timm_backbone = False
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            if model.__class__.__name__ == "Mask2FormerModel":
+                self.assertEqual(model.pixel_level_module.encoder.out_indices, [1, 2, 3])
+            elif model.__class__.__name__ == "Mask2FormerForUniversalSegmentation":
+                self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
 
 
 TOLERANCE = 1e-4
@@ -403,7 +436,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             [-6.6105, -6.3427, -6.4675],
         ]
         expected_slice = torch.tensor(expected_slice).to(torch_device)
-        self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(masks_queries_logits[0, 0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
         # class_queries_logits
         class_queries_logits = outputs.class_queries_logits
         self.assertEqual(class_queries_logits.shape, (1, model.config.num_queries, model.config.num_labels + 1))
@@ -414,7 +447,9 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
                 [0.3045, -7.7293, -3.0275],
             ]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(
+            outputs.class_queries_logits[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+        )
 
     @require_torch_accelerator
     @require_torch_fp16
@@ -449,3 +484,28 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         self.assertTrue(outputs.loss is not None)
+
+    def test_export(self):
+        if not is_torch_greater_or_equal_than_2_4:
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
+        model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
+
+        exported_program = torch.export.export(
+            model,
+            args=(inputs["pixel_values"], inputs["pixel_mask"]),
+            strict=True,
+        )
+        with torch.no_grad():
+            eager_outputs = model(**inputs)
+            exported_outputs = exported_program.module().forward(inputs["pixel_values"], inputs["pixel_mask"])
+        self.assertEqual(eager_outputs.masks_queries_logits.shape, exported_outputs.masks_queries_logits.shape)
+        torch.testing.assert_close(
+            eager_outputs.masks_queries_logits, exported_outputs.masks_queries_logits, rtol=TOLERANCE, atol=TOLERANCE
+        )
+        self.assertEqual(eager_outputs.class_queries_logits.shape, exported_outputs.class_queries_logits.shape)
+        torch.testing.assert_close(
+            eager_outputs.class_queries_logits, exported_outputs.class_queries_logits, rtol=TOLERANCE, atol=TOLERANCE
+        )

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Processor class for Pop2Piano."""
+"""Processor class for Pop2Piano."""
 
 import os
 from typing import List, Optional, Union
@@ -23,8 +23,10 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import BatchEncoding, PaddingStrategy, TruncationStrategy
 from ...utils import TensorType
+from ...utils.import_utils import requires
 
 
+@requires(backends=("essentia", "librosa", "pretty_midi", "scipy", "torch"))
 class Pop2PianoProcessor(ProcessorMixin):
     r"""
     Constructs an Pop2Piano processor which wraps a Pop2Piano Feature Extractor and Pop2Piano Tokenizer into a single
@@ -50,7 +52,7 @@ class Pop2PianoProcessor(ProcessorMixin):
     def __call__(
         self,
         audio: Union[np.ndarray, List[float], List[np.ndarray]] = None,
-        sampling_rate: Union[int, List[int]] = None,
+        sampling_rate: Optional[Union[int, List[int]]] = None,
         steps_per_beat: int = 2,
         resample: Optional[bool] = True,
         notes: Union[List, TensorType] = None,
@@ -137,3 +139,6 @@ class Pop2PianoProcessor(ProcessorMixin):
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         return cls(*args)
+
+
+__all__ = ["Pop2PianoProcessor"]

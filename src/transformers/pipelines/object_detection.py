@@ -74,7 +74,7 @@ class ObjectDetectionPipeline(Pipeline):
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            inputs (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing an HTTP(S) link pointing to an image
@@ -83,7 +83,7 @@ class ObjectDetectionPipeline(Pipeline):
 
                 The pipeline accepts either a single image or a batch of images. Images in a batch must all be in the
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
-            threshold (`float`, *optional*, defaults to 0.9):
+            threshold (`float`, *optional*, defaults to 0.5):
                 The probability necessary to make a prediction.
             timeout (`float`, *optional*, defaults to None):
                 The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
@@ -100,13 +100,17 @@ class ObjectDetectionPipeline(Pipeline):
             - **score** (`float`) -- The score attributed by the model for that label.
             - **box** (`List[Dict[str, int]]`) -- The bounding box of detected object in image's original size.
         """
-
+        # After deprecation of this is completed, remove the default `None` value for `images`
+        if "images" in kwargs and "inputs" not in kwargs:
+            kwargs["inputs"] = kwargs.pop("images")
         return super().__call__(*args, **kwargs)
 
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
         target_size = torch.IntTensor([[image.height, image.width]])
         inputs = self.image_processor(images=[image], return_tensors="pt")
+        if self.framework == "pt":
+            inputs = inputs.to(self.torch_dtype)
         if self.tokenizer is not None:
             inputs = self.tokenizer(text=inputs["words"], boxes=inputs["boxes"], return_tensors="pt")
         inputs["target_size"] = target_size
@@ -120,7 +124,7 @@ class ObjectDetectionPipeline(Pipeline):
             model_outputs["bbox"] = model_inputs["bbox"]
         return model_outputs
 
-    def postprocess(self, model_outputs, threshold=0.9):
+    def postprocess(self, model_outputs, threshold=0.5):
         target_size = model_outputs["target_size"]
         if self.tokenizer is not None:
             # This is a LayoutLMForTokenClassification variant.

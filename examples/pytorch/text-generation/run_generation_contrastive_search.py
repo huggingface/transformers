@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2022 University of Cambridge, Tencent AI Lab, DeepMind and The University of Hong Kong Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,12 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" The examples of running contrastive search on the auto-APIs;
+"""The examples of running contrastive search on the auto-APIs;
 
 Running this example:
 python run_generation_contrastive_search.py --model_name_or_path=openai-community/gpt2-large --penalty_alpha=0.6 --k=4 --length=256
 """
-
 
 import argparse
 import logging
@@ -69,7 +67,7 @@ def main():
     parser.add_argument(
         "--use_cpu",
         action="store_true",
-        help="Whether or not to use cpu. If set to False, " "we will use gpu/npu or mps device if available",
+        help="Whether or not to use cpu. If set to False, we will use gpu/npu or mps device if available",
     )
     parser.add_argument(
         "--fp16",

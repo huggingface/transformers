@@ -1,12 +1,12 @@
-# https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-23-11.html#rel-23-11
-FROM nvcr.io/nvidia/pytorch:23.04-py3
+# https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-24-08.html
+FROM nvcr.io/nvidia/pytorch:24.08-py3
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-ARG PYTORCH='2.2.0'
+ARG PYTORCH='2.6.0'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu121'
+ARG CUDA='cu126'
 
 RUN apt -y update
 RUN apt install -y libaio-dev
@@ -15,7 +15,8 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip
 ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
-RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
+# `datasets` requires pandas, pandas has some modules compiled with numpy=1.x causing errors
+RUN python3 -m pip install --no-cache-dir './transformers[deepspeed-testing]' 'pandas<2' 'numpy<2'
 
 # Install latest release PyTorch
 # (PyTorch must be installed before pre-compiling any DeepSpeed c++/cuda ops.)
@@ -49,5 +50,5 @@ RUN DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed -
 RUN cd transformers && python3 setup.py develop
 
 # The base image ships with `pydantic==1.8.2` which is not working - i.e. the next command fails
-RUN python3 -m pip install -U --no-cache-dir "pydantic<2"
+RUN python3 -m pip install -U --no-cache-dir "pydantic>=2.0.0"
 RUN python3 -c "from deepspeed.launcher.runner import main"

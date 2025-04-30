@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 在开始之前，确保你已经安装了所有必要的库：
 
 ```bash
-!pip install transformers datasets
+!pip install transformers datasets evaluate accelerate
 ```
 
 你还需要安装喜欢的机器学习框架：
@@ -355,8 +355,8 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```py
 >>> from transformers import AutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
->>> pt_model = AutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
+>>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
+>>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
 </pt>
 <tf>
@@ -364,8 +364,8 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```py
 >>> from transformers import TFAutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
+>>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
+>>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
 ```
 </tf>
 </frameworkcontent>
@@ -476,7 +476,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ...     args=training_args,
 ...     train_dataset=dataset["train"],
 ...     eval_dataset=dataset["test"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=data_collator,
 ... )  # doctest: +SKIP
 ```
@@ -495,7 +495,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 你可以通过子类化 [`Trainer`] 中的方法来自定义训练循环。这样你就可以自定义像损失函数，优化器和调度器这样的特性。查阅 [`Trainer`] 参考手册了解哪些方法能够被子类化。
 
-另一个自定义训练循环的方式是通过[回调](./main_classes/callbacks)。你可以使用回调来与其他库集成，查看训练循环来报告进度或提前结束训练。回调不会修改训练循环。如果想自定义损失函数等，就需要子类化 [`Trainer`] 了。
+另一个自定义训练循环的方式是通过[回调](./main_classes/callback)。你可以使用回调来与其他库集成，查看训练循环来报告进度或提前结束训练。回调不会修改训练循环。如果想自定义损失函数等，就需要子类化 [`Trainer`] 了。
 
 ## 使用 Tensorflow 训练
 

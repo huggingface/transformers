@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Conditional DETR model. """
-
+"""Testing suite for the PyTorch Conditional DETR model."""
 
 import inspect
 import math
@@ -23,7 +21,6 @@ from transformers import ConditionalDetrConfig, ResNetConfig, is_torch_available
 from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -174,7 +171,7 @@ class ConditionalDetrModelTester:
 
 
 @require_torch
-class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ConditionalDetrModel,
@@ -194,6 +191,8 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    zero_init_hidden_state = True
+    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -246,8 +245,12 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="Conditional DETR does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(reason="Conditional DETR does not have a get_input_embeddings method")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="Conditional DETR is not a generative model")
@@ -259,8 +262,8 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         pass
 
     @slow
+    @unittest.skip(reason="TODO Niels: fix me!")
     def test_model_outputs_equivalence(self):
-        # TODO Niels: fix me!
         pass
 
     def test_attention_outputs(self):
@@ -443,7 +446,9 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
 
         # let's pick a random timm backbone
         config.backbone = "tf_mobilenetv3_small_075"
+        config.backbone_config = None
         config.use_timm_backbone = True
+        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -459,6 +464,50 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propagated to backbone
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+            elif model_class.__name__ == "ConditionalDetrForSegmentation":
+                # Confirm out_indices was propagated to backbone
+                self.assertEqual(len(model.conditional_detr.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+            else:
+                # Confirm out_indices was propagated to backbone
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+
+            self.assertTrue(outputs)
+
+    @require_timm
+    def test_hf_backbone(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Load a pretrained HF checkpoint as backbone
+        config.backbone = "microsoft/resnet-18"
+        config.backbone_config = None
+        config.use_timm_backbone = False
+        config.use_pretrained_backbone = True
+        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if model_class.__name__ == "ConditionalDetrForObjectDetection":
+                expected_shape = (
+                    self.model_tester.batch_size,
+                    self.model_tester.num_queries,
+                    self.model_tester.num_labels,
+                )
+                self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propagated to backbone
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+            elif model_class.__name__ == "ConditionalDetrForSegmentation":
+                # Confirm out_indices was propagated to backbone
+                self.assertEqual(len(model.conditional_detr.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+            else:
+                # Confirm out_indices was propagated to backbone
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
 
@@ -522,7 +571,7 @@ class ConditionalDetrModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[0.4222, 0.7471, 0.8760], [0.6395, -0.2729, 0.7127], [-0.3090, 0.7642, 0.9529]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_object_detection_head(self):
         model = ConditionalDetrForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet-50").to(
@@ -544,14 +593,14 @@ class ConditionalDetrModelIntegrationTests(unittest.TestCase):
         expected_slice_logits = torch.tensor(
             [[-10.4372, -5.7558, -8.6764], [-10.5410, -5.8704, -8.0590], [-10.6827, -6.3469, -8.3923]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice_logits, rtol=1e-4, atol=1e-4)
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         expected_slice_boxes = torch.tensor(
             [[0.7733, 0.6576, 0.4496], [0.5171, 0.1184, 0.9094], [0.8846, 0.5647, 0.2486]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
@@ -562,6 +611,6 @@ class ConditionalDetrModelIntegrationTests(unittest.TestCase):
         expected_slice_boxes = torch.tensor([38.3089, 72.1022, 177.6293, 118.4512]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
-        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
+        torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-4, atol=1e-4)
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
-        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
+        torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes)

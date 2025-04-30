@@ -49,9 +49,9 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
             The default length of raw audio in seconds. If `max_length` is not set during `__call__` then it will
             automatically be set to default_audio_length * `self.sampling_rate`.
         hop_length (`int`, *optional*, defaults to 256):
-            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
+            Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
         chunk_length (`int`, *optional*, defaults to 30):
-            The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio
+            The maximum number of chunks of `sampling_rate` samples used to trim and pad longer or shorter audio
             sequences.
         n_fft (`int`, *optional*, defaults to 1024):
             Size of the Fourier transform.
@@ -173,7 +173,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
-            padding_value (`float`, defaults to 0.0):
+            padding_value (`float`, *optional*, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
             max_length (`int`, *optional*):
                 The maximum input length of the inputs.
@@ -188,7 +188,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
@@ -236,3 +236,6 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["input_features"] = input_features
 
         return padded_inputs.convert_to_tensors(return_tensors)
+
+
+__all__ = ["ClvpFeatureExtractor"]

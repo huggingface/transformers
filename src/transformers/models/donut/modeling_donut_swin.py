@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Donut Swin Transformer model.
+"""PyTorch Donut Swin Transformer model.
 
 This implementation is identical to a regular Swin Transformer, without final layer norm on top of the final hidden
 states."""
@@ -35,6 +35,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
+    torch_int,
 )
 from .configuration_donut_swin import DonutSwinConfig
 
@@ -48,10 +49,9 @@ _CONFIG_FOR_DOC = "DonutSwinConfig"
 _CHECKPOINT_FOR_DOC = "https://huggingface.co/naver-clova-ix/donut-base"
 _EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
 
-DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "naver-clova-ix/donut-base",
-    # See all Donut Swin models at https://huggingface.co/models?filter=donut
-]
+# Image classification docstring
+_IMAGE_CLASS_CHECKPOINT = "eljandoubi/donut-base-encoder"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 @dataclass
@@ -82,7 +82,7 @@ class DonutSwinEncoderOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -118,8 +118,45 @@ class DonutSwinModelOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     pooler_output: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+
+@dataclass
+# Copied from transformers.models.swin.modeling_swin.SwinImageClassifierOutput with Swin->DonutSwin
+class DonutSwinImageClassifierOutput(ModelOutput):
+    """
+    DonutSwin outputs for image classification.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, hidden_size, height, width)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+            include the spatial dimensions.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -170,10 +207,57 @@ class DonutSwinEmbeddings(nn.Module):
 
         self.norm = nn.LayerNorm(config.embed_dim)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.patch_size = config.patch_size
+        self.config = config
+
+    # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+
+        num_patches = embeddings.shape[1] - 1
+        num_positions = self.position_embeddings.shape[1] - 1
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embeddings
+
+        class_pos_embed = self.position_embeddings[:, :1]
+        patch_pos_embed = self.position_embeddings[:, 1:]
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor], bool_masked_pos: Optional[torch.BoolTensor] = None
+        self,
+        pixel_values: Optional[torch.FloatTensor],
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Tuple[torch.Tensor]:
+        _, num_channels, height, width = pixel_values.shape
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
         embeddings = self.norm(embeddings)
         batch_size, seq_len, _ = embeddings.size()
@@ -185,14 +269,17 @@ class DonutSwinEmbeddings(nn.Module):
             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
         if self.position_embeddings is not None:
-            embeddings = embeddings + self.position_embeddings
+            if interpolate_pos_encoding:
+                embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+            else:
+                embeddings = embeddings + self.position_embeddings
 
         embeddings = self.dropout(embeddings)
 
         return embeddings, output_dimensions
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPatchEmbeddings
+# Copied from transformers.models.swin.modeling_swin.SwinPatchEmbeddings with Swin->DonutSwin
 class DonutSwinPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -226,10 +313,6 @@ class DonutSwinPatchEmbeddings(nn.Module):
 
     def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor, Tuple[int]]:
         _, num_channels, height, width = pixel_values.shape
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
         # pad the input to be divisible by self.patch_size, if needed
         pixel_values = self.maybe_pad(pixel_values, height, width)
         embeddings = self.projection(pixel_values)
@@ -516,7 +599,7 @@ class DonutSwinOutput(nn.Module):
 
 # Copied from transformers.models.swin.modeling_swin.SwinLayer with Swin->DonutSwin
 class DonutSwinLayer(nn.Module):
-    def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
+    def __init__(self, config, dim, input_resolution, num_heads, drop_path_rate=0.0, shift_size=0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.shift_size = shift_size
@@ -524,7 +607,7 @@ class DonutSwinLayer(nn.Module):
         self.input_resolution = input_resolution
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = DonutSwinAttention(config, dim, num_heads, window_size=self.window_size)
-        self.drop_path = DonutSwinDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = DonutSwinDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = DonutSwinIntermediate(config, dim)
         self.output = DonutSwinOutput(config, dim)
@@ -532,13 +615,15 @@ class DonutSwinLayer(nn.Module):
     def set_shift_and_window_size(self, input_resolution):
         if min(input_resolution) <= self.window_size:
             # if window size is larger than input resolution, we don't partition windows
-            self.shift_size = 0
-            self.window_size = min(input_resolution)
+            self.shift_size = torch_int(0)
+            self.window_size = (
+                torch.min(torch.tensor(input_resolution)) if torch.jit.is_tracing() else min(input_resolution)
+            )
 
-    def get_attn_mask(self, height, width, dtype):
+    def get_attn_mask(self, height, width, dtype, device):
         if self.shift_size > 0:
             # calculate attention mask for SW-MSA
-            img_mask = torch.zeros((1, height, width, 1), dtype=dtype)
+            img_mask = torch.zeros((1, height, width, 1), dtype=dtype, device=device)
             height_slices = (
                 slice(0, -self.window_size),
                 slice(-self.window_size, -self.shift_size),
@@ -603,9 +688,9 @@ class DonutSwinLayer(nn.Module):
         # partition windows
         hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
         hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
-        attn_mask = self.get_attn_mask(height_pad, width_pad, dtype=hidden_states.dtype)
-        if attn_mask is not None:
-            attn_mask = attn_mask.to(hidden_states_windows.device)
+        attn_mask = self.get_attn_mask(
+            height_pad, width_pad, dtype=hidden_states.dtype, device=hidden_states_windows.device
+        )
 
         attention_outputs = self.attention(
             hidden_states_windows, attn_mask, head_mask, output_attentions=output_attentions
@@ -651,6 +736,7 @@ class DonutSwinStage(nn.Module):
                     dim=dim,
                     input_resolution=input_resolution,
                     num_heads=num_heads,
+                    drop_path_rate=drop_path[i],
                     shift_size=0 if (i % 2 == 0) else config.window_size // 2,
                 )
                 for i in range(depth)
@@ -704,7 +790,7 @@ class DonutSwinEncoder(nn.Module):
         super().__init__()
         self.num_layers = len(config.depths)
         self.config = config
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
         self.layers = nn.ModuleList(
             [
                 DonutSwinStage(
@@ -800,7 +886,7 @@ class DonutSwinEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->DonutSwin
+# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->DonutSwin,swin->donut
 class DonutSwinPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -808,9 +894,10 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
     """
 
     config_class = DonutSwinConfig
-    base_model_prefix = "swin"
+    base_model_prefix = "donut"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["DonutSwinStage"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -823,6 +910,13 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, DonutSwinEmbeddings):
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
+            if module.position_embeddings is not None:
+                module.position_embeddings.data.zero_()
+        elif isinstance(module, DonutSwinSelfAttention):
+            module.relative_position_bias_table.data.zero_()
 
 
 SWIN_START_DOCSTRING = r"""
@@ -853,6 +947,8 @@ SWIN_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -903,6 +999,7 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, DonutSwinModelOutput]:
         r"""
@@ -925,7 +1022,9 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, len(self.config.depths))
 
-        embedding_output, input_dimensions = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
+        embedding_output, input_dimensions = self.embeddings(
+            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -955,3 +1054,92 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
             attentions=encoder_outputs.attentions,
             reshaped_hidden_states=encoder_outputs.reshaped_hidden_states,
         )
+
+
+@add_start_docstrings(
+    """
+    DonutSwin Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
+    the [CLS] token) e.g. for ImageNet.
+
+    <Tip>
+
+        Note that it's possible to fine-tune DonutSwin on higher resolution images than the ones it has been trained on, by
+        setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
+        position embeddings to the higher resolution.
+
+    </Tip>
+    """,
+    SWIN_START_DOCSTRING,
+)
+# Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with Swin->DonutSwin,swin->donut
+class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.donut = DonutSwinModel(config)
+
+        # Classifier head
+        self.classifier = (
+            nn.Linear(self.donut.num_features, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        output_type=DonutSwinImageClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    )
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, DonutSwinImageClassifierOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.donut(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=return_dict,
+        )
+
+        pooled_output = outputs[1]
+
+        logits = self.classifier(pooled_output)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=logits, config=self.config)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return DonutSwinImageClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            reshaped_hidden_states=outputs.reshaped_hidden_states,
+        )
+
+
+__all__ = ["DonutSwinModel", "DonutSwinPreTrainedModel", "DonutSwinForImageClassification"]

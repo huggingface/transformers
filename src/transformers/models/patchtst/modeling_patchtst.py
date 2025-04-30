@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PatchTST model."""
+"""PyTorch PatchTST model."""
 
 import math
 from dataclasses import dataclass
@@ -32,11 +32,6 @@ from .configuration_patchtst import PatchTSTConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PatchTSTConfig"
-
-PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ibm/patchtst-etth1-pretrain",
-    # See all PatchTST models at https://huggingface.co/models?filter=patchtst
-]
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PatchTST
@@ -223,7 +218,7 @@ class PatchTSTBatchNorm(nn.Module):
 def random_masking(
     inputs: torch.Tensor,
     mask_ratio: float,
-    unmasked_channel_indices: list = None,
+    unmasked_channel_indices: Optional[list] = None,
     channel_consistent_masking: bool = False,
     mask_value: int = 0,
 ):
@@ -281,7 +276,7 @@ def random_masking(
 def forecast_masking(
     inputs: torch.Tensor,
     num_forecast_mask_patches: Union[list, int],
-    unmasked_channel_indices: list = None,
+    unmasked_channel_indices: Optional[list] = None,
     mask_value: int = 0,
 ):
     """Forecast masking that masks the last K patches where K is from the num_forecast_mask_patches.
@@ -674,7 +669,7 @@ class PatchTSTPositionalEncoding(nn.Module):
             # cls_token: [1 x num_input_channels x 1 x d_model]
             self.cls_token = nn.Parameter(torch.zeros(1, 1, 1, config.d_model))
             num_patches += 1
-        # postional encoding: [num_patches x d_model]
+        # positional encoding: [num_patches x d_model]
         self.position_enc = self._init_pe(config, num_patches)
         # Positional dropout
         self.positional_dropout = (
@@ -818,13 +813,13 @@ class PatchTSTModelOutput(ModelOutput):
             Patched input to the Transformer
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    mask: torch.FloatTensor = None
-    loc: torch.FloatTensor = None
-    scale: torch.FloatTensor = None
-    patch_input: torch.FloatTensor = None
+    mask: Optional[torch.FloatTensor] = None
+    loc: Optional[torch.FloatTensor] = None
+    scale: Optional[torch.FloatTensor] = None
+    patch_input: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -851,7 +846,7 @@ class PatchTSTForPretrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_output: torch.FloatTensor = None
+    prediction_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -880,7 +875,7 @@ class PatchTSTForRegressionOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    regression_outputs: torch.FloatTensor = None
+    regression_outputs: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -913,11 +908,11 @@ class PatchTSTForPredictionOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_outputs: torch.FloatTensor = None
+    prediction_outputs: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    loc: torch.FloatTensor = None
-    scale: torch.FloatTensor = None
+    loc: Optional[torch.FloatTensor] = None
+    scale: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -945,7 +940,7 @@ class PatchTSTForClassificationOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_logits: torch.FloatTensor = None
+    prediction_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -961,7 +956,7 @@ class SamplePatchTSTOutput(ModelOutput):
                 Sampled values from the chosen distribution.
     """
 
-    sequences: torch.FloatTensor = None
+    sequences: Optional[torch.FloatTensor] = None
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.nll
@@ -1100,7 +1095,7 @@ class PatchTSTNOPScaler(nn.Module):
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
 
     def forward(
-        self, data: torch.Tensor, observed_indicator: torch.Tensor = None
+        self, data: torch.Tensor, observed_indicator: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Parameters:
@@ -1267,7 +1262,7 @@ class PatchTSTMaskPretrainHead(nn.Module):
 
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
-        self.dropout = nn.Dropout(config.dropout)
+        self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
         self.linear = nn.Linear(config.d_model, config.patch_length)
         self.use_cls_token = config.use_cls_token
 
@@ -1462,7 +1457,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        target_values: torch.Tensor = None,
+        target_values: Optional[torch.Tensor] = None,
         past_observed_mask: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1915,7 +1910,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        target_values: torch.Tensor = None,
+        target_values: Optional[torch.Tensor] = None,
         past_observed_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -2035,3 +2030,13 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         # samples: [bs x num_samples x num_targets]
         samples = torch.stack(samples, dim=1).view(-1, num_parallel_samples, self.config.num_targets)
         return SamplePatchTSTOutput(sequences=samples)
+
+
+__all__ = [
+    "PatchTSTModel",
+    "PatchTSTPreTrainedModel",
+    "PatchTSTForPrediction",
+    "PatchTSTForPretraining",
+    "PatchTSTForRegression",
+    "PatchTSTForClassification",
+]

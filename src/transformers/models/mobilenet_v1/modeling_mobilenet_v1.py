@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MobileNetV1 model."""
-
+"""PyTorch MobileNetV1 model."""
 
 from typing import Optional, Union
 
@@ -41,13 +40,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 1024, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "google/mobilenet_v1_1.0_224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/mobilenet_v1_1.0_224",
-    "google/mobilenet_v1_0.75_192",
-    # See all MobileNetV1 models at https://huggingface.co/models?filter=mobilenet_v1
-]
 
 
 def _build_tf_to_pytorch_map(model, config, tf_weights=None):
@@ -258,6 +250,7 @@ class MobileNetV1PreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilenet_v1"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
+    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d]) -> None:
         """Initialize the weights"""
@@ -484,3 +477,11 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
+
+
+__all__ = [
+    "MobileNetV1ForImageClassification",
+    "MobileNetV1Model",
+    "MobileNetV1PreTrainedModel",
+    "load_tf_weights_in_mobilenet_v1",
+]

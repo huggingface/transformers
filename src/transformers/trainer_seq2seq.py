@@ -12,23 +12,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
+import warnings
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import torch
 from torch import nn
+from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.utils.data import Dataset
 
 from .generation.configuration_utils import GenerationConfig
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
+from .integrations.fsdp import is_fsdp_managed_module
 from .trainer import Trainer
-from .utils import logging
+from .utils import is_datasets_available, logging
+from .utils.deprecation import deprecate_kwarg
 
+
+if is_datasets_available():
+    import datasets
 
 if TYPE_CHECKING:
+    from torch.utils.data import IterableDataset
+
     from .data.data_collator import DataCollator
+    from .feature_extraction_utils import FeatureExtractionMixin
+    from .image_processing_utils import BaseImageProcessor
     from .modeling_utils import PreTrainedModel
+    from .processing_utils import ProcessorMixin
     from .tokenization_utils_base import PreTrainedTokenizerBase
     from .trainer_callback import TrainerCallback
     from .trainer_utils import EvalPrediction, PredictionOutput
@@ -39,18 +52,22 @@ logger = logging.get_logger(__name__)
 
 
 class Seq2SeqTrainer(Trainer):
+    @deprecate_kwarg("tokenizer", new_name="processing_class", version="5.0.0", raise_if_both_names=True)
     def __init__(
         self,
         model: Union["PreTrainedModel", nn.Module] = None,
         args: "TrainingArguments" = None,
         data_collator: Optional["DataCollator"] = None,
-        train_dataset: Optional[Dataset] = None,
-        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
-        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        train_dataset: Optional[Union[Dataset, "IterableDataset", "datasets.Dataset"]] = None,
+        eval_dataset: Optional[Union[Dataset, dict[str, Dataset]]] = None,
+        processing_class: Optional[
+            Union["PreTrainedTokenizerBase", "BaseImageProcessor", "FeatureExtractionMixin", "ProcessorMixin"]
+        ] = None,
         model_init: Optional[Callable[[], "PreTrainedModel"]] = None,
-        compute_metrics: Optional[Callable[["EvalPrediction"], Dict]] = None,
-        callbacks: Optional[List["TrainerCallback"]] = None,
-        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        compute_loss_func: Optional[Callable] = None,
+        compute_metrics: Optional[Callable[["EvalPrediction"], dict]] = None,
+        callbacks: Optional[list["TrainerCallback"]] = None,
+        optimizers: tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
     ):
         super().__init__(
@@ -59,8 +76,9 @@ class Seq2SeqTrainer(Trainer):
             data_collator=data_collator,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-            tokenizer=tokenizer,
+            processing_class=processing_class,
             model_init=model_init,
+            compute_loss_func=compute_loss_func,
             compute_metrics=compute_metrics,
             callbacks=callbacks,
             optimizers=optimizers,
@@ -79,7 +97,7 @@ class Seq2SeqTrainer(Trainer):
         Loads a `~generation.GenerationConfig` from the `Seq2SeqTrainingArguments.generation_config` arguments.
 
         Args:
-            gen_config_arg (`str` or [`~generation.GenerationConfig`]):
+            gen_config_arg (`str` or [`~generation.GenerationConfig]`):
                 `Seq2SeqTrainingArguments.generation_config` argument.
 
         Returns:
@@ -88,34 +106,47 @@ class Seq2SeqTrainer(Trainer):
 
         # GenerationConfig provided, nothing to do
         if isinstance(gen_config_arg, GenerationConfig):
-            return deepcopy(gen_config_arg)
-
-        # str or Path
-        pretrained_model_name = Path(gen_config_arg) if isinstance(gen_config_arg, str) else gen_config_arg
-        config_file_name = None
-
-        # Figuring if it is path pointing to a file, pointing to a directory or else a model id or URL
-        # This step is required in order to determine config_file_name
-        if pretrained_model_name.is_file():
-            config_file_name = pretrained_model_name.name
-            pretrained_model_name = pretrained_model_name.parent
-        # dir path
-        elif pretrained_model_name.is_dir():
-            pass
-        # model id or URL
+            gen_config = deepcopy(gen_config_arg)
         else:
-            pretrained_model_name = gen_config_arg
+            # str or Path
+            pretrained_model_name = Path(gen_config_arg) if isinstance(gen_config_arg, str) else gen_config_arg
+            config_file_name = None
 
-        gen_config = GenerationConfig.from_pretrained(pretrained_model_name, config_file_name)
+            # Figuring if it is path pointing to a file, pointing to a directory or else a model id or URL
+            # This step is required in order to determine config_file_name
+            if pretrained_model_name.is_file():
+                config_file_name = pretrained_model_name.name
+                pretrained_model_name = pretrained_model_name.parent
+            # dir path
+            elif pretrained_model_name.is_dir():
+                pass
+            # model id or URL
+            else:
+                pretrained_model_name = gen_config_arg
+
+            gen_config = GenerationConfig.from_pretrained(pretrained_model_name, config_file_name)
+
+        # Strict validation to fail early. `GenerationConfig.save_pretrained()`, run at the end of training, throws
+        # an exception if there are warnings at validation time.
+        try:
+            with warnings.catch_warnings(record=True) as caught_warnings:
+                gen_config.validate()
+            if len(caught_warnings) > 0:
+                raise ValueError(str([w.message for w in caught_warnings]))
+        except ValueError as exc:
+            raise ValueError(
+                "The loaded generation config instance is invalid -- `GenerationConfig.validate()` throws warnings "
+                "and/or exceptions. Fix these issues to train your model.\n\nThrown during validation:\n" + str(exc)
+            )
         return gen_config
 
     def evaluate(
         self,
         eval_dataset: Optional[Dataset] = None,
-        ignore_keys: Optional[List[str]] = None,
+        ignore_keys: Optional[list[str]] = None,
         metric_key_prefix: str = "eval",
         **gen_kwargs,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Run evaluation and returns metrics.
 
@@ -168,7 +199,7 @@ class Seq2SeqTrainer(Trainer):
     def predict(
         self,
         test_dataset: Dataset,
-        ignore_keys: Optional[List[str]] = None,
+        ignore_keys: Optional[list[str]] = None,
         metric_key_prefix: str = "test",
         **gen_kwargs,
     ) -> "PredictionOutput":
@@ -232,11 +263,11 @@ class Seq2SeqTrainer(Trainer):
     def prediction_step(
         self,
         model: nn.Module,
-        inputs: Dict[str, Union[torch.Tensor, Any]],
+        inputs: dict[str, Union[torch.Tensor, Any]],
         prediction_loss_only: bool,
-        ignore_keys: Optional[List[str]] = None,
+        ignore_keys: Optional[list[str]] = None,
         **gen_kwargs,
-    ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
+    ) -> tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Perform an evaluation step on `model` using `inputs`.
 
@@ -277,10 +308,8 @@ class Seq2SeqTrainer(Trainer):
         if "max_length" in gen_kwargs and gen_kwargs["max_length"] is None:
             gen_kwargs.pop("max_length")
 
-        default_synced_gpus = True if is_deepspeed_zero3_enabled() else False
-        gen_kwargs["synced_gpus"] = (
-            gen_kwargs["synced_gpus"] if gen_kwargs.get("synced_gpus") is not None else default_synced_gpus
-        )
+        default_synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self.model)
+        gen_kwargs["synced_gpus"] = gen_kwargs.get("synced_gpus", default_synced_gpus)
 
         generation_inputs = inputs.copy()
         # If the `decoder_input_ids` was created from `labels`, evict the former, so that the model can freely generate
@@ -293,7 +322,15 @@ class Seq2SeqTrainer(Trainer):
             generation_inputs = {
                 k: v for k, v in inputs.items() if k not in ("decoder_input_ids", "decoder_attention_mask")
             }
-        generated_tokens = self.model.generate(**generation_inputs, **gen_kwargs)
+
+        summon_full_params_context = (
+            FullyShardedDataParallel.summon_full_params(self.model)
+            if isinstance(self.model, FullyShardedDataParallel)
+            else contextlib.nullcontext()
+        )
+
+        with summon_full_params_context:
+            generated_tokens = self.model.generate(**generation_inputs, **gen_kwargs)
 
         # Temporary hack to ensure the generation config is not initialized for each iteration of the evaluation loop
         # TODO: remove this hack when the legacy code that initializes generation_config from a model config is
@@ -314,9 +351,9 @@ class Seq2SeqTrainer(Trainer):
                 with self.compute_loss_context_manager():
                     outputs = model(**inputs)
                 if self.label_smoother is not None:
-                    loss = self.label_smoother(outputs, inputs["labels"]).mean().detach()
+                    loss = self.label_smoother(outputs, inputs["labels"]).detach().mean()
                 else:
-                    loss = (outputs["loss"] if isinstance(outputs, dict) else outputs[0]).mean().detach()
+                    loss = (outputs["loss"] if isinstance(outputs, dict) else outputs[0]).detach().mean()
             else:
                 loss = None
 
@@ -335,10 +372,12 @@ class Seq2SeqTrainer(Trainer):
         return loss, generated_tokens, labels
 
     def _pad_tensors_to_max_len(self, tensor, max_length):
-        if self.tokenizer is not None and hasattr(self.tokenizer, "pad_token_id"):
+        if self.processing_class is not None and hasattr(self.processing_class, "pad_token_id"):
             # If PAD token is not defined at least EOS token has to be defined
             pad_token_id = (
-                self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else self.tokenizer.eos_token_id
+                self.processing_class.pad_token_id
+                if self.processing_class.pad_token_id is not None
+                else self.processing_class.eos_token_id
             )
         else:
             if self.model.config.pad_token_id is not None:

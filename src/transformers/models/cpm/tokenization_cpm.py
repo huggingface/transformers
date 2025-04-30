@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes."""
+
 import os
 import unicodedata
 from shutil import copyfile
@@ -22,24 +23,19 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import SPIECE_UNDERLINE, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "TsinghuaAI/CPM-Generate": "https://huggingface.co/TsinghuaAI/CPM-Generate/resolve/main/spiece.model",
-    }
-}
 
-
+@requires(backends=("sentencepiece",))
 class CpmTokenizer(PreTrainedTokenizer):
     """Runs pre-tokenization with Jieba segmentation tool. It is used in CPM models."""
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
 
     def __init__(
         self,
@@ -349,3 +345,6 @@ class CpmTokenizer(PreTrainedTokenizer):
         text = super()._decode(*args, **kwargs)
         text = text.replace(" ", "").replace("\u2582", " ").replace("\u2583", "\n")
         return text
+
+
+__all__ = ["CpmTokenizer"]

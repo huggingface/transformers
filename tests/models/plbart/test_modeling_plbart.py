@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch PLBART model. """
-
+"""Testing suite for the PyTorch PLBART model."""
 
 import copy
 import tempfile
@@ -225,10 +223,8 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_model_classes = (
         (PLBartModel, PLBartForConditionalGeneration, PLBartForSequenceClassification) if is_torch_available() else ()
     )
-    all_generative_model_classes = (PLBartForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": PLBartForConditionalGeneration,
             "feature-extraction": PLBartModel,
             "summarization": PLBartForConditionalGeneration,
             "text-classification": PLBartForSequenceClassification,
@@ -247,9 +243,16 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "TranslationPipelineTests":
+        if pipeline_test_case_name == "TranslationPipelineTests":
             # Get `ValueError: Translation requires a `src_lang` and a `tgt_lang` for this model`.
             # `PLBartConfig` was never used in pipeline tests: cannot create a simple tokenizer.
             return True
@@ -321,8 +324,14 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
-    @unittest.skip("Failing since #26752")
+    @unittest.skip(reason="Failing since #26752")
     def test_sample_generate(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
         pass
 
 
@@ -647,7 +656,6 @@ class PLBartStandaloneDecoderModelTester:
 @require_torch
 class PLBartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (PLBartDecoder, PLBartForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (PLBartForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     is_encoder_decoder = False
 
@@ -666,10 +674,6 @@ class PLBartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, 
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return
-
-    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
-    def test_left_padding_compatibility(self):
-        pass

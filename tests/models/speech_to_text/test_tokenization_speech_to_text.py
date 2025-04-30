@@ -37,12 +37,14 @@ ES_CODE = 10
 @require_sentencepiece
 @require_tokenizers
 class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/s2t-small-librispeech-asr"
     tokenizer_class = Speech2TextTokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         spm_model = sp.SentencePieceProcessor()
         spm_model.Load(SAMPLE_VOCAB)
@@ -51,13 +53,13 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         vocab += [spm_model.IdToPiece(id_) for id_ in range(len(spm_model))]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
 
-        save_dir = Path(self.tmpdirname)
+        save_dir = Path(cls.tmpdirname)
         save_json(vocab_tokens, save_dir / VOCAB_FILES_NAMES["vocab_file"])
         if not (save_dir / VOCAB_FILES_NAMES["spm_file"]).exists():
             copyfile(SAMPLE_VOCAB, save_dir / VOCAB_FILES_NAMES["spm_file"])
 
-        tokenizer = Speech2TextTokenizer.from_pretrained(self.tmpdirname)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer = Speech2TextTokenizer.from_pretrained(cls.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""

@@ -140,9 +140,6 @@ generation.
 [[autodoc]] ForcedEOSTokenLogitsProcessor
     - __call__
 
-[[autodoc]] ForceTokensLogitsProcessor
-    - __call__
-
 [[autodoc]] HammingDiversityLogitsProcessor
     - __call__
 
@@ -158,13 +155,13 @@ generation.
 [[autodoc]] LogitsProcessorList
     - __call__
 
-[[autodoc]] LogitsWarper
-    - __call__
-
 [[autodoc]] MinLengthLogitsProcessor
     - __call__
 
 [[autodoc]] MinNewTokensLengthLogitsProcessor
+    - __call__
+
+[[autodoc]] MinPLogitsWarper
     - __call__
 
 [[autodoc]] NoBadWordsLogitsProcessor
@@ -188,6 +185,9 @@ generation.
 [[autodoc]] SuppressTokensLogitsProcessor
     - __call__
 
+[[autodoc]] SynthIDTextWatermarkLogitsProcessor
+    - __call__
+
 [[autodoc]] TemperatureLogitsWarper
     - __call__
 
@@ -205,6 +205,10 @@ generation.
 
 [[autodoc]] WhisperTimeStampLogitsProcessor
     - __call__
+
+[[autodoc]] WatermarkLogitsProcessor
+    - __call__
+
 
 ### TensorFlow
 
@@ -310,6 +314,12 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 [[autodoc]] MaxTimeCriteria
     - __call__
 
+[[autodoc]] StopStringCriteria
+    - __call__
+
+[[autodoc]] EosTokenCriteria
+    - __call__
+
 ## Constraints
 
 A [`Constraint`] can be used to force the generation to include specific tokens or sequences in the output. Please note that this is exclusively available to our PyTorch implementations.
@@ -342,10 +352,18 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] TextIteratorStreamer
 
+[[autodoc]] AsyncTextIteratorStreamer
+
 ## Caches
 
 [[autodoc]] Cache
     - update
+
+[[autodoc]] CacheConfig
+	- update
+
+[[autodoc]] QuantizedCacheConfig
+	- validate
 
 [[autodoc]] DynamicCache
     - update
@@ -354,11 +372,75 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - to_legacy_cache
     - from_legacy_cache
 
+[[autodoc]] QuantizedCache
+    - update
+    - get_seq_length
+
+[[autodoc]] QuantoQuantizedCache
+
+[[autodoc]] HQQQuantizedCache
+
 [[autodoc]] SinkCache
     - update
     - get_seq_length
     - reorder_cache
 
+[[autodoc]] OffloadedCache
+    - update
+    - prefetch_layer
+    - evict_previous_layer
+
 [[autodoc]] StaticCache
     - update
     - get_seq_length
+    - reset
+
+[[autodoc]] OffloadedStaticCache
+    - update
+    - get_seq_length
+    - reset
+
+[[autodoc]] HybridCache
+    - update
+    - get_seq_length
+    - reset
+
+[[autodoc]] SlidingWindowCache
+    - update
+    - reset
+
+[[autodoc]] EncoderDecoderCache
+    - get_seq_length
+    - to_legacy_cache
+    - from_legacy_cache
+    - reset
+    - reorder_cache
+
+[[autodoc]] MambaCache
+    - update_conv_state
+    - update_ssm_state
+    - reset
+
+## Watermark Utils
+
+[[autodoc]] WatermarkingConfig
+    - __call__
+
+[[autodoc]] WatermarkDetector
+    - __call__
+
+[[autodoc]] BayesianDetectorConfig
+
+[[autodoc]] BayesianDetectorModel
+    - forward
+
+[[autodoc]] SynthIDTextWatermarkingConfig
+
+[[autodoc]] SynthIDTextWatermarkDetector
+    - __call__
+
+## Compile Utils
+
+[[autodoc]] CompileConfig
+    - __call__
+

@@ -14,9 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- A TF 2.0 Adaptive Softmax for Transformer XL model.
+A TF 2.0 Adaptive Softmax for Transformer XL model.
 """
-
 
 import tensorflow as tf
 
