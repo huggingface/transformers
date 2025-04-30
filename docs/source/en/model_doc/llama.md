@@ -174,7 +174,6 @@ predicted_class = logits.argmax().item()
 
 print(f"Predicted class: {predicted_class}")
 ```
-
 [[autodoc]] LlamaForSequenceClassification
     - forward
 
