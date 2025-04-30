@@ -22,7 +22,11 @@ from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from ..bamba.configuration_bamba import BambaConfig
-from ..bamba.modeling_bamba import BambaMixer, HybridMambaAttentionDynamicCache
+from ..bamba.modeling_bamba import (
+    BambaMixer,
+    BambaRMSNormGated,
+    HybridMambaAttentionDynamicCache,
+)
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedAttention,
     GraniteMoeSharedDecoderLayer,
@@ -45,6 +49,11 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
 class GraniteMoeHybridMambaLayer(BambaMixer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(BambaConfig(config), layer_idx)
+
+
+class GraniteMoeHybridRMSNormGated(BambaRMSNormGated):
+    def __init__(self, hidden_size, eps=1e-6):
+        super().__init__(hidden_size, eps)
 
 
 class GraniteMoeHybridMLP(GraniteMoeSharedMLP):
@@ -188,11 +197,17 @@ class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     def _init_weights(self, module):
         std = self.config.initializer_range
         super()._init_weights()
-        # Initialize Mamba convolutional modules
+        # Initialize Mamba modules
         if isinstance(module, (nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, GraniteMoeHybridMambaLayer):
+            module.dt_bias.data.fill_(1.0)
+            module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
+            module.D.data.fill_(1.0)
+        elif isinstance(module, GraniteMoeHybridRMSNormGated):
+            module.weight.data.fill_(1.0)
 
 
 GRANITEMOEHYBRID_INPUTS_DOCSTRING = r"""
