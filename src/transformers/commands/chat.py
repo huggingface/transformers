@@ -157,27 +157,27 @@ class RichInterface:
         return text
 
     def input(self) -> str:
-        """ Gets user input from the console. """
+        """Gets user input from the console."""
         input = self._console.input(f"[bold red]<{self.user_name}>:\n")
         self._console.print()
         return input
 
     def clear(self):
-        """ Clears the console. """
+        """Clears the console."""
         self._console.clear()
 
     def print_user_message(self, text: str):
-        """ Prints a user message to the console. """
+        """Prints a user message to the console."""
         self._console.print(f"[bold red]<{self.user_name}>:[/ bold red]\n{text}")
         self._console.print()
 
     def print_color(self, text: str, color: str):
-        """ Prints text in a given color to the console. """
+        """Prints text in a given color to the console."""
         self._console.print(f"[bold {color}]{text}")
         self._console.print()
 
     def print_help(self, minimal: bool = False):
-        """ Prints the help message to the console. """
+        """Prints the help message to the console."""
         self._console.print(Markdown(HELP_STRING_MINIMAL if minimal else HELP_STRING))
         self._console.print()
 
@@ -200,9 +200,7 @@ class ChatArguments:
     )
     user: Optional[str] = field(
         default=None,
-        metadata={
-            "help": "Username to display in chat interface. Defaults to the current user's name."
-        },
+        metadata={"help": "Username to display in chat interface. Defaults to the current user's name."},
     )
     system_prompt: Optional[str] = field(default=None, metadata={"help": "System prompt."})
     save_folder: str = field(default="./chat_history/", metadata={"help": "Folder to save chat history."})
