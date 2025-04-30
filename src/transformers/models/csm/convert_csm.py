@@ -213,6 +213,7 @@ def write_model(
 
     # default generation config
     model.generation_config._from_model_config = False
+    model.generation_config.max_new_tokens = 125
     model.generation_config.do_sample = True
     model.generation_config.top_k = 50
     model.generation_config.temperature = 0.9
