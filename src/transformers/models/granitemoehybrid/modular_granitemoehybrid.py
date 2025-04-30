@@ -26,12 +26,10 @@ from ..bamba.modeling_bamba import BambaMixer, HybridMambaAttentionDynamicCache
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedAttention,
     GraniteMoeSharedDecoderLayer,
-    GraniteMoeSharedFlashAttention2,
     GraniteMoeSharedForCausalLM,
     GraniteMoeSharedMLP,
     GraniteMoeSharedModel,
     GraniteMoeSharedPreTrainedModel,
-    GraniteMoeSharedSdpaAttention,
 )
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 
@@ -42,22 +40,6 @@ logger = logging.get_logger(__name__)
 class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-
-
-class GraniteMoeHybridFlashAttention2(GraniteMoeSharedFlashAttention2):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-
-class GraniteMoeHybridSdpaAttention(GraniteMoeSharedSdpaAttention):
-    pass
-
-
-GRANITEMOEHYBRID_ATTENTION_CLASSES = {
-    "eager": GraniteMoeHybridAttention,
-    "flash_attention_2": GraniteMoeHybridFlashAttention2,
-    "sdpa": GraniteMoeHybridSdpaAttention,
-}
 
 
 class GraniteMoeHybridMambaLayer(BambaMixer):
@@ -76,12 +58,11 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeHybridMLP(config)
         # attention should be initialized only if layer type is attention
         self.self_attn = None
+
         if config.layers_block_type[layer_idx] == "mamba":
             self.mamba = GraniteMoeHybridMambaLayer(config, layer_idx)
         elif config.layers_block_type[layer_idx] == "attention":
-            self.self_attn = GRANITEMOEHYBRID_ATTENTION_CLASSES[config._attn_implementation](
-                config=config, layer_idx=layer_idx
-            )
+            self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
         else:
             raise ValueError(f"Expected layer type in ['attention', 'mamba'], got {self.layer_type}")
         self.layer_type = config.layers_block_type[layer_idx]
