@@ -28,15 +28,12 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from transformers.modeling_attn_mask_utils import AttentionMaskConverter
-from transformers.modeling_outputs import BaseModelOutputWithPooling
-from transformers.modeling_utils import PreTrainedModel
-
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
