@@ -180,11 +180,6 @@ class InternVLVisionAttention(nn.Module):
 
 @auto_docstring
 class InternVLVisionPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = InternVLVisionConfig
     base_model_prefix = "internvl_vision"
     main_input_name = "pixel_values"

@@ -504,7 +504,7 @@ SEGFORMER_INPUTS_DOCSTRING = r"""
     SEGFORMER_START_DOCSTRING,
 )
 class SegformerModel(SegformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SegformerConfig):
         super().__init__(config)
         self.config = config
 
