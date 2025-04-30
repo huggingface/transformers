@@ -1,8 +1,11 @@
-from typing import Optional, Union
 import itertools
+from typing import Optional
+
 import torch
 import torch.nn.functional as F
-from .cache_utils import Cache, StaticCache, SlidingWindowCache, HybridCache, HybridChunkedCache
+
+from .cache_utils import Cache, HybridCache, HybridChunkedCache, SlidingWindowCache, StaticCache
+
 
 # Print the matrix with words as row labels
 GREEN = "\033[92m"
@@ -15,10 +18,10 @@ LOW_TRIANGLE = "⬕"
 UPPER_TRIANGLE = "⬔"
 
 
-BLACK_SQUARE = "█"   # Full block (represents "on" or active)
-WHITE_SQUARE = "░"   # Light shade (represents "off" or inactive)
-LOW_TRIANGLE    = "▙"   # Lower left triangle (stylized indication)
-UPPER_TRIANGLE  = "▜"   # Upper left triangle (stylized indication)
+BLACK_SQUARE = "█"  # Full block (represents "on" or active)
+WHITE_SQUARE = "░"  # Light shade (represents "off" or inactive)
+LOW_TRIANGLE = "▙"  # Lower left triangle (stylized indication)
+UPPER_TRIANGLE = "▜"  # Upper left triangle (stylized indication)
 
 # LOW_TRIANGLE = UPPER_TRIANGLE = "⟍"   # Upper right triangle (stylized indication)
 
@@ -29,10 +32,9 @@ GREEN_SQUARE = f"{GREEN}{BLACK_SQUARE}{RESET}"
 def tensor_to_mask_visual(original_tensor: torch.Tensor, grid_size=(20, 40)) -> str:
     h, w = original_tensor.shape
     max_h, max_w = grid_size
-    if not (h<max_h and w<max_w):
-
+    if not (h < max_h and w < max_w):
         # Preserve aspect ratio within max grid size
-        aspect_ratio = 2*w/ h
+        aspect_ratio = 2 * w / h
         if aspect_ratio > 1:
             w = max_w
             h = min(max_h, max(1, round(max_w / aspect_ratio)))
@@ -52,21 +54,25 @@ def tensor_to_mask_visual(original_tensor: torch.Tensor, grid_size=(20, 40)) -> 
         row = ""
         for j in range(w):
             if tensor[i, j] == 1:
-                row += BLACK_SQUARE 
+                row += BLACK_SQUARE
             elif tensor[i, j] == 0:
                 row += WHITE_SQUARE
             else:
-                if j>0:
-                    if tensor[i, j-1] == 1:
+                if j > 0:
+                    if tensor[i, j - 1] == 1:
                         row += LOW_TRIANGLE
-                    elif tensor[i, j-1] == 0:
+                    elif tensor[i, j - 1] == 0:
                         row += UPPER_TRIANGLE
                     else:
-                        row += BLACK_SQUARE if tensor[i,j]==1 else WHITE_SQUARE
+                        row += BLACK_SQUARE if tensor[i, j] == 1 else WHITE_SQUARE
                 else:
-                    row += BLACK_SQUARE if tensor[i, j] == 1 else (
-                        WHITE_SQUARE if tensor[i, j] == 0 else (
-                            UPPER_TRIANGLE if tensor[i, j+1] == 1 else LOW_TRIANGLE
+                    row += (
+                        BLACK_SQUARE
+                        if tensor[i, j] == 1
+                        else (
+                            WHITE_SQUARE
+                            if tensor[i, j] == 0
+                            else (UPPER_TRIANGLE if tensor[i, j + 1] == 1 else LOW_TRIANGLE)
                         )
                     )
         result.append(row)
@@ -89,22 +95,16 @@ class AttentionMask(torch.Tensor):
         *batch_dims, num_rows, num_cols = dense_mask.shape
         total_vis = []
 
-        for idx, batch_idx in enumerate(
-            itertools.product(*[range(i) for i in batch_dims])
-        ):
+        for idx, batch_idx in enumerate(itertools.product(*[range(i) for i in batch_dims])):
             if idx == limit:
                 total_vis.append("...")
                 total_vis.append("To print out more, set AttentionMask.to_string(limit=N)")
-                total_vis.append(
-                    "You can also index (AttentionMask[batch, head]) to choose a specific batch or head"
-                )
+                total_vis.append("You can also index (AttentionMask[batch, head]) to choose a specific batch or head")
                 break
             block_vis = tensor_to_mask_visual(dense_mask[batch_idx], grid_size=grid_size)
             total_vis.append(block_vis)
 
-        total_vis.append(
-            f"torch.Tensor(shape={tuple(self.shape)}, dtype={self.dtype})"
-        )
+        total_vis.append(f"torch.Tensor(shape={tuple(self.shape)}, dtype={self.dtype})")
         return "\n".join(total_vis)
 
     def __repr__(self):
@@ -115,7 +115,7 @@ class AttentionMask(torch.Tensor):
 
     @classmethod
     def from_tensor(cls, tensor: torch.Tensor):
-        return cls(tensor) 
+        return cls(tensor)
 
 
 def create_4d_causal_mask(
@@ -246,18 +246,18 @@ def flash_attention_mask(attention_mask: Optional[torch.Tensor]):
 
 
 def sdpa_mask(
-        attention_mask: Optional[torch.Tensor],
-        cache_position: torch.Tensor,
-        past_key_values: Cache,
-        batch_size: int,
-        sliding_window: Optional[int] = None,
-        chunk_size: Optional[int] = None
-    ) -> Optional[torch.Tensor]:
+    attention_mask: Optional[torch.Tensor],
+    cache_position: torch.Tensor,
+    past_key_values: Cache,
+    batch_size: int,
+    sliding_window: Optional[int] = None,
+    chunk_size: Optional[int] = None,
+) -> Optional[torch.Tensor]:
     past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
 
     # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` to avoid materializing
     # the mask
-    if not using_static_cache:
+    if not isinstance(past_key_values, (StaticCache, SlidingWindowCache, HybridCache, HybridChunkedCache)):
         if AttentionMaskConverter._ignore_causal_mask_sdpa(
             attention_mask,
             inputs_embeds=input_tensor,
@@ -265,7 +265,7 @@ def sdpa_mask(
             is_training=self.training,
         ):
             return None
-        
+
     query_length = cache_position.shape[0]
     # The kv_length and offset are the same for sliding attention or chunked attention -> only the mask pattern changes
     local_attention_size = sliding_window or chunk_size
@@ -297,14 +297,19 @@ def sdpa_mask(
         if local_mask_kv_length == full_mask_kv_length:
             sizes_and_patterns = [(full_mask_kv_offset, full_mask_kv_length, sliding_window, chunk_size)]
         else:
-            sizes_and_patterns = [(local_mask_kv_offset, local_mask_kv_length, sliding_window, chunk_size), (full_mask_kv_offset, full_mask_kv_length, sliding_window, chunk_size)]
+            sizes_and_patterns = [
+                (local_mask_kv_offset, local_mask_kv_length, sliding_window, chunk_size),
+                (full_mask_kv_offset, full_mask_kv_length, sliding_window, chunk_size),
+            ]
     elif isinstance(past_key_values, HybridChunkedCache):
         local_mask_kv_offset = torch.clamp(first_cache_position - local_attention_size + 1, min=0)
         # This is the true general case for any Cache using local attention (sliding or chunked)
         if first_cache_position >= local_attention_size:
             # Here the Cache is already full
             local_mask_kv_length = local_attention_size + query_length - 1
-        elif first_cache_position < local_attention_size and first_cache_position + query_length > local_attention_size:
+        elif (
+            first_cache_position < local_attention_size and first_cache_position + query_length > local_attention_size
+        ):
             # Here the Cache becomes full with the new input
             local_mask_kv_length = first_cache_position + query_length
         else:
@@ -318,10 +323,13 @@ def sdpa_mask(
         if local_mask_kv_length == full_mask_kv_length:
             sizes_and_patterns = [(full_mask_kv_offset, full_mask_kv_length, None, None)]
         else:
-            sizes_and_patterns = [(local_mask_kv_offset, local_mask_kv_length, sliding_window, chunk_size), (full_mask_kv_offset, full_mask_kv_length, None, None)]
+            sizes_and_patterns = [
+                (local_mask_kv_offset, local_mask_kv_length, sliding_window, chunk_size),
+                (full_mask_kv_offset, full_mask_kv_length, None, None),
+            ]
     else:
         kv_offset = 0
-        kv_length = attention_mask.shape[-1] if attention_mask is not None else past_seen_tokens + sequence_length
+        kv_length = attention_mask.shape[-1] if attention_mask is not None else past_seen_tokens + query_length
 
         sizes_and_patterns = [(kv_offset, kv_length, sliding_window, chunk_size)]
 
@@ -336,7 +344,7 @@ def sdpa_mask(
         # Merge the padding mask into the causal mask if needed
         if attention_mask is not None:
             # Offset the padding mask as well
-            local_padding_mask = attention_mask[:, kv_offset:kv_offset+kv_length]
+            local_padding_mask = attention_mask[:, kv_offset : kv_offset + kv_length]
             # It may be smaller, in which case we pad with 0s to indicate the entries should not take part in the attention
             if (padding_length := kv_length - local_padding_mask.shape[-1]) > 0:
                 local_padding_mask = torch.nn.functional.pad(local_padding_mask, (0, padding_length))
@@ -344,7 +352,6 @@ def sdpa_mask(
             causal_mask *= local_padding_mask[:, None, None, :]
 
         masks.append(causal_mask)
-        
 
     # CHECK VERSIONS BUT PROBABLY DROP THIS OR AT LEAST KEEP IT ONLY FOR FAULTY VERSION AS WE WANT TO KEEP MASK IN BOOL
     # ALSO THE VERY BEST WOULD BE TO HAVE BOOLS REPRESENTED AS 1 BIT INSTEAD OF DEFAULT 1 BYTE IN TORCH
@@ -359,7 +366,3 @@ def sdpa_mask(
     #     causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
     return masks
-
-
-
-
