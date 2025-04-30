@@ -318,7 +318,7 @@ class IdeficsProcessor(ProcessorMixin):
         and the two images will be massaged using [`IdeficsImageProcessor.__call__`] method and placed inside the
         `pixel_values` dict entry of the return value.
 
-        This example also examplifies that images can be passed as objects or as text urls. It can be seen that the
+        This example also exemplifies that images can be passed as objects or as text urls. It can be seen that the
         first image is passed as object and the second one as a url.
 
         To do training do:

@@ -118,7 +118,7 @@ class Embeddings(nn.Module):
 
         # Setting the position-ids to the registered buffer in constructor, it helps
         # when tracing the model without passing position-ids, solves
-        # isues similar to issue #5664
+        # issues similar to issue #5664
         if hasattr(self, "position_ids"):
             position_ids = self.position_ids[:, :seq_length]
         else:

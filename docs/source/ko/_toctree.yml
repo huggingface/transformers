@@ -77,6 +77,8 @@
         title: 이미지 특징 추출
       - local: tasks/mask_generation
         title: 마스크 생성
+      - local: tasks/keypoint_detection
+        title: 키포인트 탐지
       - local: tasks/knowledge_distillation_for_image_classification
         title: 컴퓨터 비전(이미지 분류)를 위한 지식 증류(knowledge distillation)
     title: 컴퓨터 비전
@@ -352,8 +354,8 @@
         title: (번역중) DistilBERT
       - local: in_translation
         title: (번역중) DPR
-      - local: in_translation
-        title: (번역중) ELECTRA
+      - local: model_doc/electra
+        title: ELECTRA
       - local: model_doc/encoder-decoder
         title: 인코더 디코더 모델
       - local: in_translation
