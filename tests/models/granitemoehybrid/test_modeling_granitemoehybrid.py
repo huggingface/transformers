@@ -12,15 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch GraniteMoeShared model."""
+"""Testing suite for the PyTorch GraniteMoeHybrid model."""
 
 import unittest
 
 import pytest
 
-from transformers import GraniteMoeHybridConfig, is_torch_available
+from transformers import (
+    AutoTokenizer,
+    GraniteMoeHybridConfig,
+    is_torch_available,
+)
 from transformers.testing_utils import (
     require_torch,
+    require_torch_gpu,
+    slow,
     torch_device,
 )
 
@@ -75,7 +81,7 @@ class GraniteMoeHybridModelTester:
         num_experts_per_tok=2,
         shared_intermediate_size=174,
         normalization_function=None,
-        position_embedding_type="nope",
+        position_embedding_type=None,
         # layer types should be a List of str
         layer_types=None,
         # took defaults from bamba config
@@ -88,7 +94,6 @@ class GraniteMoeHybridModelTester:
         mamba_chunk_size=16,
         mamba_conv_bias=True,
         mamba_proj_bias=False,
-        logits_to_keep=1,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -134,7 +139,6 @@ class GraniteMoeHybridModelTester:
         self.mamba_chunk_size = mamba_chunk_size
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
-        self.logits_to_keep = logits_to_keep
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -187,7 +191,6 @@ class GraniteMoeHybridModelTester:
             mamba_chunk_size=self.mamba_chunk_size,
             mamba_conv_bias=self.mamba_conv_bias,
             mamba_proj_bias=self.mamba_proj_bias,
-            logits_to_keep=self.logits_to_keep,
         )
 
     def create_and_check_model(self, config, input_ids, input_mask, token_labels):
@@ -196,7 +199,14 @@ class GraniteMoeHybridModelTester:
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (
+                self.batch_size,
+                self.seq_length,
+                self.hidden_size,
+            ),
+        )
 
     def create_and_check_model_as_decoder(
         self,
@@ -222,7 +232,10 @@ class GraniteMoeHybridModelTester:
             encoder_hidden_states=encoder_hidden_states,
         )
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_causal_lm(
         self,
@@ -235,7 +248,10 @@ class GraniteMoeHybridModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, self.seq_length, self.vocab_size),
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -294,7 +310,9 @@ class GraniteMoeHybridModelTester:
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -447,4 +465,63 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
             GraniteMoeHybridConfig(layer_types=["not allowed!"])
 
 
-# TODO add integration tests
+@unittest.skip(reason="GraniteMoeHybrid models are not yet released")
+@require_torch_gpu
+class GraniteMoeHybridIntegrationTest(unittest.TestCase):
+    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
+    # Depending on the hardware we get different logits / generations
+    cuda_compute_capability_major_version = None
+
+    @classmethod
+    def setUpClass(cls):
+        if is_torch_available() and torch.cuda.is_available():
+            # 8 is for A100 / A10 and 7 for T4
+            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+
+    @slow
+    def test_tiny_model_logits(self):
+        input_ids = [31390, 631, 4162, 30, 322, 25342, 432, 1875, 43826, 10066, 688, 225]
+
+        model = GraniteMoeHybridForCausalLM.from_pretrained("ibm-granite/granite-4.0-9b-light", device_map="auto")
+
+        with torch.no_grad():
+            out = model(torch.tensor([input_ids]).to(torch_device))
+
+        # fmt: off
+        # Expected mean on dim = -1
+        EXPECTED_MEAN = torch.tensor([
+            [-2.9711, -2.2554, -1.0814, -1.6123, -0.8780, -1.0685, -0.6368, -1.9732, -3.3548, -2.6895, -2.3062, -2.6338]
+        ])
+
+        torch.testing.assert_close(EXPECTED_MEAN.to(torch_device), out.logits.float().mean(-1), rtol=1e-2, atol=1e-2)
+
+        # slicing logits[0, 0, 0:15]
+        EXPECTED_SLICE = torch.tensor([
+            [4.0662, 5.9547, 3.5803, 3.1306, 4.3211, 3.8902, 4.6438, 8.5434, 7.5865, 5.1623, 5.2240, 9.2982, 5.9094, 6.8834, 5.7551],
+        ])
+        # fmt: on
+
+        self.assertTrue(
+            torch.allclose(
+                EXPECTED_SLICE.to(torch_device),
+                out.logits[0, 0, :15].float(),
+                atol=1e-3,
+                rtol=1e-3,
+            )
+        )
+
+    @slow
+    def test_model_generation(self):
+        EXPECTED_TEXT_COMPLETION = (
+            "Simply put, the theory of relativity states that 1) time is relative, and 2) space is relative. The first"
+        )
+        prompt = "Simply put, the theory of relativity states that "
+        tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.0-9b-light")
+        model = GraniteMoeHybridForCausalLM.from_pretrained("ibm-granite/granite-4.0-9b-light", device_map="auto")
+        model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+        # greedy generation outputs
+        generated_ids = model.generate(**model_inputs, max_new_tokens=16, do_sample=False)
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
