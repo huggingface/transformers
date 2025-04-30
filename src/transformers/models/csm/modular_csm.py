@@ -743,11 +743,26 @@ class CsmForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
             )
 
     def _merge_input_ids_with_input_values(
-        self, input_ids=None, input_values=None, input_values_mask=None, labels=None
-    ):
-        if input_ids is None and input_values is None:
-            return None
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        input_values: Optional[torch.Tensor] = None,
+        input_values_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+    ) -> Optional[torch.Tensor]:
+        """
+        Merges the input_ids and input_values to produce a single inputs_embeds tensor:
+        1 - Infers the codec model on the input_values to retreive codebook token.
+        2 - Embeds codebook tokens and places them at the correct positions in the inputs_embeds tensor.
+        3 - If labels are provided, expands them to match codebook dimensions and position the target codebook tokens in the inputs_embeds tensor.
 
+        Args:
+            input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+                The input ids to embed.
+            input_values (`torch.Tensor` of shape `(batch_size, channels, audio_sequence_length)`):
+                The audio input values to embed.
+            input_values_mask (`torch.Tensor` of shape `(batch_size, audio_sequence_length)`):
+                The mask for the input values.
+        """
         inputs_embeds = self.embed_text_tokens(input_ids)
 
         if input_values is not None:
