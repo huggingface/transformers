@@ -38,14 +38,14 @@ from ..clip.modeling_clip import CLIPModel, CLIPTextEmbeddings, _get_vector_norm
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipOutput
-from ..altclip.modeling_altclip import AltCLIPModel
+
 
 logger = logging.get_logger(__name__)
 
 
-class AIMv2VisionConfig(SiglipVisionConfig):
+class Aimv2VisionConfig(SiglipVisionConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AIMv2VisionModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Aimv2VisionModel`]. It is used to instantiate a
     AIMv2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the AIMv2
     [apple/aimv2-large-patch14-224](https://huggingface.co/apple/aimv2-large-patch14-224) architecture.
@@ -90,11 +90,11 @@ class AIMv2VisionConfig(SiglipVisionConfig):
     ```python
     >>> from transformers import SiglipVisionConfig, SiglipVisionModel
 
-    >>> # Initializing a AIMv2VisionConfig with apple/aimv2-large-patch14-224 style configuration
-    >>> configuration = AIMv2VisionConfig()
+    >>> # Initializing a Aimv2VisionConfig with apple/aimv2-large-patch14-224 style configuration
+    >>> configuration = Aimv2VisionConfig()
 
-    >>> # Initializing a AIMv2VisionModel (with random weights) from the apple/aimv2-large-patch14-224 style configuration
-    >>> model = AIMv2VisionModel(configuration)
+    >>> # Initializing a Aimv2VisionModel (with random weights) from the apple/aimv2-large-patch14-224 style configuration
+    >>> model = Aimv2VisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -143,9 +143,9 @@ class AIMv2VisionConfig(SiglipVisionConfig):
         del self.layer_norm_eps
 
 
-class AIMv2TextConfig(SiglipTextConfig):
+class Aimv2TextConfig(SiglipTextConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AIMv2TextModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Aimv2TextModel`]. It is used to instantiate a
     AIMv2 text encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text encoder of the AIMv2
     [apple/aimv2-large-patch14-224-lit](https://huggingface.co/apple/aimv2-large-patch14-224-lit) architecture.
@@ -156,7 +156,7 @@ class AIMv2TextConfig(SiglipTextConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
             Vocabulary size of the AIMv2 text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`AIMv2Model`].
+            the `inputs_ids` passed when calling [`Aimv2Model`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 2048):
@@ -234,9 +234,9 @@ class AIMv2TextConfig(SiglipTextConfig):
         del self.layer_norm_eps
 
 
-class AIMv2Config(SiglipConfig):
+class Aimv2Config(SiglipConfig):
     r"""
-    [`AIMv2Config`] is the configuration class to store the configuration of a [`AIMv2Model`]. It is used to
+    [`Aimv2Config`] is the configuration class to store the configuration of a [`Aimv2Model`]. It is used to
     instantiate a AIMv2 model according to the specified arguments, defining the text model and vision model configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the AIMv2
     [apple/aimv2-large-patch14-224-lit](https://huggingface.co/apple/aimv2-large-patch14-224-lit) architecture.
@@ -246,9 +246,9 @@ class AIMv2Config(SiglipConfig):
 
     Args:
         text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`AIMv2TextConfig`].
+            Dictionary of configuration options used to initialize [`Aimv2TextConfig`].
         vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`AIMv2VisionConfig`].
+            Dictionary of configuration options used to initialize [`Aimv2VisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimensionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
@@ -259,25 +259,25 @@ class AIMv2Config(SiglipConfig):
     Example:
 
     ```python
-    >>> from transformers import AIMv2Config, AIMv2Model
+    >>> from transformers import Aimv2Config, Aimv2Model
 
-    >>> # Initializing a AIMv2Config with apple/aimv2-large-patch14-224-lit style configuration
-    >>> configuration = AIMv2Config()
+    >>> # Initializing a Aimv2Config with apple/aimv2-large-patch14-224-lit style configuration
+    >>> configuration = Aimv2Config()
 
-    >>> # Initializing a AIMv2Model (with random weights) from the apple/aimv2-large-patch14-224-lit style configuration
-    >>> model = AIMv2Model(configuration)
+    >>> # Initializing a Aimv2Model (with random weights) from the apple/aimv2-large-patch14-224-lit style configuration
+    >>> model = Aimv2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a AIMv2Config from a AIMv2TextConfig and a AIMv2VisionConfig
-    >>> from transformers import AIMv2TextConfig, AIMv2VisionConfig
+    >>> # We can also initialize a Aimv2Config from a Aimv2TextConfig and a Aimv2VisionConfig
+    >>> from transformers import Aimv2TextConfig, Aimv2VisionConfig
 
     >>> # Initializing a AIMv2Text and AIMv2Vision configuration
-    >>> config_text = AIMv2TextConfig()
-    >>> config_vision = AIMv2VisionConfig()
+    >>> config_text = Aimv2TextConfig()
+    >>> config_vision = Aimv2VisionConfig()
 
-    >>> config = AIMv2Config(text_config=config_text, vision_config=config_vision)
+    >>> config = Aimv2Config(text_config=config_text, vision_config=config_vision)
     ```"""
 
     def __init__(
@@ -293,27 +293,27 @@ class AIMv2Config(SiglipConfig):
     pass
 
 
-class AIMv2Output(SiglipOutput):
+class Aimv2Output(SiglipOutput):
     pass
 
 
-class AIMv2RMSNorm(LlamaRMSNorm):
+class Aimv2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class AIMv2MLP(LlamaMLP):
+class Aimv2MLP(LlamaMLP):
     pass
 
 
-class AIMv2VisionEmbeddings(nn.Module):
-    def __init__(self, config: AIMv2VisionConfig):
+class Aimv2VisionEmbeddings(nn.Module):
+    def __init__(self, config: Aimv2VisionConfig):
         super().__init__()
         self.config = config
         self.patch_size = config.patch_size
         self.patch_embed = nn.Conv2d(
             config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
         )
-        self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.rms_norm = Aimv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
         num_patches = (config.image_size // config.patch_size) ** 2
         if not self.config.is_native:
@@ -357,11 +357,11 @@ class AIMv2VisionEmbeddings(nn.Module):
         return hidden_states
 
 
-class AIMv2TextEmbeddings(CLIPTextEmbeddings):
+class Aimv2TextEmbeddings(CLIPTextEmbeddings):
     pass
 
 
-class AIMv2Attention(SiglipAttention):
+class Aimv2Attention(SiglipAttention):
     def __init__(self, config):
         super().__init__(config)
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
@@ -370,13 +370,13 @@ class AIMv2Attention(SiglipAttention):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
 
 
-class AIMv2EncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: AIMv2VisionConfig):
+class Aimv2EncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Aimv2VisionConfig):
         super().__init__()
-        self.attention = AIMv2Attention(config)
-        self.ffn = AIMv2MLP(config)
-        self.rms_norm1 = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.rms_norm2 = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.attention = Aimv2Attention(config)
+        self.ffn = Aimv2MLP(config)
+        self.rms_norm1 = Aimv2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.rms_norm2 = Aimv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(
         self,
@@ -397,12 +397,12 @@ class AIMv2EncoderLayer(GradientCheckpointingLayer):
         return (hidden_states, attn_weights) if output_attentions else (hidden_states, None)
 
 
-class AIMv2Encoder(SiglipEncoder):
+class Aimv2Encoder(SiglipEncoder):
     pass
 
 
-class AIMv2AttentionPoolingHead(nn.Module):
-    def __init__(self, config: AIMv2VisionConfig):
+class Aimv2AttentionPoolingHead(nn.Module):
+    def __init__(self, config: Aimv2VisionConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -445,7 +445,7 @@ AIMV2_VISION_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`AIMv2VisionConfig`]): Model configuration class with all the parameters of the model.
+        config ([`Aimv2VisionConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -468,13 +468,13 @@ AIMV2_VISION_INPUTS_DOCSTRING = r"""
 """
 
 
-class AIMv2PreTrainedModel(PreTrainedModel):
+class Aimv2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models. The model is only intended for inference and doesn't support finetuning.
     """
 
-    config_class = AIMv2Config
+    config_class = Aimv2Config
     base_model_prefix = "aimv2"
     supports_gradient_checkpointing = True
     _no_split_modules = ["AIMv2SwiGLUFFN"]
@@ -490,14 +490,14 @@ class AIMv2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, AIMv2RMSNorm):
+        elif isinstance(module, Aimv2RMSNorm):
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
         elif hasattr(module, "logit_scale"):
             if isinstance(module.logit_scale, nn.Parameter):
                 module.logit_scale.data.fill_(math.log(1 / 0.07))
-        elif isinstance(module, AIMv2AttentionPoolingHead):
+        elif isinstance(module, Aimv2AttentionPoolingHead):
             module.cls_token.data.normal_(mean=0.0, std=std)
 
 
@@ -505,20 +505,20 @@ class AIMv2PreTrainedModel(PreTrainedModel):
     """The vision model from AIMv2 without any head or projection on top.""",
     AIMV2_VISION_START_DOCSTRING,
 )
-class AIMv2VisionModel(AIMv2PreTrainedModel):
+class Aimv2VisionModel(Aimv2PreTrainedModel):
     main_input_name = "pixel_values"
 
-    def __init__(self, config: AIMv2VisionConfig):
+    def __init__(self, config: Aimv2VisionConfig):
         super().__init__(config)
         self.config = config
-        self.embeddings = AIMv2VisionEmbeddings(config)
-        self.encoder = AIMv2Encoder(config)
+        self.embeddings = Aimv2VisionEmbeddings(config)
+        self.encoder = Aimv2Encoder(config)
         # The only change from SiglipVisionTransformer is, layernorm -> rms_norm.
-        self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.rms_norm = Aimv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
         self.use_head = config.use_head
         if self.use_head:
-            self.head = AIMv2AttentionPoolingHead(config)
+            self.head = Aimv2AttentionPoolingHead(config)
 
         self.post_init()
 
@@ -527,7 +527,7 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
 
     @can_return_tuple
     @add_start_docstrings_to_model_forward(AIMV2_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=AIMv2VisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Aimv2VisionConfig)
     def forward(
         self,
         pixel_values,
@@ -545,7 +545,7 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, Siglip2VisionModel
 
-        >>> model = AIMv2VisionModel.from_pretrained("apple/aimv2-large-patch14-native")
+        >>> model = Aimv2VisionModel.from_pretrained("apple/aimv2-large-patch14-native")
         >>> processor = AutoProcessor.from_pretrained("apple/aimv2-large-patch14-native")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -583,15 +583,15 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         )
 
 
-class AIMv2TextModel(AIMv2PreTrainedModel):
+class Aimv2TextModel(Aimv2PreTrainedModel):
     main_input_name = "input_ids"
 
-    def __init__(self, config: AIMv2TextConfig):
+    def __init__(self, config: Aimv2TextConfig):
         super().__init__(config)
         self.config = config
-        self.embeddings = AIMv2TextEmbeddings(config)
-        self.encoder = AIMv2Encoder(config)
-        self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.embeddings = Aimv2TextEmbeddings(config)
+        self.encoder = Aimv2Encoder(config)
+        self.rms_norm = Aimv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
         self.eos_token_id = config.eos_token_id
 
@@ -649,16 +649,16 @@ class AIMv2TextModel(AIMv2PreTrainedModel):
         )
 
 
-class AIMv2Model(CLIPModel, nn.Module):
-    def __init__(self, config: AIMv2Config):
+class Aimv2Model(CLIPModel, nn.Module):
+    def __init__(self, config: Aimv2Config):
         nn.Module().__init__(config)
 
         self.projection_dim = config.projection_dim
         self.vision_embed_dim = config.vision_config.hidden_size
         self.text_embed_dim = config.text_config.hidden_size
 
-        self.vision_model = AIMv2VisionModel._from_config(config.vision_config)
-        self.text_model = AIMv2TextModel._from_config(config.text_config)
+        self.vision_model = Aimv2VisionModel._from_config(config.vision_config)
+        self.text_model = Aimv2TextModel._from_config(config.text_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
@@ -676,14 +676,14 @@ class AIMv2Model(CLIPModel, nn.Module):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> AIMv2Output:
+    ) -> Aimv2Output:
         r"""
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, AIMv2Model
+        >>> from transformers import AutoProcessor, Aimv2Model
 
-        >>> model = AIMv2Model.from_pretrained("apple/aimv2-large-patch14-224-lit")
+        >>> model = Aimv2Model.from_pretrained("apple/aimv2-large-patch14-224-lit")
         >>> processor = AutoProcessor.from_pretrained("apple/aimv2-large-patch14-224-lit")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -730,7 +730,7 @@ class AIMv2Model(CLIPModel, nn.Module):
         logits_per_text = (logit_scale * text_embeds) @ image_embeds.t()
         logits_per_image = logits_per_text.t()
 
-        return AIMv2Output(
+        return Aimv2Output(
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,
@@ -741,11 +741,11 @@ class AIMv2Model(CLIPModel, nn.Module):
 
 
 __all__ = [
-    "AIMv2Config",
-    "AIMv2VisionConfig",
-    "AIMv2TextConfig",
-    "AIMv2VisionModel",
-    "AIMv2Model",
-    "AIMv2PreTrainedModel",
-    "AIMv2TextModel",
+    "Aimv2Config",
+    "Aimv2VisionConfig",
+    "Aimv2TextConfig",
+    "Aimv2VisionModel",
+    "Aimv2Model",
+    "Aimv2PreTrainedModel",
+    "Aimv2TextModel",
 ]

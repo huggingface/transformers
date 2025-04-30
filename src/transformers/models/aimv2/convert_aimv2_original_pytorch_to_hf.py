@@ -23,7 +23,14 @@ import torch
 from huggingface_hub import snapshot_download
 from safetensors import safe_open
 
-from transformers import AIMv2Config, AIMv2Model, AIMv2VisionConfig, AIMv2VisionModel, AutoProcessor, AutoImageProcessor
+from transformers import (
+    Aimv2Config,
+    Aimv2Model,
+    Aimv2VisionConfig,
+    Aimv2VisionModel,
+    AutoImageProcessor,
+    AutoProcessor,
+)
 
 
 ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION_MODEL = {
@@ -131,9 +138,9 @@ def get_model_config_mapping(model_id: str):
     """Determines the correct model, config, and key mappings based on the checkpoint name."""
 
     if model_id == "apple/aimv2-large-patch14-224-lit":
-        return AIMv2Model, AIMv2Config, ORIGINAL_TO_CONVERTED_KEY_MAPPING
+        return Aimv2Model, Aimv2Config, ORIGINAL_TO_CONVERTED_KEY_MAPPING
     else:
-        return AIMv2VisionModel, AIMv2VisionConfig, ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION_MODEL
+        return Aimv2VisionModel, Aimv2VisionConfig, ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION_MODEL
 
 
 def write_model(

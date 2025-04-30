@@ -45,14 +45,14 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_aimv2 import AIMv2Config, AIMv2TextConfig, AIMv2VisionConfig
+from .configuration_aimv2 import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
 
 
 logger = logging.get_logger(__name__)
 
 
 @dataclass
-class AIMv2Output(ModelOutput):
+class Aimv2Output(ModelOutput):
     """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -64,13 +64,13 @@ class AIMv2Output(ModelOutput):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
         text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`AIMv2TextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of [`Aimv2TextModel`].
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`AIMv2VisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of [`Aimv2VisionModel`].
         text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`AIMv2TextModel`].
+            The output of the [`Aimv2TextModel`].
         vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`AIMv2VisionModel`].
+            The output of the [`Aimv2VisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -89,10 +89,10 @@ class AIMv2Output(ModelOutput):
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class AIMv2RMSNorm(nn.Module):
+class Aimv2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        AIMv2RMSNorm is equivalent to T5LayerNorm
+        Aimv2RMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -109,7 +109,7 @@ class AIMv2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class AIMv2MLP(nn.Module):
+class Aimv2MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -125,15 +125,15 @@ class AIMv2MLP(nn.Module):
         return down_proj
 
 
-class AIMv2VisionEmbeddings(nn.Module):
-    def __init__(self, config: AIMv2VisionConfig):
+class Aimv2VisionEmbeddings(nn.Module):
+    def __init__(self, config: Aimv2VisionConfig):
         super().__init__()
         self.config = config
         self.patch_size = config.patch_size
         self.patch_embed = nn.Conv2d(
             config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
         )
-        self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.rms_norm = Aimv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
         num_patches = (config.image_size // config.patch_size) ** 2
         if not self.config.is_native:
@@ -177,8 +177,8 @@ class AIMv2VisionEmbeddings(nn.Module):
         return hidden_states
 
 
-class AIMv2TextEmbeddings(nn.Module):
-    def __init__(self, config: AIMv2TextConfig):
+class Aimv2TextEmbeddings(nn.Module):
+    def __init__(self, config: Aimv2TextConfig):
         super().__init__()
         embed_dim = config.hidden_size
 
@@ -240,7 +240,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class AIMv2Attention(nn.Module):
+class Aimv2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
@@ -310,13 +310,13 @@ class AIMv2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class AIMv2EncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: AIMv2VisionConfig):
+class Aimv2EncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Aimv2VisionConfig):
         super().__init__()
-        self.attention = AIMv2Attention(config)
-        self.ffn = AIMv2MLP(config)
-        self.rms_norm1 = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.rms_norm2 = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.attention = Aimv2Attention(config)
+        self.ffn = Aimv2MLP(config)
+        self.rms_norm1 = Aimv2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.rms_norm2 = Aimv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(
         self,
@@ -337,19 +337,19 @@ class AIMv2EncoderLayer(GradientCheckpointingLayer):
         return (hidden_states, attn_weights) if output_attentions else (hidden_states, None)
 
 
-class AIMv2Encoder(nn.Module):
+class Aimv2Encoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`AIMv2EncoderLayer`].
+    [`Aimv2EncoderLayer`].
 
     Args:
-        config: AIMv2Config
+        config: Aimv2Config
     """
 
-    def __init__(self, config: AIMv2Config):
+    def __init__(self, config: Aimv2Config):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([AIMv2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([Aimv2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     # Ignore copy
@@ -417,8 +417,8 @@ class AIMv2Encoder(nn.Module):
         )
 
 
-class AIMv2AttentionPoolingHead(nn.Module):
-    def __init__(self, config: AIMv2VisionConfig):
+class Aimv2AttentionPoolingHead(nn.Module):
+    def __init__(self, config: Aimv2VisionConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -451,13 +451,13 @@ class AIMv2AttentionPoolingHead(nn.Module):
         return output
 
 
-class AIMv2PreTrainedModel(PreTrainedModel):
+class Aimv2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models. The model is only intended for inference and doesn't support finetuning.
     """
 
-    config_class = AIMv2Config
+    config_class = Aimv2Config
     base_model_prefix = "aimv2"
     supports_gradient_checkpointing = True
     _no_split_modules = ["AIMv2SwiGLUFFN"]
@@ -473,14 +473,14 @@ class AIMv2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, AIMv2RMSNorm):
+        elif isinstance(module, Aimv2RMSNorm):
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
         elif hasattr(module, "logit_scale"):
             if isinstance(module.logit_scale, nn.Parameter):
                 module.logit_scale.data.fill_(math.log(1 / 0.07))
-        elif isinstance(module, AIMv2AttentionPoolingHead):
+        elif isinstance(module, Aimv2AttentionPoolingHead):
             module.cls_token.data.normal_(mean=0.0, std=std)
 
 
@@ -494,7 +494,7 @@ AIMV2_VISION_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`AIMv2VisionConfig`]): Model configuration class with all the parameters of the model.
+        config ([`Aimv2VisionConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -521,20 +521,20 @@ AIMV2_VISION_INPUTS_DOCSTRING = r"""
     """The vision model from AIMv2 without any head or projection on top.""",
     AIMV2_VISION_START_DOCSTRING,
 )
-class AIMv2VisionModel(AIMv2PreTrainedModel):
+class Aimv2VisionModel(Aimv2PreTrainedModel):
     main_input_name = "pixel_values"
 
-    def __init__(self, config: AIMv2VisionConfig):
+    def __init__(self, config: Aimv2VisionConfig):
         super().__init__(config)
         self.config = config
-        self.embeddings = AIMv2VisionEmbeddings(config)
-        self.encoder = AIMv2Encoder(config)
+        self.embeddings = Aimv2VisionEmbeddings(config)
+        self.encoder = Aimv2Encoder(config)
         # The only change from SiglipVisionTransformer is, layernorm -> rms_norm.
-        self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.rms_norm = Aimv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
         self.use_head = config.use_head
         if self.use_head:
-            self.head = AIMv2AttentionPoolingHead(config)
+            self.head = Aimv2AttentionPoolingHead(config)
 
         self.post_init()
 
@@ -543,7 +543,7 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
 
     @can_return_tuple
     @add_start_docstrings_to_model_forward(AIMV2_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=AIMv2VisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Aimv2VisionConfig)
     def forward(
         self,
         pixel_values,
@@ -561,7 +561,7 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, Siglip2VisionModel
 
-        >>> model = AIMv2VisionModel.from_pretrained("apple/aimv2-large-patch14-native")
+        >>> model = Aimv2VisionModel.from_pretrained("apple/aimv2-large-patch14-native")
         >>> processor = AutoProcessor.from_pretrained("apple/aimv2-large-patch14-native")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -599,15 +599,15 @@ class AIMv2VisionModel(AIMv2PreTrainedModel):
         )
 
 
-class AIMv2TextModel(AIMv2PreTrainedModel):
+class Aimv2TextModel(Aimv2PreTrainedModel):
     main_input_name = "input_ids"
 
-    def __init__(self, config: AIMv2TextConfig):
+    def __init__(self, config: Aimv2TextConfig):
         super().__init__(config)
         self.config = config
-        self.embeddings = AIMv2TextEmbeddings(config)
-        self.encoder = AIMv2Encoder(config)
-        self.rms_norm = AIMv2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.embeddings = Aimv2TextEmbeddings(config)
+        self.encoder = Aimv2Encoder(config)
+        self.rms_norm = Aimv2RMSNorm(config.hidden_size, config.rms_norm_eps)
 
         self.eos_token_id = config.eos_token_id
 
@@ -686,7 +686,7 @@ AIMV2_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`AIMv2Config`]): Model configuration class with all the parameters of the model.
+        config ([`Aimv2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -747,7 +747,7 @@ AIMV2_INPUTS_DOCSTRING = r"""
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`AIMv2ImageProcessor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`Aimv2ImageProcessor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -764,19 +764,19 @@ AIMV2_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(AIMV2_START_DOCSTRING)
-class AIMv2Model(AIMv2PreTrainedModel):
-    config_class = AIMv2Config
-    _no_split_modules = ["AIMv2TextEmbeddings", "AIMv2EncoderLayer", "AIMv2VisionEmbeddings"]
+class Aimv2Model(Aimv2PreTrainedModel):
+    config_class = Aimv2Config
+    _no_split_modules = ["Aimv2TextEmbeddings", "Aimv2EncoderLayer", "Aimv2VisionEmbeddings"]
 
-    def __init__(self, config: AIMv2Config):
+    def __init__(self, config: Aimv2Config):
         super().__init__(config)
 
         self.projection_dim = config.projection_dim
         self.vision_embed_dim = config.vision_config.hidden_size
         self.text_embed_dim = config.text_config.hidden_size
 
-        self.vision_model = AIMv2VisionModel._from_config(config.vision_config)
-        self.text_model = AIMv2TextModel._from_config(config.text_config)
+        self.vision_model = Aimv2VisionModel._from_config(config.vision_config)
+        self.text_model = Aimv2TextModel._from_config(config.text_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
@@ -798,14 +798,14 @@ class AIMv2Model(AIMv2PreTrainedModel):
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`AIMv2TextModel`].
+            applying the projection layer to the pooled output of [`Aimv2TextModel`].
 
         Examples:
 
         ```python
-        >>> from transformers import AutoTokenizer, AIMv2Model
+        >>> from transformers import AutoTokenizer, Aimv2Model
 
-        >>> model = AIMv2Model.from_pretrained("openai/aimv2-vit-base-patch32")
+        >>> model = Aimv2Model.from_pretrained("openai/aimv2-vit-base-patch32")
         >>> tokenizer = AutoTokenizer.from_pretrained("openai/aimv2-vit-base-patch32")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
@@ -841,16 +841,16 @@ class AIMv2Model(AIMv2PreTrainedModel):
         r"""
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`AIMv2VisionModel`].
+            applying the projection layer to the pooled output of [`Aimv2VisionModel`].
 
         Examples:
 
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, AIMv2Model
+        >>> from transformers import AutoProcessor, Aimv2Model
 
-        >>> model = AIMv2Model.from_pretrained("openai/aimv2-vit-base-patch32")
+        >>> model = Aimv2Model.from_pretrained("openai/aimv2-vit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("openai/aimv2-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -880,7 +880,7 @@ class AIMv2Model(AIMv2PreTrainedModel):
 
     @can_return_tuple
     @add_start_docstrings_to_model_forward(AIMV2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=AIMv2Output, config_class=AIMv2Config)
+    @replace_return_docstrings(output_type=Aimv2Output, config_class=Aimv2Config)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -889,7 +889,7 @@ class AIMv2Model(AIMv2PreTrainedModel):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> AIMv2Output:
+    ) -> Aimv2Output:
         r"""
         Returns:
 
@@ -898,9 +898,9 @@ class AIMv2Model(AIMv2PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, AIMv2Model
+        >>> from transformers import AutoProcessor, Aimv2Model
 
-        >>> model = AIMv2Model.from_pretrained("apple/aimv2-large-patch14-224-lit")
+        >>> model = Aimv2Model.from_pretrained("apple/aimv2-large-patch14-224-lit")
         >>> processor = AutoProcessor.from_pretrained("apple/aimv2-large-patch14-224-lit")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -947,7 +947,7 @@ class AIMv2Model(AIMv2PreTrainedModel):
         logits_per_text = (logit_scale * text_embeds) @ image_embeds.t()
         logits_per_image = logits_per_text.t()
 
-        return AIMv2Output(
+        return Aimv2Output(
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,
@@ -957,4 +957,4 @@ class AIMv2Model(AIMv2PreTrainedModel):
         )
 
 
-__all__ = ["AIMv2VisionModel", "AIMv2Model", "AIMv2PreTrainedModel", "AIMv2TextModel"]
+__all__ = ["Aimv2VisionModel", "Aimv2Model", "Aimv2PreTrainedModel", "Aimv2TextModel"]

@@ -73,31 +73,31 @@ outputs = model(**inputs)
 probs = outputs.logits_per_image.softmax(dim=-1)
 ```
 
-## AIMv2Config
+## Aimv2Config
 
-[[autodoc]] AIMv2Config
+[[autodoc]] Aimv2Config
 
-## AIMv2TextConfig
+## Aimv2TextConfig
 
-[[autodoc]] AIMv2TextConfig
+[[autodoc]] Aimv2TextConfig
 
-## AIMv2VisionConfig
+## Aimv2VisionConfig
 
-[[autodoc]] AIMv2VisionConfig
+[[autodoc]] Aimv2VisionConfig
 
-## AIMv2Model
+## Aimv2Model
 
-[[autodoc]] AIMv2Model
+[[autodoc]] Aimv2Model
     - forward
 
-## AIMv2VisionModel
+## Aimv2VisionModel
 
-[[autodoc]] AIMv2VisionModel
+[[autodoc]] Aimv2VisionModel
     - forward
 
-## AIMv2TextModel
+## Aimv2TextModel
 
-[[autodoc]] AIMv2TextModel
+[[autodoc]] Aimv2TextModel
     - forward
 
 </pt>

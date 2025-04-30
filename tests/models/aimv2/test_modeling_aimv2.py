@@ -15,6 +15,7 @@
 """Testing suite for the PyTorch AIMv2 model."""
 
 import inspect
+import os
 import tempfile
 import unittest
 
@@ -23,7 +24,7 @@ import requests
 from parameterized import parameterized
 from pytest import mark
 
-from transformers import AIMv2Config, AIMv2TextConfig, AIMv2VisionConfig
+from transformers import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
@@ -56,9 +57,9 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        AIMv2Model,
-        AIMv2TextModel,
-        AIMv2VisionModel,
+        Aimv2Model,
+        Aimv2TextModel,
+        Aimv2VisionModel,
     )
 
 
@@ -109,7 +110,7 @@ class AIMv2VisionModelTester:
         return config, pixel_values
 
     def get_config(self):
-        return AIMv2VisionConfig(
+        return Aimv2VisionConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -123,7 +124,7 @@ class AIMv2VisionModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = AIMv2VisionModel(config=config)
+        model = Aimv2VisionModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -182,7 +183,7 @@ class AIMv2VisionModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (AIMv2VisionModel,) if is_torch_available() else ()
+    all_model_classes = (Aimv2VisionModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
@@ -191,7 +192,7 @@ class AIMv2VisionModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = AIMv2VisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=AIMv2VisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Aimv2VisionConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):
@@ -281,7 +282,7 @@ class AIMv2TextModelTester:
         return config, input_ids, input_mask
 
     def get_config(self):
-        return AIMv2TextConfig(
+        return Aimv2TextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             projection_dim=self.projection_dim,
@@ -294,7 +295,7 @@ class AIMv2TextModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask):
-        model = AIMv2TextModel(config=config)
+        model = Aimv2TextModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -312,7 +313,7 @@ class AIMv2TextModelTester:
 
 @require_torch
 class AIMv2TextModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (AIMv2TextModel,) if is_torch_available() else ()
+    all_model_classes = (Aimv2TextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
@@ -320,7 +321,7 @@ class AIMv2TextModelTest(AIMv2ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = AIMv2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AIMv2TextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Aimv2TextConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -356,12 +357,12 @@ class AIMv2ModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return AIMv2Config.from_text_vision_configs(
+        return Aimv2Config.from_text_vision_configs(
             self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
-        model = AIMv2Model(config).to(torch_device).eval()
+        model = Aimv2Model(config).to(torch_device).eval()
         with torch.no_grad():
             result = model(input_ids, pixel_values, attention_mask)
         self.parent.assertEqual(
@@ -387,9 +388,9 @@ class AIMv2ModelTester:
 @require_torch
 class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     additional_model_inputs = ["pixel_values"]
-    all_model_classes = (AIMv2Model,) if is_torch_available() else ()
+    all_model_classes = (Aimv2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": AIMv2Model, "image-feature-extraction": AIMv2VisionModel}
+        {"feature-extraction": Aimv2Model, "image-feature-extraction": Aimv2VisionModel}
         if is_torch_available()
         else {}
     )
@@ -404,7 +405,7 @@ class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.model_tester = AIMv2ModelTester(self)
         common_properties = ["projection_dim", "logit_scale_init_value"]
         self.config_tester = ConfigTester(
-            self, config_class=AIMv2Config, has_text_modality=False, common_properties=common_properties
+            self, config_class=Aimv2Config, has_text_modality=False, common_properties=common_properties
         )
 
     def test_model(self):
@@ -427,7 +428,7 @@ class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="AIMv2Model does not have input/output embeddings")
+    @unittest.skip(reason="Aimv2Model does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -458,16 +459,16 @@ class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # Save AIMv2Config and check if we can load AIMv2VisionConfig from it
+        # Save Aimv2Config and check if we can load Aimv2VisionConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            vision_config = AIMv2VisionConfig.from_pretrained(tmp_dir_name)
+            vision_config = Aimv2VisionConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
 
-        # Save AIMv2Config and check if we can load AIMv2TextConfig from it
+        # Save Aimv2Config and check if we can load Aimv2TextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            text_config = AIMv2TextConfig.from_pretrained(tmp_dir_name)
+            text_config = Aimv2TextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
     @require_flash_attn
@@ -567,6 +568,78 @@ class AIMv2ModelTest(AIMv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         # Adding only flaky decorator here and call the parent test method
         return getattr(ModelTesterMixin, self._testMethodName)(self)
 
+    # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest._create_and_check_torchscript with CLIP->AIMv2
+    def _create_and_check_torchscript(self, config, inputs_dict):
+        if not self.test_torchscript:
+            self.skipTest(reason="test_torchscript is set to False")
+
+        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+        configs_no_init.torchscript = True
+        configs_no_init.return_dict = False
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            model.to(torch_device)
+            model.eval()
+
+            try:
+                input_ids = inputs_dict["input_ids"]
+                pixel_values = inputs_dict["pixel_values"]  # AIMv2 needs pixel_values
+                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
+            except RuntimeError:
+                self.fail("Couldn't trace module.")
+
+            with tempfile.TemporaryDirectory() as tmp_dir_name:
+                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
+
+                try:
+                    torch.jit.save(traced_model, pt_file_name)
+                except Exception:
+                    self.fail("Couldn't save module.")
+
+                try:
+                    loaded_model = torch.jit.load(pt_file_name)
+                except Exception:
+                    self.fail("Couldn't load module.")
+
+            model.to(torch_device)
+            model.eval()
+
+            loaded_model.to(torch_device)
+            loaded_model.eval()
+
+            model_state_dict = model.state_dict()
+            loaded_model_state_dict = loaded_model.state_dict()
+
+            non_persistent_buffers = {}
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
+                    non_persistent_buffers[key] = loaded_model_state_dict[key]
+
+            loaded_model_state_dict = {
+                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+            }
+
+            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
+
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
+
+            models_equal = True
+            for layer_name, p1 in model_state_dict.items():
+                p2 = loaded_model_state_dict[layer_name]
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
+
 
 @require_vision
 @require_torch
@@ -574,7 +647,7 @@ class AIMv2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "yaswanthgali/aimv2-large-patch14-224-lit-HF"
-        model = AIMv2Model.from_pretrained(model_name, device_map="auto")
+        model = Aimv2Model.from_pretrained(model_name, device_map="auto")
         processor = AutoProcessor.from_pretrained(model_name)
 
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
@@ -608,7 +681,7 @@ class AIMv2VisionModelIntegrationTests(unittest.TestCase):
     def test_inference(self):
         model_name = "yaswanthgali/aimv2-large-patch14-224-HF"
 
-        model = AIMv2VisionModel.from_pretrained(model_name, device_map="auto")
+        model = Aimv2VisionModel.from_pretrained(model_name, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_name)
 
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
@@ -639,7 +712,7 @@ class AIMv2VisionModelIntegrationTests(unittest.TestCase):
     def test_inference_for_native_resolution(self):
         model_name = "yaswanthgali/aimv2-large-patch14-native-HF"
 
-        model = AIMv2VisionModel.from_pretrained(model_name, device_map="auto")
+        model = Aimv2VisionModel.from_pretrained(model_name, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_name)
 
         image = image = Image.open(

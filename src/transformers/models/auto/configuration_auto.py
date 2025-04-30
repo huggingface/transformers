@@ -32,8 +32,8 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
-        ("aimv2", "AIMv2Config"),
-        ("aimv2_vision_model", "AIMv2VisionConfig"),
+        ("aimv2", "Aimv2Config"),
+        ("aimv2_vision_model", "Aimv2VisionConfig"),
         ("albert", "AlbertConfig"),
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
@@ -384,7 +384,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("aimv2", "AIMv2"),
-        ("aimv2_vision_model", "AIMv2VisionModel"),
+        ("aimv2_vision_model", "Aimv2VisionModel"),
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),

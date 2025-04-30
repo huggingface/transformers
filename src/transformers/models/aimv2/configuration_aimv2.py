@@ -26,9 +26,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class AIMv2VisionConfig(PretrainedConfig):
+class Aimv2VisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AIMv2VisionModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Aimv2VisionModel`]. It is used to instantiate a
     AIMv2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the AIMv2
     [apple/aimv2-large-patch14-224](https://huggingface.co/apple/aimv2-large-patch14-224) architecture.
@@ -73,11 +73,11 @@ class AIMv2VisionConfig(PretrainedConfig):
     ```python
     >>> from transformers import SiglipVisionConfig, SiglipVisionModel
 
-    >>> # Initializing a AIMv2VisionConfig with apple/aimv2-large-patch14-224 style configuration
-    >>> configuration = AIMv2VisionConfig()
+    >>> # Initializing a Aimv2VisionConfig with apple/aimv2-large-patch14-224 style configuration
+    >>> configuration = Aimv2VisionConfig()
 
-    >>> # Initializing a AIMv2VisionModel (with random weights) from the apple/aimv2-large-patch14-224 style configuration
-    >>> model = AIMv2VisionModel(configuration)
+    >>> # Initializing a Aimv2VisionModel (with random weights) from the apple/aimv2-large-patch14-224 style configuration
+    >>> model = Aimv2VisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -125,9 +125,9 @@ class AIMv2VisionConfig(PretrainedConfig):
         self.is_native = is_native
 
 
-class AIMv2TextConfig(PretrainedConfig):
+class Aimv2TextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AIMv2TextModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Aimv2TextModel`]. It is used to instantiate a
     AIMv2 text encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text encoder of the AIMv2
     [apple/aimv2-large-patch14-224-lit](https://huggingface.co/apple/aimv2-large-patch14-224-lit) architecture.
@@ -138,7 +138,7 @@ class AIMv2TextConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
             Vocabulary size of the AIMv2 text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`AIMv2Model`].
+            the `inputs_ids` passed when calling [`Aimv2Model`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 2048):
@@ -210,9 +210,9 @@ class AIMv2TextConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
 
 
-class AIMv2Config(PretrainedConfig):
+class Aimv2Config(PretrainedConfig):
     r"""
-    [`AIMv2Config`] is the configuration class to store the configuration of a [`AIMv2Model`]. It is used to
+    [`Aimv2Config`] is the configuration class to store the configuration of a [`Aimv2Model`]. It is used to
     instantiate a AIMv2 model according to the specified arguments, defining the text model and vision model configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the AIMv2
     [apple/aimv2-large-patch14-224-lit](https://huggingface.co/apple/aimv2-large-patch14-224-lit) architecture.
@@ -222,9 +222,9 @@ class AIMv2Config(PretrainedConfig):
 
     Args:
         text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`AIMv2TextConfig`].
+            Dictionary of configuration options used to initialize [`Aimv2TextConfig`].
         vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`AIMv2VisionConfig`].
+            Dictionary of configuration options used to initialize [`Aimv2VisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimensionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
@@ -235,29 +235,29 @@ class AIMv2Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import AIMv2Config, AIMv2Model
+    >>> from transformers import Aimv2Config, Aimv2Model
 
-    >>> # Initializing a AIMv2Config with apple/aimv2-large-patch14-224-lit style configuration
-    >>> configuration = AIMv2Config()
+    >>> # Initializing a Aimv2Config with apple/aimv2-large-patch14-224-lit style configuration
+    >>> configuration = Aimv2Config()
 
-    >>> # Initializing a AIMv2Model (with random weights) from the apple/aimv2-large-patch14-224-lit style configuration
-    >>> model = AIMv2Model(configuration)
+    >>> # Initializing a Aimv2Model (with random weights) from the apple/aimv2-large-patch14-224-lit style configuration
+    >>> model = Aimv2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a AIMv2Config from a AIMv2TextConfig and a AIMv2VisionConfig
-    >>> from transformers import AIMv2TextConfig, AIMv2VisionConfig
+    >>> # We can also initialize a Aimv2Config from a Aimv2TextConfig and a Aimv2VisionConfig
+    >>> from transformers import Aimv2TextConfig, Aimv2VisionConfig
 
     >>> # Initializing a AIMv2Text and AIMv2Vision configuration
-    >>> config_text = AIMv2TextConfig()
-    >>> config_vision = AIMv2VisionConfig()
+    >>> config_text = Aimv2TextConfig()
+    >>> config_vision = Aimv2VisionConfig()
 
-    >>> config = AIMv2Config(text_config=config_text, vision_config=config_vision)
+    >>> config = Aimv2Config(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "aimv2"
-    sub_configs = {"text_config": AIMv2TextConfig, "vision_config": AIMv2VisionConfig}
+    sub_configs = {"text_config": Aimv2TextConfig, "vision_config": Aimv2VisionConfig}
 
     def __init__(
         self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
@@ -266,29 +266,29 @@ class AIMv2Config(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `AIMv2TextConfig` with default values.")
+            logger.info("`text_config` is `None`. Initializing the `Aimv2TextConfig` with default values.")
 
         if vision_config is None:
             vision_config = {}
-            logger.info("`vision_config` is `None`. initializing the `AIMv2VisionConfig` with default values.")
+            logger.info("`vision_config` is `None`. initializing the `Aimv2VisionConfig` with default values.")
 
-        self.text_config = AIMv2TextConfig(**text_config)
-        self.vision_config = AIMv2VisionConfig(**vision_config)
+        self.text_config = Aimv2TextConfig(**text_config)
+        self.vision_config = Aimv2VisionConfig(**vision_config)
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.max_logit_scale = 100.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: AIMv2TextConfig, vision_config: AIMv2VisionConfig, **kwargs):
+    def from_text_vision_configs(cls, text_config: Aimv2TextConfig, vision_config: Aimv2VisionConfig, **kwargs):
         r"""
-        Instantiate a [`AIMv2Config`] (or a derived class) from aimv2 text model configuration and aimv2 vision
+        Instantiate a [`Aimv2Config`] (or a derived class) from aimv2 text model configuration and aimv2 vision
         model configuration.
 
         Returns:
-            [`AIMv2Config`]: An instance of a configuration object
+            [`Aimv2Config`]: An instance of a configuration object
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
-__all__ = ["AIMv2Config", "AIMv2VisionConfig", "AIMv2TextConfig"]
+__all__ = ["Aimv2Config", "Aimv2VisionConfig", "Aimv2TextConfig"]
