@@ -1497,6 +1497,37 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
             depth_decoder_attentions=depth_decoder_outputs.attentions if depth_decoder_outputs is not None else None,
         )
 
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        model = super().from_pretrained(*args, **kwargs)
+
+        # copy depth decoder generation conf attr to the depth decoder generation config
+        prefix = "depth_decoder_"
+        prefix_len = len(prefix)
+        depth_decoder_attrs = {
+            attr[prefix_len:]: value
+            for attr, value in vars(model.generation_config).items()
+            if attr.startswith(prefix)
+        }
+
+        vars(model.depth_decoder.generation_config).update({"_from_model_config": False, **depth_decoder_attrs})
+
+        # remove the depth decoder generation conf attr from the model generation config
+        for attr in depth_decoder_attrs:
+            delattr(model.generation_config, prefix + attr)
+
+        return model
+
+    def save_pretrained(self, *args, **kwargs):
+        # copy the depth decoder generation config attributes to the model generation config
+        prefix = "depth_decoder_"
+        depth_decoder_attrs = self.depth_decoder.generation_config.to_diff_dict()
+        depth_decoder_attrs.pop("transformers_version", None)
+        for attr, value in depth_decoder_attrs.items():
+            setattr(self.generation_config, prefix + attr, value)
+
+        super().save_pretrained(*args, **kwargs)
+
     def _tie_weights(self):
         if self.config.tie_codebooks_embeddings:
             self._tie_or_clone_weights(
@@ -1728,7 +1759,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
         model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         # *************** Csm specific ***************
-        depth_decoder_generation_config = generation_config.depth_decoder_generation_config
         if input_ids.ndim == 2 and model_kwargs.get("inputs_embeds") is None:
             # in the case where the passed input_ids correspond to text tokens, i.e. don't have a third dimension for codebook ids,
             # we need to remove the input length to the MaxLengthCriteria stopping criteria has such input are not returned
@@ -1823,7 +1853,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
             depth_decoder_outputs = self.depth_decoder.generate(
                 input_ids=depth_decoder_input_ids,
                 backbone_last_hidden_state=backbone_last_hidden_state,
-                generation_config=depth_decoder_generation_config,
             )
             codebook_ids = (
                 depth_decoder_outputs
@@ -1934,23 +1963,13 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
         generation_config, model_kwargs = super()._prepare_generation_config(
             generation_config, use_model_defaults, **kwargs
         )
-
-        # get the depth decoder generation config kwargs
-        from_generation_config = {
-            k[len("depth_decoder_") :]: v
-            for k, v in generation_config.to_diff_dict().items()
-            if k.startswith("depth_decoder_")
-        }
-
-        # initialize the depth decoder generation config
-        depth_decoder_generation_config = GenerationConfig(**from_generation_config)
-        depth_decoder_generation_config.update(**depth_decoder_kwargs)
+        self.depth_decoder.generation_config.update(**depth_decoder_kwargs)
 
         # ensure the depth decoder generation config is valid
-        depth_decoder_min_new_tokens = getattr(depth_decoder_generation_config, "min_new_tokens") or (
+        depth_decoder_min_new_tokens = getattr(self.depth_decoder.generation_config, "min_new_tokens") or (
             self.config.num_codebooks - 1
         )
-        depth_decoder_max_new_tokens = getattr(depth_decoder_generation_config, "max_new_tokens") or (
+        depth_decoder_max_new_tokens = getattr(self.depth_decoder.generation_config, "max_new_tokens") or (
             self.config.num_codebooks - 1
         )
 
@@ -1958,15 +1977,14 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
             raise ValueError(
                 f"depth_decoder_generation_config's min_new_tokens ({depth_decoder_min_new_tokens}) and max_new_tokens ({depth_decoder_max_new_tokens}) must be equal to self.config.num_codebooks - 1 ({self.config.num_codebooks - 1})"
             )
-        elif depth_decoder_generation_config.return_dict_in_generate:
+        elif self.depth_decoder.generation_config.return_dict_in_generate:
             logger.warning(
                 "depth_decoder_generation_config.return_dict_in_generate is set to True, but this will be ignored as the depth decoder model does not return a dictionary in generate"
             )
-            depth_decoder_generation_config.return_dict_in_generate = False
+            self.depth_decoder.generation_config.return_dict_in_generate = False
 
-        depth_decoder_generation_config.min_new_tokens = depth_decoder_min_new_tokens
-        depth_decoder_generation_config.max_new_tokens = depth_decoder_max_new_tokens
-        generation_config.depth_decoder_generation_config = depth_decoder_generation_config
+        self.depth_decoder.generation_config.min_new_tokens = depth_decoder_min_new_tokens
+        self.depth_decoder.generation_config.max_new_tokens = depth_decoder_max_new_tokens
 
         return generation_config, model_kwargs
 
