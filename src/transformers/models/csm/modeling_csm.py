@@ -825,7 +825,7 @@ class CsmCodebooksHead(nn.Module):
         self.num_codebooks = num_codebooks
         self.weight = nn.Parameter(torch.empty(self.num_codebooks - 1, hidden_size, vocab_size))
 
-    def forward(self, hidden_states, cache_position):
+    def forward(self, hidden_states, cache_position=None):
         if cache_position is None:
             seq_length = hidden_states.shape[1]
             codebook_weight = self.weight[torch.arange(seq_length)]
@@ -1582,10 +1582,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
             ) < num_audio_tokens.unsqueeze(-1)
             frames_mask = frames_mask.flatten()
 
-            audio_token_idxs = audio_token_mask.nonzero(as_tuple=True)
-            inputs_embeds[audio_token_idxs[0], audio_token_idxs[1]] = audio_embeds.view(-1, audio_embeds.shape[-1])[
-                frames_mask
-            ]
+            inputs_embeds[audio_token_mask] = audio_embeds.view(-1, audio_embeds.shape[-1])[frames_mask]
 
             # same for the audio eos token
             audio_eos_frame_ids = (
@@ -1595,17 +1592,14 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
             audio_eos_embeds = self.backbone_model.embed_tokens(audio_eos_frame_ids).squeeze(1)
 
             audio_eos_token_mask = input_ids == self.config.audio_eos_token_id
-            audio_eos_token_idxs = audio_eos_token_mask.nonzero(as_tuple=True)
-            inputs_embeds[audio_eos_token_idxs[0], audio_eos_token_idxs[1]] = audio_eos_embeds.repeat(
-                audio_eos_token_idxs[0].shape[0], 1
-            )
+            inputs_embeds[audio_eos_token_mask] = audio_eos_embeds.repeat(audio_eos_token_mask.sum(), 1)
 
             # if the labels are provided, we need to expand the labels to (batch_size, seq_length, num_codebooks)
             if labels is not None:
                 labels_expanded = labels.unsqueeze(-1).repeat(1, 1, self.config.num_codebooks)
-                labels_expanded[audio_token_idxs[0], audio_token_idxs[1]] = batched_audio_token_ids.view(
-                    -1, self.config.num_codebooks
-                )[frames_mask]
+                labels_expanded[audio_token_mask] = batched_audio_token_ids.view(-1, self.config.num_codebooks)[
+                    frames_mask
+                ]
                 # mask depth decoder
                 depth_decoder_ignore_frames_idxs = (labels == -101).nonzero(as_tuple=True)
                 labels_expanded[depth_decoder_ignore_frames_idxs[0], depth_decoder_ignore_frames_idxs[1], 1:] = -100
