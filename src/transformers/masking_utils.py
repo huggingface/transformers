@@ -17,52 +17,52 @@ YELLOW_SQUARE = f"{YELLOW}{BLACK_SQUARE}{RESET}"
 GREEN_SQUARE = f"{GREEN}{BLACK_SQUARE}{RESET}"
 
 
-def tensor_to_mask_visual(tensor: torch.Tensor, grid_size=(20, 40)) -> str:
-    n, m = tensor.shape
+def tensor_to_mask_visual(original_tensor: torch.Tensor, grid_size=(20, 40)) -> str:
+    h, w = original_tensor.shape
     max_h, max_w = grid_size
+    if not (h<max_h and w<max_w):
 
-    # Preserve aspect ratio within max grid size
-    aspect_ratio = 2*m / n
-    if aspect_ratio > 1:
-        w = max_w
-        h = min(max_h, max(1, round(max_w / aspect_ratio)))
+        # Preserve aspect ratio within max grid size
+        aspect_ratio = 2*m / n
+        if aspect_ratio > 1:
+            w = max_w
+            h = min(max_h, max(1, round(max_w / aspect_ratio)))
+        else:
+            h = max_h
+            w = max(1, round(max_h * aspect_ratio))
+
+        # Step 1: Rescale tensor by average pooling
+        tensor = tensor.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+        tensor = F.adaptive_avg_pool2d(tensor, output_size=(h, w))[0, 0]  # Remove extra dims
     else:
-        h = max_h
-        w = max(1, round(max_h * aspect_ratio))
-
-    # Step 1: Rescale tensor by average pooling
-    tensor = tensor.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
-    tensor_resized = F.adaptive_avg_pool2d(tensor, output_size=(h, w))[0, 0]  # Remove extra dims
-
-    # Step 2: a single entry should be non-binary, at the end of the edge, or at the beginning for sliding.
-    binary = tensor_resized
+        tensor = original_tensor
 
     # Step 3: Build the string representation
     result = []
     for i in range(h):
         row = ""
         for j in range(w):
-            if binary[i, j] == 1:
+            if tensor[i, j] == 1:
                 row += BLACK_SQUARE 
-            elif binary[i, j] == 0:
+            elif tensor[i, j] == 0:
                 row += WHITE_SQUARE
             else:
                 if j>0:
-                    if binary[i, j-1] == 1:
+                    if tensor[i, j-1] == 1:
                         row += LOW_TRIANGLE
-                    elif binary[i, j-1] == 0:
+                    elif tensor[i, j-1] == 0:
                         row += UPPER_TRIANGLE
                     else:
-                        row += BLACK_SQUARE if binary[i,j]==1 else WHITE_SQUARE
+                        row += BLACK_SQUARE if tensor[i,j]==1 else WHITE_SQUARE
                 else:
-                    row += BLACK_SQUARE if binary[i, j] == 1 else (
-                        WHITE_SQUARE if binary[i, j] == 0 else (
-                            UPPER_TRIANGLE if binary[i, j+1] == 1 else LOW_TRIANGLE
+                    row += BLACK_SQUARE if tensor[i, j] == 1 else (
+                        WHITE_SQUARE if tensor[i, j] == 0 else (
+                            UPPER_TRIANGLE if tensor[i, j+1] == 1 else LOW_TRIANGLE
                         )
                     )
         result.append(row)
 
-    return "\n".join(result) + "\n____________________"
+    return "\n".join(result)
 
 
 class AttentionMask(torch.Tensor):
@@ -93,6 +93,9 @@ class AttentionMask(torch.Tensor):
             block_vis = tensor_to_mask_visual(dense_mask[batch_idx], grid_size=grid_size)
             total_vis.append(block_vis)
 
+        total_vis.append(
+            f"torch.Tensor(shape={tuple(self.shape)}, dtype={self.dtype})"
+        )
         return "\n".join(total_vis)
 
     def __repr__(self):
