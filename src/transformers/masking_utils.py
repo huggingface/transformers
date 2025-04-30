@@ -348,8 +348,8 @@ def sdpa_mask(
             # It may be smaller, in which case we pad with 0s to indicate the entries should not take part in the attention
             if (padding_length := kv_length - local_padding_mask.shape[-1]) > 0:
                 local_padding_mask = torch.nn.functional.pad(local_padding_mask, (0, padding_length))
-            # Perform the operation in-place to avoid a potentially costly copy (if the causal mask is big)
-            causal_mask *= local_padding_mask[:, None, None, :]
+            # merge both
+            causal_mask = causal_mask * local_padding_mask[:, None, None, :]
 
         masks.append(causal_mask)
 
