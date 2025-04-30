@@ -488,6 +488,7 @@ class ContinuousBatchProcessor:
         stop_event: threading.Event,
         model_device: torch.device,
         model_dtype: torch.dtype,
+        streaming: bool = False,
     ):
         self.cache = cache
         self.generation_config = generation_config
@@ -496,6 +497,7 @@ class ContinuousBatchProcessor:
         self.stop_event = stop_event
         self.model_device = model_device
         self.model_dtype = model_dtype
+        self.streaming = streaming
 
         self.active_requests: Dict[str, RequestState] = {}
         self.waiting_requests: Deque[RequestState] = deque()  # Requests waiting for cache space
@@ -867,11 +869,20 @@ class ContinuousBatchProcessor:
                     state.status = "finished"
                     logger.debug(f"Request {req_id} finished. Reason: {'EOS' if is_eos else 'Max Length'}")
                     finished_request_ids.append(req_id)
+                if self.streaming:
+                    self.output_queue.put(
+                        {
+                            "request_id": state.request_id,
+                            "next_token": token,
+                            "status": state.status,
+                        }
+                    )
+                elif state.status == "finished":
                     self.output_queue.put(
                         {
                             "request_id": state.request_id,
                             "output_ids": state.output_ids,
-                            "status": "finished",
+                            "status": state.status,
                         }
                     )
 
@@ -908,11 +919,20 @@ class ContinuousBatchProcessor:
                         state.status = "finished"
                         logger.debug(f"Request {req_id} finished. Reason: {'EOS' if is_eos else 'Max Length'}")
                         finished_request_ids.append(req_id)
+                    if self.streaming:
+                        self.output_queue.put(
+                            {
+                                "request_id": state.request_id,
+                                "next_token": token,
+                                "status": state.status,
+                            }
+                        )
+                    elif state.status == "finished":
                         self.output_queue.put(
                             {
                                 "request_id": state.request_id,
                                 "output_ids": state.output_ids,
-                                "status": "finished",
+                                "status": state.status,
                             }
                         )
 
@@ -938,12 +958,13 @@ class ContinuousBatchProcessor:
 
 # Manager Class (User Interface)
 class ContinuousBatchingManager:
-    def __init__(self, model: GenerationMixin, generation_config: GenerationConfig, max_queue_size=0):
+    def __init__(self, model: GenerationMixin, generation_config: GenerationConfig, max_queue_size=0, streaming: bool = False):
         self.model = model
         self.generation_config = generation_config
         self.input_queue = queue.Queue(maxsize=max_queue_size)
         self.output_queue = queue.Queue()
         self.stop_event = threading.Event()
+        self.streaming = streaming
         self._generation_thread = None
         self._request_counter = 0
         self._request_lock = threading.Lock()  # For request counter
@@ -1070,6 +1091,7 @@ class ContinuousBatchingManager:
                 self.stop_event,
                 self.model.device,
                 self.model.dtype,
+                self.streaming,
             )
 
             # 3. Generation Loop
@@ -1154,7 +1176,7 @@ class ContinuousBatchingManager:
 
 class ContinuousMixin:
     def init_continuous_batching(
-        self, generation_config: Optional[GenerationConfig] = None, max_queue_size: int = 0
+        self, generation_config: Optional[GenerationConfig] = None, max_queue_size: int = 0, streaming: bool = False
     ) -> ContinuousBatchingManager:
         """
         Initializes and returns a manager for continuous batching inference.
@@ -1180,7 +1202,7 @@ class ContinuousMixin:
             logger.warning("`eos_token_id` not set in GenerationConfig. Setting to -1 (disabled).")
             gen_config.eos_token_id = -1  # Or get from model.config?
 
-        manager = ContinuousBatchingManager(model=self, generation_config=gen_config, max_queue_size=max_queue_size)
+        manager = ContinuousBatchingManager(model=self, generation_config=gen_config, max_queue_size=max_queue_size, streaming=streaming)
         return manager
 
     @torch.no_grad()
@@ -1236,7 +1258,7 @@ class ContinuousMixin:
             finished_requests = 0
             while finished_requests < num_requests:
                 try:
-                    result = manager.get_result(timeout=1.0)  # Use timeout to avoid potential deadlocks
+                    result = manager.get_result(timeout=1.0)
                     if result:
                         req_id = result["request_id"]
                         if req_id in request_ids:

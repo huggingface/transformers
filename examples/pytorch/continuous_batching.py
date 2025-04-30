@@ -1,9 +1,9 @@
 import datasets
 import torch
 import time
-import threading
 import queue
 
+from tokenizers.decoders import DecodeStream
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
 
@@ -17,8 +17,7 @@ _TEST_PROMPTS = [
 ]
 
 # --- Common Setup ---
-# model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", attn_implementation="sdpa", torch_dtype=torch.float16, device_map="auto")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", attn_implementation="eager", torch_dtype=torch.float16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", attn_implementation="sdpa", torch_dtype=torch.float16, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", torch_dtype=torch.float16, padding_side="left")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -88,7 +87,7 @@ print("--- Finished Simple Batch Generation Example ---\n\n")
 
 outputs = []
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", attn_implementation="eager", torch_dtype=torch.float16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", attn_implementation="sdpa", torch_dtype=torch.float16, device_map="auto")
 
 print("--- Running Simple Generation for comparison ---")
 # tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
@@ -129,10 +128,41 @@ print("-" * 20)
 
 print("--- Finished Simple Generation Example ---\n\n")
 
+# --- Example 2: Streaming Version using ContinuousBatchingManager ---
+print("--- Running Streaming Continuous Batching Example ---")
+
+manager = model.init_continuous_batching(generation_config=generation_config, streaming=True)
+
+manager.start()
+
+req_id = manager.add_request(simple_batch_inputs[0])
+
+request_streams = {}
+
+first_token = True
+for output in manager:
+    req_id = output["request_id"]
+    if req_id is None:
+        continue
+    if first_token:
+        print(f"Request {req_id} started")
+        first_token = False
+    if req_id not in request_streams:
+        request_streams[req_id] = DecodeStream(skip_special_tokens=False)
+    next_token = request_streams[req_id].step(tokenizer._tokenizer, output["next_token"])
+    print(f"{next_token}", end="")
+    if output["status"] in ["finished", "failed"]:
+        print(f"\nRequest {req_id} {output['status']}")
+        del request_streams[req_id]
+        break
+
+manager.stop()
+manager.join(timeout=10)
+
 import sys
 sys.exit(0)
 
-# --- Example 2: Involved Performant Version using ContinuousBatchingManager ---
+# --- Example 3: Involved Performant Version using ContinuousBatchingManager ---
 print("--- Running Involved Continuous Batching Example ---")
 
 # Prepare data for the involved example (using a larger dataset)
