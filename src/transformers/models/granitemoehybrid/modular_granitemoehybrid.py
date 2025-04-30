@@ -361,6 +361,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
+        mamba_mask = self._update_mamba_mask(attention_mask, cache_position)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -377,6 +378,9 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         next_decoder_cache = None
 
         for decoder_layer in self.layers:
+            # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
+            layer_mask = mamba_mask if decoder_layer.layer_type == "mamba" else causal_mask
+
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -384,7 +388,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    causal_mask,
+                    layer_mask,
                     past_key_values,
                     output_attentions,
                     use_cache,
@@ -395,7 +399,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=causal_mask,
+                    attention_mask=layer_mask,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
@@ -437,6 +441,16 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             router_logits=all_router_logits,
         )
 
+    def _update_mamba_mask(self, attention_mask, cache_position):
+        """
+        No need for zeroing states when
+            1. Cached forward
+            2. Attending to all inputs
+        """
+        mamba_mask = attention_mask
+        if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
+            mamba_mask = None
+        return mamba_mask
 
 class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
     _tied_weights_keys = ["lm_head.weight"]
