@@ -396,7 +396,7 @@ class EfficientLoFTRImageProcessor(BaseImageProcessor):
 
         return results
 
-    def plot_keypoint_matching(
+    def visualize_output(
         self,
         images: ImageInput,
         keypoint_matching_output: List[Dict[str, torch.Tensor]],
