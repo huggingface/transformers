@@ -460,41 +460,6 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         tokenizer.num_special_tokens_to_add(pair=True), len(attached_sequences) - len(sequences)
                     )
 
-    def test_padding_to_max_length(self):
-        """We keep this test for backward compatibility but it should be removed when `pad_to_max_length` will be deprecated"""
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, boxes = self.get_words_and_boxes()
-                padding_size = 10
-
-                # check correct behaviour if no pad_token_id exists and add it eventually
-                self._check_no_pad_token_padding(tokenizer, words)
-
-                padding_idx = tokenizer.pad_token_id
-
-                # Check that it correctly pads when a maximum length is specified along with the padding flag set to True
-                tokenizer.padding_side = "right"
-                encoded_sequence = tokenizer.encode(words, boxes=boxes)
-                sequence_length = len(encoded_sequence)
-                # FIXME: the next line should be padding(max_length) to avoid warning
-                padded_sequence = tokenizer.encode(
-                    words, boxes=boxes, max_length=sequence_length + padding_size, pad_to_max_length=True
-                )
-                padded_sequence_length = len(padded_sequence)
-                assert sequence_length + padding_size == padded_sequence_length
-                assert encoded_sequence + [padding_idx] * padding_size == padded_sequence
-
-                # Check that nothing is done when a maximum length is not specified
-                encoded_sequence = tokenizer.encode(words, boxes=boxes)
-                sequence_length = len(encoded_sequence)
-
-                tokenizer.padding_side = "right"
-                padded_sequence_right = tokenizer.encode(words, boxes=boxes, pad_to_max_length=True)
-                padded_sequence_right_length = len(padded_sequence_right)
-                assert sequence_length == padded_sequence_right_length
-                assert encoded_sequence == padded_sequence_right
-
     def test_padding(self, max_length=50):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
