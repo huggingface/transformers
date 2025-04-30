@@ -838,7 +838,6 @@ def _load_state_dict_into_meta_model(
     return disk_offload_index, cpu_offload_index
 
 
-# This function is in global scope so it's picklable for multiprocessing
 def load_shard_file(args):
     (
         shard_file,
@@ -924,6 +923,32 @@ def load_shard_file(args):
 
     return error_msgs, disk_offload_index, cpu_offload_index
 
+def load_shard_files_with_threadpool(args_list):
+    num_workers = int(os.environ.get("HF_PARALLEL_LOADING_WORKERS", "8"))
+
+    # Do not spawn anymore workers than you need
+    num_workers = min(len(args_list), num_workers)
+
+    logger.info(f"Loading model weights in parallel with {num_workers} workers...")
+
+    error_msgs = []
+
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        with logging.tqdm(total=len(args_list), desc="Loading checkpoint shards") as pbar:
+            futures = [executor.submit(load_shard_file, arg) for arg in args_list]
+            for future in as_completed(futures):
+                result = future.result()
+                (
+                    _error_msgs,
+                    disk_offload_index,
+                    cpu_offload_index,
+                ) = result
+
+                error_msgs += _error_msgs
+
+                pbar.update(1)
+
+    return error_msgs, disk_offload_index, cpu_offload_index
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
     if variant is not None:
@@ -4997,7 +5022,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model_to_load, expanded_device_map, hf_quantizer)
 
-        # Prepare arguments for multiprocessing
+        # Prepare and compatabilize arguments for serial and parallel shard loading
         args_list = [
             (
                 shard_file,
@@ -5026,32 +5051,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         error_msgs = []
 
-        # Use multiprocessing Pool for parallel execution, off by default
-        ENV_VARS_TRUE_VALUES
-
         if is_true(os.environ.get("HF_ENABLE_PARALLEL_LOADING", "false")) and not is_deepspeed_zero3_enabled():
-            num_workers = int(os.environ.get("HF_PARALLEL_LOADING_WORKERS", "8"))
-
-            # Do not spawn anymore workers than you need
-            num_workers = min(len(args_list), num_workers)
-
-            logger.info(f"Loading model weights in parallel with {num_workers} workers...")
-
-            # with multiprocessing.Pool(processes=num_workers) as pool:
-            with ThreadPoolExecutor(max_workers=num_workers) as executor:
-                with logging.tqdm(total=len(args_list), desc="Loading checkpoint shards") as pbar:
-                    futures = [executor.submit(load_shard_file, arg) for arg in args_list]
-                    for future in as_completed(futures):
-                        result = future.result()
-                        (
-                            _error_msgs,
-                            disk_offload_index,
-                            cpu_offload_index,
-                        ) = result
-
-                        error_msgs += _error_msgs
-
-                        pbar.update(1)
+            _error_msgs, disk_offload_index, cpu_offload_index = load_shard_files_with_threadpool(args_list)
+            error_msgs += _error_msgs
         else:
             if len(args_list) > 1:
                 args_list = logging.tqdm(args_list, desc="Loading checkpoint shards")
