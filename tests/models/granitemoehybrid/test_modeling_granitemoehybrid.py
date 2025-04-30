@@ -87,12 +87,6 @@ class GraniteMoeHybridModelTester:
         mamba_conv_bias=True,
         mamba_proj_bias=False,
         logits_to_keep=1,
-        # mla variables
-        mla_dropout=0,
-        # rename attention_dropout to mla_softmax_dropout
-        mla_softmax_dropout=0.0,
-        mla_query_comp_size=32,
-        mla_key_value_comp_size=32,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -139,12 +133,6 @@ class GraniteMoeHybridModelTester:
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
         self.logits_to_keep = logits_to_keep
-        # mla variables
-        self.mla_dropout = mla_dropout
-        # rename attention_dropout to mla_softmax_dropout
-        self.mla_softmax_dropout = mla_softmax_dropout
-        self.mla_query_comp_size = mla_query_comp_size
-        self.mla_key_value_comp_size = mla_key_value_comp_size
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -170,11 +158,10 @@ class GraniteMoeHybridModelTester:
             if len(d) == 0:
                 raise ValueError("num_hidden_layers is prime, cannot automatically set attn_layer_indices.")
             d = d[-1]  # get the largest divisor
-            attn_layer_indices = [x + 1 for x in range(0, self.num_hidden_layers, d)]
-            self.layer_types = ["mamba"] * self.num_hidden_layers
-            for i in attn_layer_indices:
-                self.layer_types[i] = "attention"
             self.attn_layer_indices = [x + 1 for x in range(0, self.num_hidden_layers, d)]
+            self.layer_types = ["mamba"] * self.num_hidden_layers
+            for idx in self.attn_layer_indices :
+                self.layer_types[idx] = "attention"
 
         return GraniteMoeHybridConfig(
             vocab_size=self.vocab_size,
@@ -198,12 +185,7 @@ class GraniteMoeHybridModelTester:
             mamba_chunk_size=self.mamba_chunk_size,
             mamba_conv_bias=self.mamba_conv_bias,
             mamba_proj_bias=self.mamba_proj_bias,
-            mla_dropout=self.mla_dropout,
             logits_to_keep=self.logits_to_keep,
-            # rename attention_dropout to mla_softmax_dropout
-            mla_softmax_dropout=self.mla_softmax_dropout,
-            mla_query_comp_size=self.mla_query_comp_size,
-            mla_key_value_comp_size=self.mla_key_value_comp_size,
         )
 
     def create_and_check_model(self, config, input_ids, input_mask, token_labels):
