@@ -16,7 +16,6 @@
 
 import copy
 import math
-import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -769,22 +768,6 @@ class BartPreTrainedModel(PreTrainedModel):
             "input_ids": input_ids,
         }
         return dummy_inputs
-
-
-class PretrainedBartModel(BartPreTrainedModel):
-    def __init_subclass__(self):
-        warnings.warn(
-            "The class `PretrainedBartModel` has been depreciated, please use `BartPreTrainedModel` instead.",
-            FutureWarning,
-        )
-
-
-class BartPretrainedModel(BartPreTrainedModel):
-    def __init_subclass__(self):
-        warnings.warn(
-            "The class `PretrainedBartModel` has been depreciated, please use `BartPreTrainedModel` instead.",
-            FutureWarning,
-        )
 
 
 BART_START_DOCSTRING = r"""
@@ -2179,6 +2162,4 @@ __all__ = [
     "BartForSequenceClassification",
     "BartModel",
     "BartPreTrainedModel",
-    "BartPretrainedModel",
-    "PretrainedBartModel",
 ]
