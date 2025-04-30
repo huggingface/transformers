@@ -602,7 +602,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         self.assertTrue(len(res.past_key_values.key_cache) == model.config.num_hidden_layers)
         self.assertEqual(2 * model.config.num_hidden_layers + 1, len(ep.graph_signature.output_specs))
         self.assertEqual(
-            3,
+            7,
             len(
                 [
                     x
