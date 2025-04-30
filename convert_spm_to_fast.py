@@ -1,4 +1,4 @@
-from transformers import PreTrainedTokenizerFast
+from transformers import PreTrainedTokenizerFast, GemmaTokenizerFast
 from transformers.models.llama.tokenization_spm import SPMTokenizer
 from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 
@@ -7,20 +7,21 @@ def load_spm_tokenizer(model_path: str) -> SPMTokenizer:
     """
     Load a slow SentencePiece tokenizer from the specified model path.
     """
-    return SPMTokenizer.from_pretrained(
+    tok = SPMTokenizer(
         model_path,
         unk_token="<unk>",
         pad_token="<pad>",
         bos_token="<bos>",
         eos_token="<eos>",
     )
+    return tok
 
 
 def load_fast_spm_tokenizer(model_path: str) -> PreTrainedTokenizerFast:
     """
     Load a fast tokenizer using the slow SPMTokenizer and convert it.
     """
-    slow_tokenizer = SPMTokenizer.from_pretrained(
+    slow_tokenizer = SPMTokenizer(
         model_path,
         unk_token="<unk>",
         pad_token="<pad>",
@@ -30,7 +31,13 @@ def load_fast_spm_tokenizer(model_path: str) -> PreTrainedTokenizerFast:
         add_bos_token=True,
     )
     return PreTrainedTokenizerFast(
-        tokenizer_object=convert_slow_tokenizer(slow_tokenizer)
+        tokenizer_object=convert_slow_tokenizer(slow_tokenizer),
+        unk_token="<unk>",
+        pad_token="<pad>",
+        bos_token="<bos>",
+        eos_token="<eos>",
+        do_lower_case=False,
+        add_bos_token=True,
     )
 
 
@@ -87,7 +94,7 @@ TEST_STRINGS = [
 
 
 def main():
-    model_path = "../../../local-gemma-7b/tokenizer.model"  # Adjust to your local path
+    model_path = "/Users/itazaporozhets/Documents/Repos/transformers/local-gemma-7b/tokenizer.model"  # Replace with your actual model path
     sp_tokenizer = load_spm_tokenizer(model_path)
     fast_tokenizer = load_fast_spm_tokenizer(model_path)
 
