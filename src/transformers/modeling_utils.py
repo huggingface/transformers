@@ -507,15 +507,15 @@ def load_state_dict(
                 )
             state_dict = {}
             for k in f.keys():
-                k_dtype = f.get_slice(k).get_dtype()
-                if k_dtype in str_to_torch_dtype:
-                    dtype = str_to_torch_dtype[k_dtype]
-                else:
-                    raise ValueError(f"Cannot load safetensors of unknown dtype {k_dtype}")
                 if map_location == "meta":
+                    k_dtype = f.get_slice(k).get_dtype() # Check moved inside this block
+                    if k_dtype in str_to_torch_dtype:
+                        dtype = str_to_torch_dtype[k_dtype]
+                    else:
+                        raise ValueError(f"Cannot load safetensors of unknown dtype {k_dtype}")
                     state_dict[k] = torch.empty(size=f.get_slice(k).get_shape(), dtype=dtype, device="meta")
                 else:
-                    state_dict[k] = f.get_tensor(k)
+                    state_dict[k] = f.get_tensor(k) # No dtype check needed here anymore in the modified code
             return state_dict
 
     # Fallback to torch.load (if weights_only was explicitly False, do not check safety as this is known to be unsafe)
@@ -1371,10 +1371,9 @@ def _find_mismatched_keys(
     """
     Find potential shape mismatch between the different state dicts and the model parameters, but only if `ignore_mismatched_sizes`
     is True. Otherwise, return immediately and any shape mismatch that may exist will be raised later on. This avoids checking
-    every parameter in advance, as shape mismatch are extremely rare in practice. If we want to ignore them however, we do
-    need to check in advance as we need to know which parameters we need to move back from meta to cpu, and initialize
-    correctly. Indeed, as our model initialization takes place at the module level, and not the weight level, in the
-    case of a sharded checkpoint we cannot correctly initialize the weights according to `model._init_weights()` if we perform
+    every parameter in advance, as shape mismatch are extremely rare in practice. If we want to ignore them however, we need to check in advance as we need to know which parameters we need to move back from meta to cpu, and initialize
+    correctly. Indeed, as our model initialization takes place at the module level, and not the
+    weight level, in the case of a sharded checkpoint we cannot correctly initialize the weights according to `model._init_weights()` if we perform
     this check on each state dict at loading time (after the first loaded checkpoint, there are no way to initialize only the
     mismatched weights if any, without overwriting the previously loaded weights as well because all the module will be
     initialized, not only the weights that are mismatched).
