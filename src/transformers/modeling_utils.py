@@ -4143,7 +4143,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
         else:
             print("DEBUG: device_mesh", device_mesh)
-            device_mesh = device_mesh
+            device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
 
         if use_auth_token is not None:
             warnings.warn(
