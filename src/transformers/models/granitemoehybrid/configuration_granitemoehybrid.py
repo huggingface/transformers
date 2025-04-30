@@ -29,9 +29,8 @@ logger = logging.get_logger(__name__)
 
 class GraniteMoeHybridConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GraniteMoeSharedModel`]. It is used to instantiate an GraniteMoeShared
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the [ibm-research/moe-7b-1b-active-shared-experts](https://huggingface.co/ibm-research/moe-7b-1b-active-shared-experts).
+    This is the configuration class to store the configuration of a [`GraniteMoeHybridConfig`]. It is used to
+    instantiate an GraniteMoeHybrid model according to the specified arguments, defining the model architecture. 
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -39,8 +38,8 @@ class GraniteMoeHybridConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the GraniteMoeShared model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GraniteMoeSharedModel`]
+            Vocabulary size of the GraniteMoeHybrid model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`GraniteMoeHybridModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -124,10 +123,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
             Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
         mamba_proj_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
-        logits_to_keep (`int`, *optional*, defaults to 1):
-            The number of logits to keep. TODO this should probably not be here,
-            move to forward () time arg and figure out how it applies to this
-            model output type.
     ```python
     >>> from transformers import GraniteMoeHybridModel, GraniteMoeHybridConfig
 
@@ -185,7 +180,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         mamba_chunk_size=256,
         mamba_conv_bias=True,
         mamba_proj_bias=False,
-        logits_to_keep=1,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -241,7 +235,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
         self.mamba_expand = mamba_expand
-        self.logits_to_keep = logits_to_keep
         self.layer_types = layer_types
 
         super().__init__(
@@ -254,8 +247,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
 
         if self.position_embedding_type == "rope":
             rope_config_validation(self)
-        elif self.position_embedding_type is not None:
-            raise ValueError("Position embedding type must be `rope` or None!")
 
     # overwrite the function to use in `HybridMambaAttentionDynamicCache`
     @property

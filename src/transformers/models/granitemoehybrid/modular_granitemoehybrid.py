@@ -513,7 +513,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
-                "logits_to_keep": self.config.logits_to_keep,
                 "cache_position": cache_position,
             }
         )
