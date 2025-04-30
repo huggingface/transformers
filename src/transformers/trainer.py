@@ -2463,6 +2463,25 @@ class Trainer:
         if args.eval_on_start:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
+        if self.args.do_profile:
+            from torch.profiler import profile, schedule, tensorboard_trace_handler, ProfilerActivity
+            activities = [ProfilerActivity.CPU]
+            if torch.cuda.is_available():
+                activities.append(ProfilerActivity.CUDA)
+            prof_schedule = schedule(wait=1, warmup=1, active=2, repeat=1)
+            log_dir = self.args.logging_dir or self.args.output_dir
+            rank = dist.get_rank() if dist.is_initialized() else 0
+            profiler = profile(
+                activities=activities,
+                schedule=prof_schedule,
+                on_trace_ready=tensorboard_trace_handler(os.path.join(f"{log_dir}/rank{rank}", "profiler")),
+                record_shapes=True,
+                profile_memory=True,
+                **self.args.profiler_options
+            )
+            profiler.start()
+
+
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_dataloader = train_dataloader
             if hasattr(epoch_dataloader, "set_epoch"):
@@ -2607,6 +2626,9 @@ class Trainer:
                         # get leaning rate before update
                         learning_rate = self._get_learning_rate()
 
+                        if self.args.do_profile:
+                            profiler.step()
+
                         if not self.accelerator.optimizer_step_was_skipped:
                             # Delay optimizer scheduling until metrics are generated
                             if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
@@ -2715,7 +2737,8 @@ class Trainer:
                     shutil.rmtree(checkpoint, ignore_errors=True)
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
-
+        if self.args.do_predict:
+            profiler.stop()
         # Wait for the checkpoint to be uploaded.
         self._finish_current_push()
 
