@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     cleanup,
     get_gpu_count,
     is_torch_available,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -198,11 +197,19 @@ class CacheIntegrationTest(unittest.TestCase):
         )
         cls.model.config.sliding_window = 256  # hack to enable the use of caches with sliding windows
 
+    def _skip_on_uninstalled_cache_dependencies(self, cache_implementation):
+        """Function to skip tests on missing cache dependencies, given a cache implementation"""
+        if cache_implementation == "quantized" and not is_optimum_quanto_available():
+            self.skipTest("Quanto is not available")
+        if "offloaded" in cache_implementation:
+            has_accelerator = torch_device is not None and torch_device != "cpu"
+            if not has_accelerator:
+                self.skipTest("Offloaded caches require an accelerator")
+
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_batched(self, cache_implementation):
         """Sanity check: caches' `.update` function expects batched inputs"""
-        if cache_implementation == "quantized" and not is_optimum_quanto_available():
-            self.skipTest("Quanto is not available")
+        self._skip_on_uninstalled_cache_dependencies(cache_implementation)
 
         EXPECTED_GENERATION = ["A sequence: 1, 2, 3, 4, 5, 6, 7, 8,", "A sequence: A, B, C, D, E, F, G, H"]
 
@@ -231,9 +238,7 @@ class CacheIntegrationTest(unittest.TestCase):
         Sanity check: caches' `reorder_cache` is operational. We can confirm this by looking at the beam indices
         (an output sequence contains multiple beam indices).
         """
-        if cache_implementation == "quantized" and not is_optimum_quanto_available():
-            self.skipTest("Quanto is not available")
-
+        self._skip_on_uninstalled_cache_dependencies(cache_implementation)
         if cache_implementation == "offloaded_hybrid_chunked":
             # TODO (joao, cyril): something is off with `offloaded_hybrid_chunked` aka `OffloadedHybridCache`: the
             # output sequence (and the corresponding beam scores, if we add `output_scores=True`) are significantly
@@ -266,11 +271,8 @@ class CacheIntegrationTest(unittest.TestCase):
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_extra_left_padding(self, cache_implementation):
-        """
-        Tests that adding extra left-padding does not affect the generation with the cache
-        """
-        if cache_implementation == "quantized" and not is_optimum_quanto_available():
-            self.skipTest("Quanto is not available")
+        """Tests that adding extra left-padding does not affect the generation with the cache"""
+        self._skip_on_uninstalled_cache_dependencies(cache_implementation)
 
         EXPECTED_GENERATION = ["The cat's whiskers are also a sign of anxiety."]
 
