@@ -40,6 +40,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -49,6 +50,7 @@ if is_vision_available():
     import PIL
 
 
+@requires(backends=("vision",))
 class CLIPImageProcessor(BaseImageProcessor):
     r"""
     Constructs a CLIP image processor.
@@ -93,10 +95,10 @@ class CLIPImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -201,7 +203,7 @@ class CLIPImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[int] = None,

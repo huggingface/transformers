@@ -274,6 +274,9 @@ class InstructBlipVideoConfig(PretrainedConfig):
     ```"""
 
     model_type = "instructblipvideo"
+    attribute_map = {
+        "video_token_id": "video_token_index",
+    }
     sub_configs = {
         "text_config": AutoConfig,
         "qformer_config": InstructBlipVideoQFormerConfig,
@@ -337,3 +340,6 @@ class InstructBlipVideoConfig(PretrainedConfig):
             text_config=text_config.to_dict(),
             **kwargs,
         )
+
+
+__all__ = ["InstructBlipVideoConfig", "InstructBlipVideoQFormerConfig", "InstructBlipVideoVisionConfig"]

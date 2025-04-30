@@ -239,7 +239,7 @@ class RemBertSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Tuple[Tuple[torch.FloatTensor]] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: bool = False,
     ) -> Tuple:
         mixed_query_layer = self.query(hidden_states)
@@ -998,6 +998,14 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
         input_ids = torch.cat([input_ids, dummy_token], dim=1)
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
+
+    @classmethod
+    def can_generate(cls) -> bool:
+        """
+        Legacy correction: RemBertForMaskedLM can't call `generate()` from `GenerationMixin`, even though it has a
+        `prepare_inputs_for_generation` method.
+        """
+        return False
 
 
 @add_start_docstrings(

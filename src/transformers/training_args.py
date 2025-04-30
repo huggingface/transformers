@@ -44,8 +44,8 @@ from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_available,
-    is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_cuda_available,
     is_torch_hpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
@@ -554,10 +554,6 @@ class TrainingArguments:
                     Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be
                     used when the xla flag is set to true, and an auto wrapping policy is specified through
                     fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
-        tp_size (`int`, *optional*):
-            Use tp_size to enable PyTorch tensor parallelism. Tensor parallelism support is only available to models having `base_tp_plan`
-            in their respective config classes.
-            Set a value greater than 1 to activate TP. The same is used to prepare device mesh internally. Requires accelerate>1.3.0.
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/deepspeedai/DeepSpeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
@@ -1166,7 +1162,6 @@ class TrainingArguments:
             "help": (
                 "Number of batches loaded in advance by each worker. "
                 "2 means there will be a total of 2 * num_workers batches prefetched across all workers. "
-                "Default is 2 for PyTorch < 2.0.0 and otherwise None."
             )
         },
     )
@@ -1242,18 +1237,6 @@ class TrainingArguments:
             "help": (
                 "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The value is either a "
                 "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`."
-            )
-        },
-    )
-    tp_size: Optional[int] = field(
-        default=0,
-        metadata={
-            "help": (
-                "Use tp_size to enable pytorch tensor parallelism."
-                "Tensor parallelism support is only available to models having `base_tp_plan` in their respective config classes."
-                "Set a value greater than 1 to activate TP."
-                "The same is used to prepare device mesh internally."
-                "Requires accelerate>1.3.0."
             )
         },
     )
@@ -1698,15 +1681,16 @@ class TrainingArguments:
                 self.half_precision_backend = self.fp16_backend
 
             if self.bf16 or self.bf16_full_eval:
-                if self.use_cpu and not is_torch_bf16_cpu_available() and not is_torch_xla_available():
+                if self.use_cpu and not is_torch_available() and not is_torch_xla_available():
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
                 elif not self.use_cpu:
-                    if torch.cuda.is_available() and not is_torch_bf16_gpu_available():
+                    if not is_torch_bf16_gpu_available():
+                        error_message = "Your setup doesn't support bf16/gpu."
+                        if is_torch_cuda_available():
+                            error_message += " You need Ampere+ GPU with cuda>=11.0"
                         # gpu
-                        raise ValueError(
-                            "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
-                        )
+                        raise ValueError(error_message)
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
@@ -1889,10 +1873,12 @@ class TrainingArguments:
                 warnings.warn("`--fsdp_config` is useful only when `--fsdp` is specified.")
             with open(self.fsdp_config, encoding="utf-8") as f:
                 self.fsdp_config = json.load(f)
-                for k in list(self.fsdp_config.keys()):
-                    if k.startswith("fsdp_"):
-                        v = self.fsdp_config.pop(k)
-                        self.fsdp_config[k[5:]] = v
+
+        if self.fsdp_config is not None and isinstance(self.fsdp_config, dict):
+            for k in list(self.fsdp_config.keys()):
+                if k.startswith("fsdp_"):
+                    v = self.fsdp_config.pop(k)
+                    self.fsdp_config[k[5:]] = v
 
         if self.fsdp_min_num_params > 0:
             warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
@@ -1942,14 +1928,6 @@ class TrainingArguments:
             if self.fsdp_config["xla_fsdp_grad_ckpt"]:
                 warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
 
-        if self.tp_size > 1:
-            if not is_accelerate_available("1.3.1"):
-                raise NotImplementedError(
-                    "TP using PyTorch requires Accelerate version `accelerate` >= 1.3.1. "
-                    "This is not supported and we recommend you to update your version."
-                )
-            os.environ["ACCELERATE_USE_TP"] = "true"
-            os.environ["TP_SIZE"] = str(self.tp_size)
         # accelerate integration for FSDP
         if len(self.fsdp) > 0 and not self.fsdp_config["xla"]:
             os.environ["ACCELERATE_USE_FSDP"] = "true"
@@ -2523,6 +2501,11 @@ class TrainingArguments:
             # Handle the accelerator_config if passed
             if is_accelerate_available() and isinstance(v, AcceleratorConfig):
                 d[k] = v.to_dict()
+            # Handle the quantization_config if passed
+            if k == "model_init_kwargs" and isinstance(v, dict) and "quantization_config" in v:
+                quantization_config = v.get("quantization_config")
+                if quantization_config and not isinstance(quantization_config, dict):
+                    d[k]["quantization_config"] = quantization_config.to_dict()
         self._dict_torch_dtype_to_str(d)
 
         return d

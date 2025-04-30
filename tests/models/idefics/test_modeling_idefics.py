@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -839,10 +838,6 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
 
     @unittest.skip(reason="IDEFICS cannot compile due to dynamic control flow when checking inputs")
     def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip(reason="IDEFICS cannot compile due to dynamic control flow when checking inputs")
-    def test_generate_compile_model_forward(self):
         pass
 
     @unittest.skip(reason="We only test the model that takes in multiple images")

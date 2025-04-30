@@ -40,6 +40,7 @@ from huggingface_hub import (
     create_repo,
     hf_hub_download,
     hf_hub_url,
+    list_repo_tree,
     snapshot_download,
     try_to_load_from_cache,
 )
@@ -69,6 +70,11 @@ from .import_utils import (
     is_torch_available,
     is_training_run_on_sagemaker,
 )
+
+
+LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE = "chat_template.json"
+CHAT_TEMPLATE_FILE = "chat_template.jinja"
+CHAT_TEMPLATE_DIR = "additional_chat_templates"
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -135,6 +141,46 @@ def _get_cache_file_to_return(
     if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
         return resolved_file
     return None
+
+
+def list_repo_templates(
+    repo_id: str,
+    *,
+    local_files_only: bool,
+    revision: Optional[str] = None,
+    cache_dir: Optional[str] = None,
+) -> list[str]:
+    """List template files from a repo.
+
+    A template is a jinja file located under the `additional_chat_templates/` folder.
+    If working in offline mode or if internet is down, the method will list jinja template from the local cache - if any.
+    """
+
+    if not local_files_only:
+        try:
+            return [
+                entry.path.removeprefix(f"{CHAT_TEMPLATE_DIR}/")
+                for entry in list_repo_tree(
+                    repo_id=repo_id, revision=revision, path_in_repo=CHAT_TEMPLATE_DIR, recursive=False
+                )
+                if entry.path.endswith(".jinja")
+            ]
+        except (GatedRepoError, RepositoryNotFoundError, RevisionNotFoundError):
+            raise  # valid errors => do not catch
+        except (ConnectionError, HTTPError):
+            pass  # offline mode, internet down, etc. => try local files
+
+    # check local files
+    try:
+        snapshot_dir = snapshot_download(
+            repo_id=repo_id, revision=revision, cache_dir=cache_dir, local_files_only=True
+        )
+    except LocalEntryNotFoundError:  # No local repo means no local files
+        return []
+    templates_dir = Path(snapshot_dir, CHAT_TEMPLATE_DIR)
+    if not templates_dir.is_dir():
+        return []
+    return [entry.stem for entry in templates_dir.iterdir() if entry.is_file() and entry.name.endswith(".jinja")]
 
 
 def is_remote_url(url_or_filename):
@@ -465,6 +511,12 @@ def cached_files(
                 "for this model name. Check the model page at "
                 f"'https://huggingface.co/{path_or_repo_id}' for available revisions."
             ) from e
+        elif isinstance(e, PermissionError):
+            raise OSError(
+                f"PermissionError at {e.filename} when downloading {path_or_repo_id}. "
+                "Check cache directory permissions. Common causes: 1) another user is downloading the same model (please wait); "
+                "2) a previous download was canceled and the lock file needs manual removal."
+            ) from e
 
         # Now we try to recover if we can find all files correctly in the cache
         resolved_files = [
@@ -499,6 +551,10 @@ def cached_files(
             if not _raise_exceptions_for_connection_errors:
                 return None
             raise OSError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}")
+        # Any other Exception type should now be re-raised, in order to provide helpful error messages and break the execution flow
+        # (EntryNotFoundError will be treated outside this block and correctly re-raised if needed)
+        elif not isinstance(e, EntryNotFoundError):
+            raise e
 
     resolved_files = [
         _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in full_filenames
@@ -516,7 +572,7 @@ def cached_files(
         )
         raise EnvironmentError(
             f"{path_or_repo_id} does not appear to have {msg}. Checkout 'https://huggingface.co/{path_or_repo_id}/tree/{revision_}'"
-            "for available files."
+            " for available files."
         )
 
     # Remove potential missing entries (we can silently remove them at this point based on the flags)
@@ -525,78 +581,6 @@ def cached_files(
     resolved_files = None if len(resolved_files) == 0 else resolved_files
 
     return resolved_files
-
-
-# TODO cyril: Deprecated and should be removed in 4.51
-def get_file_from_repo(
-    *args,
-    **kwargs,
-):
-    """
-    Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
-
-    Args:
-        path_or_repo (`str` or `os.PathLike`):
-            This can be either:
-
-            - a string, the *model id* of a model repo on huggingface.co.
-            - a path to a *directory* potentially containing the file.
-        filename (`str`):
-            The name of the file to locate in `path_or_repo`.
-        cache_dir (`str` or `os.PathLike`, *optional*):
-            Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
-            cache should not be used.
-        force_download (`bool`, *optional*, defaults to `False`):
-            Whether or not to force to (re-)download the configuration files and override the cached versions if they
-            exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
-            A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
-            'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-        token (`str` or *bool*, *optional*):
-            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
-        revision (`str`, *optional*, defaults to `"main"`):
-            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-            git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
-            identifier allowed by git.
-        local_files_only (`bool`, *optional*, defaults to `False`):
-            If `True`, will only try to load the tokenizer configuration from local files.
-        subfolder (`str`, *optional*, defaults to `""`):
-            In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
-            specify the folder name here.
-
-    <Tip>
-
-    Passing `token=True` is required when you want to use a private model.
-
-    </Tip>
-
-    Returns:
-        `Optional[str]`: Returns the resolved file (to the cache folder if downloaded from a repo) or `None` if the
-        file does not exist.
-
-    Examples:
-
-    ```python
-    # Download a tokenizer configuration from huggingface.co and cache.
-    tokenizer_config = get_file_from_repo("google-bert/bert-base-uncased", "tokenizer_config.json")
-    # This model does not have a tokenizer config so the result will be None.
-    tokenizer_config = get_file_from_repo("FacebookAI/xlm-roberta-base", "tokenizer_config.json")
-    ```
-    """
-    logger.warning(
-        "`get_file_from_repo` is deprecated and will be removed in version 4.51. Use `cached_file` instead."
-    )
-    return cached_file(
-        *args,
-        _raise_exceptions_for_gated_repo=False,
-        _raise_exceptions_for_missing_entries=False,
-        _raise_exceptions_for_connection_errors=False,
-        **kwargs,
-    )
 
 
 def download_url(url, proxies=None):
@@ -916,6 +900,9 @@ class PushToHubMixin:
         """
         use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
         ignore_metadata_errors = deprecated_kwargs.pop("ignore_metadata_errors", False)
+        save_jinja_files = deprecated_kwargs.pop(
+            "save_jinja_files", None
+        )  # TODO: This is only used for testing and should be removed once save_jinja_files becomes the default
         if use_auth_token is not None:
             warnings.warn(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
@@ -942,7 +929,7 @@ class PushToHubMixin:
                 )
             if os.path.isdir(repo_path_or_name):
                 # repo_path: infer repo_id from the path
-                repo_id = repo_id.split(os.path.sep)[-1]
+                repo_id = repo_path_or_name.split(os.path.sep)[-1]
                 working_dir = repo_id
             else:
                 # repo_name: use it as repo_id
@@ -972,7 +959,15 @@ class PushToHubMixin:
             files_timestamps = self._get_files_timestamps(work_dir)
 
             # Save all files.
-            self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
+            if save_jinja_files:
+                self.save_pretrained(
+                    work_dir,
+                    max_shard_size=max_shard_size,
+                    safe_serialization=safe_serialization,
+                    save_jinja_files=True,
+                )
+            else:
+                self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
 
             # Update model card if needed:
             model_card.save(os.path.join(work_dir, "README.md"))

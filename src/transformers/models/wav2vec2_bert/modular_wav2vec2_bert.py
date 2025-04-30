@@ -582,7 +582,7 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
 
         # The rest of the computation is identical to a vanilla Transformer
         # encoder layer.
-        hidden_states, attn_weigths = self.self_attn(
+        hidden_states, attn_weights = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
@@ -609,7 +609,6 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
     main_input_name = "input_features"
     supports_gradient_checkpointing = True
 
-    # Ignore copy
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, Wav2Vec2BertSelfAttention):
@@ -635,6 +634,17 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, Wav2Vec2BertModel):
+            if hasattr(module, "masked_spec_embed"):
+                module.masked_spec_embed.data.uniform_()
+        elif isinstance(
+            module,
+            (Wav2Vec2BertForSequenceClassification, Wav2Vec2BertForAudioFrameClassification, Wav2Vec2BertForXVector),
+        ):
+            if hasattr(module, "layer_weights"):
+                module.layer_weights.data.fill_(1.0 / (self.config.num_hidden_layers + 1))
+        elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
+            module.weight.data.normal_()
 
     # Ignore copy
     def _get_feat_extract_output_lengths(

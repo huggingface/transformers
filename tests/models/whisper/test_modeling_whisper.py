@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -105,7 +104,7 @@ if is_torch_available():
             self.begin_index = begin_index
 
         def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-            # we don't want to randomely sample timestamp tokens
+            # we don't want to randomly sample timestamp tokens
             if input_ids.shape[-1] != self.begin_index:
                 scores[:, self.timestamp_begin :] = -float("inf")
 
@@ -563,7 +562,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @parameterized.expand([("offloaded",)])
     @pytest.mark.generate
-    @unittest.skip(reason="Whisper doesnt work with offloaded cache implementation yet")
+    @unittest.skip(reason="Whisper doesn't work with offloaded cache implementation yet")
     def test_offloaded_cache_implementation(self, cache_implementation):
         pass
 
@@ -1432,7 +1431,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
 
-    # TODO (joao, eustache): fix me :)
+    # TODO (joao, eustache): fix me :) The model is not returning a `Cache` by default
     @unittest.skip(reason="Whisper's custom generate is not consistent regarding the cache return types")
     def test_generate_compile_model_forward(self):
         pass

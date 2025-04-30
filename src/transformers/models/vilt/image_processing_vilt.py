@@ -35,6 +35,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -118,6 +119,7 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
+@requires(backends=("vision",))
 class ViltImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ViLT image processor.
@@ -163,7 +165,7 @@ class ViltImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
