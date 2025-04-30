@@ -13,6 +13,14 @@ GREY_SQUARE = "∙"
 LOW_TRIANGLE = "⬕"
 UPPER_TRIANGLE = "⬔"
 
+
+BLACK_SQUARE = "█"   # Full block (represents "on" or active)
+WHITE_SQUARE = "░"   # Light shade (represents "off" or inactive)
+LOW_TRIANGLE    = "▙"   # Lower left triangle (stylized indication)
+UPPER_TRIANGLE  = "▜"   # Upper left triangle (stylized indication)
+
+# LOW_TRIANGLE = UPPER_TRIANGLE = "⟍"   # Upper right triangle (stylized indication)
+
 YELLOW_SQUARE = f"{YELLOW}{BLACK_SQUARE}{RESET}"
 GREEN_SQUARE = f"{GREEN}{BLACK_SQUARE}{RESET}"
 
