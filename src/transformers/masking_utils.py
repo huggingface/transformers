@@ -2,7 +2,8 @@ from typing import Optional, Union
 import itertools
 import torch
 import torch.nn.functional as F
-from .cache_utils import Cache, StaticCache
+from .cache_utils import Cache, StaticCache, SlidingWindowCache, HybridCache, HybridChunkedCache
+
 # Print the matrix with words as row labels
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
@@ -115,6 +116,7 @@ class AttentionMask(torch.Tensor):
     @classmethod
     def from_tensor(cls, tensor: torch.Tensor):
         return cls(tensor) 
+
 
 def create_4d_causal_mask(
     batch_size: int,
@@ -229,23 +231,6 @@ def create_4d_causal_mask(
     return AttentionMask.from_tensor(causal_mask)
 
 
-def merge_2d_padding_mask_into_4d_mask(padding_mask: Optional[torch.Tensor], causal_mask: torch.Tensor) -> torch.Tensor:
-    """
-    Merge the 2d attention mask (corresponding to padded tokens) into the general 4d mask, corresponding to the
-    masking pattern (causal attention, sliding window attention, or chunked attention).
-
-    Args:
-        padding_mask: (`torch.Tensor`):
-            The 2d mask of shape `(batch_size, all_processed_tokens)`, returned by a Tokenizer or `generate`.
-        causal_mask: (`torch.Tensor`):
-            General 4d mask of shape `(batch_size, 1, query_length, kv_length)`, usually returned by `create_4d_causal_mask`.
-    """
-    if padding_mask is not None:
-        padding_mask = padding_mask.to(device=causal_mask.device, dtype=torch.bool)
-        causal_mask[:, :, :, :padding_mask.shape[-1]] *= padding_mask[:, None, None, :]
-    return AttentionMask.from_tensor(causal_mask)
-
-
 def flash_attention_mask(attention_mask: Optional[torch.Tensor]):
     """
     Create the attention mask necesary to use FA2. Since FA2 is un-padded by definition, here we simply return
@@ -260,31 +245,19 @@ def flash_attention_mask(attention_mask: Optional[torch.Tensor]):
     return None
 
 
-def _update_causal_mask(
-    self,
-    attention_mask: Union[torch.Tensor, "BlockMask"],
-    input_tensor: torch.Tensor,
-    cache_position: torch.Tensor,
-    past_key_values: Cache,
-    output_attentions: bool = False,
-):
-    if self.config._attn_implementation == "flash_attention_2":
-        if attention_mask is not None and (attention_mask == 0.0).any():
-            return attention_mask
-        return None
-    if self.config._attn_implementation == "flex_attention":
-        if isinstance(attention_mask, torch.Tensor):
-            attention_mask = make_flex_block_causal_mask(attention_mask)
-        return attention_mask
-
-    # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
-    # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
-    # to infer the attention mask.
+def sdpa_mask(
+        attention_mask: Optional[torch.Tensor],
+        cache_position: torch.Tensor,
+        past_key_values: Cache,
+        batch_size: int,
+        sliding_window: Optional[int] = None,
+        chunk_size: Optional[int] = None
+    ) -> Optional[torch.Tensor]:
     past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-    using_static_cache = isinstance(past_key_values, StaticCache)
 
-    # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-    if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+    # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` to avoid materializing
+    # the mask
+    if not using_static_cache:
         if AttentionMaskConverter._ignore_causal_mask_sdpa(
             attention_mask,
             inputs_embeds=input_tensor,
@@ -292,40 +265,101 @@ def _update_causal_mask(
             is_training=self.training,
         ):
             return None
+        
+    query_length = cache_position.shape[0]
+    # The kv_length and offset are the same for sliding attention or chunked attention -> only the mask pattern changes
+    local_attention_size = sliding_window or chunk_size
+    first_cache_position = cache_position[0]
 
-    dtype = input_tensor.dtype
-    sequence_length = input_tensor.shape[1]
-    if using_static_cache:
-        target_length = past_key_values.get_max_cache_shape()
+    # THIS IS VERY UGLY AS-IS -> THIS SHOULD PROBABLY BE A CACHE METHOD FOR GENERALITY
+    sizes_and_patterns = []
+    if isinstance(past_key_values, SlidingWindowCache):
+        # torch.clamp() is equivalent to max() but should be compile-friendly/exportable as first_cache_position is a Tensor
+        kv_offset = torch.clamp(first_cache_position - local_attention_size + 1, min=0)
+        # This is not general (see HybridChunkedCache for the whole general case), but it's what the cache returns
+        kv_length = max(query_length, past_key_values.get_max_cache_shape())
+
+        sizes_and_patterns = [(kv_offset, kv_length, sliding_window, chunk_size)]
+    elif isinstance(past_key_values, StaticCache):
+        kv_offset = 0
+        kv_length = past_key_values.get_max_cache_shape()
+
+        sizes_and_patterns = [(kv_offset, kv_length, sliding_window, chunk_size)]
+    elif isinstance(past_key_values, HybridCache):
+        local_mask_kv_offset = torch.clamp(first_cache_position - local_attention_size + 1, min=0)
+        # This is not general (see HybridChunkedCache for the whole general case), but it's what the cache returns
+        local_mask_kv_length = max(query_length, past_key_values.sliding_window)
+
+        full_mask_kv_offset = 0
+        full_mask_kv_length = past_key_values.get_max_cache_shape()
+
+        # In this case, we only need to use a single mask everywhere
+        if local_mask_kv_length == full_mask_kv_length:
+            sizes_and_patterns = [(full_mask_kv_offset, full_mask_kv_length, sliding_window, chunk_size)]
+        else:
+            sizes_and_patterns = [(local_mask_kv_offset, local_mask_kv_length, sliding_window, chunk_size), (full_mask_kv_offset, full_mask_kv_length, sliding_window, chunk_size)]
+    elif isinstance(past_key_values, HybridChunkedCache):
+        local_mask_kv_offset = torch.clamp(first_cache_position - local_attention_size + 1, min=0)
+        # This is the true general case for any Cache using local attention (sliding or chunked)
+        if first_cache_position >= local_attention_size:
+            # Here the Cache is already full
+            local_mask_kv_length = local_attention_size + query_length - 1
+        elif first_cache_position < local_attention_size and first_cache_position + query_length > local_attention_size:
+            # Here the Cache becomes full with the new input
+            local_mask_kv_length = first_cache_position + query_length
+        else:
+            # Here the Cache is still smaller than the local size, but we return the local size as it's static
+            local_mask_kv_length = local_attention_size
+
+        full_mask_kv_offset = 0
+        full_mask_kv_length = past_key_values.get_max_cache_shape()
+
+        # Here Llama4 does not use chunk attention on the full mask (which is the reason why we need to add the patterns everywhere)
+        if local_mask_kv_length == full_mask_kv_length:
+            sizes_and_patterns = [(full_mask_kv_offset, full_mask_kv_length, None, None)]
+        else:
+            sizes_and_patterns = [(local_mask_kv_offset, local_mask_kv_length, sliding_window, chunk_size), (full_mask_kv_offset, full_mask_kv_length, None, None)]
     else:
-        target_length = (
-            attention_mask.shape[-1]
-            if isinstance(attention_mask, torch.Tensor)
-            else past_seen_tokens + sequence_length + 1
-        )
+        kv_offset = 0
+        kv_length = attention_mask.shape[-1] if attention_mask is not None else past_seen_tokens + sequence_length
 
-    # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-    causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask,
-        sequence_length=sequence_length,
-        target_length=target_length,
-        dtype=dtype,
-        cache_position=cache_position,
-        batch_size=input_tensor.shape[0],
-    )
+        sizes_and_patterns = [(kv_offset, kv_length, sliding_window, chunk_size)]
 
-    if (
-        self.config._attn_implementation == "sdpa"
-        and attention_mask is not None
-        and attention_mask.device.type in ["cuda", "xpu", "npu"]
-        and not output_attentions
-    ):
-        # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-        # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-        # Details: https://github.com/pytorch/pytorch/issues/110213
-        min_dtype = torch.finfo(dtype).min
-        causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+    # Move the mask to correct device, and potentially switch dtype for efficiency
+    if attention_mask is not None:
+        attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
 
-    return AttentionMask.from_tensor(causal_mask)
+    # We now create all the masks
+    masks = []
+    for kv_offset, kv_length, window, chunk in sizes_and_patterns:
+        causal_mask = create_4d_causal_mask(batch_size, kv_length, cache_position, kv_offset, window, chunk)
+        # Merge the padding mask into the causal mask if needed
+        if attention_mask is not None:
+            # Offset the padding mask as well
+            local_padding_mask = attention_mask[:, kv_offset:kv_offset+kv_length]
+            # It may be smaller, in which case we pad with 0s to indicate the entries should not take part in the attention
+            if (padding_length := kv_length - local_padding_mask.shape[-1]) > 0:
+                local_padding_mask = torch.nn.functional.pad(local_padding_mask, (0, padding_length))
+            # Perform the operation in-place to avoid a potentially costly copy (if the causal mask is big)
+            causal_mask *= local_padding_mask[:, None, None, :]
+
+        masks.append(causal_mask)
+        
+
+    # CHECK VERSIONS BUT PROBABLY DROP THIS OR AT LEAST KEEP IT ONLY FOR FAULTY VERSION AS WE WANT TO KEEP MASK IN BOOL
+    # ALSO THE VERY BEST WOULD BE TO HAVE BOOLS REPRESENTED AS 1 BIT INSTEAD OF DEFAULT 1 BYTE IN TORCH
+    # if (
+    #     attention_mask is not None
+    #     and attention_mask.device.type in ["cuda", "xpu", "npu"]
+    # ):
+    #     # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+    #     # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+    #     # Details: https://github.com/pytorch/pytorch/issues/110213
+    #     min_dtype = torch.finfo(dtype).min
+    #     causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+
+    return masks
+
+
 
 
