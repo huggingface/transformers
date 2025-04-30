@@ -17,7 +17,6 @@ import unittest
 
 import pytest
 import requests
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
