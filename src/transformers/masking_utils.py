@@ -1,8 +1,8 @@
 from typing import Optional, Union
-
+import itertools
 import torch
 import torch.nn.functional as F
-
+from .cache_utils import Cache, StaticCache
 # Print the matrix with words as row labels
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
@@ -74,7 +74,7 @@ class AttentionMask(torch.Tensor):
         # You can initialize any additional metadata here if needed
         pass
 
-    def to_string(self, grid_size=(20, 20), limit=4):
+    def to_string(self, grid_size=(20, 40), limit=4):
         """Returns a string representation of the block mask."""
         dense_mask = self
         *batch_dims, num_rows, num_cols = dense_mask.shape
@@ -96,6 +96,9 @@ class AttentionMask(torch.Tensor):
         return "\n".join(total_vis)
 
     def __repr__(self):
+        return self.to_string()
+
+    def __str__(self):
         return self.to_string()
 
     @classmethod
