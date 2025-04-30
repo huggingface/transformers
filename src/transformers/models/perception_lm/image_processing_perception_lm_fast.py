@@ -117,13 +117,11 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         grouped_images, grouped_images_index = group_images_by_shape(images)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
-            print("shape", shape)
             stacked_images, _ = self.image_transform(stacked_images)
-            print("stacked_images shape", stacked_images.shape)
+            print("stacked_images shape: ", stacked_images.shape)
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 

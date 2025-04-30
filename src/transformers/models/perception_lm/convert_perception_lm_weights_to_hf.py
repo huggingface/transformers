@@ -23,17 +23,16 @@ import torch
 from tokenizers import AddedToken, processors
 
 from transformers import (
-    CLIPVisionConfig,
     GenerationConfig,
     LlamaConfig,
     LlamaForCausalLM,
     LlamaTokenizer,
     PreTrainedTokenizerFast,
-    SiglipVisionConfig,
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
 from transformers.models.perception_lm.configuration_perception_lm import (
     PerceptionLMConfig,
+    PerceptionEncoderConfig,
 )
 from transformers.models.perception_lm.image_processing_perception_lm_fast import PerceptionLMImageProcessorFast
 from transformers.models.perception_lm.modeling_perception_lm import (
@@ -93,7 +92,6 @@ tokenizer._tokenizers.post_processor = processors.Sequence(
 """
 
 KEYS_TO_MODIFY_MAPPING = {
-    "model.vision_tower.": "",
     "model.mm_projector": "multi_modal_projector",
     "model": "model.model",
     "vision_model.model": "vision_model",
@@ -309,6 +307,9 @@ def write_model(
                 "vision_projector.projector.2.bias"
             ],
         }
+        for k, v in loaded.items():
+            if "vision_model" in k:
+                state_dict[k] = v
         state_dict = convert_state_dict_to_hf(state_dict)
         for k, v in state_dict.items():
             index_dict["weight_map"][k] = filename
@@ -362,17 +363,9 @@ def write_model(
             tie_word_embeddings=tie_word_embeddings,
         )
 
-        vision_config = CLIPVisionConfig(
-            hidden_size=1024,
-            image_size=336,
-            intermediate_size=4096,
-            num_attention_heads=16,
-            num_hidden_layers=24,
-            patch_size=14,
-            projection_dim=768,
-            vocab_size=32000,
-        )
-
+        vision_config = PerceptionEncoderConfig(**model_params["vision_model"])
+        print("vision_config: ", vision_config)
+        
         config = PerceptionLMConfig(
             text_config=text_config.to_dict(),
             vision_config=vision_config.to_dict(),
