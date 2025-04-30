@@ -910,8 +910,6 @@ def _get_learning_rate(self):
         # that time `get_last_lr` will fail if called during that warm up stage, so work around it:
         try:
             last_lr = self.lr_scheduler.get_last_lr()[0]
-            if torch.is_tensor(last_lr):
-                last_lr = last_lr.item()
         except AssertionError as e:
             if "need to call step" in str(e):
                 logger.warning("tried to get lr value before scheduler/optimizer started stepping, returning lr=0")
@@ -923,8 +921,9 @@ def _get_learning_rate(self):
             last_lr = self.optimizer.param_groups[0]["lr"]
         else:
             last_lr = self.lr_scheduler.get_last_lr()[0]
-        if torch.is_tensor(last_lr):
-            last_lr = last_lr.item()
+
+    if torch.is_tensor(last_lr):
+        last_lr = last_lr.item()
     return last_lr
 
 
