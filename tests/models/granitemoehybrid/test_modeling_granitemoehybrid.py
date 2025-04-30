@@ -465,6 +465,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
             GraniteMoeHybridConfig(layer_types=["not allowed!"])
 
 
+# TODO (@alex-jw-brooks) - update this one the model(s) are out
 @unittest.skip(reason="GraniteMoeHybrid models are not yet released")
 @require_torch_gpu
 class GraniteMoeHybridIntegrationTest(unittest.TestCase):
@@ -482,7 +483,7 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
     def test_tiny_model_logits(self):
         input_ids = [31390, 631, 4162, 30, 322, 25342, 432, 1875, 43826, 10066, 688, 225]
 
-        model = GraniteMoeHybridForCausalLM.from_pretrained("ibm-granite/granite-4.0-9b-light", device_map="auto")
+        model = GraniteMoeHybridForCausalLM.from_pretrained("ibm-granite/granite-4.0-tiny", device_map="auto")
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
@@ -516,8 +517,8 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that 1) time is relative, and 2) space is relative. The first"
         )
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.0-9b-light")
-        model = GraniteMoeHybridForCausalLM.from_pretrained("ibm-granite/granite-4.0-9b-light", device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.0-tiny")
+        model = GraniteMoeHybridForCausalLM.from_pretrained("ibm-granite/granite-4.0-tiny", device_map="auto")
         model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
