@@ -103,13 +103,9 @@ for output in outputs:
 
 The downside of few-shot prompting is that you need to create lengthier prompts which increases computation and latency. There is also a limit to prompt lengths. Finally, a model can learn unintended patterns from your examples, and it may not work well on complex reasoning tasks.
 
-**Structuring Few-Shot Examples for Chat-Trained Models**
+To improve few-shot prompting for modern instruction-tuned LLMs, use a models specific [chat template](../conversations). These models are trained on datasets with turn-based conversations between a "user" and "assistant". Structuring your prompt to align with this can improve performance.
 
-Many modern instruction-tuned Large Language Models, like the one in the example above (Mistral-7B-Instruct-v0.1), are trained on datasets that resemble conversations. These datasets often distinguish between turns taken by a "user" providing instructions or questions and an "assistant" providing responses. Some datasets also include a "system" role for initial guidance.
-
-To better align with the training of these models and potentially improve performance when using few-shot examples, you can structure your prompts using the model's specific **chat template**. The `apply_chat_template` method in the Hugging Face Transformers library facilitates this by formatting your input as a list of dictionaries, each representing a turn with a `"role"` and `"content"`.
-
-Here's how the previous 1-shot example can be restructured using the chat template:
+Structure your prompt as a turn-based conversation and use the [`apply_chat_template`] method to tokenize and format it.
 
 ```python
 from transformers import pipeline
