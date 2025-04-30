@@ -132,6 +132,9 @@ class GraniteMoeHybridConfig(PretrainedConfig):
     ```"""
 
     model_type = "granitemoehybrid"
+    attribute_map = {
+        "layers_block_type": "layer_types",
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
