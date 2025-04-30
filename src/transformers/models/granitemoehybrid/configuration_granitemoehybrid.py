@@ -97,9 +97,9 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxialiary loss coefficient
         shared_intermediate_size (`int`, *optional*, defaults to 0): intermediate size for shared experts.
             0 implies no shared experts.
-        position_embedding_type (`str`, *optional*, defaults to None): Positional embedding
+        position_embedding_type (`str`, *optional*): Positional embedding
             type to be used; defaults to None. Allowed options: `[None, "rope"]`
-        layer_types (`List`): list of strings to be used as layer types.
+        layer_types (`List`, *optional*): list of strings to be used as layer types.
             Allowed choices: "mamba", "attention".
         mamba_n_heads (`int`, *optional*, defaults to 128):
             The number of mamba heads used.
@@ -146,7 +146,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         max_position_embeddings=2048,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
-        use_cache=False,
+        use_cache=True,
         pad_token_id=None,
         bos_token_id=1,
         eos_token_id=2,
