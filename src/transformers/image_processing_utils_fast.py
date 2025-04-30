@@ -755,7 +755,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
 
 class SemanticSegmentationMixin:
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
+    def post_process_semantic_segmentation(
+        self, 
+        outputs, 
+        target_sizes: Optional[list[tuple]] = None,
+        class_proba: Optional[bool] = False,
+    ):
         """
         Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
@@ -765,11 +770,15 @@ class SemanticSegmentationMixin:
             target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
                 List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
                 predictions will not be resized.
+            class_proba (`bool`, *optional*, defaults to `False`):
+                Whether to keep class probabilities.
+                Will return (N, H, W) segmentation maps if False and (N, C, H, W) class probabilities maps if True.
 
         Returns:
             semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
-            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
-            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+            segmentation map of shape (height, width) or (num_classes, height, width) corresponding to the target_sizes entry 
+            (if `target_sizes` is specified) and `class_proba` value. Each entry of each `torch.Tensor` correspond to a semantic class id 
+            if `class_proba` is False, otherwise to the class probability.
         """
         logits = outputs.logits
 
@@ -789,10 +798,18 @@ class SemanticSegmentationMixin:
                 resized_logits = torch.nn.functional.interpolate(
                     logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
                 )
-                semantic_map = resized_logits[0].argmax(dim=0)
+                # Apply argmax conditionally
+                if class_proba:
+                    semantic_map = resized_logits[0]
+                else:
+                    semantic_map = resized_logits[0].argmax(dim=0)
                 semantic_segmentation.append(semantic_map)
         else:
-            semantic_segmentation = logits.argmax(dim=1)
+            # Apply argmax conditionally
+            if class_proba:
+                semantic_segmentation = logits
+            else:
+                semantic_segmentation = logits.argmax(dim=1)
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation

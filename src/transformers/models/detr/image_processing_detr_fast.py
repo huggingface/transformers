@@ -1088,7 +1088,12 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         return results
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_semantic_segmentation
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None):
+    def post_process_semantic_segmentation(
+        self, 
+        outputs, 
+        target_sizes: Optional[List[Tuple[int, int]]] = None,
+        class_proba: Optional[bool] = False,
+    ):
         """
         Converts the output of [`DetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
@@ -1098,11 +1103,15 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             target_sizes (`List[Tuple[int, int]]`, *optional*):
                 A list of tuples (`Tuple[int, int]`) containing the target size (height, width) of each image in the
                 batch. If unset, predictions will not be resized.
+            class_proba (`bool`, *optional*, defaults to `False`):
+                Whether to keep class probabilities.
+                Will return (N, H, W) segmentation maps if False and (N, C, H, W) class probabilities maps if True.
         Returns:
             `List[torch.Tensor]`:
-                A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
-                corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
-                `torch.Tensor` correspond to a semantic class id.
+                A list of length `batch_size`. If `class_proba` is `False`, each item is a semantic segmentation map
+                of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is specified).
+                Each entry of each `torch.Tensor` correspond to a semantic class id. If `class_proba` is `True`,
+                each item is a probability map of shape (num_classes, height, width).
         """
         class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
@@ -1122,18 +1131,26 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
 
-            semantic_segmentation = []
+            processed_segmentation = []
             for idx in range(batch_size):
-                resized_logits = nn.functional.interpolate(
+                resized_segmentation = nn.functional.interpolate(
                     segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
                 )
-                semantic_map = resized_logits[0].argmax(dim=0)
-                semantic_segmentation.append(semantic_map)
+                # Apply argmax conditionally
+                if class_proba:
+                    semantic_map = resized_segmentation[0]
+                else:
+                    semantic_map = resized_segmentation[0].argmax(dim=0)
+                processed_segmentation.append(semantic_map)
         else:
-            semantic_segmentation = segmentation.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+            # Apply argmax conditionally
+            if class_proba:
+                processed_segmentation = [segmentation[i] for i in range(segmentation.shape[0])]
+            else:
+                semantic_segmentation_map = segmentation.argmax(dim=1)
+                processed_segmentation = [semantic_segmentation_map[i] for i in range(semantic_segmentation_map.shape[0])]
 
-        return semantic_segmentation
+        return processed_segmentation
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_instance_segmentation
     def post_process_instance_segmentation(
