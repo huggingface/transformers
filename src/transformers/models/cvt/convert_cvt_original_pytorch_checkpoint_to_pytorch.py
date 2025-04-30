@@ -277,7 +277,7 @@ def final():
 
 def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_folder):
     """
-    Fucntion to convert the microsoft cvt checkpoint to huggingface checkpoint
+    Function to convert the microsoft cvt checkpoint to huggingface checkpoint
     """
     img_labels_file = "imagenet-1k-id2label.json"
     num_labels = 1000

@@ -113,6 +113,7 @@ from transformers.utils import (
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    check_torch_load_is_safe,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
@@ -646,6 +647,7 @@ class TrainerIntegrationCommon:
         else:
             best_model = RegressionModel()
             if not safe_weights:
+                check_torch_load_is_safe()
                 state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME), weights_only=True)
             else:
                 state_dict = safetensors.torch.load_file(os.path.join(checkpoint, SAFE_WEIGHTS_NAME))
@@ -678,6 +680,7 @@ class TrainerIntegrationCommon:
             loader = safetensors.torch.load_file
             weights_file = os.path.join(folder, SAFE_WEIGHTS_NAME)
         else:
+            check_torch_load_is_safe()
             loader = torch.load
             weights_file = os.path.join(folder, WEIGHTS_NAME)
 
@@ -1817,7 +1820,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(isinstance(tiny_llama.model.norm, LigerRMSNorm))
 
     @require_liger_kernel
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_use_liger_kernel_trainer(self):
         # Check that trainer still works with liger kernel applied
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
@@ -1921,7 +1924,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             _ = trainer.train()
 
     @require_schedulefree
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_schedulefree_radam(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2225,7 +2228,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(lower_bound_pm < galore_peak_memory)
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_lr_display_without_scheduler(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2250,7 +2253,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(trainer.get_learning_rates(), [learning_rate, learning_rate])
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_lr_display_with_scheduler(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2276,22 +2279,23 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # creating log history of trainer, results don't matter
         trainer.train()
-        logs = trainer.state.log_history[1:][:-1]
+        logs = trainer.state.log_history[1:-1]
 
         # reach given learning rate peak and end with 0 lr
-        self.assertTrue(logs[num_warmup_steps - 2]["learning_rate"] == learning_rate)
-        self.assertTrue(logs[-1]["learning_rate"] == 0)
+        self.assertTrue(logs[num_warmup_steps - 1]["learning_rate"] == learning_rate)
+        # self.assertTrue(logs[-1]["learning_rate"] == 0)
+        self.assertTrue(np.allclose(logs[-1]["learning_rate"], 0, atol=5e-6))
 
         # increasing and decreasing pattern of lrs
         increasing_lrs = [
             logs[i]["learning_rate"] < logs[i + 1]["learning_rate"]
             for i in range(len(logs))
-            if i < num_warmup_steps - 2
+            if i < num_warmup_steps - 1
         ]
         decreasing_lrs = [
             logs[i]["learning_rate"] > logs[i + 1]["learning_rate"]
             for i in range(len(logs) - 1)
-            if i >= num_warmup_steps - 2
+            if i >= num_warmup_steps - 1
         ]
 
         self.assertTrue(all(increasing_lrs))

@@ -168,11 +168,11 @@ class LlavaNextImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
-        image_grid_pinpoints: List = None,
+        size: Optional[Dict[str, int]] = None,
+        image_grid_pinpoints: Optional[List] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -330,7 +330,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[int] = None,
@@ -559,8 +559,8 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
-        image_grid_pinpoints: List = None,
+        size: Optional[Dict[str, int]] = None,
+        image_grid_pinpoints: Optional[List] = None,
         resample: PILImageResampling = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[int] = None,
@@ -688,7 +688,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
         for image in images:
             # convert image into a list of patches
-            # we intentially use the same data format as the input data format
+            # we intentionally use the same data format as the input data format
             image_patches = self.get_image_patches(
                 image,
                 image_grid_pinpoints,

@@ -831,13 +831,13 @@ class FlaxXLMRobertaPreTrainedModel(FlaxPreTrainedModel):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        past_key_values: dict = None,
+        past_key_values: Optional[dict] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

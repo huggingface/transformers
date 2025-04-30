@@ -51,6 +51,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bigbird_pegasus", "BigBirdPegasusModel"),
         ("biogpt", "BioGptModel"),
         ("bit", "BitModel"),
+        ("bitnet", "BitNetModel"),
         ("blenderbot", "BlenderbotModel"),
         ("blenderbot-small", "BlenderbotSmallModel"),
         ("blip", "BlipModel"),
@@ -81,6 +82,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("cpmant", "CpmAntModel"),
         ("ctrl", "CTRLModel"),
         ("cvt", "CvtModel"),
+        ("d_fine", "DFineModel"),
         ("dab-detr", "DabDetrModel"),
         ("dac", "DacModel"),
         ("data2vec-audio", "Data2VecAudioModel"),
@@ -143,6 +145,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("grounding-dino", "GroundingDinoModel"),
         ("groupvit", "GroupViTModel"),
         ("helium", "HeliumModel"),
+        ("hgnet_v2", "HGNetV2Backbone"),
         ("hiera", "HieraModel"),
         ("hubert", "HubertModel"),
         ("ibert", "IBertModel"),
@@ -258,6 +261,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("rt_detr_v2", "RTDetrV2Model"),
         ("rwkv", "RwkvModel"),
         ("sam", "SamModel"),
+        ("sam_hq", "SamHQModel"),
+        ("sam_hq_vision_model", "SamHQVisionModel"),
         ("sam_vision_model", "SamVisionModel"),
         ("seamless_m4t", "SeamlessM4TModel"),
         ("seamless_m4t_v2", "SeamlessM4Tv2Model"),
@@ -517,6 +522,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("big_bird", "BigBirdForCausalLM"),
         ("bigbird_pegasus", "BigBirdPegasusForCausalLM"),
         ("biogpt", "BioGptForCausalLM"),
+        ("bitnet", "BitNetForCausalLM"),
         ("blenderbot", "BlenderbotForCausalLM"),
         ("blenderbot-small", "BlenderbotSmallForCausalLM"),
         ("bloom", "BloomForCausalLM"),
@@ -728,6 +734,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ),
         ("efficientnet", "EfficientNetForImageClassification"),
         ("focalnet", "FocalNetForImageClassification"),
+        ("hgnet_v2", "HGNetV2ForImageClassification"),
         ("hiera", "HieraForImageClassification"),
         ("ijepa", "IJepaForImageClassification"),
         ("imagegpt", "ImageGPTForImageClassification"),
@@ -944,6 +951,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Object Detection mapping
         ("conditional_detr", "ConditionalDetrForObjectDetection"),
+        ("d_fine", "DFineForObjectDetection"),
         ("dab-detr", "DabDetrForObjectDetection"),
         ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("deta", "DetaForObjectDetection"),
@@ -1475,6 +1483,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("dinov2", "Dinov2Backbone"),
         ("dinov2_with_registers", "Dinov2WithRegistersBackbone"),
         ("focalnet", "FocalNetBackbone"),
+        ("hgnet_v2", "HGNetV2Backbone"),
         ("hiera", "HieraBackbone"),
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("nat", "NatBackbone"),
@@ -1493,6 +1502,12 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
     [
         ("sam", "SamModel"),
+    ]
+)
+
+MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
+    [
+        ("sam_hq", "SamHQModel"),
     ]
 )
 

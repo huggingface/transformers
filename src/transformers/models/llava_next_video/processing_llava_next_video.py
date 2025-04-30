@@ -64,7 +64,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             Patch size from the vision tower.
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
-            Shoudl be same as in model's config
+            Should be same as in model's config
         video_token (`str`, *optional*, defaults to `"<video>"`):
             Special token used to denote video location.
         image_token (`str`, *optional*, defaults to `"<image>"`):
