@@ -23,7 +23,7 @@ def tensor_to_mask_visual(original_tensor: torch.Tensor, grid_size=(20, 40)) -> 
     if not (h<max_h and w<max_w):
 
         # Preserve aspect ratio within max grid size
-        aspect_ratio = 2*m / n
+        aspect_ratio = 2*w/ h
         if aspect_ratio > 1:
             w = max_w
             h = min(max_h, max(1, round(max_w / aspect_ratio)))
@@ -32,7 +32,7 @@ def tensor_to_mask_visual(original_tensor: torch.Tensor, grid_size=(20, 40)) -> 
             w = max(1, round(max_h * aspect_ratio))
 
         # Step 1: Rescale tensor by average pooling
-        tensor = tensor.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+        tensor = original_tensor.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
         tensor = F.adaptive_avg_pool2d(tensor, output_size=(h, w))[0, 0]  # Remove extra dims
     else:
         tensor = original_tensor
@@ -319,4 +319,5 @@ def _update_causal_mask(
         causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
     return AttentionMask.from_tensor(causal_mask)
+
 
