@@ -19,7 +19,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib
 from typing import Any, Dict, Optional, Union
+
+from transformers.pytorch_utils import is_torch_greater_or_equal
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -28,6 +31,11 @@ from ..siglip import SiglipVisionConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+# This is to workaround issue where we can't import torch in
+# configuration_gemma3_text.py. Local import also doesn't work
+pytree_module = importlib.import_module("torch.utils._pytree")
 
 
 class Gemma3TextConfig(PretrainedConfig):
@@ -228,6 +236,9 @@ class Gemma3TextConfig(PretrainedConfig):
         self.attn_logit_softcapping = attn_logit_softcapping
         self.cache_implementation = cache_implementation
 
+        if is_torch_greater_or_equal("2.7"):
+            pytree_module.register_constant(self.__class__)
+
         self.rope_local_base_freq = rope_local_base_freq
         # For configuring HybridCache to work with 5:1 attention pattern
         self.sliding_window_pattern = sliding_window_pattern
@@ -330,6 +341,9 @@ class Gemma3Config(PretrainedConfig):
         self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
+
+        if is_torch_greater_or_equal("2.7"):
+            pytree_module.register_constant(self.__class__)
 
 
 __all__ = ["Gemma3Config", "Gemma3TextConfig"]

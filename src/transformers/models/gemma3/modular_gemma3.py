@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import importlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -22,6 +23,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
+
+from transformers.pytorch_utils import is_torch_greater_or_equal
 
 from ...cache_utils import Cache, HybridCache, StaticCache
 from ...configuration_utils import PretrainedConfig
@@ -60,6 +63,10 @@ _CONFIG_FOR_DOC = "Gemma3Config"
 logger = logging.get_logger(__name__)
 
 GEMMA3_INPUTS_DOCSTRING = None  # Will be picked up by modular
+
+# This is to workaround issue where we can't import torch in
+# configuration_gemma2.py. Local import also doesn't work
+pytree_module = importlib.import_module("torch.utils._pytree")
 
 
 class Gemma3TextConfig(Gemma2Config):
@@ -299,6 +306,9 @@ class Gemma3Config(PretrainedConfig):
         self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
+
+        if is_torch_greater_or_equal("2.7"):
+            pytree_module.register_constant(self.__class__)
 
 
 @dataclass
