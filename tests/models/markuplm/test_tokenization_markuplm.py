@@ -393,9 +393,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Encode - Simple input
                 nodes, xpaths = self.get_nodes_and_xpaths()
-                input_r = tokenizer_r.encode(nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
-                input_p = tokenizer_p.encode(nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
-                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
                 input_r = tokenizer_r.encode(nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
                 input_p = tokenizer_p.encode(nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
                 self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
@@ -406,13 +403,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Encode - Pair input
                 question, nodes, xpaths = self.get_question_nodes_and_xpaths()
-                input_r = tokenizer_r.encode(
-                    question, nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
-                )
-                input_p = tokenizer_p.encode(
-                    question, nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
-                )
-                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
                 input_r = tokenizer_r.encode(
                     question, nodes, xpaths=xpaths, max_length=max_length, padding="max_length"
                 )
@@ -426,10 +416,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Encode_plus - Simple input
                 nodes, xpaths = self.get_nodes_and_xpaths()
-                input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
-                input_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
-                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
                 input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
                 input_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
                 self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
@@ -445,14 +431,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Encode_plus - Pair input
                 question, nodes, xpaths = self.get_question_nodes_and_xpaths()
-                input_r = tokenizer_r.encode_plus(
-                    question, nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
-                )
-                input_p = tokenizer_p.encode_plus(
-                    question, nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
-                )
-                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
                 input_r = tokenizer_r.encode_plus(
                     question, nodes, xpaths=xpaths, max_length=max_length, padding="max_length"
                 )
@@ -470,20 +448,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Batch_encode_plus - Simple input
                 nodes, xpaths = self.get_nodes_and_xpaths_batch()
-
-                input_r = tokenizer_r.batch_encode_plus(
-                    nodes,
-                    xpaths=xpaths,
-                    max_length=max_length,
-                    pad_to_max_length=True,
-                )
-                input_p = tokenizer_p.batch_encode_plus(
-                    nodes,
-                    xpaths=xpaths,
-                    max_length=max_length,
-                    pad_to_max_length=True,
-                )
-                self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
 
                 input_r = tokenizer_r.batch_encode_plus(
                     nodes,

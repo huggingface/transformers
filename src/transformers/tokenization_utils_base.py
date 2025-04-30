@@ -2759,8 +2759,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self, padding=False, truncation=None, max_length=None, pad_to_multiple_of=None, verbose=True, **kwargs
     ):
         """
-        Find the correct padding/truncation strategy with backward compatibility for old arguments (truncation_strategy
-        and pad_to_max_length) and behaviors.
+        Find the correct padding/truncation strategy
         """
 
         # Backward compatibility for previous behavior, maybe we should deprecate it:
@@ -3114,7 +3113,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 method).
         """
 
-        # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=padding,
             truncation=truncation,

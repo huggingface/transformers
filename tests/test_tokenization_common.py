@@ -3865,9 +3865,6 @@ class TokenizerTesterMixin:
                 pad_token_id = tokenizer_p.pad_token_id
 
                 # Encode - Simple input
-                input_r = tokenizer_r.encode("This is a simple input", max_length=max_length, pad_to_max_length=True)
-                input_p = tokenizer_p.encode("This is a simple input", max_length=max_length, pad_to_max_length=True)
-                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
                 input_r = tokenizer_r.encode("This is a simple input", max_length=max_length, padding="max_length")
                 input_p = tokenizer_p.encode("This is a simple input", max_length=max_length, padding="max_length")
                 self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
@@ -3877,13 +3874,6 @@ class TokenizerTesterMixin:
                 self.assert_padded_input_match(input_r, input_p, len(input_r), pad_token_id)
 
                 # Encode - Pair input
-                input_r = tokenizer_r.encode(
-                    "This is a simple input", "This is a pair", max_length=max_length, pad_to_max_length=True
-                )
-                input_p = tokenizer_p.encode(
-                    "This is a simple input", "This is a pair", max_length=max_length, pad_to_max_length=True
-                )
-                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
                 input_r = tokenizer_r.encode(
                     "This is a simple input", "This is a pair", max_length=max_length, padding="max_length"
                 )
