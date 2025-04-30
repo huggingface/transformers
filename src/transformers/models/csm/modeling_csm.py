@@ -19,19 +19,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...generation import GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput, GenerationConfig, GenerationMixin
-from ...generation.logits_process import LogitsProcessorList
-from ...generation.stopping_criteria import MaxLengthCriteria, StoppingCriteriaList
-from ...generation.utils import GenerateNonBeamOutput
+from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -52,10 +48,7 @@ from ...utils import (
 )
 from ..auto import AutoModel
 from .configuration_csm import CsmConfig, CsmDepthDecoderConfig
-
-
-if TYPE_CHECKING:
-    from ...generation.streamers import BaseStreamer
+from .generation_csm import CsmGenerationMixin
 
 
 if is_torch_flex_attn_available():
@@ -716,10 +709,10 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_static_cache = isinstance(past_key_values, StaticCache)
+        using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -730,7 +723,7 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
 
         dtype = input_tensor.dtype
         sequence_length = input_tensor.shape[1]
-        if using_static_cache:
+        if using_compilable_cache:
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
@@ -1163,10 +1156,10 @@ class CsmBackboneModel(CsmPreTrainedModel):
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_static_cache = isinstance(past_key_values, StaticCache)
+        using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -1177,7 +1170,7 @@ class CsmBackboneModel(CsmPreTrainedModel):
 
         dtype = input_tensor.dtype
         sequence_length = input_tensor.shape[1]
-        if using_static_cache:
+        if using_compilable_cache:
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
@@ -1266,38 +1259,6 @@ class CsmBackboneModel(CsmPreTrainedModel):
         return causal_mask
 
 
-@dataclass
-class CsmGenerateOutput(GenerateDecoderOnlyOutput):
-    """
-    Outputs of CsmForConditionalGeneration.generate.
-
-    Args:
-        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
-            if all batches finished early due to the `eos_token_id`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True`):
-            Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
-            each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
-        logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
-            Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
-            each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
-        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True`):
-            Returns the model cache, used to speed up decoding. Different models have a different cache format, check
-        audio (`list(torch.FloatTensor)` of length `batch_size`):
-            The generated audio.
-    """
-
-    audio: Optional[List[torch.Tensor]] = None
-
-
 CSM_INPUTS_DOCSTRING = r"""{}""".format(INPUTS_DOCSTRING_BASE.format(input_ids_docstring=INPUT_IDS_DOCSTRING))
 
 
@@ -1307,13 +1268,11 @@ CSM_INPUTS_DOCSTRING = r"""{}""".format(INPUTS_DOCSTRING_BASE.format(input_ids_d
     """,
     CSM_START_DOCSTRING,
 )
-class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
+class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
     _tied_weights_keys = [
         "backbone_model.embed_tokens.embed_audio_tokens.weight",
         "depth_decoder.model.embed_tokens.weight",
     ]
-    _tp_plan = None
-    _pp_plan = None
 
     def __init__(self, config):
         super().__init__(config)
@@ -1338,6 +1297,168 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def _tie_weights(self):
+        if self.config.tie_codebooks_embeddings:
+            self._tie_or_clone_weights(
+                self.backbone_model.embed_tokens.embed_audio_tokens,
+                self.depth_decoder.model.embed_tokens,
+            )
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        if kwargs.get("output_loading_info", False):
+            model, loading_info = super().from_pretrained(*args, **kwargs)
+        else:
+            model = super().from_pretrained(*args, **kwargs)
+
+        # copy depth decoder generation conf attr to the depth decoder generation config
+        prefix = "depth_decoder_"
+        prefix_len = len(prefix)
+        depth_decoder_attrs = {
+            attr[prefix_len:]: value
+            for attr, value in vars(model.generation_config).items()
+            if attr.startswith(prefix)
+        }
+
+        vars(model.depth_decoder.generation_config).update({"_from_model_config": False, **depth_decoder_attrs})
+
+        # remove the depth decoder generation conf attr from the model generation config
+        for attr in depth_decoder_attrs:
+            delattr(model.generation_config, prefix + attr)
+
+        if "output_loading_info" in kwargs:
+            return model, loading_info
+        else:
+            return model
+
+    def save_pretrained(self, *args, **kwargs):
+        # copy the depth decoder generation config attributes to the model generation config
+        prefix = "depth_decoder_"
+        depth_decoder_attrs = self.depth_decoder.generation_config.to_diff_dict()
+        depth_decoder_attrs.pop("transformers_version", None)
+        for attr, value in depth_decoder_attrs.items():
+            setattr(self.generation_config, prefix + attr, value)
+
+        super().save_pretrained(*args, **kwargs)
+
+    def _merge_input_ids_with_input_values(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        input_values: Optional[torch.Tensor] = None,
+        input_values_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+    ) -> Optional[torch.Tensor]:
+        """
+        Merges the input_ids and input_values to produce a single inputs_embeds tensor:
+        1 - Infers the codec model on the input_values to retreive codebook token.
+        2 - Embeds codebook tokens and places them at the correct positions in the inputs_embeds tensor.
+        3 - If labels are provided, expands them to match codebook dimensions and position the target codebook tokens in the inputs_embeds tensor.
+
+        Args:
+            input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+                The input ids to embed.
+            input_values (`torch.Tensor` of shape `(batch_size, channels, audio_sequence_length)`):
+                The audio input values to embed.
+            input_values_mask (`torch.Tensor` of shape `(batch_size, audio_sequence_length)`):
+                The mask for the input values.
+        """
+        inputs_embeds = self.embed_text_tokens(input_ids)
+
+        if input_values is not None:
+            # =======================================
+            # TODO: @eustlb, this should be batched !!!
+            # but requires making sure batched inference of the codec model works as intended
+            audio_batch_list = [
+                input_values_batch[:, : input_values_mask_batch.sum(-1)]
+                for input_values_batch, input_values_mask_batch in zip(input_values, input_values_mask)
+            ]
+            audio_tokens_list = []
+            for audio_batch in audio_batch_list:
+                codec_outputs = self.codec_model.encode(audio_batch.unsqueeze(0))
+                codebook_ids = codec_outputs.audio_codes.transpose(1, -1)
+                audio_tokens_list.append(codebook_ids[0])
+
+            max_audio_frames = max(el.shape[0] for el in audio_tokens_list)
+            batched_audio_token_ids = torch.stack(
+                [nn.functional.pad(el, (0, 0, 0, max_audio_frames - el.shape[0])) for el in audio_tokens_list]
+            )
+            # =======================================
+
+            audio_embeds = self.backbone_model.embed_tokens(batched_audio_token_ids)
+
+            # batched_audio_codes is a tensor of shape (batch_size, max_audio_frames, num_codebooks)
+            # We need to:
+            # 1. Select only the valid frames for each audio (excluding padding frames)
+            # 2. Embed such frames and place then to their sequence corresponding idxs
+            audio_token_id = self.config.audio_token_id
+            audio_token_mask = input_ids == audio_token_id
+
+            # retreive the number of audio tokens for each audio from the input_ids
+            change_idxs = (audio_token_mask[:, 1:] != audio_token_mask[:, :-1]).nonzero(as_tuple=True)[-1]
+            num_audio_tokens = change_idxs.diff()
+            num_audio_tokens = torch.stack([num_audio_tokens[i] for i in range(0, len(num_audio_tokens), 2)])
+
+            frames_mask = torch.arange(max_audio_frames, device=batched_audio_token_ids.device).expand(
+                len(num_audio_tokens), -1
+            ) < num_audio_tokens.unsqueeze(-1)
+            frames_mask = frames_mask.flatten()
+
+            inputs_embeds[audio_token_mask] = audio_embeds.view(-1, audio_embeds.shape[-1])[frames_mask]
+
+            # same for the audio eos token
+            audio_eos_frame_ids = (
+                torch.ones((1, 1, self.config.num_codebooks), device=input_ids.device, dtype=torch.long)
+                * self.config.codebook_eos_token_id
+            )
+            audio_eos_embeds = self.backbone_model.embed_tokens(audio_eos_frame_ids).squeeze(1)
+
+            audio_eos_token_mask = input_ids == self.config.audio_eos_token_id
+            inputs_embeds[audio_eos_token_mask] = audio_eos_embeds.repeat(audio_eos_token_mask.sum(), 1)
+
+            # if the labels are provided, we need to expand the labels to (batch_size, seq_length, num_codebooks)
+            if labels is not None:
+                labels_expanded = labels.unsqueeze(-1).repeat(1, 1, self.config.num_codebooks)
+                labels_expanded[audio_token_mask] = batched_audio_token_ids.view(-1, self.config.num_codebooks)[
+                    frames_mask
+                ]
+                # mask depth decoder
+                depth_decoder_ignore_frames_idxs = (labels == -101).nonzero(as_tuple=True)
+                labels_expanded[depth_decoder_ignore_frames_idxs[0], depth_decoder_ignore_frames_idxs[1], 1:] = -100
+                labels = labels_expanded
+
+        return {"inputs_embeds": inputs_embeds, "labels": labels}
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.LongTensor,
+        past_key_values: Optional[Cache] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids=input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        if input_ids is not None and input_ids.ndim == 2 and model_inputs.get("inputs_embeds") is None:
+            merged_inputs = self._merge_input_ids_with_input_values(
+                input_ids=input_ids,
+                input_values=kwargs.get("input_values"),
+                input_values_mask=kwargs.get("input_values_mask"),
+                labels=kwargs.get("labels"),
+            )
+            model_inputs.update(
+                {"inputs_embeds": merged_inputs["inputs_embeds"], "labels": merged_inputs["labels"], "input_ids": None}
+            )
+
+        return model_inputs
 
     @can_return_tuple
     @add_start_docstrings_to_model_forward(CSM_INPUTS_DOCSTRING)
@@ -1497,168 +1618,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
             depth_decoder_attentions=depth_decoder_outputs.attentions if depth_decoder_outputs is not None else None,
         )
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        if kwargs.get("output_loading_info", False):
-            model, loading_info = super().from_pretrained(*args, **kwargs)
-        else:
-            model = super().from_pretrained(*args, **kwargs)
-
-        # copy depth decoder generation conf attr to the depth decoder generation config
-        prefix = "depth_decoder_"
-        prefix_len = len(prefix)
-        depth_decoder_attrs = {
-            attr[prefix_len:]: value
-            for attr, value in vars(model.generation_config).items()
-            if attr.startswith(prefix)
-        }
-
-        vars(model.depth_decoder.generation_config).update({"_from_model_config": False, **depth_decoder_attrs})
-
-        # remove the depth decoder generation conf attr from the model generation config
-        for attr in depth_decoder_attrs:
-            delattr(model.generation_config, prefix + attr)
-
-        if "output_loading_info" in kwargs:
-            return model, loading_info
-        else:
-            return model
-
-    def save_pretrained(self, *args, **kwargs):
-        # copy the depth decoder generation config attributes to the model generation config
-        prefix = "depth_decoder_"
-        depth_decoder_attrs = self.depth_decoder.generation_config.to_diff_dict()
-        depth_decoder_attrs.pop("transformers_version", None)
-        for attr, value in depth_decoder_attrs.items():
-            setattr(self.generation_config, prefix + attr, value)
-
-        super().save_pretrained(*args, **kwargs)
-
-    def _tie_weights(self):
-        if self.config.tie_codebooks_embeddings:
-            self._tie_or_clone_weights(
-                self.backbone_model.embed_tokens.embed_audio_tokens,
-                self.depth_decoder.model.embed_tokens,
-            )
-
-    def _merge_input_ids_with_input_values(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        input_values: Optional[torch.Tensor] = None,
-        input_values_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-    ) -> Optional[torch.Tensor]:
-        """
-        Merges the input_ids and input_values to produce a single inputs_embeds tensor:
-        1 - Infers the codec model on the input_values to retreive codebook token.
-        2 - Embeds codebook tokens and places them at the correct positions in the inputs_embeds tensor.
-        3 - If labels are provided, expands them to match codebook dimensions and position the target codebook tokens in the inputs_embeds tensor.
-
-        Args:
-            input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                The input ids to embed.
-            input_values (`torch.Tensor` of shape `(batch_size, channels, audio_sequence_length)`):
-                The audio input values to embed.
-            input_values_mask (`torch.Tensor` of shape `(batch_size, audio_sequence_length)`):
-                The mask for the input values.
-        """
-        inputs_embeds = self.embed_text_tokens(input_ids)
-
-        if input_values is not None:
-            # =======================================
-            # TODO: @eustlb, this should be batched !!!
-            # but requires making sure batched inference of the codec model works as intended
-            audio_batch_list = [
-                input_values_batch[:, : input_values_mask_batch.sum(-1)]
-                for input_values_batch, input_values_mask_batch in zip(input_values, input_values_mask)
-            ]
-            audio_tokens_list = []
-            for audio_batch in audio_batch_list:
-                codec_outputs = self.codec_model.encode(audio_batch.unsqueeze(0))
-                codebook_ids = codec_outputs.audio_codes.transpose(1, -1)
-                audio_tokens_list.append(codebook_ids[0])
-
-            max_audio_frames = max(el.shape[0] for el in audio_tokens_list)
-            batched_audio_token_ids = torch.stack(
-                [nn.functional.pad(el, (0, 0, 0, max_audio_frames - el.shape[0])) for el in audio_tokens_list]
-            )
-            # =======================================
-
-            audio_embeds = self.backbone_model.embed_tokens(batched_audio_token_ids)
-
-            # batched_audio_codes is a tensor of shape (batch_size, max_audio_frames, num_codebooks)
-            # We need to:
-            # 1. Select only the valid frames for each audio (excluding padding frames)
-            # 2. Embed such frames and place then to their sequence corresponding idxs
-            audio_token_id = self.config.audio_token_id
-            audio_token_mask = input_ids == audio_token_id
-
-            # retreive the number of audio tokens for each audio from the input_ids
-            change_idxs = (audio_token_mask[:, 1:] != audio_token_mask[:, :-1]).nonzero(as_tuple=True)[-1]
-            num_audio_tokens = change_idxs.diff()
-            num_audio_tokens = torch.stack([num_audio_tokens[i] for i in range(0, len(num_audio_tokens), 2)])
-
-            frames_mask = torch.arange(max_audio_frames, device=batched_audio_token_ids.device).expand(
-                len(num_audio_tokens), -1
-            ) < num_audio_tokens.unsqueeze(-1)
-            frames_mask = frames_mask.flatten()
-
-            inputs_embeds[audio_token_mask] = audio_embeds.view(-1, audio_embeds.shape[-1])[frames_mask]
-
-            # same for the audio eos token
-            audio_eos_frame_ids = (
-                torch.ones((1, 1, self.config.num_codebooks), device=input_ids.device, dtype=torch.long)
-                * self.config.codebook_eos_token_id
-            )
-            audio_eos_embeds = self.backbone_model.embed_tokens(audio_eos_frame_ids).squeeze(1)
-
-            audio_eos_token_mask = input_ids == self.config.audio_eos_token_id
-            inputs_embeds[audio_eos_token_mask] = audio_eos_embeds.repeat(audio_eos_token_mask.sum(), 1)
-
-            # if the labels are provided, we need to expand the labels to (batch_size, seq_length, num_codebooks)
-            if labels is not None:
-                labels_expanded = labels.unsqueeze(-1).repeat(1, 1, self.config.num_codebooks)
-                labels_expanded[audio_token_mask] = batched_audio_token_ids.view(-1, self.config.num_codebooks)[
-                    frames_mask
-                ]
-                # mask depth decoder
-                depth_decoder_ignore_frames_idxs = (labels == -101).nonzero(as_tuple=True)
-                labels_expanded[depth_decoder_ignore_frames_idxs[0], depth_decoder_ignore_frames_idxs[1], 1:] = -100
-                labels = labels_expanded
-
-        return {"inputs_embeds": inputs_embeds, "labels": labels}
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids: torch.LongTensor,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids=input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
-            **kwargs,
-        )
-
-        if input_ids is not None and input_ids.ndim == 2 and model_inputs.get("inputs_embeds") is None:
-            merged_inputs = self._merge_input_ids_with_input_values(
-                input_ids=input_ids,
-                input_values=kwargs.get("input_values"),
-                input_values_mask=kwargs.get("input_values_mask"),
-                labels=kwargs.get("labels"),
-            )
-            model_inputs.update(
-                {"inputs_embeds": merged_inputs["inputs_embeds"], "labels": merged_inputs["labels"], "input_ids": None}
-            )
-
-        return model_inputs
-
     @staticmethod
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
@@ -1713,449 +1672,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, GenerationMixin):
                 )
 
         return causal_mask
-
-    def _sample(
-        self,
-        input_ids: torch.LongTensor,
-        logits_processor: LogitsProcessorList,
-        stopping_criteria: StoppingCriteriaList,
-        generation_config: GenerationConfig,
-        synced_gpus: bool,
-        streamer: Optional["BaseStreamer"],
-        **model_kwargs,
-    ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
-        """
-        This method overrides [~generation.utils.GenerationMixin._sample].
-        To ease maintenance, modifications are marked with the comment "Csm specific".
-
-        Indeed, Csm model requires a custom generation sampling step:
-        1. Infer the backbone model to sample the first codebook token
-        2. Call generate on the depth decoder with the first codebook token as input_ids to sample the next codebook tokens
-        3. Use these generated codebook tokens as input_ids to sample the next first codebook token using the backbone model
-        4. Repeat until stopping criteria is met
-
-        Csm supports two stopping criterias:
-        - stop when the generated sequence is at max_length
-        - stop when all the generated codebook tokens are the codebook_eos_token_id
-        """
-        # init values
-        # *************** Csm specific ***************
-        pad_token_id = self.config.codebook_pad_token_id
-        # ============================================
-        output_attentions = generation_config.output_attentions
-        output_hidden_states = generation_config.output_hidden_states
-        output_scores = generation_config.output_scores
-        output_logits = generation_config.output_logits
-        return_dict_in_generate = generation_config.return_dict_in_generate
-        # *************** Csm specific ***************
-        has_eos_stopping_criteria = generation_config._eos_token_tensor is not None
-        # ============================================
-        do_sample = generation_config.do_sample
-
-        # init attention / hidden states / scores tuples
-        scores = () if (return_dict_in_generate and output_scores) else None
-        raw_logits = () if (return_dict_in_generate and output_logits) else None
-        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
-        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
-        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
-
-        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        if return_dict_in_generate and self.config.is_encoder_decoder:
-            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None  # noqa: F841
-            encoder_hidden_states = (
-                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None  # noqa: F841
-            )
-
-        # keep track of which sequences are already finished
-        batch_size, cur_len = input_ids.shape[:2]
-
-        this_peer_finished = False
-        unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
-
-        # *************** Csm specific ***************
-        if input_ids.ndim == 2 and model_kwargs.get("inputs_embeds") is None:
-            # in the case where the passed input_ids correspond to text tokens, i.e. don't have a third dimension for codebook ids,
-            # we need to remove the input length to the MaxLengthCriteria stopping criteria has such input are not returned
-            for criterion in stopping_criteria:
-                if isinstance(criterion, MaxLengthCriteria):
-                    criterion.max_length -= cur_len
-        # ============================================
-
-        model_forward = self.__call__
-        if isinstance(model_kwargs.get("past_key_values"), Cache):
-            is_compileable = model_kwargs["past_key_values"].is_compileable and self._supports_static_cache
-            is_compileable = is_compileable and not self.generation_config.disable_compile
-            if is_compileable and (
-                self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
-            ):
-                os.environ["TOKENIZERS_PARALLELISM"] = "0"
-                model_forward = self.get_compiled_call(generation_config.compile_config)
-
-        is_prefill = True
-        while self._has_unfinished_sequences(
-            this_peer_finished,
-            synced_gpus,
-            device=input_ids.device,
-        ):
-            # prepare model inputs
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
-            # prepare variable output controls (note: some models won't accept all output controls)
-            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-            # *************** Csm specific ***************
-            model_inputs.update({"output_hidden_states": True})
-            # ============================================
-
-            if is_prefill:
-                outputs = self(**model_inputs, return_dict=True)
-                is_prefill = False
-            else:
-                outputs = model_forward(**model_inputs, return_dict=True)
-
-            # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
-            model_kwargs = self._update_model_kwargs_for_generation(
-                outputs,
-                model_kwargs,
-            )
-            if synced_gpus and this_peer_finished:
-                continue
-
-            # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
-            # (the clone itself is always small)
-            next_token_logits = outputs.logits[:, -1, :].clone().float()
-            next_token_logits = next_token_logits.to(input_ids.device)
-
-            # pre-process distribution
-            next_token_scores = logits_processor(input_ids, next_token_logits)
-
-            # Store scores, attentions and hidden_states when required
-            if return_dict_in_generate:
-                if output_scores:
-                    scores += (next_token_scores,)
-                if output_logits:
-                    raw_logits += (next_token_logits,)
-                if output_attentions:
-                    decoder_attentions += (
-                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
-                    )
-                    if self.config.is_encoder_decoder:
-                        cross_attentions += (outputs.cross_attentions,)
-
-                if output_hidden_states:
-                    decoder_hidden_states += (
-                        (outputs.decoder_hidden_states,)
-                        if self.config.is_encoder_decoder
-                        else (outputs.hidden_states,)
-                    )
-
-            # token selection
-            if do_sample:
-                probs = nn.functional.softmax(next_token_scores, dim=-1)
-                # TODO (joao): this OP throws "skipping cudagraphs due to ['incompatible ops']", find solution
-                next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
-            else:
-                next_tokens = torch.argmax(next_token_scores, dim=-1)
-
-            # *************** Csm specific ***************
-            # infer the depth decoder
-            first_codebook_ids = next_tokens[:, None]
-            # adds place holder in position 0 that will be replaced by the backbone_last_hidden_state
-            depth_decoder_input_ids = nn.functional.pad(first_codebook_ids, (1, 0), value=0)
-            backbone_last_hidden_state = outputs.hidden_states[-1][:, -1, :]
-
-            torch.compiler.cudagraph_mark_step_begin()
-            depth_decoder_outputs = self.depth_decoder.generate(
-                input_ids=depth_decoder_input_ids,
-                backbone_last_hidden_state=backbone_last_hidden_state,
-            )
-            codebook_ids = (
-                depth_decoder_outputs
-                if isinstance(depth_decoder_outputs, torch.Tensor)
-                else depth_decoder_outputs.sequences
-            )
-            # remove the place holder in position 0
-            codebook_ids = codebook_ids[:, 1:]
-            next_tokens = codebook_ids
-            # ============================================
-
-            # *************** Csm specific ***************
-            # finished sentences should have their next token be a padding token
-            if has_eos_stopping_criteria:
-                next_tokens = next_tokens * unfinished_sequences.unsqueeze(-1) + pad_token_id * (
-                    1 - unfinished_sequences.unsqueeze(-1)
-                )
-            # ============================================
-
-            # *************** Csm specific ***************
-            # update generated ids, model inputs, and length for next step
-            if input_ids.ndim == 2:
-                input_ids = next_tokens[:, None, :]
-            else:
-                input_ids = torch.cat([input_ids, next_tokens[:, None, :]], dim=1)
-            # ============================================
-            if streamer is not None:
-                streamer.put(next_tokens.cpu())
-
-            # *************** Csm specific ***************
-            # for the eos stopping criteria, is it expected that the eos token is the same for each codebook !!!!
-            unfinished_sequences = unfinished_sequences & ~(
-                input_ids[:, -1, :-1] == self.config.codebook_eos_token_id
-            ).all(-1)
-            # ============================================
-            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-            this_peer_finished = unfinished_sequences.max() == 0
-            cur_len += 1
-
-            # This is needed to properly delete outputs.logits which may be very large for first iteration
-            # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
-            del outputs
-            # *************** Csm specific ***************
-            del depth_decoder_outputs
-            # ============================================
-
-        if streamer is not None:
-            streamer.end()
-
-        if return_dict_in_generate:
-            if self.config.is_encoder_decoder:
-                return GenerateEncoderDecoderOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    encoder_attentions=encoder_attentions,
-                    encoder_hidden_states=encoder_hidden_states,
-                    decoder_attentions=decoder_attentions,
-                    cross_attentions=cross_attentions,
-                    decoder_hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-            else:
-                return GenerateDecoderOnlyOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    attentions=decoder_attentions,
-                    hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-        else:
-            return input_ids
-
-    def _get_stopping_criteria(
-        self,
-        *args,
-        **kwargs,
-    ) -> StoppingCriteriaList:
-        criteria = super()._get_stopping_criteria(*args, **kwargs)
-
-        kept_criteria = StoppingCriteriaList()
-        for criterion in criteria:
-            if not isinstance(criterion, MaxLengthCriteria):
-                logger.warning(
-                    f"Csm does not support {criterion.__class__.__name__} stopping criteria, it will be ignored."
-                )
-            else:
-                kept_criteria.append(criterion)
-        return kept_criteria
-
-    def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Dict
-    ) -> Tuple[GenerationConfig, Dict]:
-        """
-        This method overrides [~generation.utils.GenerationMixin._prepare_generation_config].
-        It ensures that the depth decoder generation config is initialized and that passed args as depth_decoder_* are properly handled.
-        """
-        # extract depth decoder kwargs and remove them from the main kwargs
-        depth_decoder_kwargs = {
-            k[len("depth_decoder_") :]: v for k, v in kwargs.items() if k.startswith("depth_decoder_")
-        }
-
-        # remove the depth decoder keys from the original kwargs
-        kwargs = {k: v for k, v in kwargs.items() if not k.startswith("depth_decoder_")}
-
-        # initialize the generation config
-        generation_config, model_kwargs = super()._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
-        )
-        self.depth_decoder.generation_config.update(**depth_decoder_kwargs)
-
-        # ensure the depth decoder generation config is valid
-        depth_decoder_min_new_tokens = getattr(self.depth_decoder.generation_config, "min_new_tokens") or (
-            self.config.num_codebooks - 1
-        )
-        depth_decoder_max_new_tokens = getattr(self.depth_decoder.generation_config, "max_new_tokens") or (
-            self.config.num_codebooks - 1
-        )
-
-        if {depth_decoder_min_new_tokens, depth_decoder_max_new_tokens} != {self.config.num_codebooks - 1}:
-            raise ValueError(
-                f"depth_decoder_generation_config's min_new_tokens ({depth_decoder_min_new_tokens}) and max_new_tokens ({depth_decoder_max_new_tokens}) must be equal to self.config.num_codebooks - 1 ({self.config.num_codebooks - 1})"
-            )
-        elif self.depth_decoder.generation_config.return_dict_in_generate:
-            logger.warning(
-                "depth_decoder_generation_config.return_dict_in_generate is set to True, but this will be ignored as the depth decoder model does not return a dictionary in generate"
-            )
-            self.depth_decoder.generation_config.return_dict_in_generate = False
-
-        self.depth_decoder.generation_config.min_new_tokens = depth_decoder_min_new_tokens
-        self.depth_decoder.generation_config.max_new_tokens = depth_decoder_max_new_tokens
-
-        return generation_config, model_kwargs
-
-    def generate(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        input_values: Optional[torch.Tensor] = None,
-        input_values_mask: Optional[torch.Tensor] = None,
-        generation_config: Optional[GenerationConfig] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
-        synced_gpus: Optional[bool] = None,
-        streamer: Optional["BaseStreamer"] = None,
-        output_audio: Optional[bool] = False,
-        **kwargs,
-    ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
-        r"""
-        This method overrides [`~generation.utils.GenerationMixin.generate`] to match the specifics of the Csm model.
-        Indeed, Csm model requires a custom generation sampling step:
-        1. Infer the backbone model to sample the first codebook token
-        2. Call generate on the depth decoder with the first codebook token as `input_ids` to sample the next codebook tokens
-        3. Use these generated codebook tokens as `input_ids` to sample the next first codebook token using the backbone model
-        4. Repeat until stopping criteria is met
-
-        <Tip warning={true}>
-
-        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
-        model's default generation configuration. You can override any `generation_config` by passing the corresponding
-        parameters to generate(), e.g. `.generate(inputs, do_sample=True)`.
-        </Tip>
-
-        Parameters:
-            inputs_ids (`torch.Tensor` of shape (batch_size, seq_length), *optional*):
-                The sequence used as a prompt for the backbone model.
-            input_values (`torch.Tensor` of shape (batch_size, audio_sequence_length), *optional*):
-                The batched audio input values that will be encoded into codebook tokens using the codec model and
-                and merged with the text input ids provided in `input_ids`.
-            generation_config ([`~generation.GenerationConfig`], *optional*):
-                The generation configuration to be used as base parametrization for the generation call. `**kwargs`
-                passed to generate matching the attributes of `generation_config` will override them. If
-                `generation_config` is not provided, the default will be used, which has the following loading
-                priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
-                configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
-                default values, whose documentation should be checked to parameterize generation.
-            logits_processor (`LogitsProcessorList`, *optional*):
-                Custom logits processors that complement the default logits processors built from arguments and
-                generation config. If a logit processor is passed that is already created with the arguments or a
-                generation config an error is thrown. This feature is intended for advanced users.
-            stopping_criteria (`StoppingCriteriaList`, *optional*):
-                Custom stopping criteria that complements the default stopping criteria built from arguments and a
-                generation config. If a stopping criteria is passed that is already created with the arguments or a
-                generation config an error is thrown. If your stopping criteria depends on the `scores` input, make
-                sure you pass `return_dict_in_generate=True, output_scores=True` to `generate`. This feature is
-                intended for advanced users.
-            synced_gpus (`bool`, *optional*):
-                Whether to continue running the while loop until max_length. Unless overridden, this flag will be set
-                to `True` if using `FullyShardedDataParallel` or DeepSpeed ZeRO Stage 3 with multiple GPUs to avoid
-                deadlocking if one GPU finishes generating before other GPUs. Otherwise, defaults to `False`.
-            streamer (`BaseStreamer`, *optional*):
-                Streamer object that will be used to stream the generated sequences. Generated tokens are passed
-                through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
-            output_audio (`bool`, *optional*):
-                Whether to return the generated audio.
-            kwargs (`Dict[str, Any]`, *optional*):
-                Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
-                forwarded to the `forward` function of the model. Depth decoder specific kwargs should be prefixed with *depth_decoder_*.
-
-        Return:
-            [`CsmGenerateOutput`] or `torch.LongTensor` or `List[torch.FloatTensor]`: A [`CsmGenerateOutput`]
-            (if `return_dict_in_generate=True` or when `config.return_dict_in_generate=True`) or a `torch.LongTensor` when `output_audio=False`
-            or a `List[torch.FloatTensor]` otherwise.
-
-        Example:
-
-        ```python
-        >>> from transformers import CsmProcessor, CsmForConditionalGeneration
-        >>> from datasets import load_dataset, Audio
-        >>> import soundfile as sf
-
-        >>> model_id = "eustlb/csm-1b"
-        >>> torch_device = "cuda" if torch.cuda.is_available() else "cpu"
-
-        >>> processor = AutoProcessor.from_pretrained(model_id)
-
-        >>> ds = load_dataset("eustlb/dailytalk-dummy", split="train")
-        >>> # ensure the audio is 24kHz
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=24000))
-
-        >>> conversation = []
-        >>> # prepare a conversation with text and corresponding audio
-        >>> for text, audio, speaker_id in zip(ds[:4]["text"], ds[:4]["audio"], ds[:4]["speaker_id"]):
-        ...     conversation.append(
-        ...         {
-        ...             "role": f"{speaker_id}",
-        ...             "content": [{"type": "text", "text": text}, {"type": "audio", "path": audio["array"]}],
-        ...         }
-        ...     )
-
-        >>> # text prompt
-        >>> conversation.append({"role": f"{ds[4]['speaker_id']}", "content": [{"type": "text", "text": ds[4]["text"]}]})
-
-        >>> inputs = processor.apply_chat_template(
-        ...     conversation,
-        ...     tokenize=True,
-        ...     return_dict=True,
-        ... ).to(torch_device)
-
-        >>> model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
-        >>> audio_values = model.generate(**inputs, output_audio=True)
-        >>> sf.write("output.wav", audio_values[0].cpu().numpy(), 24000)
-        ```
-        """
-        # TODO: ensure the user is not requesting an unsupported generation mode (!= greedy/ sampling)
-        # TODO: ensure not using unsupported logits processors
-
-        generate_output = super().generate(
-            input_ids=input_ids,
-            input_values=input_values,
-            input_values_mask=input_values_mask,
-            generation_config=generation_config,
-            logits_processor=logits_processor,
-            stopping_criteria=stopping_criteria,
-            synced_gpus=synced_gpus,
-            streamer=streamer,
-            **kwargs,
-        )
-
-        generate_returned_dict = not isinstance(generate_output, torch.Tensor)
-        audio = None
-        if output_audio:
-            generated_audio_codes = generate_output.sequences if generate_returned_dict else generate_output
-
-            # infer the codec model
-            audio = []
-            with torch.no_grad():
-                # =======================================
-                # TODO: @eustlb, this should be batched !!!
-                # but requires making sure batched inference of the codec model works as intended
-                for audio_codes_batch in generated_audio_codes:
-                    eos_idxs = (audio_codes_batch == self.config.codebook_eos_token_id).all(dim=-1).nonzero()
-                    if eos_idxs.numel() != 0:
-                        cutoff_idx = eos_idxs.min()
-                    else:
-                        cutoff_idx = audio_codes_batch.shape[1]
-
-                    audio_codes_batch = audio_codes_batch[:cutoff_idx]
-                    codec_decode_output = self.codec_model.decode(audio_codes_batch.transpose(0, 1).unsqueeze(0))
-                    audio.append(codec_decode_output.audio_values[0, 0])
-                # =======================================
-
-        if generate_returned_dict:
-            return CsmGenerateOutput(audio=audio, **generate_output)
-        elif output_audio:
-            return audio
-        else:
-            return generate_output
 
 
 __all__ = [
