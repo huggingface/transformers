@@ -128,12 +128,12 @@ for output in outputs:
 ```
 
 
-While the original few-shot prompting approach embedded examples within a single text string, using the chat template format can offer benefits by more closely mirroring the model's training:
+While the basic few-shot prompting approach embedded examples within a single text string, the chat template format offers the following benefits.
 
-* **Potentially Improved Understanding:** The model might better recognize the pattern and the expected roles of user input and assistant output.
-* **More Consistent Output:** Structuring the input according to the model's training can lead to more reliable adherence to the desired output format.
+- The model may have a potentially improved understanding because it can better recognize the pattern and the expected roles of user input and assistant output.
+- The model may more consistently output the desired output format because it is structured like its input during training.
 
-When working with different instruction-tuned models, it's crucial to consult their specific documentation to understand their recommended chat template and how to best structure your few-shot examples using this format.
+Always consult a specific instruction-tuned models documentation to learn more about the format of their chat template so that you can structure your few-shot prompts accordingly.
 
 ### Chain-of-thought
 
