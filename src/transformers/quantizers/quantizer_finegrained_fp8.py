@@ -196,7 +196,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
     def update_tp_plan(self, config):
         if "Qwen3" in config.__class__.__name__:
-            print(config.__class__.__name__)
             text_plan = {
                 "layers.*.self_attn.q_proj.weight": "local_colwise",
                 "layers.*.self_attn.q_proj.weight_scale_inv": "local_colwise",
