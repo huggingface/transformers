@@ -216,6 +216,9 @@ class GraniteMoeHybridConfig(PretrainedConfig):
 
         mamba_intermediate = mamba_expand * hidden_size
 
+        if layer_types is not None and any(layer_type not in ["mamba", "attention"] for layer_type in layer_types):
+            raise ValueError("layer_types must be a list strings in  [`mamba` `attention`]")
+
         if mamba_intermediate % mamba_n_heads != 0:
             raise ValueError("mamba_n_heads must divide mamba_expand * hidden_size")
 

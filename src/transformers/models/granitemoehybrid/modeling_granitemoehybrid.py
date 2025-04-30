@@ -1066,10 +1066,8 @@ class GraniteMoeHybridDecoderLayer(nn.Module):
 
         if config.layers_block_type[layer_idx] == "mamba":
             self.mamba = GraniteMoeHybridMambaLayer(config, layer_idx)
-        elif config.layers_block_type[layer_idx] == "attention":
-            self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
         else:
-            raise ValueError(f"Expected layer type in ['attention', 'mamba'], got {self.layer_type}")
+            self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
         self.layer_type = config.layers_block_type[layer_idx]
 
     def forward(

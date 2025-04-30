@@ -16,6 +16,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import GraniteMoeHybridConfig, is_torch_available
 from transformers.testing_utils import (
     require_torch,
@@ -438,6 +440,11 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
                             [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
+
+    def test_config_requires_mamba_or_attention_layers(self):
+        """Ensure we can't create a config with disallowed layers."""
+        with pytest.raises(ValueError):
+            GraniteMoeHybridConfig(layer_types=["not allowed!"])
 
 
 # TODO add integration tests
