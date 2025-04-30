@@ -125,6 +125,7 @@ from .utils.import_utils import (
     is_sagemaker_mp_enabled,
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
+    is_true,
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
@@ -5026,8 +5027,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         error_msgs = []
 
         # Use multiprocessing Pool for parallel execution, off by default
-        if json.loads(os.environ.get("HF_ENABLE_PARALLEL_LOADING", "false")) and not is_deepspeed_zero3_enabled():
-            num_workers = json.loads(os.environ.get("HF_PARALLEL_LOADING_WORKERS", "8"))
+        ENV_VARS_TRUE_VALUES
+
+        if is_true(os.environ.get("HF_ENABLE_PARALLEL_LOADING", "false")) and not is_deepspeed_zero3_enabled():
+            num_workers = int(os.environ.get("HF_PARALLEL_LOADING_WORKERS", "8"))
 
             # Do not spawn anymore workers than you need
             num_workers = min(len(args_list), num_workers)
