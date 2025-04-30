@@ -52,6 +52,8 @@ class DummyDataset(Dataset):
         }
 
 def main():
+    tp_size = 2
+    dp_size = 2
     # Initialize distributed environment
     if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
         dist.init_process_group("nccl")
@@ -62,15 +64,18 @@ def main():
         logger.info(f"Distributed setup - Rank: {rank}, World size: {world_size}, Local rank: {local_rank}")
 
         # Create TP device mesh spanning all available ranks/GPUs
-        tp_device_mesh = DeviceMesh("cuda", torch.arange(world_size))
-        logger.info(f"Created TP DeviceMesh: {tp_device_mesh}")
+        mesh = torch.arange(world_size).reshape(dp_size, tp_size)
+        device_mesh = DeviceMesh(device_type="cuda", mesh=mesh, mesh_dim_names=("dp", "tp"))
+        tp_mesh = device_mesh["tp"]
+        dp_mesh = device_mesh["dp"]
+        logger.info(f"Created DeviceMesh: {device_mesh}")
+
 
     else:
         logger.info("Running in non-distributed mode. DeviceMesh not applicable.")
         rank = 0
         world_size = 1
         local_rank = 0
-        tp_device_mesh = None # No mesh for non-distributed
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load model and tokenizer
@@ -86,10 +91,10 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         tp_plan="auto",  # Keep auto plan for sharding strategy
-        device_mesh=tp_device_mesh if dist.is_initialized() else None # Pass the mesh
+        device_mesh=tp_mesh if dist.is_initialized() else None # Pass the mesh
     )
 
-    assert model.config.num_key_value_heads % tp_device_mesh.size() == 0, f"num_key_value_heads={model.config.num_key_value_heads} must be divisible by tp_size={tp_device_mesh.size()}"
+    assert model.config.num_key_value_heads % tp_mesh.size() == 0, f"num_key_value_heads={model.config.num_key_value_heads} must be divisible by tp_size={tp_mesh.size()}"
 
     # Move model to GPU - No longer needed, DeviceMesh handles placement
     device = torch.device(f"cuda:{local_rank}") # Still needed for data loader etc.
@@ -102,7 +107,7 @@ def main():
     # Create dummy dataset and dataloader
     dataset = DummyDataset(tokenizer, seq_len=64, size=16) # Small size for quick test
     if dist.is_initialized():
-        sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank)
+        sampler = DistributedSampler(dataset, num_replicas=dp_mesh.size(), rank=dp_mesh.get_local_rank())
         shuffle = False # Sampler handles shuffling
     else:
         # Non-distributed: use the determined device
@@ -162,7 +167,7 @@ def main():
     model.save_pretrained(f"test_model_{rank}", safe_serialization=False)
 
     # TODO: make loading topo-aware
-    # model = AutoModelForCausalLM.from_pretrained("test_model", tp_plan="auto", device_mesh=tp_device_mesh)
+    # model = AutoModelForCausalLM.from_pretrained("test_model", tp_plan="auto", device_mesh=tp_mesh)
 
     # Clean up distributed environment
     if dist.is_initialized():
