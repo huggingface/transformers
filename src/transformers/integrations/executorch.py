@@ -10,6 +10,7 @@
 # an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 # specific language governing permissions and limitations under the License.
 
+import logging
 from typing import Optional
 
 import torch
@@ -50,14 +51,22 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         """
         super().__init__()
 
-        if model.config.cache_implementation == "static":
+        if not hasattr(model.config, "use_cache") or model.config.use_cache is False:
+            raise ValueError("The model must have caching enabled to be performant.")
+
+        if not hasattr(model.config, "cache_implementation"):
+            # If `cache_implementation` is not specified explicitly in the config, `DynamicCache` will
+            # be used by default, so export will use `StaticCache` by default.
+            logging.info("Using `StaticCache` for export as `cache_implementation` is not specified in the config.")
             self.model = TorchExportableModuleWithStaticCache(model)
-        elif model.config.cache_implementation == "hybrid":
-            self.model = TorchExportableModuleWithHybridCache(model, max_batch_size, max_cache_len)
         else:
-            raise ValueError(
-                f"Unsupported cache implementation in this export recipe: '{model.config.cache_implementation}'"
-            )
+            if model.config.cache_implementation == "hybrid":
+                self.model = TorchExportableModuleWithHybridCache(model, max_batch_size, max_cache_len)
+            else:
+                raise ValueError(
+                    f"Unsupported cache implementation: {model.config.cache_implementation}. "
+                    "Please use `hybrid` or `static`."
+                )
 
     def forward(
         self,
@@ -462,6 +471,8 @@ def convert_and_export_with_cache(
     model: PreTrainedModel,
     example_input_ids: Optional[torch.Tensor] = None,
     example_cache_position: Optional[torch.Tensor] = None,
+    dynamic_shapes: Optional[dict] = None,
+    strict: Optional[bool] = None,
 ):
     """
     Convert a `PreTrainedModel` into an exportable module and export it using `torch.export`,
@@ -469,8 +480,10 @@ def convert_and_export_with_cache(
 
     Args:
         model (`PreTrainedModel`): The pretrained model to be exported.
-        example_input_ids (`torch.Tensor`): Example input token id used by `torch.export`.
-        example_cache_position (`torch.Tensor`): Example current cache position used by `torch.export`.
+        example_input_ids (`Optional[torch.Tensor]`): Example input token id used by `torch.export`.
+        example_cache_position (`Optional[torch.Tensor]`): Example current cache position used by `torch.export`.
+        dynamic_shapes(`Optional[dict]`): Dynamic shapes used by `torch.export`.
+        strict(`Optional[bool]`): Flag to instruct `torch.export` to use `torchdynamo`.
 
     Returns:
         Exported program (`torch.export.ExportedProgram`): The exported program generated via `torch.export`.
@@ -489,14 +502,21 @@ def convert_and_export_with_cache(
             example_cache_position if example_cache_position is not None else torch.tensor([0], dtype=torch.long)
         )
 
-        if is_torch_greater_or_equal("2.5.0"):
+        if is_torch_greater_or_equal("2.6.0"):
             exported_program = torch.export.export(
                 TorchExportableModuleWithStaticCache(model),
-                args=(example_input_ids,),
-                kwargs={"cache_position": example_cache_position},
-                strict=True,
+                args=(example_input_ids, example_cache_position),
+                kwargs={},
+                dynamic_shapes=dynamic_shapes,
+                strict=strict if strict is not None else True,
             )
         else:
+            if dynamic_shapes is not None:
+                logging.warning(
+                    "Dynamic shapes spec will be ignored by convert_and_export_with_cache for torch < 2.6.0."
+                )
+            if strict is not None:
+                logging.warning("The strict flag will be ingored by convert_and_export_with_cache for torch < 2.6.0.")
             # We have to keep this path for BC.
             #
             # Due to issue https://github.com/pytorch/pytorch/issues/128394, we need to switch to use an internal
