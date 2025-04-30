@@ -38,8 +38,8 @@ class GraniteMoeHybridConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the GraniteMoeHybrid model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GraniteMoeHybridModel`]
+            Vocabulary size of the GraniteMoeHybrid model. Defines the number of different tokens that
+            can be represented by the `inputs_ids` passed when calling [`GraniteMoeHybridModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -65,8 +65,8 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
+            Whether or not the model should return the last key/values attentions (not used by all models).
+            Only relevant if `config.is_decoder=True`.
         pad_token_id (`int`, *optional*):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 1):
@@ -89,40 +89,41 @@ class GraniteMoeHybridConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        embedding_multiplier (`float`, *optional*, defaults to 1.0): embedding multiplier
-        logits_scaling (`float`, *optional*, defaults to 1.0): divisor for output logits
-        residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier
-        attention_multiplier (`float`, *optional*, defaults to 1.0): attention multiplier
-        num_local_experts (`int`, *optional*, defaults to 8): total number of experts
-        num_experts_per_tok (`int`, *optional*, defaults to 2): number of experts per token
+        embedding_multiplier (`float`, *optional*, defaults to 1.0): embedding multiplier.
+        logits_scaling (`float`, *optional*, defaults to 1.0): divisor for output logits.
+        residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier.
+        attention_multiplier (`float`, *optional*, defaults to 1.0): attention multiplier.
+        num_local_experts (`int`, *optional*, defaults to 8): total number of experts.
+        num_experts_per_tok (`int`, *optional*, defaults to 2): number of experts per token.
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabeling this will also
             allow the model to output the auxiliary loss.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxialiary loss coefficient
-        shared_intermediate_size (`int`, *optional*, defaults to 0): intermediate size for shared experts. 0 implies
-            no shared experts.
+        shared_intermediate_size (`int`, *optional*, defaults to 0): intermediate size for shared experts.
+            0 implies no shared experts.
         position_embedding_type (`str`, *optional*, defaults to None): Positional embedding
             type to be used; defaults to None. Allowed options: `[None, "rope"]`
-        layer_types (`List`): list of strins to be used as layer types.
+        layer_types (`List`): list of strings to be used as layer types.
             Allowed choices: "mamba", "attention".
         mamba_n_heads (`int`, *optional*, defaults to 128):
-            The number of mamba heads used in the v2 implementation.
+            The number of mamba heads used.
         mamba_n_groups (`int`, *optional*, defaults to 1):
-            The number of the mamba groups used in the v2 implementation.
+            The number of the mamba groups used.
         mamba_d_state (`int`, *optional*, defaults to 256):
-            The dimension the mamba state space latents
+            The dimension the mamba latent state space.
         mamba_d_head (`int`, *optional*, defaults to `"auto"`):
-            Head embedding dimension size
+            Head embedding dimension size.
         mamba_d_conv (`int`, *optional*, defaults to 4):
-            The size of the mamba convolution kernel
+            The size of the mamba convolution kernel.
         mamba_expand (`int`, *optional*, defaults to 2):
-            Expanding factor (relative to hidden_size) used to determine the mamba intermediate size
+            Expanding factor (relative to hidden_size) used to determine the mamba intermediate size.
         mamba_chunk_size (`int`, *optional*, defaults to 256):
-            The chunks in which to break the sequence when doing prefill/training
+            The chunks in which to break the sequence when doing prefill/training.
         mamba_conv_bias (`bool`, *optional*, defaults to `True`):
             Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
         mamba_proj_bias (`bool`, *optional*, defaults to `False`):
-            Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
+            Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"])
+            of the mamba mixer block.
     ```python
     >>> from transformers import GraniteMoeHybridModel, GraniteMoeHybridConfig
 
