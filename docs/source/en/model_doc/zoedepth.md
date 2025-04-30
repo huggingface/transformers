@@ -35,13 +35,17 @@ The example below demonstrates how to generate text based on an image with [`Pip
 ```py
 import torch
 from transformers import pipeline
+from PIL import Image
+import requests
 
-pipeline = pipeline(
+image = Image.open(requests.get(url, stream=True).raw)
+pipe = pipeline(
     task="depth-estimation",
     model="Intel/zoedepth-nyu-kitti",
     device=0
 )
-pipeline(images="http://images.cocodataset.org/val2017/000000039769.jpg")
+results = pipe(image)
+depth = result['depth']
 ```
 
 </hfoption>
