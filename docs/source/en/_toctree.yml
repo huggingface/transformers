@@ -149,6 +149,8 @@
       title: TPU
     - local: perf_train_special
       title: Apple Silicon
+    - local: perf_train_gaudi
+      title: Intel Gaudi
     - local: perf_hardware
       title: Build your own machine
     title: Hardware

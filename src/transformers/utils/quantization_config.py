@@ -1554,6 +1554,7 @@ class TorchAoConfig(QuantizationConfigMixin):
     quant_type: Union[str, "AOBaseConfig"]  # noqa: F821
     modules_to_not_convert: Optional[List]
     quant_type_kwargs: Dict[str, Any]
+    include_embedding: bool
 
     """This is a config class for torchao quantization/sparsity techniques.
 
@@ -1565,6 +1566,9 @@ class TorchAoConfig(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
+        inlcude_embedding (`bool`, default to `False`):
+            Whether to include embedding in quantization or not, input embedding will be removed from
+            the module_not_to_convert list as well if this flag is set.
         kwargs (`Dict[str, Any]`, *optional*):
             The keyword arguments for the chosen type of quantization, for example, int4_weight_only quantization supports two keyword arguments
             `group_size` and `inner_k_tiles` currently. More API examples and documentation of arguments can be found in
@@ -1609,12 +1613,14 @@ class TorchAoConfig(QuantizationConfigMixin):
         self,
         quant_type: Union[str, "AOBaseConfig"],  # noqa: F821
         modules_to_not_convert: Optional[List] = None,
+        include_embedding: bool = False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.TORCHAO
         self.quant_type = quant_type
         self.modules_to_not_convert = modules_to_not_convert
         self.quant_type_kwargs = kwargs.get("quant_type_kwargs", kwargs)
+        self.include_embedding = include_embedding
         self.post_init()
 
     @staticmethod
