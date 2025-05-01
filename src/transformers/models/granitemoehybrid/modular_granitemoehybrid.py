@@ -65,8 +65,9 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeHybridMLP(config)
-        # attention should be initialized only if layer type is attention
+        # Either attention or mamba will be initialized, depending on the layer type.
         self.self_attn = None
+        self.mamba = None
 
         if config.layers_block_type[layer_idx] == "mamba":
             self.mamba = GraniteMoeHybridMambaLayer(config, layer_idx)
@@ -112,17 +113,18 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
                 into the model
         """
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
-        self_attn_weights = None
-        if self.layer_type == "mamba":
+
+        if self.mamba is not None:
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
                 cache_position=cache_position,
                 cache_params=past_key_value,
                 attention_mask=attention_mask,
             )
-        elif self.layer_type == "attention":
+            # No attention weights for state space layers
+            self_attn_weights = None
+        else:
             hidden_states, self_attn_weights, _ = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -133,8 +135,6 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-        else:
-            raise ValueError(f"Expected layer type in ['attention', 'mamba'], got {self.layer_type}")
 
         hidden_states = residual + hidden_states * self.residual_multiplier
 
