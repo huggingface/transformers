@@ -17,9 +17,7 @@ logger = logging.get_logger(__name__)
 class MMGroundingDinoConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MMGroundingDinoModel`]. It is used to instantiate a
-    Grounding DINO model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Grounding DINO
-    [IDEA-Research/grounding-dino-tiny](https://huggingface.co/IDEA-Research/grounding-dino-tiny) architecture.
+    MM Grounding DINO model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -109,8 +107,10 @@ class MMGroundingDinoConfig(PretrainedConfig):
             Whether to initialize the target with Embedding weights.
         query_dim (`int`, *optional*, defaults to 4):
             The dimension of the query vector.
-        decoder_bbox_embed_share (`bool`, *optional*, defaults to `True`):
+        decoder_bbox_embed_share (`bool`, *optional*, defaults to `False`):
             Whether to share the bbox regression head for all decoder layers.
+        decoder_cls_embed_share (`bool`, *optional*, defaults to `False`):
+            Whether to share the class head for all decoder layers.
         two_stage_bbox_embed_share (`bool`, *optional*, defaults to `False`):
             Whether to share the bbox embedding between the two-stage bbox generator and the region proposal
             generation.
@@ -126,10 +126,10 @@ class MMGroundingDinoConfig(PretrainedConfig):
     ```python
     >>> from transformers import MMGroundingDinoConfig, MMGroundingDinoModel
 
-    >>> # Initializing a Grounding DINO IDEA-Research/grounding-dino-tiny style configuration
+    >>> # Initializing a MM Grounding DINO configuration
     >>> configuration = MMGroundingDinoConfig()
 
-    >>> # Initializing a model (with random weights) from the IDEA-Research/grounding-dino-tiny style configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = MMGroundingDinoModel(configuration)
 
     >>> # Accessing the model configuration

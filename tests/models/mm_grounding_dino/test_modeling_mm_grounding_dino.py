@@ -251,7 +251,10 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     test_head_masking = False
     test_missing_keys = False
     pipeline_model_mapping = (
-        {"image-feature-extraction": MMGroundingDinoModel, "zero-shot-object-detection": MMGroundingDinoForObjectDetection}
+        {
+            "image-feature-extraction": MMGroundingDinoModel,
+            "zero-shot-object-detection": MMGroundingDinoForObjectDetection,
+        }
         if is_torch_available()
         else {}
     )
@@ -661,10 +664,16 @@ def prepare_text():
 class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return AutoProcessor.from_pretrained("rziga/mm_grounding_dino_tiny_o365v1_goldg_v3det") if is_vision_available() else None
+        return (
+            AutoProcessor.from_pretrained("rziga/mm_grounding_dino_tiny_o365v1_goldg_v3det")
+            if is_vision_available()
+            else None
+        )
 
     def test_inference_object_detection_head(self):
-        model = MMGroundingDinoForObjectDetection.from_pretrained("rziga/mm_grounding_dino_tiny_o365v1_goldg_v3det").to(torch_device)
+        model = MMGroundingDinoForObjectDetection.from_pretrained(
+            "rziga/mm_grounding_dino_tiny_o365v1_goldg_v3det"
+        ).to(torch_device)
 
         processor = self.default_processor
         image = prepare_img()
@@ -695,7 +704,7 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
             outputs, threshold=0.35, target_sizes=[(image.height, image.width)]
         )[0]
         expected_scores = torch.tensor([0.4480, 0.3973]).to(torch_device)
-        expected_slice_boxes = torch.tensor([343.7321,  23.8182, 637.5044, 373.8593]).to(torch_device)
+        expected_slice_boxes = torch.tensor([343.7321, 23.8182, 637.5044, 373.8593]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 2)
         torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-3, atol=1e-3)
@@ -758,7 +767,9 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
 
     @is_flaky()
     def test_cross_attention_mask(self):
-        model = MMGroundingDinoForObjectDetection.from_pretrained("rziga/mm_grounding_dino_tiny_o365v1_goldg_v3det").to(torch_device)
+        model = MMGroundingDinoForObjectDetection.from_pretrained(
+            "rziga/mm_grounding_dino_tiny_o365v1_goldg_v3det"
+        ).to(torch_device)
 
         processor = self.default_processor
         image = prepare_img()

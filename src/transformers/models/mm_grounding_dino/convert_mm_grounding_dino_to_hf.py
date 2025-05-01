@@ -73,7 +73,7 @@ def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dic
             (
                 f"class_embed.{layer}.bias",
                 f"model.decoder.class_embed.{layer}.bias",
-            )
+            ),
         )
         for param in ["weight", "bias"]:
             key_mapping[f"bbox_head.reg_branches.{layer}.0.{param}"] = (
@@ -81,21 +81,21 @@ def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dic
                 (
                     f"bbox_embed.{layer}.layers.0.{param}",
                     f"model.decoder.bbox_embed.{layer}.layers.0.{param}",
-                )
+                ),
             )
             key_mapping[f"bbox_head.reg_branches.{layer}.2.{param}"] = (
                 "duplicate",
                 (
                     f"bbox_embed.{layer}.layers.1.{param}",
                     f"model.decoder.bbox_embed.{layer}.layers.1.{param}",
-                )
+                ),
             )
             key_mapping[f"bbox_head.reg_branches.{layer}.4.{param}"] = (
                 "duplicate",
                 (
                     f"bbox_embed.{layer}.layers.2.{param}",
                     f"model.decoder.bbox_embed.{layer}.layers.2.{param}",
-                )
+                ),
             )
 
     # last branch in original gets mapped to encoder
@@ -143,7 +143,7 @@ def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dic
                         f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.self.query.{param}",
                         f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.self.key.{param}",
                         f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.self.value.{param}",
-                    )
+                    ),
                 )
                 key_mapping[f"backbone.stages.{stage}.blocks.{block}.attn.w_msa.proj.{param}"] = (
                     f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.output.dense.{param}"
@@ -195,7 +195,7 @@ def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dic
     ##################
 
     for k in mm_state:
-        if k.startswith("language_model"):
+        if k.startswith("language_model") and "position_ids" not in k:
             key_mapping[k] = k.replace("language_model.language_backbone.body.model", "model.text_backbone")
 
     for param in ["weight", "bias"]:
@@ -266,7 +266,7 @@ def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dic
                     f"model.encoder.layers.{layer}.text_enhancer_layer.self_attn.query.{param}",
                     f"model.encoder.layers.{layer}.text_enhancer_layer.self_attn.key.{param}",
                     f"model.encoder.layers.{layer}.text_enhancer_layer.self_attn.value.{param}",
-                )
+                ),
             )
             key_mapping[f"encoder.text_layers.{layer}.self_attn.attn.out_proj.{param}"] = (
                 f"model.encoder.layers.{layer}.text_enhancer_layer.self_attn.out_proj.{param}"
@@ -307,7 +307,7 @@ def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dic
                     f"model.decoder.layers.{layer}.self_attn.query.{param}",
                     f"model.decoder.layers.{layer}.self_attn.key.{param}",
                     f"model.decoder.layers.{layer}.self_attn.value.{param}",
-                )
+                ),
             )
             key_mapping[f"decoder.layers.{layer}.self_attn.attn.out_proj.{param}"] = (
                 f"model.decoder.layers.{layer}.self_attn.out_proj.{param}"
@@ -324,7 +324,7 @@ def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dic
                     f"model.decoder.layers.{layer}.encoder_attn_text.query.{param}",
                     f"model.decoder.layers.{layer}.encoder_attn_text.key.{param}",
                     f"model.decoder.layers.{layer}.encoder_attn_text.value.{param}",
-                )
+                ),
             )
             key_mapping[f"decoder.layers.{layer}.cross_attn_text.attn.out_proj.{param}"] = (
                 f"model.decoder.layers.{layer}.encoder_attn_text.out_proj.{param}"
@@ -422,21 +422,9 @@ def parse_args():
         choices=list(CHECKPOINT_URL_MAP.keys()),
         help="URL to the original mm grounding dino checkpoint.",
     )
-    parser.add_argument(
-        "--hub-user-name",
-        type=str,
-        help="User name on the huggingface hub."
-    )
-    parser.add_argument(
-        "--push-to-hub",
-        action="store_true",
-        help="Whether to push model to hub or not."
-    )
-    parser.add_argument(
-        "--draw-result",
-        action="store_true",
-        help="Whether to draw and display predictions or not."
-    )
+    parser.add_argument("--hub-user-name", type=str, help="User name on the huggingface hub.")
+    parser.add_argument("--push-to-hub", action="store_true", help="Whether to push model to hub or not.")
+    parser.add_argument("--draw-result", action="store_true", help="Whether to draw and display predictions or not.")
     return parser.parse_args()
 
 
@@ -496,6 +484,7 @@ def main(args):
             raise ValueError('You should provide "--hub-user-name" when pushing to hub.')
         hf_model.push_to_hub(f"{args.hub_user_name}/{args.checkpoint}")
         processor.push_to_hub(f"{args.hub_user_name}/{args.checkpoint}")
+
 
 if __name__ == "__main__":
     main(parse_args())
