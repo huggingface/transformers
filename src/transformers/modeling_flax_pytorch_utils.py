@@ -27,7 +27,7 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 import transformers
 
 from . import is_safetensors_available, is_torch_available
-from .utils import logging
+from .utils import check_torch_load_is_safe, logging
 
 
 if is_torch_available():
@@ -71,6 +71,7 @@ def load_pytorch_checkpoint_in_flax_state_dict(
                 )
                 raise
 
+            check_torch_load_is_safe()
             pt_state_dict = torch.load(pt_path, map_location="cpu", weights_only=True)
             logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters.")
 
@@ -247,6 +248,7 @@ def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
     flax_state_dict = {}
     for shard_file in shard_filenames:
         # load using msgpack utils
+        check_torch_load_is_safe()
         pt_state_dict = torch.load(shard_file, weights_only=True)
         weight_dtypes = {k: v.dtype for k, v in pt_state_dict.items()}
         pt_state_dict = {

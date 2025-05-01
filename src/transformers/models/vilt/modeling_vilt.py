@@ -139,7 +139,7 @@ class ViltEmbeddings(nn.Module):
         x_mask = x_mask.flatten(1)
 
         if max_image_length < 0 or max_image_length is None or not isinstance(max_image_length, int):
-            # suppose aug is 800 x 1333, then, maximum effective res is 800 x 1333 (if one side gets bigger, the other will be constrained and be shrinked)
+            # suppose aug is 800 x 1333, then, maximum effective res is 800 x 1333 (if one side gets bigger, the other will be constrained and be shrunk)
             # (800 // self.patch_size) * (1333 // self.patch_size) is the maximum number of patches that single image can get.
             # if self.patch_size = 32, 25 * 41 = 1025
             # if res is 384 x 640, 12 * 20 = 240

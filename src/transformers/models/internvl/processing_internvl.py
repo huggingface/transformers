@@ -276,7 +276,7 @@ class InternVLProcessor(ProcessorMixin):
 
         Args:
             metadata (`VideoMetadata`):
-                `VideoMetadata` object containing metadat about the video, such as "total_num_frames" or "fps".
+                `VideoMetadata` object containing metadata about the video, such as "total_num_frames" or "fps".
             num_frames (`int`, *optional*):
                 Number of frames to sample uniformly. If None, all frames are sampled.
             initial_shift (`bool`, `float` or `int`, defaults to `0`):

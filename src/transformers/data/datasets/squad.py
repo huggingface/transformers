@@ -24,7 +24,7 @@ from torch.utils.data import Dataset
 
 from ...models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
+from ...utils import check_torch_load_is_safe, logging
 from ..processors.squad import SquadFeatures, SquadV1Processor, SquadV2Processor, squad_convert_examples_to_features
 
 
@@ -148,6 +148,7 @@ class SquadDataset(Dataset):
         with FileLock(lock_path):
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 start = time.time()
+                check_torch_load_is_safe()
                 self.old_features = torch.load(cached_features_file, weights_only=True)
 
                 # Legacy cache files have only features, while new cache files
