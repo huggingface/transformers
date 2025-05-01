@@ -98,27 +98,10 @@ class PerceptionLMConfig(PretrainedConfig):
         vision_config=None,
         text_config=None,
         projector_pooling_ratio=1,
-        image_token_index=32000,
-        projector_hidden_act="gelu",
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-2,
-        image_seq_length=576,
-        multimodal_projector_bias=True,
+        image_token_index=128002,
         **kwargs,
     ):
         self.image_token_index = image_token_index
-        self.projector_hidden_act = projector_hidden_act
-        self.image_seq_length = image_seq_length
-
-        if vision_feature_select_strategy not in ["default", "full"]:
-            raise ValueError(
-                "vision_feature_select_strategy should be one of 'default', 'full'."
-                f"Got: {vision_feature_select_strategy}"
-            )
-
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-
         if isinstance(vision_config, dict):
             vision_config = PerceptionEncoderConfig(**vision_config)
         elif isinstance(vision_config, PerceptionEncoderConfig):
