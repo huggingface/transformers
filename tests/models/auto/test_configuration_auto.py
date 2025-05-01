@@ -124,7 +124,6 @@ class AutoConfigTest(unittest.TestCase):
             reloaded_config = AutoConfig.from_pretrained(tmp_dir, trust_remote_code=True)
         self.assertEqual(reloaded_config.__class__.__name__, "NewModelConfig")
 
-
     def test_from_pretrained_dynamic_config_conflict(self):
         class NewModelConfigLocal(BertConfig):
             model_type = "new-model"
