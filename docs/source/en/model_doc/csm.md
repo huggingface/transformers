@@ -56,7 +56,11 @@ inputs = processor(f"[{speaker_id}]{text}", add_special_tokens=True).to(device)
 conversation = [
     {"role": "0", "content": [{"type": "text", "text": "The past is just a story we tell ourselves."}]},
 ]
-inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True).to(device)
+inputs = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    return_dict=True,
+).to(device)
 
 # infer the model
 audio_values = model.generate(**inputs, output_audio=True)
@@ -71,7 +75,7 @@ CSM can be used to generate speech given a conversation, allowing consistency in
 import torch
 import soundfile as sf
 from transformers import CsmForConditionalGeneration, AutoProcessor
-from datasets import load_dataset
+from datasets import load_dataset, Audio
 
 model_id = "eustlb/csm-1b"
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -82,6 +86,8 @@ model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
 
 # prepare the inputs
 ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+# ensure the audio is 24kHz
+ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 conversation = []
 
 # 1. context
@@ -115,7 +121,7 @@ CSM supports batched inference!
 import torch
 import soundfile as sf
 from transformers import CsmForConditionalGeneration, AutoProcessor
-from datasets import load_dataset
+from datasets import load_dataset, Audio
 
 model_id = "eustlb/csm-1b"
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -126,6 +132,8 @@ model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
 
 # prepare the inputs 
 ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+# ensure the audio is 24kHz
+ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 # here a batch with two prompts
 conversation = [
     [
@@ -171,7 +179,7 @@ CSM supports full-graph compilation with CUDA graphs!
 import torch
 import copy
 from transformers import CsmForConditionalGeneration, AutoProcessor
-from datasets import load_dataset
+from datasets import load_dataset, Audio
 
 model_id = "eustlb/csm-1b"
 device = "cuda"
@@ -223,6 +231,8 @@ class TimerContext:
 
 # prepare the inputs 
 ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+# ensure the audio is 24kHz
+ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 
 conversation = [
     {
@@ -324,7 +334,7 @@ CSM Transformers integration supports training!
 ```python
 import torch
 from transformers import CsmForConditionalGeneration, AutoProcessor
-from datasets import load_dataset
+from datasets import load_dataset, Audio
 
 model_id = "eustlb/csm-1b"
 device = "cuda"
@@ -335,6 +345,8 @@ model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
 model.eval()
 
 ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+# ensure the audio is 24kHz
+ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 conversation = []
 
 # context
@@ -373,7 +385,7 @@ The original code can be found [here](https://github.com/SesameAILabs/csm).
 ## CsmProcessor
 
 [[autodoc]] CsmProcessor
-    _ __call__  
+    - __call__
 
 ## CsmForConditionalGeneration
 

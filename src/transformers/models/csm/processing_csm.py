@@ -166,7 +166,7 @@ class CsmProcessor(ProcessorMixin):
         depth_decoder_labels_ratio: Optional[float] = 1.0,
         **kwargs: Unpack[CsmProcessorKwargs],
     ):
-        """
+        r"""
         Main method to prepare text(s) and audio to be fed as input to the model. This method forwards the `text`
         arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode
         the text. To prepare the audio, this method forwards the `audio` arguments to
