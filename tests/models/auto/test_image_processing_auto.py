@@ -13,11 +13,11 @@
 # limitations under the License.
 
 import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-import os
 
 import transformers
 from transformers import (
@@ -192,7 +192,9 @@ class AutoImageProcessorTest(unittest.TestCase):
             image_processor.save_pretrained(tmp_dir)
             reloaded_image_processor = AutoImageProcessor.from_pretrained(tmp_dir, trust_remote_code=True)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "image_processor.py")))  # Assert we saved custom code
-            self.assertEqual(reloaded_image_processor.auto_map["AutoImageProcessor"], "image_processor.NewImageProcessor")
+            self.assertEqual(
+                reloaded_image_processor.auto_map["AutoImageProcessor"], "image_processor.NewImageProcessor"
+            )
         self.assertEqual(reloaded_image_processor.__class__.__name__, "NewImageProcessor")
 
         # Test the dynamic module is reloaded if we force it.
