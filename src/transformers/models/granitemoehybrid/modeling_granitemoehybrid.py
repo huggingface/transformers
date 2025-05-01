@@ -38,6 +38,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
@@ -1373,6 +1374,7 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(GRANITEMOEHYBRID_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1484,8 +1486,6 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
 
         next_cache = next_decoder_cache if use_cache else None
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,

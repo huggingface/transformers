@@ -20,7 +20,12 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    can_return_tuple,
+    logging,
+)
 from ..bamba.configuration_bamba import BambaConfig
 from ..bamba.modeling_bamba import (
     BambaMixer,
@@ -300,6 +305,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             [GraniteMoeHybridDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(GRANITEMOEHYBRID_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -411,8 +417,6 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
         next_cache = next_decoder_cache if use_cache else None
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
