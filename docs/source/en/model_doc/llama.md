@@ -156,24 +156,7 @@ visualizer("Plants create energy through a process known as")
     - forward
 
 ## LlamaForSequenceClassification
-```python
-from transformers import LlamaForSequenceClassification, LlamaTokenizer
-import torch
 
-# Load model
-model = LlamaForSequenceClassification.from_pretrained("meta-llama/Llama-2-7b-hf")
-tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-
-# Prepare input
-inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-
-# Get prediction
-with torch.no_grad():
-    logits = model(**inputs).logits
-predicted_class = logits.argmax().item()
-
-print(f"Predicted class: {predicted_class}")
-```
 [[autodoc]] LlamaForSequenceClassification
     - forward
 
