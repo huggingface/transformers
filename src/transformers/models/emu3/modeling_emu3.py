@@ -1914,6 +1914,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
+    # Copied from transformers.models.emu3.modeling_emu3.Emu3Model.get_image_tokens
     def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
         """
         Tokenizes images into discrete tokens with VQGAN module. Converts
@@ -1932,6 +1933,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         return bpe_tokens
 
     @torch.no_grad
+    # Copied from transformers.models.emu3.modeling_emu3.Emu3Model.decode_image_tokens
     def decode_image_tokens(self, image_tokens: torch.LongTensor, height: int, width: int):
         """
         Decodes generated image tokens from language model to continuous pixel values

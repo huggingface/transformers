@@ -477,6 +477,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
 
         self.post_init()
 
+    # Copied from transformers.models.got_ocr2.modeling_got_ocr2.GotOcr2Model.get_image_features
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

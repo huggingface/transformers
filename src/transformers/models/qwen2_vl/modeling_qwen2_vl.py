@@ -1756,6 +1756,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    # Copied from transformers.models.qwen2_vl.modeling_qwen2_vl.Qwen2VLModel.get_rope_index
     def get_rope_index(
         self,
         input_ids: Optional[torch.LongTensor] = None,

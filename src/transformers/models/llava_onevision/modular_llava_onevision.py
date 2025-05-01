@@ -349,6 +349,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         super().__init__(config)
         del self.vision_resampler
 
+    # Copied from transformers.models.llava_onevision.modeling_llava_onevision.LlavaOnevisionModel.pack_image_features
     def pack_image_features(self, image_features, image_sizes, image_newline=None, vision_aspect_ratio="anyres_max_9"):
         """
         Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
@@ -415,6 +416,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features.device)
         return image_features, feature_lens
 
+    # Copied from transformers.models.llava_onevision.modeling_llava_onevision.LlavaOnevisionModel.apply_pooling
     def apply_pooling(self, image_features):
         height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
         batch_frames, seq_len, dim = image_features.shape
@@ -429,6 +431,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         image_features = image_features.view(batch_frames, -1, dim)
         return image_features
 
+    # Copied from transformers.models.llava_onevision.modeling_llava_onevision.LlavaOnevisionModel.get_video_features
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,

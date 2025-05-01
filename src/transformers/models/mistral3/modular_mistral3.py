@@ -231,6 +231,7 @@ class Mistral3Model(LlavaModel):
 
 
 class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
+    # Copied from transformers.models.mistral3.modeling_mistral3.Mistral3Model.get_image_features
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

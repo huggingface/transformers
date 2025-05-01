@@ -677,6 +677,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextModel.pack_image_features
     def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
         """
         Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
@@ -745,6 +746,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features.device)
         return image_features, feature_lens
 
+    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextModel.get_image_features
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

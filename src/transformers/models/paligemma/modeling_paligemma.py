@@ -561,6 +561,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask,
@@ -568,7 +569,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         past_key_values=None,
         cache_position=None,
         input_tensor=None,
-        is_training: Optional[bool] = None,
+        is_training: bool = None,
     ):
         if self.config.text_config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
@@ -629,6 +630,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
         return causal_mask
 
+    # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaModel.get_image_features
     def get_image_features(self, pixel_values: torch.FloatTensor):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.

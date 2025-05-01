@@ -525,6 +525,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    # Copied from transformers.models.video_llava.modeling_video_llava.VideoLlavaModel.get_image_features
     def get_image_features(
         self,
         pixel_values_images: torch.FloatTensor,
@@ -569,6 +570,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
 
         return image_features
 
+    # Copied from transformers.models.video_llava.modeling_video_llava.VideoLlavaModel.get_video_features
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,

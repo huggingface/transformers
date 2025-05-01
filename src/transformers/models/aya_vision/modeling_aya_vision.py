@@ -117,7 +117,6 @@ class AyaVisionPreTrainedModel(PreTrainedModel):
     config_class = AyaVisionConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
     _supports_flash_attn_2 = True
@@ -312,18 +311,6 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
-
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -508,7 +495,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
         Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
                The tensors corresponding to the input images.
             vision_feature_layer (`Union[int, List[int]]`):
                 The index of the layer to select the vision feature. If multiple indices are provided,

@@ -326,6 +326,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    # Copied from transformers.models.fuyu.modeling_fuyu.FuyuModel.gather_continuous_embeddings
     def gather_continuous_embeddings(
         self,
         word_embeddings: torch.Tensor,

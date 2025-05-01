@@ -560,6 +560,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         self.vision_resampler = LlavaNextVideoPooler(config)
         self.post_init()
 
+    # Copied from transformers.models.llava_next_video.modeling_llava_next_video.LlavaNextVideoModel.get_image_features
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -620,6 +621,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         image_features = torch.split(image_features, image_num_patches, dim=0)
         return image_features
 
+    # Copied from transformers.models.llava_next_video.modeling_llava_next_video.LlavaNextVideoModel.get_video_features
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,

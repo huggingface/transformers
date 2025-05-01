@@ -183,6 +183,7 @@ class VipLlavaModel(LlavaModel):
 
 
 class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
+    # Copied from transformers.models.vipllava.modeling_vipllava.VipLlavaModel.get_image_features
     def get_image_features(self, pixel_values: torch.FloatTensor, vision_feature_layers: Union[int, List[int]]):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.

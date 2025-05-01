@@ -737,6 +737,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         super().__init__(config)
         self.visual = Qwen2_5_VisionTransformerPretrainedModel._from_config(config.vision_config)
 
+    # Copied from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLModel.get_rope_index
     def get_rope_index(
         self,
         input_ids: Optional[torch.LongTensor] = None,

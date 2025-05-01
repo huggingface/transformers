@@ -919,6 +919,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
     def tie_weights(self):
         return self.language_model.tie_weights()
 
+    # Copied from transformers.models.gemma3.modeling_gemma3.Gemma3Model.get_image_features
     def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Projects the last hidden state from the vision model into language model space.
@@ -933,6 +934,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         image_features = self.multi_modal_projector(vision_outputs)
         return image_features
 
+    # Copied from transformers.models.gemma3.modeling_gemma3.Gemma3Model._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask,

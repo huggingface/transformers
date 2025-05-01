@@ -1179,6 +1179,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
 
         return model_inputs
 
+    # Copied from transformers.models.llava_next_video.modeling_llava_next_video.LlavaNextVideoModel.get_video_features
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,

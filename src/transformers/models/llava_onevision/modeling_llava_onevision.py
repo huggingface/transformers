@@ -1214,6 +1214,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
 
         return video_features
 
+    # Copied from transformers.models.llava_onevision.modeling_llava_onevision.LlavaOnevisionModel.apply_pooling
     def apply_pooling(self, image_features):
         height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
         batch_frames, seq_len, dim = image_features.shape
