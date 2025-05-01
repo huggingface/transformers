@@ -4252,8 +4252,6 @@ class ModelTesterMixin:
                 tol = torch.finfo(torch.float16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
-    
-
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test

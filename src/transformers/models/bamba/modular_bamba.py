@@ -894,7 +894,6 @@ class BambaModel(BambaPreTrainedModel):
                     "position_ids must also be specified when (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k, seq_idx) are provided for padding-free training."
                 )
 
-
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
