@@ -127,6 +127,7 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
+
 @slow
 @require_read_token
 @require_torch_large_gpu
