@@ -281,10 +281,7 @@ class CsmGenerationMixin(GenerationMixin):
             backbone_last_hidden_state = outputs.hidden_states[-1][:, -1, :]
 
             depth_decoder_outputs = self.depth_decoder.generate(
-                input_ids=depth_decoder_input_ids,
-                backbone_last_hidden_state=backbone_last_hidden_state.clone()
-                if torch.compiler.is_compiling()
-                else backbone_last_hidden_state,
+                input_ids=depth_decoder_input_ids, backbone_last_hidden_state=backbone_last_hidden_state.clone()
             )
             codebook_ids = (
                 depth_decoder_outputs
