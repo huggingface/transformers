@@ -202,8 +202,6 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
                 The image to be resized.
             size (`Dict[str, int]`):
                 The size `{"height": h, "width": w}` to resize the image to.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                The resampling filter to use.
         """
 
         input_height, input_width = image.shape[-2:]
@@ -270,7 +268,7 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
                 Image to resize.
             size (`SizeDict`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
+            interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BICUBIC`):
                 `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
 
         Returns:
