@@ -21,9 +21,27 @@ from typing import List, Optional, Union
 import transformers
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import ImageInput
-from transformers.processing_utils import ProcessorMixin
+from transformers.processing_utils import ProcessorMixin, ProcessingKwargs, Unpack, ImagesKwargs
 from transformers.tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
 from transformers.utils import TensorType
+
+
+class MagmaImagesKwargs(ImagesKwargs):
+    min_pixels: Optional[int]
+    max_pixels: Optional[int]
+    patch_size: Optional[int]
+    temporal_patch_size: Optional[int]
+    merge_size: Optional[int]
+
+
+class MagmaProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: MagmaImagesKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+        },
+    }
+
 
 class MagmaProcessor(ProcessorMixin):
     r"""
@@ -57,6 +75,7 @@ class MagmaProcessor(ProcessorMixin):
         max_length: Optional[int] = None,
         do_pad: Optional[bool] = False,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        **kwargs: Unpack[MagmaProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
