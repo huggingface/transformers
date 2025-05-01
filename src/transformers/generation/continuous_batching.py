@@ -98,6 +98,9 @@ class RequestState:
 
         return False
 
+    def __repr__(self):
+        return f"RequestState(request_id={self.request_id}, status={self.status}, generated_len={self.generated_len()}, current_len={self.current_len()})"
+
 
 class PagedAttentionCache(Cache):
     def __init__(
@@ -136,7 +139,7 @@ class PagedAttentionCache(Cache):
         if num_blocks is None or block_size is None:
             logger.info("Calculating optimal block size and number...")
             num_blocks, block_size = compute_optimal_blocks(
-                device, config, generation_config, initial_prompt_shapes or [], dtype, median_prefill_length=50
+                device, config, generation_config, initial_prompt_shapes or [], dtype, median_prefill_length=200
             )
             logger.info(f"Using calculated num_blocks={num_blocks}, block_size={block_size}")
 
@@ -365,7 +368,7 @@ def compute_optimal_blocks(
     generation_config: GenerationConfig,
     inputs: List[List[int]],
     dtype: torch.dtype = torch.bfloat16,
-    safety_margin: float = 0.8,  # Reduced from 0.9 to be more conservative
+    safety_margin: float = 0.9,
     median_prefill_length: Optional[int] = None,
 ):
     """Calculate optimal number and size of blocks for the KV cache.
@@ -572,10 +575,10 @@ class ContinuousBatchProcessor:
             selected_requests.extend(decoding_requests[:available_slots])
             batch_token_count += min(len(decoding_requests), available_slots)  # 1 token per request
 
-        # Next, try to add new requests from waiting queue and split requests
-        candidates: List[RequestState] = list(self.waiting_requests)
-        split_waiting = [state for state in self.active_requests.values() if state.status == "split_pending_remainder"]
-        candidates.extend(split_waiting)
+        candidates: List[RequestState] = [
+            state for state in self.active_requests.values() if state.status == "split_pending_remainder"
+        ]
+        candidates.extend(list(self.waiting_requests))
 
         request_ids_to_remove_from_waiting = set()
 
@@ -822,6 +825,14 @@ class ContinuousBatchProcessor:
                 else:
                     state.status = "decoding"
                     state.prompt_ids = []
+
+                    token = generated_ids[token_idx].item()
+                    token_idx += 1
+
+                    if state.update_with_token(token):
+                        finished_request_ids.append(req_id)
+
+                    self._send_output(state, token)
 
             elif state.status == "decoding":
                 if token_idx >= len(generated_ids):
