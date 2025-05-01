@@ -882,10 +882,10 @@ class BambaModel(BambaPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        fa_kwargs = (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k, seq_idx)
-        num_fa_kwargs_used = sum(k is not None for k in fa_kwargs)
-        if num_fa_kwargs_used:
-            if num_fa_kwargs_used != len(fa_kwargs):
+        padding_free_kwargs = (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k, seq_idx)
+        num_padding_free_kwargs_used = sum(k is not None for k in padding_free_kwargs)
+        if num_padding_free_kwargs_used:
+            if num_padding_free_kwargs_used != len(padding_free_kwargs):
                 raise ValueError(
                     "All of (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k, seq_idx) must be specified for padding-free training."
                 )
