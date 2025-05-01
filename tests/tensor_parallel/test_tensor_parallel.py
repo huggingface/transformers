@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import subprocess
 import tempfile
 import textwrap
@@ -32,15 +33,18 @@ if is_torch_available():
 class TestTensorParallel(TestCasePlus):
     nproc_per_node = 2
 
-    def torchrun(self, script: str):
+    def torchrun(self, script: str, is_torchrun: bool = True):
         """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necessary."""
         with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
             tmp.write(script)
             tmp.flush()
             tmp.seek(0)
-            cmd = (
-                f"torchrun --nproc_per_node {self.nproc_per_node} --master_port {get_torch_dist_unique_port()} {tmp.name}"
-            ).split()
+            if is_torchrun:
+                cmd = (
+                    f"torchrun --nproc_per_node {self.nproc_per_node} --master_port {get_torch_dist_unique_port()} {tmp.name}"
+                ).split()
+            else:
+                cmd = ["python", tmp.name]
 
             # Note that the subprocess will be waited for here, and raise an error if not successful
             try:
@@ -87,6 +91,47 @@ class TestTensorParallel(TestCasePlus):
             """
         )
         self.torchrun(script_to_run)
+
+    def test_model_save(self):
+        from safetensors import safe_open
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for is_torchrun in [True, False]:
+                script_to_run = textwrap.dedent(
+                    f"""
+                    import torch
+                    import os
+                    from transformers import AutoModelForCausalLM
+
+                    model_id = "JackFram/llama-68m"
+                    kwargs = dict()
+
+                    if os.environ.get("RANK", None) is not None:
+                        kwargs["tp_plan"] = "auto"
+                        result_dir = "{tmp_dir}/tp"
+                    else:
+                        result_dir = "{tmp_dir}/nontp"
+
+                    model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
+                    model.save_pretrained(result_dir)
+                    """
+                )
+                self.torchrun(script_to_run, is_torchrun=is_torchrun)
+
+            non_tp_model_path = os.path.join(tmp_dir, "nontp")
+            tp_model_path = os.path.join(tmp_dir, "tp")
+
+            for filename in os.listdir(non_tp_model_path):
+                if not filename.endswith(".safetensors"):
+                    continue
+
+                non_tp_model = safe_open(os.path.join(non_tp_model_path, filename), device="cpu", framework="pt")
+                tp_model = safe_open(os.path.join(tp_model_path, filename), device="cpu", framework="pt")
+                for non_tp_key in non_tp_model.keys():
+                    non_tp_tensor = non_tp_model.get_tensor(non_tp_key)
+                    tp_tensor = tp_model.get_tensor(non_tp_key)
+                    assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
+                    del non_tp_tensor, tp_tensor
 
 
 @require_torch_multi_gpu
