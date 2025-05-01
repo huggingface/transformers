@@ -77,16 +77,6 @@ class NougatFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """,
 )
 class NougatImageProcessorFast(BaseImageProcessorFast):
-    # This generated class can be used as a starting point for the fast image processor.
-    # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,
-    # only the default values should be set in the class.
-    # If the image processor requires more complex augmentations, methods from BaseImageProcessorFast can be overridden.
-    # In most cases, only the `_preprocess` method should be overridden.
-
-    # For an example of a fast image processor requiring more complex augmentations, see `LlavaNextImageProcessorFast`.
-
-    # Default values should be checked against the slow image processor
-    # None values left after checking can be removed
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -157,8 +147,7 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
             gray_threshold (`int`, *optional*, defaults to `200`)
                 Value below which pixels are considered to be gray.
         """
-        image_rgb = image[:3, :, :]
-        data = F.rgb_to_grayscale(image_rgb, num_output_channels=1)
+        data = F.rgb_to_grayscale(image, num_output_channels=1)
 
         max_val = torch.max(data)
         min_val = torch.min(data)
@@ -173,18 +162,6 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
 
         return image
 
-    def _crop_margin(self, stacked_images: "torch.Tensor") -> "torch.Tensor":
-        """
-        Crops the margin of a batch of images. Gray pixels are considered margin (i.e., pixels with a value below the
-        threshold).
-
-        Args:
-            image (`torch.Tensor`):
-                The image to be cropped.
-        """
-
-        return torch.stack([self.crop_margin(image) for image in stacked_images])
-
     def align_long_axis(
         self,
         image: "torch.Tensor",
@@ -194,7 +171,7 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
         Align the long axis of the image to the longest axis of the specified size.
 
         Args:
-            image (`np.ndarray`):
+            image (`torch.Tensor`):
                 The image to be aligned.
             size (`Dict[str, int]`):
                 The size `{"height": h, "width": w}` to align the long axis to.
@@ -248,16 +225,16 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
 
         return F.resize(image, new_size, interpolation=F.InterpolationMode.BICUBIC)
 
-    def pad_image(
+    def pad_images(
         self,
         image: "torch.Tensor",
         size: SizeDict,
     ) -> "torch.Tensor":
         """
-        Pad the image to the specified size at the top, bottom, left and right.
+        Pads a batch of images to the specified size at the top, bottom, left and right.
 
         Args:
-            image (`np.ndarray`):
+            image (`torch.tensor`):
                 The image to be padded.
             size (`Dict[str, int]`):
                 The size `{"height": h, "width": w}` to pad the image to.
@@ -328,12 +305,13 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
+        # Crop images
+        images = [self.crop_margin(image) for image in images]
+
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
-            if do_crop_margin:
-                stacked_images = self._crop_margin(stacked_images)
             if do_align_long_axis:
                 stacked_images = self.align_long_axis(image=stacked_images, size=size)
             if do_resize:
@@ -341,7 +319,7 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
             if do_thumbnail:
                 stacked_images = self.thumbnail(image=stacked_images, size=size)
             if do_pad:
-                stacked_images = self.pad_image(image=stacked_images, size=size)
+                stacked_images = self.pad_images(image=stacked_images, size=size)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 

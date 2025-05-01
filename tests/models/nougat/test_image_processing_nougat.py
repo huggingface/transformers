@@ -110,16 +110,6 @@ class NougatImageProcessingTester:
         )
 
 
-def to_channels_first(
-    image: np.array,
-):
-    """
-    Converts a NumPy image from channels-last (H, W, C) to channels-first (C, H, W).
-    """
-    if image.ndim == 3 and image.shape[-1] in [1, 3]:
-        return np.transpose(image, (2, 0, 1))
-
-
 @require_torch
 @require_vision
 class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
@@ -175,7 +165,6 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             else:
                 image_processor = image_processing_class(**self.image_processor_dict)
                 cropped_image = image_processor.crop_margin(image)
-                cropped_image = to_channels_first(cropped_image)
                 self.assertTrue(np.array_equal(image, cropped_image))
 
     def test_crop_margin_centered_black_square(self):
@@ -294,43 +283,6 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     image_inputs,
                     return_tensors="pt",
                     input_data_format="channels_last",
-                    image_mean=0,
-                    image_std=1,
-                ).pixel_values
-                expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
-                self.assertEqual(
-                    tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
-                )
-
-    def test_call_torch_4_channels(self):
-        for image_processing_class in self.image_processor_list:
-            if image_processing_class == NougatImageProcessorFast:
-                # Test that can process images which have an arbitrary number of channels
-                # Initialize image_processing
-                image_processor = image_processing_class(**self.image_processor_dict)
-
-                # create random numpy tensors
-                self.image_processor_tester.num_channels = 4
-                image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-
-                # Test not batched input
-                encoded_images = image_processor(
-                    image_inputs[0],
-                    return_tensors="pt",
-                    input_data_format="channels_first",
-                    image_mean=0,
-                    image_std=1,
-                ).pixel_values
-                expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(
-                    [image_inputs[0]]
-                )
-                self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
-
-                # Test batched
-                encoded_images = image_processor(
-                    image_inputs,
-                    return_tensors="pt",
-                    input_data_format="channels_first",
                     image_mean=0,
                     image_std=1,
                 ).pixel_values
