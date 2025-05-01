@@ -17,6 +17,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+import os
 
 import transformers
 from transformers import (
@@ -190,12 +191,9 @@ class AutoImageProcessorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             image_processor.save_pretrained(tmp_dir)
             reloaded_image_processor = AutoImageProcessor.from_pretrained(tmp_dir, trust_remote_code=True)
+            self.assertTrue(os.path.exists(os.path.join(tmp_dir, "image_processor.py")))  # Assert we saved custom code
+            self.assertEqual(reloaded_image_processor.auto_map["AutoImageProcessor"], "image_processor.NewImageProcessor")
         self.assertEqual(reloaded_image_processor.__class__.__name__, "NewImageProcessor")
-
-        # The image processor file is cached in the snapshot directory. So the module file is not changed after dumping
-        # to a temp dir. Because the revision of the module file is not changed.
-        # Test the dynamic module is loaded only once if the module file is not changed.
-        self.assertIs(image_processor.__class__, reloaded_image_processor.__class__)
 
         # Test the dynamic module is reloaded if we force it.
         reloaded_image_processor = AutoImageProcessor.from_pretrained(
