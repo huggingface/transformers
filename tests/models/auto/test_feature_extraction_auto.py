@@ -128,7 +128,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             reloaded_feature_extractor = AutoFeatureExtractor.from_pretrained(tmp_dir, trust_remote_code=True)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "feature_extractor.py")))  # Assert we saved code
             self.assertEqual(
-                reloaded_feature_extractor.auto_map["AutoFeatureExtractor"], "feature_extraction.NewFeatureExtractor"
+                reloaded_feature_extractor.auto_map["AutoFeatureExtractor"], "feature_extractor.NewFeatureExtractor"
             )
         self.assertEqual(reloaded_feature_extractor.__class__.__name__, "NewFeatureExtractor")
 
