@@ -92,8 +92,11 @@ echo -e "Plants create <mask> through a process known as photosynthesis." | tran
 ## Notes
 
 - Inputs should be padded on the right because BERT uses absolute position embeddings.
-- Models that load the facebook/bart-large-cnn weights will not have a mask_token_id, or be able to perform mask-filling tasks.
-- Bart doesn’t use token_type_ids for sequence classification. Use BartTokenizer or encode() to get the proper splitting.
+- The [facebook/bart-large-cnn](https://huggingface.co/facebook/bart-large-cnn) checkpoint doesn't include `mask_token_id` which means it can't perform mask-filling tasks.
+- BART doesn’t use `token_type_ids` for sequence classification. Use [`BartTokenizer`] or [`~PreTrainedTokenizerBase.encode`] to get the proper splitting.
+- The forward pass of [`BartModel`] creates the `decoder_input_ids` if they're not passed. This can be different from other model APIs, but it is a useful feature for mask-filling tasks.
+- Model predictions are intended to be identical to the original implementation when `forced_bos_token_id=0`. This only works if the text passed to `fairseq.encode` begins with a space.
+- [`~GenerationMixin.generate`] should be used for conditional generation tasks like summarization.
 
 ## BartConfig
 
