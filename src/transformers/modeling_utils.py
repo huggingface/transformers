@@ -5985,8 +5985,8 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
             # Note that we use an absolute value instead of device proportion here, as a 8GiB device could still allocate too much
             # if using e.g. 90% of device size, while a 140GiB device would allocate too little
             byte_count = min(byte_count, max(0, int(device_memory - 1.2 * 1024**3)))
-            # If there is unused cuda memory, we can skip/reduce the allocation.
-            unused_memory = torch.cuda.memory_reserved() - torch.cuda.memory_allocated()
+            # If there is *unused* reserved cuda memory, we can skip/reduce the allocation.
+            unused_memory = torch.cuda.memory_reserved(index) - torch.cuda.memory_allocated(index)
             byte_count = max(0, byte_count - unused_memory)
         # Allocate memory
         if byte_count > 0:
