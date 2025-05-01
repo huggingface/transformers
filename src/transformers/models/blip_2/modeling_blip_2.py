@@ -1,3 +1,4 @@
+
 # coding=utf-8
 # Copyright 2023 The Salesforce Authors and The HuggingFace Team. All rights reserved.
 #
@@ -41,7 +42,7 @@ from ...utils import (
     replace_return_docstrings,
     torch_int,
 )
-from ..auto import AutoModel, AutoModelForCausalLM, AutoModelForSeq2SeqLM
+from ..auto import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 
 
@@ -1532,11 +1533,16 @@ class Blip2Model(Blip2PreTrainedModel):
         self.qformer = Blip2QFormerModel(config.qformer_config)
 
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
-        self.language_model = AutoModel.from_config(config.text_config)
+        if config.use_decoder_only_language_model:
+            language_model = AutoModelForCausalLM.from_config(config.text_config)
+        else:
+            language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
 
         # Update _tied_weights_keys using the base model used.
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+        if language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
+
+        self.language_model = language_model
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1546,6 +1552,18 @@ class Blip2Model(Blip2PreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
+
+    def set_output_embeddings(self, new_embeddings):
+        self.language_model.set_output_embeddings(new_embeddings)
+
+    def get_output_embeddings(self) -> nn.Module:
+        return self.language_model.get_output_embeddings()
+
+    def get_encoder(self):
+        return self.language_model.get_encoder()
+
+    def get_decoder(self):
+        return self.language_model.get_decoder()
 
     def _tie_weights(self):
         if not self.config.use_decoder_only_language_model:
@@ -1559,6 +1577,7 @@ class Blip2Model(Blip2PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1605,6 +1624,7 @@ class Blip2Model(Blip2PreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                labels=labels,
             )
 
         return text_outputs
@@ -1730,7 +1750,6 @@ class Blip2Model(Blip2PreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-        use_cache: Optional[bool] = None,
     ) -> Union[Tuple, Blip2ForConditionalGenerationModelOutput]:
         r"""
         Returns:
@@ -1807,10 +1826,22 @@ class Blip2Model(Blip2PreTrainedModel):
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=True,
-                use_cache=use_cache,
+                return_dict=return_dict,
             )
-            outputs = outputs.to_tuple() if not return_dict else outputs
+            logits = outputs.logits if return_dict else outputs[0]
+            loss = None
+            # we compute the loss here since we need to take into account the sequence length of the query embeds
+            if labels is not None:
+                labels = labels.to(logits.device)
+                logits = logits[:, -labels.size(1) :, :]
+                # Shift so that tokens < n predict n
+                shift_logits = logits[..., :-1, :].contiguous()
+                shift_labels = labels[..., 1:].contiguous().to(logits.device)
+
+                # Flatten the tokens
+                loss_fct = CrossEntropyLoss(reduction="mean")
+
+                loss = loss_fct(shift_logits.view(-1, self.config.text_config.vocab_size), shift_labels.view(-1))
         else:
             outputs = self.language_model(
                 inputs_embeds=inputs_embeds,
@@ -1820,14 +1851,19 @@ class Blip2Model(Blip2PreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=True,  # toggle for easier access to loss/logits below
-                use_cache=use_cache,
+                labels=labels,
             )
+            loss = outputs.loss
+            logits = outputs.logits
             outputs = outputs.to_tuple() if not return_dict else outputs
 
         if not return_dict:
-            return (vision_outputs, query_outputs, outputs)
+            output = (logits, vision_outputs, query_outputs, outputs)
+            return ((loss,) + output) if loss is not None else output
 
         return Blip2ForConditionalGenerationModelOutput(
+            loss=loss,
+            logits=logits,
             vision_outputs=vision_outputs,
             qformer_outputs=query_outputs,
             language_model_outputs=outputs,
