@@ -351,7 +351,7 @@ class AutoTokenizerTest(unittest.TestCase):
                 # Assert we're pointing at local code and not another remote repo
                 # TODO Matt: Should we also be saving the fast code at the same time and ensuring the fast
                 #      tokenizer autoclass is set?
-                self.assertEqual(tokenizer_config['auto_map']["AutoTokenizer"], ['tokenization.NewTokenizer', None])
+                self.assertEqual(tokenizer_config["auto_map"]["AutoTokenizer"], ["tokenization.NewTokenizer", None])
             self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizer")
             self.assertTrue(reloaded_tokenizer.special_attribute_present)
         else:
