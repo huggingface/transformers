@@ -32,7 +32,7 @@ You can find all the original BART checkpoints under the [AI at Meta](https://hu
 > [!TIP]
 > Click on the BART models in the right sidebar for more examples of how to apply BART to different language tasks.
 
-The example below demonstrates how to predict the [MASK] token with Pipeline, AutoModel, and from the command line.
+The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
