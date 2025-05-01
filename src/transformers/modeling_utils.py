@@ -773,7 +773,7 @@ def _load_state_dict_into_meta_model(
                 param_name,
                 casting_dtype,
                 to_contiguous,
-                int(os.environ["RANK"]),  # the rank
+                device_mesh.get_local_rank(),
                 device_mesh,
             )
         else:
@@ -5043,7 +5043,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         name,
                         casting_dtype,
                         to_contiguous,
-                        os.environ["RANK"],
+                        device_mesh.get_local_rank(),
                         device_mesh,
                     )
 
