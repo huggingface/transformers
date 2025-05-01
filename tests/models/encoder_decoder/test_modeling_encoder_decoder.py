@@ -829,7 +829,6 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         input_dict = tokenizer(
             [ARTICLE_SIGMA, ARTICLE_AMERICA],
             padding="max_length",
-            pad_to_max_length=True,
             max_length=512,
             return_tensors="pt",
         )
