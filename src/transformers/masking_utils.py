@@ -18,18 +18,44 @@ LOW_TRIANGLE = "⬕"
 UPPER_TRIANGLE = "⬔"
 
 
-BLACK_SQUARE = "█"  # Full block (represents "on" or active)
-WHITE_SQUARE = "░"  # Light shade (represents "off" or inactive)
-LOW_TRIANGLE = "▙"  # Lower left triangle (stylized indication)
-UPPER_TRIANGLE = "▜"  # Upper left triangle (stylized indication)
+r"""
+🀞🀞🀞🀞🀞🀞🀛🀆🀆🀆🀆🀆🀆🀆🀆🀆
+🀞🀞🀞🀞🀞🀞🀞🀛🀆🀆🀆🀆🀆🀆🀆🀆
+🀞🀞🀞🀞🀞🀞🀞🀞🀛🀆🀆🀆🀆🀆🀆🀆
+🀞🀞🀞🀞🀞🀞🀞🀞🀞🀛🀆🀆🀆🀆🀆🀆
+🀞🀞🀞🀞🀞🀞🀞🀞🀞🀞🀛🀆🀆🀆🀆🀆
+🀞🀞🀞🀞🀞🀞🀞🀞🀞🀞🀞🀛🀆🀆🀆🀆
+⛰⛰⛰⛰⛰⛰⛰⛰⛰⚋⚋⚋⚋⚋⚋⚋◹◥
+✅✅✅✅✅🟥🟥🟥🟥🟥
+▚▚▚▚▚▚▚▚▚▚▚▚▚⍂░⋱
+⎕⎕⎕⎕⍂⎕⎕⎕⎕⎕⎕⎕
+⏺⏺⏺⏺⏺⏲⏲⏲⏲⏲
+⏺⏺⏺⏺⏺⏲⏲⏲⏲⏲
 
+"""
+
+def get_style(style):
+    if style == "majong":
+        BLACK_SQUARE = "🀞"  # Full block (represents "on" or active)
+        BLACK_SQUARE = "🀙"  # Full block (represents "on" or active)
+        WHITE_SQUARE = "🀆" #"▒"  # Light shade (represents "off" or inactive)
+        LOW_TRIANGLE = "🀛"  # Lower left triangle (stylized indication)
+        UPPER_TRIANGLE = "🀛"  # Upper left triangle (stylized indication)
+    else:
+        BLACK_SQUARE = "█"  # Full block (represents "on" or active)
+        WHITE_SQUARE = "░" #"▒"  # Light shade (represents "off" or inactive)
+        LOW_TRIANGLE = "▙"  # Lower left triangle (stylized indication))
+        UPPER_TRIANGLE = "▜"  # Upper left triangle (stylized indication)
+
+    return BLACK_SQUARE, WHITE_SQUARE, LOW_TRIANGLE, UPPER_TRIANGLE
 # LOW_TRIANGLE = UPPER_TRIANGLE = "⟍"   # Upper right triangle (stylized indication)
 
 YELLOW_SQUARE = f"{YELLOW}{BLACK_SQUARE}{RESET}"
 GREEN_SQUARE = f"{GREEN}{BLACK_SQUARE}{RESET}"
 
 
-def tensor_to_mask_visual(original_tensor: torch.Tensor, grid_size=(20, 40)) -> str:
+def tensor_to_mask_visual(original_tensor: torch.Tensor, grid_size=(20, 40), style="majong") -> str:
+    BLACK_SQUARE, WHITE_SQUARE, LOW_TRIANGLE, UPPER_TRIANGLE = get_style(style)
     h, w = original_tensor.shape
     max_h, max_w = grid_size
     if not (h < max_h and w < max_w):
@@ -81,8 +107,9 @@ def tensor_to_mask_visual(original_tensor: torch.Tensor, grid_size=(20, 40)) -> 
 
 
 class AttentionMask(torch.Tensor):
-    def __new__(cls, data):
+    def __new__(cls, data, style=None):
         # Create a new instance of AttentionMask as a Tensor
+        cls.style = style
         return torch.Tensor._make_subclass(cls, data, require_grad=False)
 
     def __init__(self, data):
@@ -101,7 +128,7 @@ class AttentionMask(torch.Tensor):
                 total_vis.append("To print out more, set AttentionMask.to_string(limit=N)")
                 total_vis.append("You can also index (AttentionMask[batch, head]) to choose a specific batch or head")
                 break
-            block_vis = tensor_to_mask_visual(dense_mask[batch_idx], grid_size=grid_size)
+            block_vis = tensor_to_mask_visual(dense_mask[batch_idx], grid_size=grid_size, style=self.style)
             total_vis.append(block_vis)
 
         total_vis.append(f"torch.Tensor(shape={tuple(self.shape)}, dtype={self.dtype})")
@@ -114,9 +141,10 @@ class AttentionMask(torch.Tensor):
         return self.to_string()
 
     @classmethod
-    def from_tensor(cls, tensor: torch.Tensor):
-        return cls(tensor)
-
+    def from_tensor(cls, tensor: torch.Tensor, style: Optional[str] = None) -> "AttentionMask":
+        res = cls(tensor)
+        res.style = style
+        return res
 
 def create_4d_causal_mask(
     batch_size: int,
