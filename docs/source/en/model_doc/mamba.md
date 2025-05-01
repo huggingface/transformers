@@ -17,18 +17,15 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
   </div>
 </div>
 
 # Mamba
 
-[Mamba](https://huggingface.co/papers/2312.00752) is a new `state space model` architecture that rivals the classic Transformers. The architecture stacks `mixer` layers, which are the equivalent of `Attention` layers. The core logic of `mamba` is held in the `MambaMixer` class.
+[Mamba](https://huggingface.co/papers/2312.00752) is a selective structured state space model (SSMs) designed to work around Transformers computational inefficiency when dealing with long sequences.  It is a completely attention-free architecture, and comprised of a combination of H3 and gated MLP blocks (Mamba block). Mamba's "content-based reasoning" allows it to focus on specific parts of an input depending on the current token. Mamba also uses a new hardware-aware parallel algorithm to compensate for the lack of convolutional operations. As a result, Mamba has fast inference and can scale to very long sequences.
 
-You can find all the original Mamba checkpoints under the [state-spaces](https://huggingface.co/state-spaces) organization.
+You can find all the original Mamba checkpoints under the [State Space Models](https://huggingface.co/state-spaces) organization.
 
-# Usage
 
 > [!TIP]
 > Click on the Mamba models in the right sidebar for more examples of how to apply Mamba to different language tasks.
@@ -67,10 +64,10 @@ print(tokenizer.batch_decode(out))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model state-spaces/mamba-130m-hf --device 0
+echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model state-spaces/mamba-130m-hf --device 0
 ```
 
 </hfoption>
@@ -78,7 +75,44 @@ echo -e "Plants create energy through a process known as" | transformers-cli run
 
 ## Notes
 
-- The current implementation leverages the original cuda kernels: the equivalent of flash attention for Mamba are hosted in the [`mamba-ssm`](https://github.com/state-spaces/mamba) and the [`causal_conv1d`](https://github.com/Dao-AILab/causal-conv1d) repositories. Make sure to install them if your hardware supports them!
+- The current implementation uses the original CUDA kernels. The FlashAttention equivalent implementation is hosted in the [mamba-ssm](https://github.com/state-spaces/mamba) and [causal_conv1d](https://github.com/Dao-AILab/causal-conv1d) repositories. Make sure to install them if your hardware supports it!
+- Mamba stacks `mixer` layers which are equivalent to `Attention` layers. You can find the main logic of Mamba in the `MambaMixer` class.
+- The example below demonstrates how to fine-tune Mamba with [PEFT](https://huggingface.co/docs/peft).
+
+   ```py
+   from datasets import load_dataset
+   from trl import SFTTrainer
+   from peft import LoraConfig
+   from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments
+   
+   model_id = "state-spaces/mamba-130m-hf"
+   tokenizer = AutoTokenizer.from_pretrained(model_id)
+   model = AutoModelForCausalLM.from_pretrained(model_id)
+   dataset = load_dataset("Abirate/english_quotes", split="train")
+   training_args = TrainingArguments(
+       output_dir="./results",
+       num_train_epochs=3,
+       per_device_train_batch_size=4,
+       logging_dir='./logs',
+       logging_steps=10,
+       learning_rate=2e-3
+   )
+   lora_config =  LoraConfig(
+           r=8,
+           target_modules=["x_proj", "embeddings", "in_proj", "out_proj"],
+           task_type="CAUSAL_LM",
+           bias="none"
+   )
+   trainer = SFTTrainer(
+       model=model,
+       processing_class=tokenizer,
+      args=training_args,
+       peft_config=lora_config,
+       train_dataset=dataset,
+       dataset_text_field="quote",
+   )
+   trainer.train()
+   \```
 
 ## MambaConfig
 
