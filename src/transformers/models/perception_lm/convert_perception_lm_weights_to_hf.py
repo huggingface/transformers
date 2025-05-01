@@ -25,7 +25,6 @@ from tokenizers import AddedToken, processors
 from transformers import (
     GenerationConfig,
     LlamaConfig,
-    LlamaForCausalLM,
     LlamaTokenizer,
     PreTrainedTokenizerFast,
 )
@@ -91,15 +90,6 @@ tokenizer._tokenizers.post_processor = processors.Sequence(
 
 """
 
-KEYS_TO_MODIFY_MAPPING = {
-    "model.mm_projector": "multi_modal_projector",
-    "model": "model.model",
-    "vision_model.model": "vision_model",
-    "lm_head": "language_model.lm_head",
-    "model.model": "language_model.model",
-    "language_model.model.image_newline": "image_newline",
-}
-
 BOS_ADDED_TOKEN = AddedToken(
     "<|begin_of_text|>",
     single_word=False,
@@ -140,17 +130,6 @@ DEFAULT_SPECIAL_TOKENS = {
     ]
     + [f"<|reserved_special_token_{i}|>" for i in range(5, 256 - 5)]
 }
-
-
-def convert_state_dict_to_hf(state_dict):
-    new_state_dict = {}
-    for key, value in state_dict.items():
-        for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
-            if key_to_modify in key:
-                key = key.replace(key_to_modify, new_key)
-
-        new_state_dict[key] = value.to(torch.float16)
-    return new_state_dict
 
 
 def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
@@ -244,40 +223,39 @@ def write_model(
             filename = f"pytorch_model-{layer_i + 1}-of-{n_layers + 1}.bin"
             assert num_shards == 1, "PerceptionLM does not support sharded weights"
             state_dict = {
-                f"model.layers.{layer_i}.self_attn.q_proj.weight": permute(
+                f"language_model.model.layers.{layer_i}.self_attn.q_proj.weight": permute(
                     loaded[f"layers.{layer_i}.attention.wq.weight"], n_heads=n_heads
                 ),
-                f"model.layers.{layer_i}.self_attn.k_proj.weight": permute(
+                f"language_model.model.layers.{layer_i}.self_attn.k_proj.weight": permute(
                     loaded[f"layers.{layer_i}.attention.wk.weight"],
                     n_heads=num_key_value_heads,
                     dim1=key_value_dim,
                 ),
-                f"model.layers.{layer_i}.self_attn.v_proj.weight": loaded[
+                f"language_model.model.layers.{layer_i}.self_attn.v_proj.weight": loaded[
                     f"layers.{layer_i}.attention.wv.weight"
                 ],
-                f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[
+                f"language_model.model.layers.{layer_i}.self_attn.o_proj.weight": loaded[
                     f"layers.{layer_i}.attention.wo.weight"
                 ],
-                f"model.layers.{layer_i}.mlp.gate_proj.weight": loaded[
+                f"language_model.model.layers.{layer_i}.mlp.gate_proj.weight": loaded[
                     f"layers.{layer_i}.feed_forward.w1.weight"
                 ],
-                f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[
+                f"language_model.model.layers.{layer_i}.mlp.down_proj.weight": loaded[
                     f"layers.{layer_i}.feed_forward.w2.weight"
                 ],
-                f"model.layers.{layer_i}.mlp.up_proj.weight": loaded[
+                f"language_model.model.layers.{layer_i}.mlp.up_proj.weight": loaded[
                     f"layers.{layer_i}.feed_forward.w3.weight"
                 ],
-                f"model.layers.{layer_i}.input_layernorm.weight": loaded[
+                f"language_model.model.layers.{layer_i}.input_layernorm.weight": loaded[
                     f"layers.{layer_i}.attention_norm.weight"
                 ],
-                f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[
+                f"language_model.model.layers.{layer_i}.post_attention_layernorm.weight": loaded[
                     f"layers.{layer_i}.ffn_norm.weight"
                 ],
             }
-            state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = (
+            state_dict[f"language_model.model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = (
                 inv_freq
             )
-            state_dict = convert_state_dict_to_hf(state_dict)
             for k, v in state_dict.items():
                 index_dict["weight_map"][k] = filename
                 param_count += v.numel()
@@ -287,9 +265,9 @@ def write_model(
         filename = f"pytorch_model-{n_layers + 1}-of-{n_layers + 1}.bin"
 
         state_dict = {
-            "model.embed_tokens.weight": loaded["tok_embeddings.weight"],
-            "model.norm.weight": loaded["norm.weight"],
-            "model.lm_head.weight": (
+            "language_model.model.embed_tokens.weight": loaded["tok_embeddings.weight"],
+            "language_model.model.norm.weight": loaded["norm.weight"],
+            "language_model.lm_head.weight": (
                 loaded["output.weight"]
                 if not tie_word_embeddings
                 else loaded["tok_embeddings.weight"]
@@ -310,7 +288,6 @@ def write_model(
         for k, v in loaded.items():
             if "vision_model" in k:
                 state_dict[k] = v
-        state_dict = convert_state_dict_to_hf(state_dict)
         for k, v in state_dict.items():
             index_dict["weight_map"][k] = filename
             param_count += v.numel()
@@ -364,8 +341,6 @@ def write_model(
         )
 
         vision_config = PerceptionEncoderConfig(**model_params["vision_model"])
-        print("vision_config: ", vision_config)
-        
         config = PerceptionLMConfig(
             text_config=text_config.to_dict(),
             vision_config=vision_config.to_dict(),
