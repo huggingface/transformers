@@ -86,11 +86,6 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
 ENV_VARS_TRUE_VALUES = {"1", "ON", "YES", "TRUE"}
 ENV_VARS_TRUE_AND_AUTO_VALUES = ENV_VARS_TRUE_VALUES.union({"AUTO"})
 
-def is_true(value: Optional[str]) -> bool:
-    if value is None:
-        return False
-    return value.upper() in ENV_VARS_TRUE_VALUES
-
 USE_TF = os.environ.get("USE_TF", "AUTO").upper()
 USE_TORCH = os.environ.get("USE_TORCH", "AUTO").upper()
 USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
