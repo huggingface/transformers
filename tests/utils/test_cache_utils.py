@@ -301,22 +301,33 @@ class CacheIntegrationTest(unittest.TestCase):
 class CacheHardIntegrationTest(unittest.TestCase):
     """Hard cache integration tests that require loading different models"""
 
-    def tearDown(self):
-        # Some tests use large models, which might result in suboptimal torch re-allocation if we run multiple tests
-        # in a row
+    def setUp(self):
+        # Clears memory before each test. Some tests use large models, which might result in suboptimal torch
+        # re-allocation if we run multiple tests in a row without clearing memory.
+        cleanup(torch_device, gc_collect=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        # Clears memory after the last test. See `setUp` for more details.
         cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_dynamic_cache_hard(self):
         """Hard test for base cache implementation -- minor numerical fluctuations will cause this test to fail"""
-        set_seed(0)  # This line shouldn't be needed, but the test is flaky without it (why?)
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-4B", padding_side="left")
         model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-4B", device_map="auto", torch_dtype=torch.bfloat16)
         inputs = tokenizer(["Here's everything I know about cats. Cats"], return_tensors="pt").to(model.device)
 
         set_seed(0)
-        gen_out = model.generate(**inputs, do_sample=True, max_new_tokens=256, return_dict_in_generate=True)
+        gen_out = model.generate(
+            **inputs, do_sample=True, max_new_tokens=256, return_dict_in_generate=True, output_scores=True
+        )
         decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        # sum of the scores for the generated tokens
+        input_length = inputs.input_ids.shape[1]
+        score_sum = sum(
+            [score[0][gen_out.sequences[0][input_length + idx]] for idx, score in enumerate(gen_out.scores)]
+        )
 
         EXPECTED_GENERATION = (
             "Here's everything I know about cats. Cats are mammals, they have four legs, they have a tail, they have "
@@ -325,14 +336,16 @@ class CacheHardIntegrationTest(unittest.TestCase):
             "themselves. They have a lot of different breeds. Some are small, some are large. Some are friendly, "
             "some are not. They have a lot of different personalities. They can be very independent, or they can be "
             "very affectionate. They can be very playful, or they can be very lazy. They can be very intelligent, or "
-            "they can be very silly. They have a lot of different behaviors. They can be very curious, or they can be "
-            "very cautious. They can be very vocal, or they can be very quiet. They can be very social, or they can "
-            "be very solitary. They can be very active, or they can be very inactive. They can be very loud, or "
-            "they can be very quiet. They can be very playful, or they can be very lazy. They can be very "
-            "intelligent, or they can be very silly. They can be very curious, or they can be very cautious. They "
-            "can be very vocal,"
+            "they can be very silly. They have a lot of different behaviors. They can be very curious, or they can "
+            "be very cautious. They can be very vocal, or they can be very quiet. They can be very social, or they "
+            "can be very solitary. They can be very active, or they can be very inactive. They can be very "
+            "affectionate, or they can be very aloof. They can be very playful, or they can be very lazy. They can "
+            "be very intelligent, or they can be very silly. They have a lot of different behaviors. They can be "
+            "very curious, or they can"
         )
+        EXPECTED_SCORE_SUM = 11017.4971
         self.assertEqual(decoded[0], EXPECTED_GENERATION)
+        self.assertAlmostEqual(score_sum, EXPECTED_SCORE_SUM, places=2)
         self.assertIsInstance(gen_out.past_key_values, DynamicCache)  # sanity check
 
     @parameterized.expand([("eager"), ("sdpa")])
@@ -449,9 +462,9 @@ class CacheHardIntegrationTest(unittest.TestCase):
             responses.append(response)
 
         EXPECTED_DECODED_TEXT = [
-            "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a wonderful "
-            "way to explore new places, cultures, and experiences. Whether you are a seasoned traveler or a "
-            "first-time adventurer, there is always something",
+            "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is an "
+            "enriching experience that broadens our horizons and allows us to explore the world beyond our comfort "
+            "zones. Whether it's a short weekend getaway",
             "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital "
             "of France.\n\n\n\n\n\n\n<|endoftext|>",
         ]
