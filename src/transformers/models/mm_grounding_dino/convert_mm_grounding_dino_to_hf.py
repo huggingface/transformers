@@ -48,10 +48,11 @@ def correct_unfold_norm_order(x):
 
 
 def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dict:
-    # a bit hacky, but key mapping will be a dict of
+    # key mapping will be a dict of
     # str: str - one to one key to value mapping
-    # str: tup[str] - chunk key into q, k, v values
-    # str: list[str] - duplicate key into all values
+    # str: tup[str, tup[str]] - where the first element is str for mapping type
+    #      (e.g. to chunk target key into q, k, v values or duplicate to all target keys)
+    #      and the second element is a tuple of target keys
     key_mapping = {}
 
     ################
@@ -67,23 +68,35 @@ def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dic
         key_mapping[f"memory_trans_norm.{param}"] = f"model.enc_output_norm.{param}"
 
     for layer in range(hf_cfg.decoder_layers):
-        key_mapping[f"bbox_head.cls_branches.{layer}.bias"] = [
-            f"class_embed.{layer}.bias",
-            f"model.decoder.class_embed.{layer}.bias",
-        ]
+        key_mapping[f"bbox_head.cls_branches.{layer}.bias"] = (
+            "duplicate",
+            (
+                f"class_embed.{layer}.bias",
+                f"model.decoder.class_embed.{layer}.bias",
+            )
+        )
         for param in ["weight", "bias"]:
-            key_mapping[f"bbox_head.reg_branches.{layer}.0.{param}"] = [
-                f"bbox_embed.{layer}.layers.0.{param}",
-                f"model.decoder.bbox_embed.{layer}.layers.0.{param}",
-            ]
-            key_mapping[f"bbox_head.reg_branches.{layer}.2.{param}"] = [
-                f"bbox_embed.{layer}.layers.1.{param}",
-                f"model.decoder.bbox_embed.{layer}.layers.1.{param}",
-            ]
-            key_mapping[f"bbox_head.reg_branches.{layer}.4.{param}"] = [
-                f"bbox_embed.{layer}.layers.2.{param}",
-                f"model.decoder.bbox_embed.{layer}.layers.2.{param}",
-            ]
+            key_mapping[f"bbox_head.reg_branches.{layer}.0.{param}"] = (
+                "duplicate",
+                (
+                    f"bbox_embed.{layer}.layers.0.{param}",
+                    f"model.decoder.bbox_embed.{layer}.layers.0.{param}",
+                )
+            )
+            key_mapping[f"bbox_head.reg_branches.{layer}.2.{param}"] = (
+                "duplicate",
+                (
+                    f"bbox_embed.{layer}.layers.1.{param}",
+                    f"model.decoder.bbox_embed.{layer}.layers.1.{param}",
+                )
+            )
+            key_mapping[f"bbox_head.reg_branches.{layer}.4.{param}"] = (
+                "duplicate",
+                (
+                    f"bbox_embed.{layer}.layers.2.{param}",
+                    f"model.decoder.bbox_embed.{layer}.layers.2.{param}",
+                )
+            )
 
     # last branch in original gets mapped to encoder
     enc_idx = hf_cfg.decoder_layers
@@ -125,9 +138,12 @@ def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dic
                     f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.layernorm_before.{param}"
                 )
                 key_mapping[f"backbone.stages.{stage}.blocks.{block}.attn.w_msa.qkv.{param}"] = (
-                    f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.self.query.{param}",
-                    f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.self.key.{param}",
-                    f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.self.value.{param}",
+                    "split_qkv",
+                    (
+                        f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.self.query.{param}",
+                        f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.self.key.{param}",
+                        f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.self.value.{param}",
+                    )
                 )
                 key_mapping[f"backbone.stages.{stage}.blocks.{block}.attn.w_msa.proj.{param}"] = (
                     f"model.backbone.conv_encoder.model.encoder.layers.{stage}.blocks.{block}.attention.output.dense.{param}"
@@ -245,9 +261,12 @@ def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dic
         # text self attention
         for param in ["weight", "bias"]:
             key_mapping[f"encoder.text_layers.{layer}.self_attn.attn.in_proj_{param}"] = (
-                f"model.encoder.layers.{layer}.text_enhancer_layer.self_attn.query.{param}",
-                f"model.encoder.layers.{layer}.text_enhancer_layer.self_attn.key.{param}",
-                f"model.encoder.layers.{layer}.text_enhancer_layer.self_attn.value.{param}",
+                "split_qkv",
+                (
+                    f"model.encoder.layers.{layer}.text_enhancer_layer.self_attn.query.{param}",
+                    f"model.encoder.layers.{layer}.text_enhancer_layer.self_attn.key.{param}",
+                    f"model.encoder.layers.{layer}.text_enhancer_layer.self_attn.value.{param}",
+                )
             )
             key_mapping[f"encoder.text_layers.{layer}.self_attn.attn.out_proj.{param}"] = (
                 f"model.encoder.layers.{layer}.text_enhancer_layer.self_attn.out_proj.{param}"
@@ -283,9 +302,12 @@ def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dic
         # query self att
         for param in ["weight", "bias"]:
             key_mapping[f"decoder.layers.{layer}.self_attn.attn.in_proj_{param}"] = (
-                f"model.decoder.layers.{layer}.self_attn.query.{param}",
-                f"model.decoder.layers.{layer}.self_attn.key.{param}",
-                f"model.decoder.layers.{layer}.self_attn.value.{param}",
+                "split_qkv",
+                (
+                    f"model.decoder.layers.{layer}.self_attn.query.{param}",
+                    f"model.decoder.layers.{layer}.self_attn.key.{param}",
+                    f"model.decoder.layers.{layer}.self_attn.value.{param}",
+                )
             )
             key_mapping[f"decoder.layers.{layer}.self_attn.attn.out_proj.{param}"] = (
                 f"model.decoder.layers.{layer}.self_attn.out_proj.{param}"
@@ -297,9 +319,12 @@ def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dic
         # query-text cross att
         for param in ["weight", "bias"]:
             key_mapping[f"decoder.layers.{layer}.cross_attn_text.attn.in_proj_{param}"] = (
-                f"model.decoder.layers.{layer}.encoder_attn_text.query.{param}",
-                f"model.decoder.layers.{layer}.encoder_attn_text.key.{param}",
-                f"model.decoder.layers.{layer}.encoder_attn_text.value.{param}",
+                "split_qkv",
+                (
+                    f"model.decoder.layers.{layer}.encoder_attn_text.query.{param}",
+                    f"model.decoder.layers.{layer}.encoder_attn_text.key.{param}",
+                    f"model.decoder.layers.{layer}.encoder_attn_text.value.{param}",
+                )
             )
             key_mapping[f"decoder.layers.{layer}.cross_attn_text.attn.out_proj.{param}"] = (
                 f"model.decoder.layers.{layer}.encoder_attn_text.out_proj.{param}"
@@ -332,23 +357,27 @@ def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dic
     #################
 
     # do a copy here so it errors out with any missed or extra keys
-    hf_state = mm_state.copy()
+    hf_state = {}
 
     # map keys
     for mm_key, hf_key in key_mapping.items():
         # str, str -> one to one
-        if isinstance(hf_key, str) and isinstance(mm_key, str):
-            hf_state[hf_key] = hf_state.pop(mm_key)
-        # str, tup -> chunk into q, k, v
-        elif isinstance(hf_key, tuple) and isinstance(mm_key, str):
-            q_param, k_param, v_param = hf_state.pop(mm_key).chunk(3)
-            for key, param in zip(hf_key, (q_param, k_param, v_param)):
-                hf_state[key] = param
-        # str, list -> duplicate
-        elif isinstance(hf_key, list) and isinstance(mm_key, str):
-            param = hf_state.pop(mm_key)
-            for key in hf_key:
-                hf_state[key] = param
+        if isinstance(hf_key, str):
+            hf_state[hf_key] = mm_state[mm_key]
+        # str, tup[str, tup[str]] -> either chunk into qkv or duplicate
+        elif isinstance(hf_key, tuple):
+            mapping_type, keys = hf_key
+            if mapping_type == "split_qkv":
+                q_param, k_param, v_param = mm_state[mm_key].chunk(3)
+                q_key, k_key, v_key = keys
+                hf_state[q_key] = q_param
+                hf_state[k_key] = k_param
+                hf_state[v_key] = v_param
+            elif mapping_type == "duplicate":
+                for key in keys:
+                    hf_state[key] = mm_state[mm_key]
+            else:
+                raise ValueError(f"Unknown mapping type: {mapping_type}")
 
     # convert downsample params
     for k in hf_state:
@@ -356,28 +385,6 @@ def convert_mm_to_hf_state(mm_state: dict, hf_cfg: MMGroundingDinoConfig) -> dic
             hf_state[k] = correct_unfold_reduction_order(hf_state[k])
         if "downsample.norm" in k:
             hf_state[k] = correct_unfold_norm_order(hf_state[k])
-
-    # remove unused keys
-    unused_keys = [
-        "dn_query_generator.label_embedding.weight",
-        "model.text_backbone.embeddings.position_ids",
-    ]
-    # for llmdet checkpoints
-    for k in hf_state:
-        if (
-            k.startswith("lmm")
-            or k.startswith("connector")
-            or k.startswith("region_connector")
-            or k.startswith("ref_point_head")
-        ):
-            unused_keys.append(k)
-
-    for key in unused_keys:
-        try:
-            hf_state.pop(key)
-            print(f"Removed unused key: {key}")
-        except KeyError:
-            pass
 
     return hf_state
 
@@ -447,7 +454,7 @@ def main(args):
     # check predictions
     image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(image_url, stream=True).raw)
-    text = [["a cat", "a remote control"]]
+    text = [["cat", "remote"]]
 
     # set up processor
     img_processor = GroundingDinoImageProcessor()
