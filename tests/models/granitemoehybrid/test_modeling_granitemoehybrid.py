@@ -116,7 +116,7 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @slow
-    def test_tiny_model_logits(self):
+    def test_model_logits(self):
         input_ids = [31390, 631, 4162, 30, 322, 25342, 432, 1875, 43826, 10066, 688, 225]
 
         model = GraniteMoeHybridForCausalLM.from_pretrained("ibm-granite/granite-4.0-tiny", device_map="auto")
