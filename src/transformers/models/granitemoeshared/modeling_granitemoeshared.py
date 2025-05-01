@@ -29,6 +29,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -420,7 +421,7 @@ class GraniteMoeSharedAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class GraniteMoeSharedDecoderLayer(nn.Module):
+class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: GraniteMoeSharedConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -791,31 +792,17 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    output_router_logits,
-                    position_embeddings,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    output_router_logits=output_router_logits,
-                    position_embeddings=position_embeddings,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                output_router_logits=output_router_logits,
+                position_embeddings=position_embeddings,
+            )
 
             hidden_states = layer_outputs[0]
 
