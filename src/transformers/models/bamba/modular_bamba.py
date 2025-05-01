@@ -278,6 +278,7 @@ class BambaMixer(nn.Module):
         cache_params: Optional[HybridMambaAttentionDynamicCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        seq_idx: Optional[torch.IntTensor] = None,
     ):
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -360,7 +361,7 @@ class BambaMixer(nn.Module):
                     A,
                     D=self.D,
                     chunk_size=self.chunk_size,
-                    seq_idx=None,  # was seq_idx
+                    seq_idx=seq_idx,
                     activation=self.activation,
                     rmsnorm_weight=self.norm.weight,
                     rmsnorm_eps=self.norm.variance_epsilon,
@@ -401,6 +402,7 @@ class BambaMixer(nn.Module):
                         weight=self.conv1d.weight.squeeze(1),
                         bias=self.conv1d.bias,
                         activation=self.activation,
+                        seq_idx=seq_idx
                     ).transpose(1, 2)
 
                 hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
@@ -420,7 +422,7 @@ class BambaMixer(nn.Module):
                     chunk_size=self.chunk_size,
                     D=self.D,
                     z=None,
-                    seq_idx=None,
+                    seq_idx=seq_idx,
                     return_final_states=True,
                     dt_bias=self.dt_bias,
                     dt_softplus=True,
@@ -654,9 +656,14 @@ class BambaMixer(nn.Module):
         cache_params: Optional[HybridMambaAttentionDynamicCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        seq_idx: Optional[torch.IntTensor] = None,
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
-            return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
+            return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask, seq_idx)
+        if seq_idx is not None:
+            raise NotImplementedError(
+                "`seq_idx` support requires fast path support. Please install `mamba_ssm` and `causal_conv1d`"
+            )
         dtype = hidden_states.dtype
         if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
             # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
@@ -701,6 +708,11 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        cu_seq_lens_q: Optional[torch.LongTensor] = None,
+        cu_seq_lens_k: Optional[torch.LongTensor] = None,
+        max_length_q: Optional[int] = None,
+        max_length_k: Optional[int] = None,
+        seq_idx: Optional[torch.IntTensor] = None,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -720,6 +732,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
             position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
+            TODO: @goon - Docs
             kwargs (`dict`, *optional*):
                 Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
                 into the model
@@ -736,6 +749,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
                 cache_params=past_key_value,
                 cache_position=cache_position,
                 attention_mask=attention_mask,
+                seq_idx=seq_idx,
             )
             self_attn_weights = None
         elif self.layer_type == "attention":
@@ -748,6 +762,10 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
+                cu_seq_lens_q=cu_seq_lens_q,
+                cu_seq_lens_k=cu_seq_lens_k,
+                max_length_q=max_length_q,
+                max_length_k=max_length_k,
                 **kwargs,
             )
 
@@ -838,6 +856,11 @@ class BambaModel(BambaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        cu_seq_lens_q: Optional[torch.LongTensor] = None,
+        cu_seq_lens_k: Optional[torch.LongTensor] = None,
+        max_length_q: Optional[int] = None,
+        max_length_k: Optional[int] = None,
+        seq_idx: Optional[torch.IntTensor] = None,
         **kwargs,  # NOOP kwargs, for now
     ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -889,6 +912,7 @@ class BambaModel(BambaPreTrainedModel):
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
+                # TODO: @goon - grad ckpt support
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
@@ -910,6 +934,11 @@ class BambaModel(BambaPreTrainedModel):
                     use_cache=use_cache,
                     cache_position=cache_position,
                     position_embeddings=position_embeddings,
+                    cu_seq_lens_q=cu_seq_lens_q,
+                    cu_seq_lens_k=cu_seq_lens_k,
+                    max_length_q=max_length_q,
+                    max_length_k=max_length_k,
+                    seq_idx=seq_idx,
                 )
 
             hidden_states = layer_outputs[0]
