@@ -280,10 +280,11 @@ class CsmGenerationMixin(GenerationMixin):
             depth_decoder_input_ids = nn.functional.pad(first_codebook_ids, (1, 0), value=0)
             backbone_last_hidden_state = outputs.hidden_states[-1][:, -1, :]
 
-            torch.compiler.cudagraph_mark_step_begin()
             depth_decoder_outputs = self.depth_decoder.generate(
                 input_ids=depth_decoder_input_ids,
-                backbone_last_hidden_state=backbone_last_hidden_state,
+                backbone_last_hidden_state=backbone_last_hidden_state.clone()
+                if torch.compiler.is_compiling()
+                else backbone_last_hidden_state,
             )
             codebook_ids = (
                 depth_decoder_outputs
