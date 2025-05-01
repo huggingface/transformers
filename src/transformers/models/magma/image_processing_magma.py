@@ -215,7 +215,8 @@ class MagmaImageProcessor(BaseImageProcessor):
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                 - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
         """
-        images = make_list_of_images(images)
+        if not isinstance(images, list):
+            images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
