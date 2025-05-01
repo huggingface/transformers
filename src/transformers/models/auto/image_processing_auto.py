@@ -557,8 +557,7 @@ class AutoImageProcessor:
                 class_ref = image_processor_auto_map[0]
             image_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
-            if os.path.isdir(pretrained_model_name_or_path):
-                image_processor_class.register_for_auto_class()
+            image_processor_class.register_for_auto_class()
             return image_processor_class.from_dict(config_dict, **kwargs)
         elif image_processor_class is not None:
             return image_processor_class.from_dict(config_dict, **kwargs)

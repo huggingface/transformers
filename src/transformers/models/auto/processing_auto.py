@@ -17,7 +17,6 @@
 import importlib
 import inspect
 import json
-import os
 import warnings
 from collections import OrderedDict
 
@@ -367,8 +366,7 @@ class AutoProcessor:
                 processor_auto_map, pretrained_model_name_or_path, **kwargs
             )
             _ = kwargs.pop("code_revision", None)
-            if os.path.isdir(pretrained_model_name_or_path):
-                processor_class.register_for_auto_class()
+            processor_class.register_for_auto_class()
             return processor_class.from_pretrained(
                 pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
             )
