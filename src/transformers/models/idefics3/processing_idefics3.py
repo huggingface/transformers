@@ -301,7 +301,6 @@ class Idefics3Processor(ProcessorMixin):
             images = [[load_image(im) if is_url(im) else im for im in sample] for sample in images]
 
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-            return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
             inputs.update(image_inputs)
 
             if text is not None:

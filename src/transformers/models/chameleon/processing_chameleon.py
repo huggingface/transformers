@@ -149,7 +149,7 @@ class ChameleonProcessor(ProcessorMixin):
 
         image_inputs = {}
         if images is not None:
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
