@@ -23,15 +23,15 @@ The Conversational Speech Model (CSM) is the first open-source contextual text-t
 **Model Architecture:**
 CSM is composed of two LLaMA-style auto-regressive transformer decoders: a backbone decoder that predicts the first codebook token and a depth decoder that generates the remaining tokens. It uses the pretrained codec model [Mimi](./mimi.md), introduced by Kyutai, to encode speech into discrete codebook tokens and decode them back into audio.
 
-The original csm-1b checkpoint is available under the [Sesame](https://huggingface.co/sesame/csm-1b) o organization on Hugging Face.
+The original csm-1b checkpoint is available under the [Sesame](https://huggingface.co/sesame/csm-1b) organization on Hugging Face.
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/eustlb/documentation-images/resolve/main/csm_architecture.png"/>
 </div>
 
-# Usage Example
+## Usage Tips
 
-## without conversational context
+### Without Conversational Context
 
 CSM can be used to simply generate speech from a text prompt:
 
@@ -63,7 +63,7 @@ audio_values = model.generate(**inputs, output_audio=True)
 sf.write("example_without_context.wav", audio_values[0].cpu().numpy(), 24000)
 ```
 
-## with a conversational context
+### With Conversational Context
 
 CSM can be used to generate speech given a conversation, allowing consistency in the voices and content-aware generation:
 
@@ -107,7 +107,7 @@ audio_values = model.generate(**inputs, output_audio=True)
 sf.write("example_with_context.wav", audio_values[0].cpu().numpy(), 24000)
 ```
 
-## batched inference
+### Batched Inference
 
 CSM supports batched inference!
 
@@ -163,7 +163,7 @@ for i, audio in enumerate(audio_values):
     sf.write(f"speech_batch_idx_{i}.wav", audio.cpu().numpy(), 24000)
 ```
 
-## Making the model go brrr
+### Making The Model Go Brrr
 
 CSM supports full-graph compilation with CUDA graphs!
 
@@ -317,7 +317,7 @@ with TimerContext("Generation with different inputs"):
 print("="*50)
 ```
 
-## Training
+### Training
 
 CSM Transformers integration supports training!
 
@@ -361,6 +361,7 @@ out.loss.backward()
 This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb).
 The original code can be found [here](https://github.com/SesameAILabs/csm).
 
+
 ## CsmConfig
 
 [[autodoc]] CsmConfig
@@ -372,10 +373,13 @@ The original code can be found [here](https://github.com/SesameAILabs/csm).
 ## CsmProcessor
 
 [[autodoc]] CsmProcessor
+    _ __call__  
 
 ## CsmForConditionalGeneration
 
 [[autodoc]] CsmForConditionalGeneration
+    - forward
+    - generate
 
 ## CsmDepthDecoderForCausalLM
 
