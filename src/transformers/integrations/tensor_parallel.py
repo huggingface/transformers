@@ -670,3 +670,34 @@ def shard_and_distribute_module(
     setattr(module_to_tp, param_type, param)
     # module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
     return param
+
+
+def verify_tp_plan(expected_keys: list[str], tp_plan: Optional[dict[str, str]]):
+    """
+    Verify the TP plan of the model, log a warning if the layers that were not sharded and the rules that were not applied.
+    """
+
+    if tp_plan is None:
+        return
+
+    generic_keys = {re.sub(r"\d+", "*", key) for key in expected_keys}
+    unsharded_layers = set(generic_keys)
+    unused_rules = tp_plan
+
+    for key in generic_keys:
+        param_name, _ = key.rsplit(".", 1) if "." in key else key
+        generic_param_name = re.sub(r"\d+", "*", param_name)
+
+        if generic_param_name in tp_plan:
+            unused_rules.pop(generic_param_name)
+            unsharded_layers.discard(key)
+        elif "." in generic_param_name and (parent_param_name := generic_param_name.rsplit(".", 1)[0]) in tp_plan:
+            unused_rules.pop(parent_param_name)
+            unsharded_layers.discard(key)
+        else:
+            pass  # we couldn't find the rule for this parameter, so it's not sharded
+
+    if len(unused_rules) > 0:
+        logger.warning(f"The following TP rules were not applied on any of the layers: {unused_rules}")
+    if len(unsharded_layers) > 0:
+        logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
