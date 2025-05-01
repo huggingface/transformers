@@ -214,7 +214,6 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assert_padded_input_match(input_r, input_p, len(input_r), pad_token_id)
 
                 # Encode - Pair input
-                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
                 input_r = tokenizer_r.encode(
                     "This is a simple input", "This is a pair", max_length=max_length, padding="max_length"
                 )
