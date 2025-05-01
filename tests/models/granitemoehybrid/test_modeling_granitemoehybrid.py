@@ -74,6 +74,7 @@ class GraniteMoeHybridModelTester(BambaModelTester):
             layer_types=self.layer_types,
         )
 
+
 @require_torch
 class GraniteMoeHybridModelTest(BambaModelTest, GenerationTesterMixin, unittest.TestCase):
     model_tester_class = GraniteMoeHybridModelTester

@@ -1196,14 +1196,12 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
     _is_stateful = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, GraniteMoeHybridRMSNorm):
@@ -1212,7 +1210,7 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         # Initialize Mamba modules
         if isinstance(module, (nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, GraniteMoeHybridMambaLayer):

@@ -193,11 +193,10 @@ class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     _is_stateful = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
         super()._init_weights()
         # Initialize Mamba modules
         if isinstance(module, (nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, GraniteMoeHybridMambaLayer):
