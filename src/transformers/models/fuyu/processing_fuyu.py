@@ -25,6 +25,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging, requires_backends
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -243,7 +244,7 @@ def _tokenize_prompts_with_image_and_batch(
     - pad all the sequences to this length so we can convert them into a 3D tensor.
     """
 
-    # If not tool use, tranform the coordinates while tokenizing
+    # If not tool use, transform the coordinates while tokenizing
     if scale_factors is not None:
         transformed_prompt_tokens = []
         for prompt_seq, scale_factor_seq in zip(prompts, scale_factors):
@@ -326,6 +327,7 @@ def scale_bbox_to_transformed_image(
     return [top_scaled, left_scaled, bottom_scaled, right_scaled]
 
 
+@requires(backends=("vision",))
 class FuyuProcessor(ProcessorMixin):
     r"""
     Constructs a Fuyu processor which wraps a Fuyu image processor and a Llama tokenizer into a single processor.

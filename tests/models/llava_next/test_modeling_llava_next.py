@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,6 +33,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import check_torch_load_is_safe
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -332,18 +332,10 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("LLaVA Next has dynamic control flow in unpadding")
-    def test_generate_compile_model_forward(self):
         pass
 
 
@@ -375,6 +367,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             filename="llava_1_6_input_ids.pt",
             repo_type="dataset",
         )
+        check_torch_load_is_safe()
         original_input_ids = torch.load(filepath, map_location="cpu", weights_only=True)
         # replace -200 by image_token_index (since we use token ID = 32000 for the image token)
         # remove image token indices because HF impl expands image tokens `image_seq_length` times
@@ -387,6 +380,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             filename="llava_1_6_pixel_values.pt",
             repo_type="dataset",
         )
+        check_torch_load_is_safe()
         original_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)
         assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
 

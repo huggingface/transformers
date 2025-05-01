@@ -676,7 +676,7 @@ class Data2VecVisionEncoder(nn.Module):
             self.relative_position_bias = Data2VecVisionRelativePositionBias(config, window_size=window_size)
 
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
         self.layer = nn.ModuleList(
             [
                 Data2VecVisionLayer(

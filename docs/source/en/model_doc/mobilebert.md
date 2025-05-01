@@ -76,10 +76,10 @@ print(f"The predicted token is: {predicted_token}")
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
-echo -e "The capital of France is [MASK]." | transformers-cli run --task fill-mask --model google/mobilebert-uncased --device 0
+echo -e "The capital of France is [MASK]." | transformers run --task fill-mask --model google/mobilebert-uncased --device 0
 ```
 
 </hfoption>

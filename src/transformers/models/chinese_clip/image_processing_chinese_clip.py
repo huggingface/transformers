@@ -41,13 +41,17 @@ from ...image_utils import (
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
-logger = logging.get_logger(__name__)
-
-
 if is_vision_available():
     import PIL
 
 
+from ...utils.import_utils import requires
+
+
+logger = logging.get_logger(__name__)
+
+
+@requires(backends=("vision",))
 class ChineseCLIPImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Chinese-CLIP image processor.
@@ -92,10 +96,10 @@ class ChineseCLIPImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -166,7 +170,7 @@ class ChineseCLIPImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[int] = None,

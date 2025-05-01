@@ -1849,3 +1849,14 @@ class RealmForOpenQA(RealmPreTrainedModel):
             reader_output=reader_output,
             predicted_answer_ids=predicted_answer_ids,
         )
+
+
+__all__ = [
+    "RealmEmbedder",
+    "RealmForOpenQA",
+    "RealmKnowledgeAugEncoder",
+    "RealmPreTrainedModel",
+    "RealmReader",
+    "RealmScorer",
+    "load_tf_weights_in_realm",
+]

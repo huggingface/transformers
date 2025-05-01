@@ -358,7 +358,7 @@ class ChatArguments:
     """
 
     # General settings
-    model_name_or_path: str = field(metadata={"help": "Name of the pre-trained model."})
+    model_name_or_path: Optional[str] = field(default=None, metadata={"help": "Name of the pre-trained model."})
     user: Optional[str] = field(default=None, metadata={"help": "Username to display in chat interface."})
     system_prompt: Optional[str] = field(default=None, metadata={"help": "System prompt."})
     save_folder: str = field(default="./chat_history/", metadata={"help": "Folder to save chat history."})
@@ -435,9 +435,20 @@ class ChatCommand(BaseTransformersCLICommand):
         """
         dataclass_types = (ChatArguments,)
         chat_parser = parser.add_parser("chat", help=HELP_STRING, dataclass_types=dataclass_types)
+
+        group = chat_parser.add_argument_group("Positional arguments")
+        group.add_argument(
+            "model_name_or_path_positional", type=str, nargs="?", default=None, help="Name of the pre-trained model."
+        )
+
         chat_parser.set_defaults(func=chat_command_factory)
 
     def __init__(self, args):
+        args.model_name_or_path = args.model_name_or_path_positional or args.model_name_or_path
+
+        if args.model_name_or_path is None:
+            raise ValueError("--model_name_or_path required for chat command.")
+
         self.args = args
 
     @staticmethod

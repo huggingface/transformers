@@ -25,6 +25,7 @@ from ...audio_utils import chroma_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, is_torch_available, is_torchaudio_available, logging
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -36,6 +37,7 @@ if is_torchaudio_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torchaudio",))
 class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a MusicgenMelody feature extractor.
@@ -52,7 +54,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate (`int`, *optional*, defaults to 32000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         hop_length (`int`, *optional*, defaults to 4096):
-            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
+            Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
         chunk_length (`int`, *optional*, defaults to 30):
             The maximum number of chunks of `sampling_rate` samples used to trim and pad longer or shorter audio
             sequences.
@@ -329,3 +331,6 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         if "spectrogram" in output:
             del output["spectrogram"]
         return output
+
+
+__all__ = ["MusicgenMelodyFeatureExtractor"]

@@ -61,9 +61,10 @@ class PretrainedConfig(PushToHubMixin):
 
     - **model_type** (`str`) -- An identifier for the model type, serialized into the JSON file, and used to recreate
       the correct object in [`~transformers.AutoConfig`].
-    - **is_composition** (`bool`) -- Whether the config class is composed of multiple sub-configs. In this case the
-      config has to be initialized from two or more configs of type [`~transformers.PretrainedConfig`] like:
-      [`~transformers.EncoderDecoderConfig`] or [`~RagConfig`].
+    - **has_no_defaults_at_init** (`bool`) -- Whether the config class can be initialized without providing input arguments.
+      Some configurations requires inputs to be defined at init and have no default values, usually these are composite configs,
+      (but not necessarily) such as [`~transformers.EncoderDecoderConfig`] or [`~RagConfig`]. They have to be initialized from
+      two or more configs of type [`~transformers.PretrainedConfig`].
     - **keys_to_ignore_at_inference** (`List[str]`) -- A list of keys to ignore by default when looking at dictionary
       outputs of the model during inference.
     - **attribute_map** (`Dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
@@ -193,7 +194,7 @@ class PretrainedConfig(PushToHubMixin):
     model_type: str = ""
     base_config_key: str = ""
     sub_configs: dict[str, "PretrainedConfig"] = {}
-    is_composition: bool = False
+    has_no_defaults_at_init: bool = False
     attribute_map: dict[str, str] = {}
     base_model_tp_plan: Optional[dict[str, Any]] = None
     base_model_pp_plan: Optional[dict[str, tuple[list[str]]]] = None
@@ -813,8 +814,8 @@ class PretrainedConfig(PushToHubMixin):
         # Get the default config dict (from a fresh PreTrainedConfig instance)
         default_config_dict = PretrainedConfig().to_dict()
 
-        # Get class-specific config dict if not part of a composition
-        class_config_dict = self.__class__().to_dict() if not self.is_composition else {}
+        # get class specific config dict
+        class_config_dict = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
 
         serializable_config_dict = {}
 
@@ -842,28 +843,19 @@ class PretrainedConfig(PushToHubMixin):
             ):
                 serializable_config_dict[key] = value
 
+        self._remove_keys_not_serialized(serializable_config_dict)
+
+        # Key removed only in diff dict
+        if "_name_or_path" in serializable_config_dict:
+            del serializable_config_dict["_name_or_path"]
+
         if hasattr(self, "quantization_config"):
             serializable_config_dict["quantization_config"] = (
                 self.quantization_config.to_dict()
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
-            # Pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
-            _ = serializable_config_dict.pop("_pre_quantization_dtype", None)
-
         self.dict_torch_dtype_to_str(serializable_config_dict)
-
-        if "_attn_implementation_internal" in serializable_config_dict:
-            del serializable_config_dict["_attn_implementation_internal"]
-        # Do not serialize `base_model_tp_plan` for now
-        if "base_model_tp_plan" in serializable_config_dict:
-            del serializable_config_dict["base_model_tp_plan"]
-        # Do not serialize `base_model_pp_plan` for now
-        if "base_model_pp_plan" in serializable_config_dict:
-            del serializable_config_dict["base_model_pp_plan"]
-
-        if "_name_or_path" in serializable_config_dict:
-            del serializable_config_dict["_name_or_path"]
 
         return serializable_config_dict
 
@@ -877,18 +869,6 @@ class PretrainedConfig(PushToHubMixin):
         output = copy.deepcopy(self.__dict__)
         if hasattr(self.__class__, "model_type"):
             output["model_type"] = self.__class__.model_type
-        if "_auto_class" in output:
-            del output["_auto_class"]
-        if "_commit_hash" in output:
-            del output["_commit_hash"]
-        if "_attn_implementation_internal" in output:
-            del output["_attn_implementation_internal"]
-        # Do not serialize `base_model_tp_plan` for now
-        if "base_model_tp_plan" in output:
-            del output["base_model_tp_plan"]
-        # Do not serialize `base_model_pp_plan` for now
-        if "base_model_pp_plan" in output:
-            del output["base_model_pp_plan"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
@@ -901,16 +881,14 @@ class PretrainedConfig(PushToHubMixin):
 
             output[key] = value
 
+        self._remove_keys_not_serialized(output)
+
         if hasattr(self, "quantization_config"):
             output["quantization_config"] = (
                 self.quantization_config.to_dict()
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
-
-            # pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
-            _ = output.pop("_pre_quantization_dtype", None)
-
         self.dict_torch_dtype_to_str(output)
 
         return output
@@ -1009,6 +987,31 @@ class PretrainedConfig(PushToHubMixin):
         for value in d.values():
             if isinstance(value, dict):
                 self.dict_torch_dtype_to_str(value)
+
+    def _remove_keys_not_serialized(self, d: dict[str, Any]) -> None:
+        """
+        Checks and removes if there are any keys in the dict that should not be serialized when saving the config.
+        Runs recursive check on the dict, to remove from all sub configs.
+        """
+        if hasattr(self, "quantization_config"):
+            # Pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
+            _ = d.pop("_pre_quantization_dtype", None)
+
+        if "_auto_class" in d:
+            del d["_auto_class"]
+        if "_commit_hash" in d:
+            del d["_commit_hash"]
+        if "_attn_implementation_internal" in d:
+            del d["_attn_implementation_internal"]
+        # Do not serialize `base_model_tp_plan` for now
+        if "base_model_tp_plan" in d:
+            del d["base_model_tp_plan"]
+        # Do not serialize `base_model_pp_plan` for now
+        if "base_model_pp_plan" in d:
+            del d["base_model_pp_plan"]
+        for value in d.values():
+            if isinstance(value, dict):
+                self._remove_keys_not_serialized(value)
 
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoConfig"):

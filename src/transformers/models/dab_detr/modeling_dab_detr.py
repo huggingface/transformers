@@ -143,7 +143,7 @@ class DabDetrObjectDetectionOutput(ModelOutput):
             possible padding). You can use [`~DabDetrImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
-            Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+            Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
             `pred_boxes`) for each decoder layer.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -1415,8 +1415,8 @@ class DabDetrModel(DabDetrPreTrainedModel):
         reference_position_embeddings = self.query_refpoint_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
 
         # Fourth, sent flattened_features + flattened_mask + object_queries through encoder
-        # flattened_features is a Tensor of shape (heigth*width, batch_size, hidden_size)
-        # flattened_mask is a Tensor of shape (batch_size, heigth*width)
+        # flattened_features is a Tensor of shape (height*width, batch_size, hidden_size)
+        # flattened_mask is a Tensor of shape (batch_size, height*width)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 inputs_embeds=flattened_features,
