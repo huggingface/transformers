@@ -556,9 +556,19 @@ class ContinuousBatchProcessor:
 
     def _handle_request_error(self, error, request_id):
         """Handle general request processing error."""
-        self.output_queue.put(
-            {"request_id": request_id, "status": "failed", "error": f"Error processing request: {str(error)}"}
-        )
+        error_response = {
+            "request_id": request_id,
+            "status": "failed",
+            "error": f"Error processing request: {str(error)}",
+        }
+
+        # Include any generated tokens if this is an active request
+        if isinstance(request_id, str) and request_id in self.active_requests:
+            error_response["output_ids"] = self.active_requests[request_id].output_ids
+        else:
+            error_response["output_ids"] = []
+
+        self.output_queue.put(error_response)
 
     def _schedule_batch(self) -> List[str]:
         """Select requests for the next processing batch."""
@@ -875,6 +885,31 @@ class ContinuousBatchProcessor:
         """Check if there are any active or waiting requests."""
         return bool(self.active_requests or self.waiting_requests)
 
+    def handle_batch_error(self, error):
+        """Handle errors during batch processing."""
+        failed_ids = self.requests_to_process_next
+        for req_id in failed_ids:
+            if req_id in self.active_requests:
+                self._handle_request_error(error, req_id)
+                self.cache.free_blocks(req_id)
+                del self.active_requests[req_id]
+
+    def fail_all_requests(self, error):
+        """Fail all active requests with the given error.
+
+        Args:
+            error: The error to report in the failure message
+        """
+        for req_id, state in list(self.active_requests.items()):
+            self._handle_request_error(error, req_id)
+            self.cache.free_blocks(req_id)
+            del self.active_requests[req_id]
+
+        # Also fail any requests in the waiting queue
+        while self.waiting_requests:
+            state = self.waiting_requests.popleft()
+            self._handle_request_error(error, state.request_id)
+
 
 # Manager Class (User Interface)
 class ContinuousBatchingManager:
@@ -1067,7 +1102,7 @@ class ContinuousBatchingManager:
                         )
                 except Exception as e:
                     logger.error(f"Model forward pass failed: {e}", exc_info=True)
-                    self._handle_batch_error(batch_processor, e)
+                    batch_processor.handle_batch_error(e)
                     continue
 
                 # Get next token logits and sample next tokens
@@ -1084,20 +1119,6 @@ class ContinuousBatchingManager:
         finally:
             logger.info("Generation loop finished.")
 
-    # XXX: this should be handled by the batch processor
-    def _handle_batch_error(self, batch_processor, error):
-        """Handle errors during batch processing."""
-        failed_ids = batch_processor.requests_to_process_next
-        for req_id in failed_ids:
-            if req_id in batch_processor.active_requests:
-                state = batch_processor.active_requests[req_id]
-                state.status = "failed"
-                self.output_queue.put(
-                    {"request_id": req_id, "output_ids": state.output_ids, "status": "failed", "error": str(error)}
-                )
-                batch_processor.cache.free_blocks(req_id)
-                del batch_processor.active_requests[req_id]
-
     def _handle_critical_error(self, error, batch_processor: Optional[ContinuousBatchProcessor]):
         """Handle critical errors that terminate the generation loop."""
         # Signal stop
@@ -1107,27 +1128,13 @@ class ContinuousBatchingManager:
         try:
             while True:
                 req_data = self.input_queue.get_nowait()
-                if req_data and "request_id" in req_data:
-                    self.output_queue.put(
-                        {
-                            "request_id": req_data["request_id"],
-                            "output_ids": [],
-                            "status": "failed",
-                            "error": str(error),
-                        }
-                    )
+                self._handle_request_error(error, getattr(req_data, "request_id", None))
         except queue.Empty:
             pass
 
         # Fail active requests
-        # XXX: this should be handled by the batch processor
         if batch_processor is not None:
-            for req_id, state in list(batch_processor.active_requests.items()):
-                self.output_queue.put(
-                    {"request_id": req_id, "output_ids": state.output_ids, "status": "failed", "error": str(error)}
-                )
-                batch_processor.cache.free_blocks(req_id)
-                del batch_processor.active_requests[req_id]
+            batch_processor.fail_all_requests(error)
 
 
 class ContinuousMixin:
@@ -1216,7 +1223,9 @@ class ContinuousMixin:
                             results[original_idx] = []
 
                         finished_count += 1
-                    # XXX: what happens if req_id is not in request_ids?
+                    else:
+                        # Log unexpected request IDs
+                        logger.warning(f"Received result for unknown request ID: {req_id}. Ignoring.")
                 else:
                     # Check if the manager is still running
                     if not manager.is_running():
