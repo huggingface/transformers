@@ -37,7 +37,7 @@ class AwqQuantizer(HfQuantizer):
     4-bit quantization for Activation-aware Weight Quantization(AWQ) (https://arxiv.org/abs/2306.00978)
     """
 
-    # AWQ requires data callibration - we support only inference
+    # AWQ requires data calibration - we support only inference
     requires_calibration = True
 
     required_packages = ["awq", "accelerate"]

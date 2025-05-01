@@ -181,7 +181,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        # specifi to camembert, both 3 and 4 point to the unk token.
+        # specific to camembert, both 3 and 4 point to the unk token.
         if self.sp_model.PieceToId(token) == 0:
             # Convert sentence piece unk token to fairseq unk token index
             return self.unk_token_id

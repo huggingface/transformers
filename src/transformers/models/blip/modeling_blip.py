@@ -64,7 +64,7 @@ class BlipForConditionalGenerationModelOutput(ModelOutput):
 
     Args:
         loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            Languge modeling loss from the text decoder.
+            Language modeling loss from the text decoder.
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`, *optional*):
             Prediction scores of the language modeling head of the text decoder model.
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*):
@@ -109,7 +109,7 @@ class BlipTextVisionModelOutput(ModelOutput):
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Languge modeling loss from the text decoder.
+            Language modeling loss from the text decoder.
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
             The image embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -145,7 +145,7 @@ class BlipImageTextMatchingModelOutput(ModelOutput):
         itm_score (`torch.FloatTensor`):
             The image-text similarity scores.
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Languge modeling loss from the text decoder.
+            Language modeling loss from the text decoder.
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
             The image embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):

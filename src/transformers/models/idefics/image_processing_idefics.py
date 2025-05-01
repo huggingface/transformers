@@ -101,7 +101,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
         image_size: Optional[Dict[str, int]] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        transform: Callable = None,
+        transform: Optional[Callable] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,

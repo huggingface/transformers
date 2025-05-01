@@ -230,21 +230,21 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            curr_input_dicr = copy.deepcopy(input_dict)
-            _ = model(**curr_input_dicr)  # successfull forward with no modifications
+            curr_input_dict = copy.deepcopy(input_dict)
+            _ = model(**curr_input_dict)  # successfull forward with no modifications
 
             # remove one image but leave the image token in text
             patch_size = config.vision_config.patch_size
             one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
-            curr_input_dicr["pixel_values"] = curr_input_dicr["pixel_values"][-one_img_length:, ...]
-            curr_input_dicr["image_grid_thw"] = curr_input_dicr["image_grid_thw"][-1:, ...]
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
+            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
             with self.assertRaises(ValueError):
-                _ = model(**curr_input_dicr)
+                _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = curr_input_dicr["input_ids"][:1]
-            pixel_values = curr_input_dicr["pixel_values"][:one_img_length]
-            image_grid_thw = curr_input_dicr["image_grid_thw"][:1]
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:one_img_length]
+            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error

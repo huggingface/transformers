@@ -118,7 +118,7 @@ The example below uses [torchao](../quantization/torchao) to only quantize the w
 
 ```python
 import torch
-from transformers import TorchAoConfig, Gemma3ForConditionalGeneration, AutoProcessor
+from transformers import TorchAoConfig, Qwen2_5_VLForConditionalGeneration, AutoProcessor
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(

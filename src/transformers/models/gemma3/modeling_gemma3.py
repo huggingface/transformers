@@ -444,7 +444,7 @@ class Gemma3DecoderLayer(nn.Module):
                 # In case we are beyond the sliding window, we need to correctly offset the mask slicing
                 offset = cache_position[-1] - effective_seq_len + 1
                 # Should only be used when beyond the sliding window (i.e. offset > 0)
-                offset = max(0, offset)
+                offset = torch.clamp(offset, min=0)
                 # equivalent to: `attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]`,
                 # but without data-dependent slicing (i.e. torch.compile friendly)
                 mask_indexes = torch.arange(
@@ -830,7 +830,6 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         **kwargs,
@@ -850,8 +849,6 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
                 to account for the 0 padding, the part of the cache that is not filled yet.
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -863,11 +860,11 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
@@ -1510,7 +1507,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
 
         is_training = token_type_ids is not None and labels is not None
 
-        # Replace image id woth PAD if the image token if OOV, to avoid index-errors
+        # Replace image id with PAD if the image token if OOV, to avoid index-errors
         if input_ids is not None and self.config.image_token_id >= self.vocab_size:
             special_image_mask = input_ids == self.config.image_token_id
             llm_input_ids = input_ids.clone()

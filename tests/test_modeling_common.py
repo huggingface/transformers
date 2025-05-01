@@ -80,7 +80,6 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_deepspeed,
     require_flash_attn,
-    require_non_xpu,
     require_safetensors,
     require_torch,
     require_torch_accelerator,
@@ -2604,7 +2603,7 @@ class ModelTesterMixin:
                     )[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
-    @require_non_xpu
+    @require_torch_gpu
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3429,7 +3428,7 @@ class ModelTesterMixin:
     def test_sdpa_can_dispatch_non_composite_models(self):
         """
         Tests if non-composite models dispatch correctly on SDPA/eager when requested so when loading the model.
-        This tests only by looking at layer names, as usually SDPA layers are calles "SDPAAttention".
+        This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
         """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -3467,7 +3466,7 @@ class ModelTesterMixin:
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
-        This tests only by looking at layer names, as usually SDPA layers are calles "SDPAAttention".
+        This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
         In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
         is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
         See https://github.com/huggingface/transformers/pull/32238 for more info
@@ -3874,7 +3873,6 @@ class ModelTesterMixin:
                 with sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
                     _ = model(**inputs_dict)
 
-    @require_non_xpu
     @require_torch_sdpa
     @require_torch_accelerator
     @slow
@@ -3887,8 +3885,8 @@ class ModelTesterMixin:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
         elif device_type == "rocm" and major < 9:
             self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
-        else:
-            self.skipTest(reason="This test requires a Nvidia or AMD GPU")
+        elif device_type not in ["cuda", "rocm", "xpu"]:
+            self.skipTest(reason="This test requires a Nvidia or AMD GPU, or an Intel XPU")
 
         torch.compiler.reset()
 

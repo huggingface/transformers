@@ -49,9 +49,9 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
             The default length of raw audio in seconds. If `max_length` is not set during `__call__` then it will
             automatically be set to default_audio_length * `self.sampling_rate`.
         hop_length (`int`, *optional*, defaults to 256):
-            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
+            Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
         chunk_length (`int`, *optional*, defaults to 30):
-            The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio
+            The maximum number of chunks of `sampling_rate` samples used to trim and pad longer or shorter audio
             sequences.
         n_fft (`int`, *optional*, defaults to 1024):
             Size of the Fourier transform.
