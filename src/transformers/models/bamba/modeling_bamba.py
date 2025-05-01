@@ -970,7 +970,17 @@ class BambaDecoderLayer(nn.Module):
             position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
-            TODO: @goon - Docs
+            cu_seq_lens_q (`torch.LongTensor`, *optional*):
+                Cumulative query sequence lengths. For padding-free training with flash attention.
+            cu_seq_lens_k (`torch.LongTensor`, *optional*):
+                Cumulative key sequence lengths. For padding-free training with flash attention.
+            max_length_q (`int`, *optional*):
+                Maximum query length. For padding-free training with flash attention.
+            max_length_k (`int`, *optional*):
+                Maximum key length. For padding-free training with flash attention.
+            seq_idx (`torch.IntTensor`, *optional*):
+                Sequence index of each packed example. For padding-free training with fast mamba_ssm and causal_conv1d
+                kernels.
             kwargs (`dict`, *optional*):
                 Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
                 into the model
@@ -1110,6 +1120,18 @@ class BambaModel(BambaPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        fa_kwargs = (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k, seq_idx)
+        num_fa_kwargs_used = sum(k is not None for k in fa_kwargs)
+        if num_fa_kwargs_used:
+            if num_fa_kwargs_used != len(fa_kwargs):
+                raise ValueError(
+                    "All of (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k, seq_idx) must be specified for padding-free training."
+                )
+            if position_ids is None:
+                raise ValueError(
+                    "position_ids must also be specified when (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k, seq_idx) are provided for padding-free training."
+                )
+
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
@@ -1150,7 +1172,6 @@ class BambaModel(BambaPreTrainedModel):
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                # TODO: @goon - grad ckpt support
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
@@ -1161,6 +1182,11 @@ class BambaModel(BambaPreTrainedModel):
                     use_cache,
                     cache_position,
                     position_embeddings,
+                    cu_seq_lens_q,
+                    cu_seq_lens_k,
+                    max_length_q,
+                    max_length_k,
+                    seq_idx,
                 )
             else:
                 layer_outputs = decoder_layer(
