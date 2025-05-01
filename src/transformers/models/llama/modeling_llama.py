@@ -925,21 +925,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Example:
-        ```python
-        >>> from transformers import LlamaForSequenceClassification, LlamaTokenizer
-        >>> import torch
-
-        >>> model = LlamaForSequenceClassification.from_pretrained("meta-llama/Llama-2-7b-hf")
-        >>> tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> with torch.no_grad():
-        ...     logits = model(**inputs).logits
-        >>> predicted_class = logits.argmax().item()
-        >>> print(f"Predicted class: {predicted_class}")
-        ```"""
+        """
 
         transformer_outputs: BaseModelOutputWithPast = self.model(
             input_ids,
