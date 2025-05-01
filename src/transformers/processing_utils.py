@@ -127,6 +127,8 @@ class TextKwargs(TypedDict, total=False):
             Whether or not to print more information and warnings.
         padding_side (`str`, *optional*):
             The side on which padding will be applied.
+        return_mm_token_type_ids (`bool`, *optional*):
+            Whether to return multimodal token type ids indicating mm placeholder token positions.
     """
 
     text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
@@ -147,6 +149,7 @@ class TextKwargs(TypedDict, total=False):
     return_length: Optional[bool]
     verbose: Optional[bool]
     padding_side: Optional[str]
+    return_mm_token_type_ids: Optional[bool]
 
 
 class ImagesKwargs(TypedDict, total=False):

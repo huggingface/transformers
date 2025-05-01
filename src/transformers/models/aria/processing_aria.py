@@ -20,7 +20,9 @@
 # limitations under the License.
 from typing import Dict, List, Optional, Union
 
-from ...image_processing_utils import BatchFeature
+import numpy as np
+
+from ...image_processing_utils import BatchFeature, select_best_resolution
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput
@@ -32,6 +34,7 @@ class AriaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
             "max_image_size": 980,
@@ -121,10 +124,7 @@ class AriaProcessor(ProcessorMixin):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         if images is not None:
-            image_inputs = self.image_processor(
-                images,
-                **output_kwargs["images_kwargs"],
-            )
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             # expand the image_token according to the num_crops and tokens per image
             tokens_per_image = self.size_conversion[image_inputs.pixel_values.shape[2]]
             prompt_strings = []
@@ -138,10 +138,49 @@ class AriaProcessor(ProcessorMixin):
             prompt_strings = text
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def _get_num_mm_tokens_from_sizes(
+        self, image_sizes=None, video_sizes=None, audio_lengths=None, **mm_processor_kwargs
+    ):
+        """
+        Computes the number of placeholder tokens needed for each multimodal input type
+        (image, video, and audio) with the given input sizes.
+        Args:
+            image_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+            audio_lengths (List[int], *optional*):
+                The input length formatted as per each audio.
+        Returns:
+            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            to a list containing the number of placeholder tokens required. If the model doesn't accept
+            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+        """
+        split_image = mm_processor_kwargs.get("split_image", None) or self.image_processor.split_image
+        max_image_size = mm_processor_kwargs.get("max_image_size", None) or self.image_processor.max_image_size
+
+        batch_num_image_tokens = []
+        for height, width in image_sizes:
+            resized_height, resized_width = select_best_resolution(
+                (height, width), self.image_processor.split_resolutions
+            )
+            num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size
+            num_image_tokens = self.size_conversion[max_image_size] * num_patches
+            batch_num_image_tokens.append(num_image_tokens)
+
+        return {"image": batch_num_image_tokens, "video": [], "audio": []}
 
     def batch_decode(self, *args, **kwargs):
         """

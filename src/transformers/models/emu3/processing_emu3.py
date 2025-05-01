@@ -16,6 +16,8 @@
 
 from typing import List, Optional, Union
 
+import numpy as np
+
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
@@ -37,6 +39,7 @@ class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "return_for_image_generation": False,
+            "return_mm_token_typpe_ids": False,
         },
         "images_kwargs": {
             "ratio": "1:1",
@@ -79,6 +82,7 @@ class Emu3Processor(ProcessorMixin):
         self.image_start_token = tokenizer.boi_token  # "<|image start|>" fixed tokens for start and end of image
         self.image_end_token = tokenizer.eoi_token  # "<|image end|>"
         self.fake_token_around_image = tokenizer.image_wrapper_token  # "<|image token|>"  every image starts with it
+        self.image_token_id = tokenizer.image_token_id
         self.eof_token = tokenizer.eof_token  # "<|extra_201|>"
         self.bos_token = tokenizer.bos_token
         self.downsample_ratio = 8
@@ -166,7 +170,7 @@ class Emu3Processor(ProcessorMixin):
 
                     image_placeholder = f"{image_start_tokens}{height}*{width}{self.fake_token_around_image}{'<placeholder>' * image_seq_length}{image_end_tokens}"
                     sample = sample.replace(self.image_token, image_placeholder, 1)
-                    sample = f"{self.bos_token}{sample}"  # add BOS because PT tokenizer doesn't add it
+                    sample = f"{self.bos_token}{sample}"  # add BOS because GPT tokenizer doesn't add it
                 prompt_strings.append(sample)
             text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
 
@@ -179,12 +183,37 @@ class Emu3Processor(ProcessorMixin):
 
         # else just generate from text-only input, and we do no special treatment for text
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        data = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, data, modalities=["image"])
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
-        data.update(**image_features)
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data={**text_inputs, **image_features}, tensor_type=return_tensors)
+
+    def _get_num_mm_tokens_from_sizes(
+        self, image_sizes=None, video_sizes=None, audio_lengths=None, **mm_processor_kwargs
+    ):
+        """
+        Computes the number of placeholder tokens needed for each multimodal input type
+        (image, video, and audio) with the given input sizes.
+        Args:
+            image_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+            audio_lengths (List[int], *optional*):
+                The input length formatted as per each audio.
+        Returns:
+            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            to a list containing the number of placeholder tokens required. If the model doesn't accept
+            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+        """
+        return {"image": [self.image_seq_length + 2] * len(image_sizes), "video": [], "audio": []}
 
     def calculate_generate_size(self, ratio, image_area, spatial_factor):
         width, height = map(int, ratio.split(":"))

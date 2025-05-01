@@ -133,7 +133,8 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         else:
             raise ValueError("patch_size must contain either 'shortest_edge' or 'height' and 'width'.")
 
-        output_size = get_resize_output_image_size(image, size=size, patch_size=patch_size)
+        height, width = image.shape[-2:]
+        output_size = get_resize_output_image_size(height, width, size=size, patch_size=patch_size)
         return F.resize(image, size=output_size, interpolation=interpolation, **kwargs)
 
     # Adapted from transformers.models.pixtral.image_processing_pixtral.PixtralImageProcessor._pad_for_batching

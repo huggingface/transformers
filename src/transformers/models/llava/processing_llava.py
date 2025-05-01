@@ -18,6 +18,8 @@ Processor class for Llava.
 
 from typing import List, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
@@ -30,9 +32,7 @@ logger = logging.get_logger(__name__)
 
 class LlavaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
+        "text_kwargs": {"padding": False, "return_mm_token_type_ids": False},
         "images_kwargs": {},
     }
 
@@ -89,11 +89,7 @@ class LlavaProcessor(ProcessorMixin):
         self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
-        self.image_token_id = (
-            tokenizer.image_token_id
-            if getattr(tokenizer, "image_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.image_token)
-        )
+        self.image_token_id = tokenizer.encode(self.image_token, add_special_tokens=False)[0]
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -174,9 +170,45 @@ class LlavaProcessor(ProcessorMixin):
                 prompt_strings.append(sample)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def _get_num_mm_tokens_from_sizes(
+        self, image_sizes=None, video_sizes=None, audio_lengths=None, **mm_processor_kwargs
+    ):
+        """
+        Computes the number of placeholder tokens needed for each multimodal input type
+        (image, video, and audio) with the given input sizes.
+        Args:
+            image_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+            audio_lengths (List[int], *optional*):
+                The input length formatted as per each audio.
+        Returns:
+            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            to a list containing the number of placeholder tokens required. If the model doesn't accept
+            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+        """
+        crop_size = mm_processor_kwargs.get("crop_size", None) or self.image_processor.crop_size
+        resized_height, resized_width = crop_size["height"], crop_size["width"]
+        num_image_tokens = (resized_height // self.patch_size) * (resized_width // self.patch_size)
+        num_image_tokens += self.num_additional_image_tokens
+        if self.vision_feature_select_strategy == "default":
+            num_image_tokens -= 1
+
+        num_image_tokens = [num_image_tokens] * len(image_sizes)
+        return {"image": num_image_tokens, "video": [], "audio": []}
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

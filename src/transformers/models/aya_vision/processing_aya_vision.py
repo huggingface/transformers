@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from typing import List, Optional, Union
+
+import numpy as np
 
 from transformers.processing_utils import (
     ImagesKwargs,
@@ -29,6 +30,7 @@ from ...image_utils import (
     ImageInput,
     make_flat_list_of_images,
 )
+from ..got_ocr2.image_processing_got_ocr2 import get_optimal_tiled_canvas
 
 
 class AyaVisionImagesKwargs(ImagesKwargs, total=False):
@@ -43,6 +45,7 @@ class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding_side": "left",
             "padding": True,
+            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
             "crop_to_patches": True,
@@ -226,10 +229,56 @@ class AyaVisionProcessor(ProcessorMixin):
             text = processed_text
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
         self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def _get_num_mm_tokens_from_sizes(
+        self, image_sizes=None, video_sizes=None, audio_lengths=None, **mm_processor_kwargs
+    ):
+        """
+        Computes the number of placeholder tokens needed for each multimodal input type
+        (image, video, and audio) with the given input sizes.
+        Args:
+            image_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+            audio_lengths (List[int], *optional*):
+                The input length formatted as per each audio.
+        Returns:
+            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            to a list containing the number of placeholder tokens required. If the model doesn't accept
+            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+        """
+        min_patches = mm_processor_kwargs.get("min_patches", None) or self.image_processor.min_patches
+        max_patches = mm_processor_kwargs.get("max_patches", None) or self.image_processor.max_patches
+        patch_size = mm_processor_kwargs.get("patch_size", None) or self.image_processor.patch_size
+        crop_to_patches = mm_processor_kwargs.get("crop_to_patches", None) or self.image_processor.crop_to_patches
+
+        batch_num_image_tokens = []
+        for height, width in image_sizes:
+            num_patches = 1
+            if crop_to_patches and max_patches > 1:
+                num_columns, num_rows = get_optimal_tiled_canvas(
+                    (height, width), (patch_size["height"], patch_size["width"]), min_patches, max_patches
+                )
+                num_patches += num_columns * num_rows
+
+            token_per_patch = (self.img_size // self.patch_size) ** 2
+            num_image_tokens = token_per_patch + 3
+            num_image_tokens += sum(token_per_patch + 1 for idx in range(1, num_patches))
+            batch_num_image_tokens.append(num_image_tokens)
+
+        return {"image": batch_num_image_tokens, "video": [], "audio": []}
 
     def batch_decode(self, *args, **kwargs):
         """

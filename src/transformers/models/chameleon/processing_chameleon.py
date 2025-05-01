@@ -18,6 +18,8 @@ Processor class for Chameleon.
 
 from typing import List, Optional, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack, _validate_images_text_input_order
@@ -34,6 +36,7 @@ class ChameleonProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": False,
             "return_for_text_completion": False,
+            "return_mm_token_type_ids": False,
         },
         "common_kwargs": {
             "return_tensors": "pt",
@@ -73,6 +76,9 @@ class ChameleonProcessor(ProcessorMixin):
             tokenizer.boi_token if hasattr(tokenizer, "boi_token") else "<racm3:break>"
         )  # fixed tokens for start and end, so can hardcode
         self.image_end_token = tokenizer.eoi_token if hasattr(tokenizer, "eoi_token") else "<eoss>"
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.image_start_token_id = tokenizer.convert_tokens_to_ids(self.image_start_token)
+        self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
 
         super().__init__(image_processor, tokenizer)
 
@@ -141,14 +147,44 @@ class ChameleonProcessor(ProcessorMixin):
                 sample += self.tokenizer.sep_token  # special Chameleon treatment to add sep for chat mode
             prompt_strings.append(sample)
 
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(prompt_strings, data, modalities=["image"])
-
+        image_inputs = {}
         if images is not None:
-            data["pixel_values"] = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            mm_token_type_ids[array_ids == self.image_start_token_id] = 1
+            mm_token_type_ids[array_ids == self.image_end_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def _get_num_mm_tokens_from_sizes(
+        self, image_sizes=None, video_sizes=None, audio_lengths=None, **mm_processor_kwargs
+    ):
+        """
+        Computes the number of placeholder tokens needed for each multimodal input type
+        (image, video, and audio) with the given input sizes.
+        Args:
+            image_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+            audio_lengths (List[int], *optional*):
+                The input length formatted as per each audio.
+        Returns:
+            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            to a list containing the number of placeholder tokens required. If the model doesn't accept
+            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+        """
+        return {"image": [self.image_seq_length + 2] * len(image_sizes), "video": 0, "audio": 0}
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
