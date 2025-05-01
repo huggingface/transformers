@@ -345,8 +345,13 @@ class AutoTokenizerTest(unittest.TestCase):
                 self.assertTrue(
                     os.path.exists(os.path.join(tmp_dir, "tokenization.py"))
                 )  # Assert we saved tokenizer code
+                self.assertEqual(reloaded_tokenizer._auto_class, "AutoTokenizer")
+                with open(os.path.join(tmp_dir, "tokenizer_config.json"), "r") as f:
+                    tokenizer_config = json.load(f)
                 # Assert we're pointing at local code and not another remote repo
-                self.assertEqual(reloaded_tokenizer.auto_map["AutoTokenizer"], "tokenization.NewTokenizerFast")
+                # TODO Matt: Should we also be saving the fast code at the same time and ensuring the fast
+                #      tokenizer autoclass is set?
+                self.assertEqual(tokenizer_config['auto_map']["AutoTokenizer"], ['tokenization.NewTokenizer', None])
             self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizer")
             self.assertTrue(reloaded_tokenizer.special_attribute_present)
         else:
