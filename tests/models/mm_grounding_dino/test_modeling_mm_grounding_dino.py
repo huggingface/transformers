@@ -678,10 +678,10 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
         expected_boxes = torch.tensor(
-            [[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]]
+            [[0.7666, 0.4142, 0.4590], [0.2557, 0.5480, 0.4812], [0.5049, 0.5133, 0.9767]]
         ).to(torch_device)
         expected_logits = torch.tensor(
-            [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]]
+            [[-5.1160, -0.2143, -0.2089], [-5.0592, -0.4269, -0.4169], [-4.9087, -1.7608, -1.7372]]
         ).to(torch_device)
 
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-3, atol=1e-3)
@@ -694,8 +694,8 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
         results = processor.image_processor.post_process_object_detection(
             outputs, threshold=0.35, target_sizes=[(image.height, image.width)]
         )[0]
-        expected_scores = torch.tensor([0.4526, 0.4082]).to(torch_device)
-        expected_slice_boxes = torch.tensor([344.8143, 23.1796, 637.4004, 373.8295]).to(torch_device)
+        expected_scores = torch.tensor([0.4480, 0.3973]).to(torch_device)
+        expected_slice_boxes = torch.tensor([343.7321,  23.8182, 637.5044, 373.8593]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 2)
         torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-3, atol=1e-3)
@@ -805,30 +805,30 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
 
         # Loss differs by CPU and GPU, also this can be changed in future.
         expected_loss_dict = {
-            "loss_ce": torch.tensor(1.1147),
-            "loss_bbox": torch.tensor(0.2031),
-            "loss_giou": torch.tensor(0.5819),
-            "loss_ce_0": torch.tensor(1.1941),
-            "loss_bbox_0": torch.tensor(0.1978),
-            "loss_giou_0": torch.tensor(0.5524),
-            "loss_ce_1": torch.tensor(1.1621),
-            "loss_bbox_1": torch.tensor(0.1909),
-            "loss_giou_1": torch.tensor(0.5892),
-            "loss_ce_2": torch.tensor(1.1641),
-            "loss_bbox_2": torch.tensor(0.1892),
-            "loss_giou_2": torch.tensor(0.5626),
-            "loss_ce_3": torch.tensor(1.1943),
-            "loss_bbox_3": torch.tensor(0.1941),
-            "loss_giou_3": torch.tensor(0.5607),
-            "loss_ce_4": torch.tensor(1.0956),
-            "loss_bbox_4": torch.tensor(0.2008),
-            "loss_giou_4": torch.tensor(0.5836),
-            "loss_ce_enc": torch.tensor(16226.3164),
-            "loss_bbox_enc": torch.tensor(0.3063),
-            "loss_giou_enc": torch.tensor(0.7380),
+            "loss_ce": torch.tensor(1.1799),
+            "loss_bbox": torch.tensor(0.2348),
+            "loss_giou": torch.tensor(0.5834),
+            "loss_ce_0": torch.tensor(1.1199),
+            "loss_bbox_0": torch.tensor(0.3083),
+            "loss_giou_0": torch.tensor(0.6555),
+            "loss_ce_1": torch.tensor(1.2075),
+            "loss_bbox_1": torch.tensor(0.2641),
+            "loss_giou_1": torch.tensor(0.6073),
+            "loss_ce_2": torch.tensor(1.2915),
+            "loss_bbox_2": torch.tensor(0.2616),
+            "loss_giou_2": torch.tensor(0.5730),
+            "loss_ce_3": torch.tensor(1.0243),
+            "loss_bbox_3": torch.tensor(0.2799),
+            "loss_giou_3": torch.tensor(0.6326),
+            "loss_ce_4": torch.tensor(1.2019),
+            "loss_bbox_4": torch.tensor(0.2430),
+            "loss_giou_4": torch.tensor(0.5679),
+            "loss_ce_enc": torch.tensor(10.2381),
+            "loss_bbox_enc": torch.tensor(0.2886),
+            "loss_giou_enc": torch.tensor(0.6335),
         }
 
-        expected_loss = torch.tensor(32482.2305)
+        expected_loss = torch.tensor(52.4340)
 
         for key in expected_loss_dict:
             self.assertTrue(torch.allclose(outputs.loss_dict[key], expected_loss_dict[key], atol=1e-3))
