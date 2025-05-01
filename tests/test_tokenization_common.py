@@ -3887,14 +3887,6 @@ class TokenizerTesterMixin:
 
                 # Encode_plus - Simple input
                 input_r = tokenizer_r.encode_plus(
-                    "This is a simple input", max_length=max_length, pad_to_max_length=True
-                )
-                input_p = tokenizer_p.encode_plus(
-                    "This is a simple input", max_length=max_length, pad_to_max_length=True
-                )
-                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
-                input_r = tokenizer_r.encode_plus(
                     "This is a simple input", max_length=max_length, padding="max_length"
                 )
                 input_p = tokenizer_p.encode_plus(
@@ -3913,14 +3905,6 @@ class TokenizerTesterMixin:
 
                 # Encode_plus - Pair input
                 input_r = tokenizer_r.encode_plus(
-                    "This is a simple input", "This is a pair", max_length=max_length, pad_to_max_length=True
-                )
-                input_p = tokenizer_p.encode_plus(
-                    "This is a simple input", "This is a pair", max_length=max_length, pad_to_max_length=True
-                )
-                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
-                input_r = tokenizer_r.encode_plus(
                     "This is a simple input", "This is a pair", max_length=max_length, padding="max_length"
                 )
                 input_p = tokenizer_p.encode_plus(
@@ -3936,18 +3920,6 @@ class TokenizerTesterMixin:
                 self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
 
                 # Batch_encode_plus - Simple input
-                input_r = tokenizer_r.batch_encode_plus(
-                    ["This is a simple input 1", "This is a simple input 2"],
-                    max_length=max_length,
-                    pad_to_max_length=True,
-                )
-                input_p = tokenizer_p.batch_encode_plus(
-                    ["This is a simple input 1", "This is a simple input 2"],
-                    max_length=max_length,
-                    pad_to_max_length=True,
-                )
-                self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
-
                 input_r = tokenizer_r.batch_encode_plus(
                     ["This is a simple input 1", "This is a simple input 2"],
                     max_length=max_length,
