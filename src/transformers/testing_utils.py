@@ -240,6 +240,7 @@ def parse_int_from_env(key, default=None):
 
 
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
+_run_flaky_tests = parse_flag_from_env("RUN_FLAKY", default=True)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
@@ -2614,7 +2615,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
 
             return test_func_ref(*args, **kwargs)
 
-        return wrapper
+        return unittest.skipUnless(_run_flaky_tests, "test is flaky")(wrapper)
 
     return decorator
 
@@ -2664,7 +2665,7 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
 def run_first(test_case):
     """
     Decorator marking a test with order(1). When pytest-order plugin is installed, tests marked with this decorator
-    are garanteed to run first.
+    are guaranteed to run first.
 
     This is especially useful in some test settings like on a Gaudi instance where a Gaudi device can only be used by a
     single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device

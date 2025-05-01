@@ -236,7 +236,7 @@ class TFEsmModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model_as_decoder(self):
         """Test the base model as a decoder (of an encoder-decoder architecture)
 
-        is_deocder=True + cross_attention + pass encoder outputs
+        is_decoder=True + cross_attention + pass encoder outputs
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)

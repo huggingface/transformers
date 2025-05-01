@@ -63,7 +63,7 @@ Wenn Sie sich vergewissert haben, dass der Fehler noch nicht gemeldet wurde, geb
 Um das Betriebssystem und die Softwareversionen automatisch auszugeben, führen Sie den folgenden Befehl aus:
 
 ```bash
-transformers-cli env
+transformers env
 ```
 
 Sie können denselben Befehl auch im Hauptverzeichnis des Repositorys ausführen:

@@ -125,7 +125,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         emoji_file (`str`):
             File containing the emoji.
         unk_token (`str`, *optional*, defaults to `"<|nottoken|>"`):
-            The token used for unknown charactor
+            The token used for unknown character
         pad_token (`str`, *optional*, defaults to `"<|separator|>"`):
             The token used for padding
         bos_token (`str`, *optional*, defaults to `"<|startoftext|>"`):
@@ -372,7 +372,7 @@ class SubWordJapaneseTokenizer:
     - Decoding byte0~byte255 tokens correctly
     - Added bagofword token handling
 
-    https://github.com/tanreinama/Japanese-BPEEncoder_V2 This tokenizer class is under MIT Lisence according to the
+    https://github.com/tanreinama/Japanese-BPEEncoder_V2 This tokenizer class is under MIT License according to the
     original repository.
 
     MIT License

@@ -160,7 +160,7 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "image_std"))
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
-    # The following tests are overriden as PixtralImageProcessor can return images of different sizes
+    # The following tests are overridden as PixtralImageProcessor can return images of different sizes
     # and thus doesn't support returning batched tensors
 
     def test_call_pil(self):
