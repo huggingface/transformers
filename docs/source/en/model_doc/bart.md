@@ -91,7 +91,7 @@ echo -e "Plants create <mask> through a process known as photosynthesis." | tran
 
 ## Notes
 
-- BART is a model with absolute position embeddings so it’s usually advised to pad the inputs on the right rather than the left.
+- Inputs should be padded on the right because BERT uses absolute position embeddings.
 - Models that load the facebook/bart-large-cnn weights will not have a mask_token_id, or be able to perform mask-filling tasks.
 - Bart doesn’t use token_type_ids for sequence classification. Use BartTokenizer or encode() to get the proper splitting.
 
