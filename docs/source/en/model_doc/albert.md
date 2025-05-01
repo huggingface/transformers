@@ -108,11 +108,6 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 - Inputs should be padded on the right because BERT uses absolute position embeddings.
 - The embedding size `E` is different from the hidden size `H` because the embeddings are context independent (one embedding vector represents one token) and the hidden states are context dependent (one hidden state represents a sequence of tokens). The embedding matrix is also larger because `V x E` where `V` is the vocabulary size. As a result, it's more logical if `H >> E`. If `E < H`, the model has less parameters.
-- ALBERT supports a maximum sequence length of 512 tokens.
-- Cannot be used for autoregressive generation (unlike GPT)
-- ALBERT requires absolute positional embeddings, and it expects right-padding (i.e., pad tokens should be added at the end, not the beginning).
-- ALBERT uses token_type_ids, just like BERT. So you should indicate which token belongs to which segment (e.g., sentence A vs. sentence B) when doing tasks like question answering or sentence-pair classification.
-- ALBERT uses a different pretraining objective called Sentence Order Prediction (SOP) instead of Next Sentence Prediction (NSP), so fine-tuned models might behave slightly differently from BERT when modeling inter-sentence relationships.
 
 
 ## Resources
