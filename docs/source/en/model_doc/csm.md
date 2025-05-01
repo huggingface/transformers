@@ -18,11 +18,12 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The CSM (Conversational Speech Model) is the first Open-Source contextual text-to-speech model [introduced by Sesame](https://www.sesame.com/research/crossing_the_uncanny_valley_of_voice). This model is intended to generate speech, given a conversational context (or not) - namely a conversation between speakers formed by turns composed of text and the spoken text. 
+The Conversational Speech Model (CSM) is the first open-source contextual text-to-speech model [released by Sesame](https://www.sesame.com/research/crossing_the_uncanny_valley_of_voice). It is designed to generate natural-sounding speech with or without conversational context. This context typically consists of multi-turn dialogue between speakers, represented as sequences of text and corresponding spoken audio.
 
-**Model Architecture:** The CSM model consists of two llama-like auto-regressive transformer decoders: a backbone model that predicts the first codebook token and a depth decoder that predicts the other codebook tokens. It relies on the pretrained codec model [Mimi](./mimi.md) introduced by Kyutai to encode speech into discrete codebook tokens and decode them back into audio. 
+**Model Architecture:**
+CSM is composed of two LLaMA-style auto-regressive transformer decoders: a backbone decoder that predicts the first codebook token and a depth decoder that generates the remaining tokens. It uses the pretrained codec model [Mimi](./mimi.md), introduced by Kyutai, to encode speech into discrete codebook tokens and decode them back into audio.
 
-You can find the original csm-1b checkpoint under the [Sesame](https://huggingface.co/sesame/csm-1b) organization.
+The original csm-1b checkpoint is available under the [Sesame](https://huggingface.co/sesame/csm-1b) o organization on Hugging Face.
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/eustlb/documentation-images/resolve/main/csm_architecture.png"/>
@@ -32,7 +33,7 @@ You can find the original csm-1b checkpoint under the [Sesame](https://huggingfa
 
 ## without conversational context
 
-CSM can be used to simply generate speech from a text prompt
+CSM can be used to simply generate speech from a text prompt:
 
 ```python
 import torch
@@ -64,7 +65,7 @@ sf.write("example_without_context.wav", audio_values[0].cpu().numpy(), 24000)
 
 ## with a conversational context
 
-CSM can be used to generate speech given a conversation, allowing consistency in the voices and content-aware generation.
+CSM can be used to generate speech given a conversation, allowing consistency in the voices and content-aware generation:
 
 ```python
 import torch
@@ -108,7 +109,7 @@ sf.write("example_with_context.wav", audio_values[0].cpu().numpy(), 24000)
 
 ## batched inference
 
-CSM supports batched inference !
+CSM supports batched inference!
 
 ```python
 import torch
@@ -360,7 +361,6 @@ out.loss.backward()
 This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb).
 The original code can be found [here](https://github.com/SesameAILabs/csm).
 
-
 ## CsmConfig
 
 [[autodoc]] CsmConfig
@@ -388,4 +388,3 @@ The original code can be found [here](https://github.com/SesameAILabs/csm).
 ## CsmBackboneModel
 
 [[autodoc]] CsmBackboneModel
-
