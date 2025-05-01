@@ -247,6 +247,16 @@ class TorchAoHfQuantizer(HfQuantizer):
             module._parameters[tensor_name] = torch.nn.Parameter(
                 param_value, requires_grad=param_value.requires_grad
             ).to(device=target_device)
+            # if we are quantizing tied parameters, to avoid tying the quantized weights
+            # the correct order to do it is
+            # 1. load the weight to model
+            # 2. run tie_weights to populate the weights
+            # 3. quantize
+            input_embed = model.get_input_embeddings()
+            if self.quantization_config.untie_embedding_weights and id(module) == id(input_embed):
+                model.tie_weights()
+                setattr(model.config.get_text_config(decoder=True), "tie_word_embeddings", False)
+
             # handle AOPerModuleConfig, introduced in torchao 0.11.0+
             if self.quantization_config._get_ao_version() > version.Version("0.10.0"):
                 from torchao.quantization import AOPerModuleConfig
