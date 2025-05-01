@@ -1285,7 +1285,8 @@ def _get_device_map(
         if hf_quantizer is not None:
             max_memory = hf_quantizer.adjust_max_memory(max_memory)
 
-        # There may be unused reserved memory in the GPU, which we can use to allocate parameters.
+        # CUDA: `max_memory` contains non-reserved memory. There may be *unused* reserved memory in the GPU, which we
+        # can use to allocate parameters.
         for device_name in max_memory.keys():
             if isinstance(device_name, int):  # it's a GPU device
                 unused_memory = torch.cuda.memory_reserved(device_name) - torch.cuda.memory_allocated(device_name)
