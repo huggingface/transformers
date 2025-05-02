@@ -215,6 +215,28 @@ TORCH_INIT_FUNCTIONS = {
     "kaiming_normal": nn.init.kaiming_normal,
 }
 
+# DO NOT MODIFY, KEPT FOR BC ONLY
+VLMS = [
+    "aria",
+    "aya_vision",
+    "emu3",
+    "fuyu",
+    "got_ocr2",
+    "gemma3",
+    "internvl",
+    "llava",
+    "llava_next",
+    "llava_next_video",
+    "llava_onevision",
+    "mistral3",
+    "mllama",
+    "paligemma",
+    "qwen2_vl",
+    "qwem2_5_vl",
+    "video_llava",
+    "vipllava",
+]
+
 
 @contextmanager
 def no_init_weights():
@@ -4058,7 +4080,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
-        key_mapping = kwargs.pop("key_mapping", cls._key_mapping)
+
+        # Load models with hardcoded key mapping on class for VLMs only,  to keep BC and standardize model
+        if any(allowed_name in cls.__name__.lower() for allowed_name in VLMS):
+            key_mapping = kwargs.pop("key_mapping", cls._key_mapping)
+        else:
+            key_mapping = kwargs.pop("key_mapping", None)
+
         # Not used anymore -- remove them from the kwargs
         _ = kwargs.pop("resume_download", None)
         _ = kwargs.pop("trust_remote_code", None)
