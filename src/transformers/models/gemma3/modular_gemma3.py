@@ -732,7 +732,6 @@ class Gemma3MultiModalProjector(nn.Module):
 
 
 class Gemma3Model(PaliGemmaModel):
-
     def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Projects the last hidden state from the vision model into language model space.

@@ -1277,7 +1277,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
 class AriaPreTrainedModel(LlamaPreTrainedModel):
     config_class = AriaConfig
-    base_model_prefix = "model"
+    base_model_prefix = ""
     _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = False
 

@@ -267,11 +267,11 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             model = model_class(config).to(torch_device)
 
             # Generate and make sure rope_deltas are not `None`
-            self.assertTrue(model.rope_deltas is None)
+            self.assertTrue(model.model.rope_deltas is None)
             generation_output = model.generate(
                 **input_dict, max_new_tokens=4, return_dict_in_generate=True, output_logits=True
             )
-            self.assertTrue(model.rope_deltas is not None)
+            self.assertTrue(model.model.rope_deltas is not None)
 
             # Now if we try to do forward pass, we should get new rope logits, because cache is not passed
             forward_output = model(**input_dict)
