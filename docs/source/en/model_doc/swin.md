@@ -83,8 +83,8 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 ## Notes
 
-- Swin pads the inputs supporting any input height and width (if divisible by `32`).
-- Swin can be used as a *backbone*. When `output_hidden_states = True`, it will output both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, sequence_length, num_channels)`.
+- Swin can pad the inputs for any input height and width divisible by `32`.
+- Swin can be used as a [backbone](../backbones). When `output_hidden_states = True`, it outputs both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, sequence_length, num_channels)`.
 
 ## SwinConfig
 
