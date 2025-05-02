@@ -19,7 +19,6 @@ import numpy as np
 
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
-from ...generation import GenerationMixin
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, select_best_resolution
 from ...image_transforms import PaddingMode, convert_to_rgb, pad, resize, to_channel_dimension_format
 from ...image_utils import (
@@ -50,7 +49,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.import_utils import is_torch_available
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForCausalLM, AutoTokenizer
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -62,6 +61,7 @@ from ..llama.modeling_llama import (
 )
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
+    LlavaForConditionalGeneration,
     LlavaModel,
     LlavaModelOutputWithPast,
 )
@@ -1531,85 +1531,15 @@ class AriaModel(LlavaModel):
     to perform tasks that involve both image and text inputs.""",
     ARIA_START_DOCSTRING,
 )
-class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
-    config_class = AriaConfig
-    _supports_flash_attn_2 = False
-    _supports_flex_attn = False
-    _supports_sdpa = False
-    _tied_weights_keys = ["language_model.lm_head.weight"]
-
-    def __init__(self, config: AriaConfig):
-        super().__init__(config)
-
-        self.vision_tower = AutoModel.from_config(config.vision_config)
-        self.multi_modal_projector = AriaProjector(config)
-        self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
-        self._use_flash_attention_2 = config.text_config._attn_implementation == "flash_attention_2"
-        self.post_init()
-
-    def _create_patch_attention_mask(self, pixel_mask):
-        if pixel_mask is None:
-            return None
-
-        patches_subgrid = pixel_mask.unfold(
-            dimension=1,
-            size=self.vision_tower.config.patch_size,
-            step=self.vision_tower.config.patch_size,
-        )
-        patches_subgrid = patches_subgrid.unfold(
-            dimension=2,
-            size=self.vision_tower.config.patch_size,
-            step=self.vision_tower.config.patch_size,
-        )
-        return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
-
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: int = -1,
-    ):
-        patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
-        image_outputs = self.vision_tower(
-            pixel_values, patch_attention_mask=patch_attention_mask, output_hidden_states=True
-        )
-        image_attn_mask = None
-        if patch_attention_mask is not None:
-            flattened_mask = patch_attention_mask.flatten(1)
-            image_attn_mask = torch.logical_not(flattened_mask)
-
-        selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
-        return image_features
-
+class AriaForConditionalGeneration(LlavaForConditionalGeneration):
     @can_return_tuple
     @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=AriaConfig)
+    @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        pixel_mask: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -1618,10 +1548,11 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         cache_position: Optional[torch.LongTensor] = None,
         **loss_kwargs,
-    ) -> AriaCausalLMOutputWithPast:
+    ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1687,37 +1618,12 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        # 2. Merge text and images
-        if pixel_values is not None and inputs_embeds.shape[1] != 1:
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)[0]
-            else:
-                image_embeds = input_ids == self.config.image_token_id
-                special_image_mask = image_embeds.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-                n_image_tokens = (image_embeds).sum(dim=1).sum(dim=0)
-            image_features = self.get_image_features(
-                pixel_values=pixel_values,
-                pixel_mask=pixel_mask,
-                vision_feature_layer=self.config.vision_feature_layer,
-            )
-            n_images, n_features_per_image = image_features.shape[0], image_features.shape[1]
-            n_image_features = n_images * n_features_per_image
-            if n_image_tokens != n_image_features:
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
-
-        outputs: CausalLMOutputWithPast = self.language_model(
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            pixel_mask=pixel_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1725,11 +1631,14 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            logits_to_keep=logits_to_keep,
+            return_dict=return_dict,
             cache_position=cache_position,
         )
 
-        logits = outputs.logits
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -1757,7 +1666,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         logits_to_keep=None,
         **kwargs,
     ):
-        model_inputs = self.language_model.prepare_inputs_for_generation(
+        model_inputs = self.model.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,

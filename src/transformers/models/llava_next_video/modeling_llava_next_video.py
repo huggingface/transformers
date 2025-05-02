@@ -35,11 +35,12 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
-from ..auto import AutoModel, AutoModelForCausalLM
+from ..auto import AutoModel
 from .configuration_llava_next_video import LlavaNextVideoConfig
 
 
@@ -748,190 +749,41 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
     LLAVA_NEXT_VIDEO_START_DOCSTRING,
 )
 class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, GenerationMixin):
-    def __init__(
-        self,
-        config: LlavaNextVideoConfig,
-    ):
+    _key_mapping = {
+        "^language_model.model": "model.language_model",
+        "^vision_tower": "model.vision_tower",
+        "^multi_modal_projector": "model.multi_modal_projector",
+        "^image_newline": "model.image_newline",
+        "^language_model.lm_head": "lm_head",
+    }
+    _tied_weights_keys = ["lm_head.weight"]
+
+    def __init__(self, config: LlavaNextVideoConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
-
-        self.multi_modal_projector = LlavaNextVideoMultiModalProjector(config)
-        embed_std = 1 / math.sqrt(config.text_config.hidden_size)
-        self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size, dtype=self.dtype) * embed_std)
-
-        self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
-        self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
-        self.vision_resampler = LlavaNextVideoPooler(config)
+        self.model = LlavaNextVideoModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
-    @property
-    def padding_side(self):
-        return self._padding_side
-
-    @padding_side.setter
-    def padding_side(self, padding_side: str):
-        if padding_side not in ["left", "right"]:
-            raise ValueError(f"{padding_side} is not `left` or `right`.")
-        self._padding_side = padding_side
-
     def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
+        return self.model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
+        self.model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
+    def get_output_embeddings(self) -> nn.Module:
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
+        self.lm_head = new_embeddings
 
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
-
-    def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
-        """
-        Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
-
-        Args:
-            image_features (`List[torch.Tensor]` of length num_images, each of shape `(num_patches, image_length, embed_dim)`)
-                List of image feature tensor, each contains all the visual feature of all patches.
-            image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
-                Actual image size of each images (H, W).
-            vision_feature_select_strategy (`str`)
-                The feature selection strategy used to select the vision feature from the vision backbone.
-            image_newline (`torch.Tensor` of shape `(embed_dim)`)
-                New line embedding vector.
-        Returns:
-            image_features (`torch.Tensor` of shape `(all_feat_len, embed_dim)`)
-            feature_lens (`List[int]`)
-                token length of each image in image_features
-        """
-        new_image_features = []
-        feature_lens = []
-        for image_idx, image_feature in enumerate(image_features):
-            if image_feature.shape[0] > 1:
-                base_image_feature = image_feature[0]
-                image_feature = image_feature[1:]
-                height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
-
-                num_patch_height, num_patch_width = get_anyres_image_grid_shape(
-                    image_sizes[image_idx],
-                    self.config.image_grid_pinpoints,
-                    self.config.vision_config.image_size,
-                )
-
-                if (
-                    np.prod(image_feature.shape) % (num_patch_height * num_patch_width * height * width) != 0
-                    and vision_feature_select_strategy == "default"
-                ):
-                    logger.warning_once(
-                        "Image feature shape does not line up with the provided patch size. "
-                        "You may be using the `default` vision_feature_select_strategy with a"
-                        " visual encoder that does not have CLS."
-                    )
-
-                image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
-                image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
-                image_feature = image_feature.flatten(1, 2).flatten(2, 3)
-                image_feature = unpad_image(image_feature, image_sizes[image_idx])
-                if image_newline is not None:
-                    image_feature = torch.cat(
-                        (
-                            image_feature,
-                            image_newline[:, None, None]
-                            .expand(*image_feature.shape[:-1], 1)
-                            .to(image_feature.device, image_feature.dtype),
-                        ),
-                        dim=-1,
-                    )
-                image_feature = image_feature.flatten(1, 2).transpose(0, 1)
-                image_feature = torch.cat((base_image_feature, image_feature), dim=0)
-            else:
-                image_feature = image_feature[0]
-                if image_newline is not None:
-                    image_feature = torch.cat((image_feature, image_newline[None].to(image_feature)), dim=0)
-            new_image_features.append(image_feature)
-            feature_lens.append(image_feature.size(0))
-        image_features = torch.cat(new_image_features, dim=0)
-        feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features.device)
-        return image_features, feature_lens
-
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_sizes: torch.Tensor,
-        vision_feature_layer: Union[int, List[int]],
-        vision_feature_select_strategy: str,
-    ):
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
-               The tensors corresponding to the input images.
-            image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
-                Actual image size of each images (H, W).
-            vision_feature_layer (`Union[int, List[int]]`):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-            vision_feature_select_strategy (`str`):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
-        Returns:
-            image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
-            and are of shape `(num_patches, image_length, embed_dim)`).
-        """
-        # ! infer image_num_patches from image_sizes
-        image_num_patches = [
-            image_size_to_num_patches(
-                image_size=imsize,
-                grid_pinpoints=self.config.image_grid_pinpoints,
-                patch_size=self.config.vision_config.image_size,
-            )
-            for imsize in image_sizes
-        ]
-        if pixel_values.dim() == 5:
-            # stacked if input is (batch_size, num_patches, num_channels, height, width)
-            _pixel_values_list = [pix_val[:num_patch] for pix_val, num_patch in zip(pixel_values, image_num_patches)]
-            pixel_values = torch.cat(_pixel_values_list, dim=0)
-        elif pixel_values.dim() != 4:
-            # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
-            raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
-
-        image_features = self.vision_tower(pixel_values, output_hidden_states=True)
-        # If we have one vision feature layer, return the corresponding hidden states,
-        # otherwise, select the hidden states of each feature layer and concatenate them
-        if isinstance(vision_feature_layer, int):
-            selected_image_feature = image_features.hidden_states[vision_feature_layer]
-        else:
-            hs_pool = [image_features.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
-            selected_image_feature = torch.cat(hs_pool, dim=-1)
-
-        if vision_feature_select_strategy == "default":
-            selected_image_feature = selected_image_feature[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_image_feature = selected_image_feature
-        image_features = self.multi_modal_projector(selected_image_feature)
-        image_features = torch.split(image_features, image_num_patches, dim=0)
-        return image_features
-
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(LLAVA_NEXT_VIDEO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LlavaNextVideoCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        pixel_values_videos: torch.FloatTensor = None,
         image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1023,117 +875,47 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "USER: \nWhat's the content of the image? ASSISTANT: The image shows a red stop sign on a pole, with a traditional Chinese archway (...)"
         ```"""
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        self.vision_feature_layer = (
+        vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
-        self.vision_feature_select_strategy = (
+        vision_feature_select_strategy = (
             vision_feature_select_strategy
             if vision_feature_select_strategy is not None
             else self.config.vision_feature_select_strategy
         )
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if (pixel_values is not None or pixel_values_videos is not None) and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both `pixel_values`/`pixel_values_videos` and `inputs_embeds` at the same time, "
-                "and must specify either one"
-            )
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        if pixel_values is not None and pixel_values.size(0) > 0:
-            image_features = self.get_image_features(
-                pixel_values,
-                image_sizes,
-                vision_feature_layer=self.vision_feature_layer,
-                vision_feature_select_strategy=self.vision_feature_select_strategy,
-            )
-            image_features, feature_lens = self.pack_image_features(
-                image_features,
-                image_sizes,
-                self.vision_feature_select_strategy,
-                image_newline=self.image_newline,
-            )
-
-            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
-                n_image_features = image_features.shape[0]
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
-
-        if pixel_values_videos is not None and pixel_values_videos.size(0) > 0:
-            video_features = self.get_video_features(
-                pixel_values_videos,
-                vision_feature_layer=self.vision_feature_layer,
-                vision_feature_select_strategy=self.vision_feature_select_strategy,
-            )
-            video_features = [feature.flatten(0, 1) for feature in video_features]
-            video_feature_lens = [feature.size(0) for feature in video_features]
-            video_features = torch.cat(video_features, dim=0)
-            video_feature_lens = torch.tensor(video_feature_lens, dtype=torch.long, device=video_features.device)
-
-            special_image_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != video_features.numel():
-                n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
-                n_video_features = video_features.shape[0]
-                raise ValueError(
-                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
-                )
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, video_features)
-
-        outputs = self.language_model(
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            vision_feature_layer=vision_feature_layer,
+            vision_feature_select_strategy=vision_feature_select_strategy,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            logits_to_keep=logits_to_keep,
+            image_sizes=image_sizes,
             **lm_kwargs,
         )
 
-        logits = outputs[0]
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            if attention_mask is not None:
-                # we use the input attention mask to shift the logits and labels, because it is 2D.
-                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
-            else:
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
-            )
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
         return LlavaNextVideoCausalLMOutputWithPast(
             loss=loss,
@@ -1141,8 +923,8 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-            video_hidden_states=video_features if pixel_values_videos is not None else None,
+            image_hidden_states=outputs.image_hidden_states,
+            video_hidden_states=outputs.video_hidden_states,
         )
 
     def prepare_inputs_for_generation(
@@ -1160,7 +942,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
     ):
         # Overwritten -- extra custom processing
 
-        model_inputs = self.language_model.prepare_inputs_for_generation(
+        model_inputs = self.model.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -1178,53 +960,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             model_inputs["image_sizes"] = image_sizes
 
         return model_inputs
-
-    # Copied from transformers.models.llava_next_video.modeling_llava_next_video.LlavaNextVideoModel.get_video_features
-    def get_video_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        vision_feature_layer: Union[int, List[int]],
-        vision_feature_select_strategy: str,
-    ):
-        """
-        Obtains video last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
-               The tensors corresponding to the input video.
-            vision_feature_layer (`Union[int, List[int]]`):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-            vision_feature_select_strategy (`str`):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
-        Returns:
-            video_features (List[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
-            and are of shape `(num_videos, video_length, embed_dim)`).
-        """
-        batch_size, frames, channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.reshape(batch_size * frames, channels, height, width)
-        video_features = self.vision_tower(pixel_values, output_hidden_states=True)
-
-        # If we have one vision feature layer, return the corresponding hidden states,
-        # otherwise, select the hidden states of each feature layer and concatenate them
-        if isinstance(vision_feature_layer, int):
-            selected_video_features = video_features.hidden_states[vision_feature_layer]
-        else:
-            hs_pool = [video_features.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
-            selected_video_features = torch.cat(hs_pool, dim=-1)
-
-        if vision_feature_select_strategy == "default":
-            selected_video_features = selected_video_features[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_video_features = selected_video_features
-
-        # Same as image features except that video has pooling layer
-        video_features = self.vision_resampler(selected_video_features)
-        video_features = self.multi_modal_projector(video_features)
-        video_features = torch.split(video_features, frames, dim=0)
-        return video_features
 
 
 __all__ = ["LlavaNextVideoForConditionalGeneration", "LlavaNextVideoModel", "LlavaNextVideoPreTrainedModel"]

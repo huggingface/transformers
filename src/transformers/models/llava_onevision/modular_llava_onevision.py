@@ -36,8 +36,7 @@ from ...image_utils import (
     OPENAI_CLIP_STD,
     PILImageResampling,
 )
-from ...utils import add_start_docstrings, is_torchdynamo_compiling, logging
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import add_start_docstrings, can_return_tuple, is_torchdynamo_compiling, logging
 
 
 logger = logging.get_logger(__name__)
@@ -345,140 +344,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
 
 class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGeneration):
-    def __init__(self, config):
-        super().__init__(config)
-        del self.vision_resampler
-
-    # Copied from transformers.models.llava_onevision.modeling_llava_onevision.LlavaOnevisionModel.pack_image_features
-    def pack_image_features(self, image_features, image_sizes, image_newline=None, vision_aspect_ratio="anyres_max_9"):
-        """
-        Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
-
-        Args:
-            image_features (`List[torch.Tensor]` of length num_images, each of shape `(num_patches, image_length, embed_dim)`)
-                List of image feature tensor, each contains all the visual feature of all patches.
-            image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
-                Actual image size of each images (H, W).
-            image_newline (`torch.Tensor` of shape `(embed_dim)`)
-                New line embedding vector.
-            vision_aspect_ratio (`str`, *optional*, "anyres_max_9"):
-                Aspect ratio used when processong image features. The default value is "anyres_max_9".
-        Returns:
-            image_features (`torch.Tensor` of shape `(all_feat_len, embed_dim)`)
-            feature_lens (`List[int]`)
-                token length of each image in image_features
-        """
-        new_image_features = []
-        feature_lens = []
-        for image_idx, image_feature in enumerate(image_features):
-            if image_feature.shape[0] > 1:
-                base_image_feature = image_feature[0]
-                image_feature = image_feature[1:]
-                height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
-                if height * width != base_image_feature.shape[0]:
-                    raise ValueError("The number of patches is not consistent with the image size.")
-                num_patch_height, num_patch_width = get_anyres_image_grid_shape(
-                    image_sizes[image_idx],
-                    self.config.image_grid_pinpoints,
-                    self.config.vision_config.image_size,
-                )
-                image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
-                image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
-                image_feature = image_feature.flatten(1, 2).flatten(2, 3)
-                image_feature = unpad_image(image_feature, image_sizes[image_idx])
-                max_num_patches = int(vision_aspect_ratio.strip("anyres_max_"))
-                channels, curr_height, curr_width = image_feature.shape
-                ratio = math.sqrt(curr_height * curr_width / (max_num_patches * height**2))
-                if ratio > 1.1:
-                    image_feature = image_feature[None]
-                    image_feature = nn.functional.interpolate(
-                        image_feature, [int(curr_height // ratio), int(curr_width // ratio)], mode="bilinear"
-                    )[0]
-                if image_newline is not None:
-                    image_feature = torch.cat(
-                        (
-                            image_feature,
-                            image_newline[:, None, None]
-                            .expand(*image_feature.shape[:-1], 1)
-                            .to(image_feature.device, image_feature.dtype),
-                        ),
-                        dim=-1,
-                    )
-                image_feature = image_feature.flatten(1, 2).transpose(0, 1)
-                image_feature = torch.cat((base_image_feature, image_feature), dim=0)
-            else:
-                image_feature = image_feature[0]
-                if image_newline is not None:
-                    image_feature = torch.cat((image_feature, image_newline[None].to(image_feature)), dim=0)
-            new_image_features.append(image_feature)
-            feature_lens.append(image_feature.size(0))
-        image_features = torch.cat(new_image_features, dim=0)
-        feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features.device)
-        return image_features, feature_lens
-
-    # Copied from transformers.models.llava_onevision.modeling_llava_onevision.LlavaOnevisionModel.apply_pooling
-    def apply_pooling(self, image_features):
-        height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
-        batch_frames, seq_len, dim = image_features.shape
-        image_features = image_features.view(batch_frames, height, width, -1)
-        image_features = image_features.permute(0, 3, 1, 2).contiguous()
-
-        height, width = image_features.shape[2:]
-        scaled_shape = [math.ceil(height / 2), math.ceil(width / 2)]
-        image_features = nn.functional.interpolate(image_features, size=scaled_shape, mode="bilinear")
-
-        image_features = image_features.permute(0, 2, 3, 1)
-        image_features = image_features.view(batch_frames, -1, dim)
-        return image_features
-
-    # Copied from transformers.models.llava_onevision.modeling_llava_onevision.LlavaOnevisionModel.get_video_features
-    def get_video_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        vision_feature_layer: Union[int, List[int]],
-        vision_feature_select_strategy: str,
-    ):
-        """
-        Obtains video last hidden states from the vision tower, apply multimodal projection and pooling.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
-               The tensors corresponding to the input video.
-            vision_feature_layer (`Union[int, List[int]], *optional*, defaults to -2`):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-            vision_feature_select_strategy (`str`):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
-        Returns:
-            video_features (List[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
-            and are of shape `(num_videos, video_length, embed_dim)`).
-        """
-        batch_size, frames, channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.view(batch_size * frames, channels, height, width)
-        video_features = self.vision_tower(pixel_values, output_hidden_states=True)
-
-        # If we have one vision feature layer, return the corresponding hidden states,
-        # otherwise, select the hidden states of each feature layer and concatenate them
-        if isinstance(vision_feature_layer, int):
-            selected_video_feature = video_features.hidden_states[vision_feature_layer]
-        else:
-            hs_pool = [video_features.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
-            selected_video_feature = torch.cat(hs_pool, dim=-1)
-
-        if vision_feature_select_strategy == "default":
-            selected_video_feature = selected_video_feature[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_video_feature = selected_video_feature
-        video_features = self.multi_modal_projector(selected_video_feature)
-
-        video_features = self.apply_pooling(video_features)
-        video_features = video_features.reshape(batch_size, frames * video_features.shape[1], -1)
-
-        return video_features
-
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
+    @can_return_tuple
     @add_start_docstrings(LLAVA_ONEVISION_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -567,69 +433,15 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
             vision_aspect_ratio if vision_aspect_ratio is not None else self.config.vision_aspect_ratio
         )
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if (pixel_values is not None or pixel_values_videos is not None) and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both `pixel_values`/`pixel_values_videos` and `inputs_embeds` at the same time, "
-                "and must specify either one"
-            )
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        # Images are processed with Anyres
-        if pixel_values is not None:
-            image_features = self.get_image_features(
-                pixel_values,
-                image_sizes,
-                vision_feature_layer=vision_feature_layer,
-                vision_feature_select_strategy=vision_feature_select_strategy,
-            )
-            image_features, feature_lens = self.pack_image_features(
-                image_features,
-                image_sizes,
-                image_newline=self.image_newline,
-                vision_aspect_ratio=vision_aspect_ratio,
-            )
-
-            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
-                n_image_features = image_features.shape[0]
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
-
-        # Video are simply embedded and further pooled to decrease seq len
-        if pixel_values_videos is not None:
-            video_features = self.get_video_features(
-                pixel_values_videos,
-                vision_feature_layer=vision_feature_layer,
-                vision_feature_select_strategy=vision_feature_select_strategy,
-            )
-            image_newline = (
-                self.image_newline[None, None, :].repeat(video_features.shape[0], 1, 1).to(video_features.device)
-            )
-            video_features = torch.cat((video_features, image_newline), dim=1)
-            video_features = video_features.flatten(0, 1)
-
-            special_video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
-            special_video_mask = special_video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and inputs_embeds[special_video_mask].numel() != video_features.numel():
-                n_video_tokens = (input_ids == self.config.video_token_id).sum()
-                n_video_features = video_features.shape[0]
-                raise ValueError(
-                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
-                )
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
-
-        outputs = self.language_model(
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_sizes=image_sizes,
+            image_sizes_videos=image_sizes_videos,
+            vision_aspect_ratio=vision_aspect_ratio,
+            vision_feature_layer=vision_feature_layer,
+            vision_feature_select_strategy=vision_feature_select_strategy,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -637,35 +449,20 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **lm_kwargs,
         )
 
-        logits = outputs[0]
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            if attention_mask is not None:
-                # we use the input attention mask to shift the logits and labels, because it is 2D.
-                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
-            else:
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
-            )
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
         return LlavaOnevisionCausalLMOutputWithPast(
             loss=loss,
@@ -673,9 +470,45 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-            video_hidden_states=video_features if pixel_values_videos is not None else None,
+            image_hidden_states=outputs.image_hidden_states,
+            video_hidden_states=outputs.video_hidden_states,
         )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        image_sizes=None,
+        pixel_values_videos=None,
+        image_sizes_videos=None,
+        attention_mask=None,
+        cache_position=None,
+        logits_to_keep=None,
+        **kwargs,
+    ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
+        model_inputs = self.model.language_model.prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
+            **kwargs,
+        )
+
+        if cache_position[0] == 0:
+            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+            # Otherwise we need pixel values to be passed to model
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["image_sizes"] = image_sizes
+            model_inputs["pixel_values_videos"] = pixel_values_videos
+            model_inputs["image_sizes_videos"] = image_sizes_videos
+
+        return model_inputs
 
 
 __all__ = [
