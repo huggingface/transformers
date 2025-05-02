@@ -39,6 +39,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -51,6 +52,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class MobileViTImageProcessor(BaseImageProcessor):
     r"""
     Constructs a MobileViT image processor.
@@ -88,12 +90,12 @@ class MobileViTImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_flip_channel_order: bool = True,
         **kwargs,
     ) -> None:
@@ -221,12 +223,12 @@ class MobileViTImageProcessor(BaseImageProcessor):
         self,
         image: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_flip_channel_order: Optional[bool] = None,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -263,9 +265,9 @@ class MobileViTImageProcessor(BaseImageProcessor):
         self,
         segmentation_map: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """Preprocesses a single mask."""
@@ -303,12 +305,12 @@ class MobileViTImageProcessor(BaseImageProcessor):
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_flip_channel_order: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
@@ -438,7 +440,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->MobileViT
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple]] = None):
         """
         Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 

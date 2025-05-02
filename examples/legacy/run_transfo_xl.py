@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -66,13 +65,13 @@ def main():
         ptvsd.wait_for_attach()
 
     device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-    logger.info("device: {}".format(device))
+    logger.info(f"device: {device}")
 
     # Load a pre-processed dataset
     # You can also build the corpus yourself using TransfoXLCorpus methods
     # The pre-processing involve computing word frequencies to prepare the Adaptive input and SoftMax
     # and tokenizing the dataset
-    # The pre-processed corpus is a convertion (using the conversion script )
+    # The pre-processed corpus is a conversion (using the conversion script )
     corpus = TransfoXLCorpus.from_pretrained(args.model_name)
 
     va_iter = corpus.get_iterator("valid", args.batch_size, args.tgt_len, device=device, ext_len=args.ext_len)
@@ -111,7 +110,7 @@ def main():
                 total_loss += seq_len * loss.item()
                 total_len += seq_len
             total_time = time.time() - start_time
-        logger.info("Time : {:.2f}s, {:.2f}ms/segment".format(total_time, 1000 * total_time / (idx + 1)))
+        logger.info(f"Time : {total_time:.2f}s, {1000 * total_time / (idx + 1):.2f}ms/segment")
         return total_loss / total_len
 
     # Run on test data.

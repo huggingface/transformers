@@ -1291,3 +1291,13 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+
+__all__ = [
+    "AdaptiveEmbedding",
+    "TransfoXLForSequenceClassification",
+    "TransfoXLLMHeadModel",
+    "TransfoXLModel",
+    "TransfoXLPreTrainedModel",
+    "load_tf_weights_in_transfo_xl",
+]

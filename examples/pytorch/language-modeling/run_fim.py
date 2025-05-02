@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -551,7 +550,7 @@ def main():
                 covariance_matrix=1e-5 * sigma,
             )
             new_token_embeddings = torch.stack(
-                tuple((dist.sample() for _ in range(len(special_tokens)))),
+                tuple(dist.sample() for _ in range(len(special_tokens))),
                 dim=0,
             )
     else:
@@ -571,7 +570,7 @@ def main():
             covariance_matrix=1e-5 * sigma,
         )
         new_token_embeddings = torch.stack(
-            tuple((dist.sample() for _ in range(len(special_tokens)))),
+            tuple(dist.sample() for _ in range(len(special_tokens))),
             dim=0,
         )
 

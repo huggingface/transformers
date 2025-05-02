@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Mistral AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -292,10 +291,6 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             result.logits.shape,
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
-
-    @unittest.skip(reason="Mistral uses GQA on all models so the KV cache is a non standard format")
-    def test_past_key_values_format(self):
-        pass
 
     @require_flash_attn
     @require_torch_gpu

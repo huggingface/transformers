@@ -751,7 +751,7 @@ GPT_BIGCODE_INPUTS_DOCSTRING = r"""
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        position_ids (`torch.Tensor` of shape `(batch_size, input_ids_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
 
@@ -762,7 +762,7 @@ GPT_BIGCODE_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, input_ids_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -926,7 +926,11 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
                     # [batch_size, target_length, 1, source_length], not compatible with SDPA, hence this transpose.
                     self_attention_mask = self_attention_mask.transpose(1, 2)
 
-                if query_length > 1 and attention_mask is not None and attention_mask.device.type in ["cuda", "xpu"]:
+                if (
+                    query_length > 1
+                    and attention_mask is not None
+                    and attention_mask.device.type in ["cuda", "xpu", "npu"]
+                ):
                     # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
                     # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
                     self_attention_mask = AttentionMaskConverter._unmask_unattended(
@@ -1150,7 +1154,7 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
-        labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`torch.Tensor` of shape `(batch_size, input_ids_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`

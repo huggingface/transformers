@@ -29,8 +29,10 @@ Citation:
 from typing import Optional, Tuple, Union
 
 import torch
+from packaging import version
 
 from ..utils import is_torch_flex_attn_available
+from ..utils.import_utils import _torch_version
 
 
 if is_torch_flex_attn_available():
@@ -56,12 +58,21 @@ class WrappedFlexAttention:
         return cls._instance
 
     @torch.compiler.disable(recursive=False)
-    def __init__(self):
+    def __init__(self, training):
         """
         Initialize or update the singleton instance.
         """
-        if self._is_flex_compiled is False:
-            self._compiled_flex_attention = torch.compile(flex_attention, backend="inductor")
+        if not self._is_flex_compiled or training != self.training:
+            # In PyTorch 2.6.0, there's a known issue with flex attention compilation which may
+            # cause errors. The suggested fix is to compile with "max-autotune-no-cudagraphs"
+            # see https://github.com/pytorch/pytorch/issues/146260 for training
+            self.training = training
+            if version.parse(_torch_version).base_version == "2.6.0" and training:
+                self._compiled_flex_attention = torch.compile(
+                    flex_attention, dynamic=False, mode="max-autotune-no-cudagraphs"
+                )
+            else:
+                self._compiled_flex_attention = torch.compile(flex_attention)
             self._is_flex_compiled = True
 
     def __call__(self):
@@ -100,6 +111,11 @@ def make_flex_block_causal_mask(
     Returns:
         BlockMask
     """
+    batch_size, total_seq_len = attention_mask_2d.shape
+    if not key_length:
+        key_length = total_seq_len
+    if not query_length:
+        query_length = total_seq_len
     attention_mask_2d = torch.nn.functional.pad(attention_mask_2d, value=0, pad=(0, key_length))
     device = attention_mask_2d.device
     document_ids = attention_mask_2d.clone()
@@ -139,7 +155,7 @@ def make_flex_block_causal_mask(
         mask_mod = causal_mask_mod
     return create_block_causal_mask_flex(
         mask_mod=mask_mod,
-        B=1,
+        B=batch_size,
         H=None,  # attention head
         Q_LEN=query_length,
         KV_LEN=key_length,
@@ -153,10 +169,11 @@ def compile_friendly_flex_attention(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
+    training=False,
     **kwargs,
 ) -> torch.Tensor:
     # First call initialise singleton wrapper object, second call invokes the object method to return compiled flex attention
-    flex_attention_compiled = WrappedFlexAttention()()
+    flex_attention_compiled = WrappedFlexAttention(training)()
     return flex_attention_compiled(
         query,
         key,
@@ -229,6 +246,7 @@ def flex_attention_forward(
         # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
         # For simplification, we thus always return it as no additional computations are introduced.
         return_lse=True,
+        training=module.training,
     )
     # lse is returned in float32
     attention_weights = attention_weights.to(value.dtype)

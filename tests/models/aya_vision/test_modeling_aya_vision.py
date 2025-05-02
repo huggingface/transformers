@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -315,10 +314,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @unittest.skip(reason="Compile not yet supported because in LLava models")
     def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
         pass
 
     # todo: yoni - fix or improve the test

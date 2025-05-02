@@ -106,7 +106,6 @@ OBJECTS_TO_IGNORE = [
     "BlenderbotSmallConfig",
     "BlenderbotSmallTokenizerFast",
     "BlenderbotTokenizerFast",
-    "Blip2QFormerConfig",
     "Blip2VisionConfig",
     "BlipTextConfig",
     "BlipVisionConfig",
@@ -384,6 +383,7 @@ OBJECTS_TO_IGNORE = [
     "MegatronBertConfig",
     "MegatronBertForPreTraining",
     "MegatronBertModel",
+    "MLCDVisionConfig",
     "MobileBertConfig",
     "MobileBertModel",
     "MobileBertTokenizerFast",
@@ -469,6 +469,8 @@ OBJECTS_TO_IGNORE = [
     "SEWForCTC",
     "SamConfig",
     "SamPromptEncoderConfig",
+    "SamHQConfig",
+    "SamHQPromptEncoderConfig",
     "SeamlessM4TConfig",  # use of unconventional markdown
     "SeamlessM4Tv2Config",  # use of unconventional markdown
     "Seq2SeqTrainingArguments",
@@ -580,6 +582,7 @@ OBJECTS_TO_IGNORE = [
     "ZeroShotClassificationPipeline",
     "ZeroShotImageClassificationPipeline",
     "ZeroShotObjectDetectionPipeline",
+    "Llama4TextConfig",
 ]
 
 # Supported math operations when interpreting the value of defaults.

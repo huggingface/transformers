@@ -970,7 +970,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
             if plan_idx > 0:
                 # set the row for all from_blocks starting from 0 to
                 # plan_block_length[plan_idx-1]
-                # column indx start fromm plan_block_length[plan_idx-1] and ends at
+                # column indx start from plan_block_length[plan_idx-1] and ends at
                 # plan_block_length[plan_idx]
                 if plan_num_rand_blocks[plan_idx] > 0:
                     rnd_r_cnt = int(np.sum(plan_num_rand_blocks[:plan_idx]))
@@ -1957,8 +1957,6 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-
-        self.encoder_o = hidden_states
 
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions

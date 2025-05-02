@@ -955,7 +955,9 @@ class HubertPreTrainedModel(PreTrainedModel):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
@@ -971,8 +973,14 @@ class HubertPreTrainedModel(PreTrainedModel):
             else:
                 nn.init.kaiming_normal_(module.weight.data)
 
-        if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
-            module.bias.data.zero_()
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, HubertModel):
+            if hasattr(module, "masked_spec_embed"):
+                module.masked_spec_embed.data.uniform_()
+        elif isinstance(module, HubertForSequenceClassification):
+            if hasattr(module, "layer_weights"):
+                module.layer_weights.data.fill_(1.0 / (self.config.num_hidden_layers + 1))
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """

@@ -56,6 +56,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.import_utils import requires
 from .image_processing_detr import (
     compute_segments,
     convert_segmentation_to_rle,
@@ -313,6 +314,7 @@ class DetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
             Whether to return segmentation masks.
     """,
 )
+@requires(backends=("torchvision", "torch"))
 class DetrImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -1086,7 +1088,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         return results
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_semantic_segmentation
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple[int, int]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None):
         """
         Converts the output of [`DetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 

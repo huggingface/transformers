@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -530,6 +529,9 @@ def main():
 
     def compute_metrics(p):
         predictions, labels = p
+        if not training_args.eval_do_concat_batches:
+            predictions = np.hstack(predictions)
+            labels = np.hstack(labels)
         predictions = np.argmax(predictions, axis=2)
 
         # Remove ignored index (special tokens)
