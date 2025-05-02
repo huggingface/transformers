@@ -54,8 +54,6 @@ from .configuration_csm import (
 from .generation_csm import CsmGenerationMixin
 
 
-if TYPE_CHECKING:
-    pass
 
 logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "CsmConfig"
