@@ -304,7 +304,6 @@ print("="*50)
 CSM Transformers integration supports training!
 
 ```python
-import torch
 from transformers import CsmForConditionalGeneration, AutoProcessor
 from datasets import load_dataset, Audio
 
@@ -335,9 +334,8 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     output_labels=True,
-).to(torch_device)
+).to(device)
 
-model = CsmForConditionalGeneration.from_pretrained(model_checkpoint, device_map=torch_device, attn_implementation="sdpa")
 out = model(**inputs)
 out.loss.backward()
 ```
