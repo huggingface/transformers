@@ -415,7 +415,6 @@ class CsmGenerationMixin(GenerationMixin):
         ```python
         >>> from transformers import CsmProcessor, CsmForConditionalGeneration
         >>> from datasets import load_dataset, Audio
-        >>> import soundfile as sf
 
         >>> model_id = "eustlb/csm-1b"
         >>> torch_device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -446,8 +445,8 @@ class CsmGenerationMixin(GenerationMixin):
         ... ).to(torch_device)
 
         >>> model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
-        >>> audio_values = model.generate(**inputs, output_audio=True)
-        >>> sf.write("output.wav", audio_values[0].cpu().numpy(), 24000)
+        >>> audio = model.generate(**inputs, output_audio=True)
+        >>> processor.save_audio(audio, "output.wav")
         ```
         """
         generate_output = super().generate(

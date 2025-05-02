@@ -14,13 +14,17 @@
 # limitations under the License.
 
 import math
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from ...utils import is_torch_available
+from ...utils import is_soundfile_available, is_torch_available
 
 
 if is_torch_available():
     import torch
+
+if is_soundfile_available():
+    import soundfile as sf
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
@@ -158,10 +162,44 @@ class CsmProcessor(ProcessorMixin):
 
         return cur_length
 
+    def save_audio(
+        self,
+        audio: AudioInput,
+        saving_path: Union[str, Path, List[Union[str, Path]]],
+        **kwargs: Unpack[CsmProcessorKwargs],
+    ):
+        # TODO: @eustlb, this should be in AudioProcessor
+        if not is_soundfile_available():
+            raise ImportError("Please install `soundfile` to save audio files.")
+
+        # ensure correct audio input
+        audio = make_list_of_audio(audio)
+
+        # ensure correct saving path
+        if isinstance(saving_path, (str, Path)):
+            saving_path = [saving_path]
+        elif not (isinstance(saving_path, (list, tuple)) and all(isinstance(p, (str, Path)) for p in saving_path)):
+            raise ValueError("Invalid input path. Please provide a string, or a list of strings")
+
+        if len(audio) != len(saving_path):
+            raise ValueError("The number of audio and saving paths must be the same")
+
+        output_kwargs = self._merge_kwargs(
+            CsmProcessorKwargs,
+            **kwargs,
+        )
+        audio_kwargs = output_kwargs["audio_kwargs"]
+        sampling_rate = audio_kwargs["sampling_rate"]
+
+        for audio_value, p in zip(audio, saving_path):
+            if isinstance(audio_value, torch.Tensor):
+                audio_value = audio_value.cpu().numpy()
+            sf.write(p, audio_value, sampling_rate)
+
     def __call__(
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]],
-        audio: Optional[Union[AudioInput, List[AudioInput]]] = None,
+        audio: Optional[AudioInput] = None,
         output_labels: Optional[bool] = False,
         depth_decoder_labels_ratio: Optional[float] = 1.0,
         **kwargs: Unpack[CsmProcessorKwargs],

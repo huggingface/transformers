@@ -37,7 +37,6 @@ CSM can be used to simply generate speech from a text prompt:
 
 ```python
 import torch
-import soundfile as sf
 from transformers import CsmForConditionalGeneration, AutoProcessor
 
 model_id = "eustlb/csm-1b"
@@ -63,8 +62,8 @@ inputs = processor.apply_chat_template(
 ).to(device)
 
 # infer the model
-audio_values = model.generate(**inputs, output_audio=True)
-sf.write("example_without_context.wav", audio_values[0].cpu().numpy(), 24000)
+audio = model.generate(**inputs, output_audio=True)
+processor.save_audio(audio, "example_without_context.wav")
 ```
 
 ### With Conversational Context
@@ -73,7 +72,6 @@ CSM can be used to generate speech given a conversation, allowing consistency in
 
 ```python
 import torch
-import soundfile as sf
 from transformers import CsmForConditionalGeneration, AutoProcessor
 from datasets import load_dataset, Audio
 
@@ -109,8 +107,8 @@ inputs = processor.apply_chat_template(
 ).to(device)
 
 # infer the model
-audio_values = model.generate(**inputs, output_audio=True)
-sf.write("example_with_context.wav", audio_values[0].cpu().numpy(), 24000)
+audio = model.generate(**inputs, output_audio=True)
+processor.save_audio(audio, "example_with_context.wav")
 ```
 
 ### Batched Inference
@@ -119,7 +117,6 @@ CSM supports batched inference!
 
 ```python
 import torch
-import soundfile as sf
 from transformers import CsmForConditionalGeneration, AutoProcessor
 from datasets import load_dataset, Audio
 
@@ -166,9 +163,8 @@ inputs = processor.apply_chat_template(
     return_dict=True,
 ).to(device)
 
-audio_values = model.generate(**inputs, output_audio=True)
-for i, audio in enumerate(audio_values):
-    sf.write(f"speech_batch_idx_{i}.wav", audio.cpu().numpy(), 24000)
+audio = model.generate(**inputs, output_audio=True)
+processor.save_audio(audio, [f"speech_batch_idx_{i}.wav" for i in range(len(audio))])
 ```
 
 ### Making The Model Go Brrr
