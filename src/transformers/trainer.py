@@ -4296,7 +4296,8 @@ class Trainer:
             start_time = time.time()
             model = (
                 self.accelerator.prepare(model)
-                if self.is_deepspeed_enabled or (self.is_fsdp_enabled and self.accelerator.mixed_precision != "fp8" and not self.args.torch_compile)
+                if self.is_deepspeed_enabled
+                or (self.is_fsdp_enabled and self.accelerator.mixed_precision != "fp8" and not self.args.torch_compile)
                 else self.accelerator.prepare_model(model, evaluation_mode=True)
             )
             self.model_preparation_time = round(time.time() - start_time, 4)

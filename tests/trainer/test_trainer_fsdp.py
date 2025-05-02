@@ -170,7 +170,6 @@ class TestFSDPTrainerTorchCompile(TestCasePlus):
             f"{output_dir}",
             "--report_to",
             "none",
-
         ]
         execute_subprocess_async(cmd, env=self.get_env())
         # successful return here == success - any errors would have caused an error in the sub-call
