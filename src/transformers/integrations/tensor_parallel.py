@@ -598,7 +598,7 @@ def translate_to_torch_parallel_style(style: str):
         return ColwiseParallel(output_layouts=Replicate())
     elif style == "rowwise_rep":
         return RowwiseParallel(input_layouts=Replicate())
-    elif style == "local_cxpolwise":
+    elif style == "local_colwise":
         return ColwiseParallel(use_dtensor=False)
     elif style == "local_rowwise":
         return RowwiseParallel(use_dtensor=False)
