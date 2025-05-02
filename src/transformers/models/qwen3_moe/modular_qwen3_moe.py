@@ -133,9 +133,6 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer, nn.Module):
         self.hidden_size = config.hidden_size
 
         self.self_attn = Qwen3MoeAttention(config, layer_idx)
-        self.mlp = Qwen3MoeMLP(config)
-
-        self.self_attn = Qwen3MoeAttention(config, layer_idx)
 
         if (layer_idx not in config.mlp_only_layers) and (
             config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
