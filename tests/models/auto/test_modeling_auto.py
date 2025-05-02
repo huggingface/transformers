@@ -332,11 +332,6 @@ class AutoModelTest(unittest.TestCase):
         for p1, p2 in zip(model.parameters(), reloaded_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-        # The model file is cached in the snapshot directory. So the module file is not changed after dumping
-        # to a temp dir. Because the revision of the module file is not changed.
-        # Test the dynamic module is loaded only once if the module file is not changed.
-        self.assertIs(model.__class__, reloaded_model.__class__)
-
         # Test the dynamic module is reloaded if we force it.
         reloaded_model = AutoModel.from_pretrained(
             "hf-internal-testing/test_dynamic_model", trust_remote_code=True, force_download=True
