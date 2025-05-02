@@ -3489,14 +3489,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
             for name, tensor in state_dict.items():
-                from torch.distributed.tensor import DTensor
-
-                if isinstance(tensor, DTensor):
-                    device, id, size = id_tensor_storage(tensor)
-                    ptrs[(device, id, size)].append(name)
                 # Sometimes in the state_dict we have non-tensor objects.
                 # e.g. in bitsandbytes we have some `str` objects in the state_dict
-                elif isinstance(tensor, torch.Tensor):
+                if isinstance(tensor, torch.Tensor) or isinstance(tensor, torch.distributed.tensor.DTensor):
                     ptrs[id_tensor_storage(tensor)].append(name)
                 else:
                     # In the non-tensor case, fall back to the pointer of the object itself
@@ -3606,7 +3601,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         for shard_file, tensors in filename_to_tensors:
             shard = {}
             for tensor in tensors:
-                if isinstance(state_dict[tensor], DTensor):
+                if isinstance(state_dict[tensor], torch.distributed.tensor.DTensor):
                     shard[tensor] = state_dict[tensor].full_tensor().contiguous()
                 else:
                     shard[tensor] = state_dict[tensor].contiguous()
