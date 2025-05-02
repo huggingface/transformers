@@ -1972,8 +1972,8 @@ class DFineConvNormLayer(nn.Module):
         kernel_size: int,
         stride: int,
         groups: int = 1,
-        padding: int = None,
-        activation: str = None,
+        padding: Optional[int] = None,
+        activation: Optional[str] = None,
     ):
         super().__init__()
         self.conv = nn.Conv2d(
