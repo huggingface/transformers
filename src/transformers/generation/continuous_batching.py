@@ -534,12 +534,6 @@ class ContinuousBatchProcessor:
                     self._handle_request_error("Empty input_ids provided", request_id)
                     continue
 
-                if len(input_ids) > self.max_context_len:
-                    logger.warning(
-                        f"Request {request_id} prompt length ({len(input_ids)}) exceeds max context length ({self.max_context_len}). Truncating."
-                    )
-                    input_ids = input_ids[-self.max_context_len :]  # Keep the end
-
                 state = RequestState(
                     request_id=request_id,
                     prompt_ids=list(input_ids),
@@ -583,8 +577,11 @@ class ContinuousBatchProcessor:
             # Start with the max batch tokens
             available_slots = self.max_batch_tokens
             selected_requests.extend(decoding_requests[:available_slots])
-            batch_token_count += min(len(decoding_requests), available_slots)  # 1 token per request
+            if len(selected_requests) == available_slots:
+                return selected_requests
+            batch_token_count += len(decoding_requests)  # 1 token per request
 
+        # priortise requests for which we already started prefilling
         candidates: List[RequestState] = [
             state for state in self.active_requests.values() if state.status == "split_pending_remainder"
         ]
