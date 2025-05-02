@@ -22,7 +22,7 @@ import os
 import re
 import sys
 import time
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 
 import requests
 from get_ci_error_statistics import get_jobs
@@ -920,6 +920,13 @@ def prepare_reports(title, header, reports, to_truncate=True):
     return report
 
 
+def pop_default(l: list[Any], i: int, default: Any) -> Any:
+    try:
+        return l.pop(i)
+    except IndexError:
+        return default
+
+
 if __name__ == "__main__":
     SLACK_REPORT_CHANNEL_ID = os.environ["SLACK_REPORT_CHANNEL"]
 
@@ -1102,11 +1109,7 @@ if __name__ == "__main__":
                         if artifact_gpu not in model_results[model]["failures"]:
                             model_results[model]["failures"][artifact_gpu] = []
 
-                        if len(stacktraces) > 0:
-                            trace = stacktraces.pop(0)
-                        else:
-                            trace = "Cannot retrieve error message."
-
+                        trace = pop_default(stacktraces, 0, "Cannot retrieve error message.")
                         model_results[model]["failures"][artifact_gpu].append(
                             {"line": line, "trace": trace}
                         )
@@ -1192,15 +1195,18 @@ if __name__ == "__main__":
             continue
 
         for artifact_path_dict in available_artifacts[additional_files[key]].paths:
-            # Link to the GitHub Action job
-            job = artifact_name_to_job_map[artifact_path_dict["path"]]
-            additional_results[key]["job_link"][artifact_path_dict["gpu"]] = job["html_url"]
+            path = artifact_path_dict["path"]
+            artifact_gpu = artifact_path_dict["gpu"]
 
-            artifact = retrieve_artifact(artifact_path_dict["path"], artifact_path_dict["gpu"])
+            # Link to the GitHub Action job
+            job = artifact_name_to_job_map[path]
+            additional_results[key]["job_link"][artifact_gpu] = job["html_url"]
+
+            artifact = retrieve_artifact(path, artifact_gpu)
             stacktraces = handle_stacktraces(artifact["failures_line"])
 
             failed, success, time_spent = handle_test_results(artifact["stats"])
-            additional_results[key]["failed"][artifact_path_dict["gpu"] or "unclassified"] += failed
+            additional_results[key]["failed"][artifact_gpu or "unclassified"] += failed
             additional_results[key]["success"] += success
             additional_results[key]["time_spent"] += time_spent[1:-1] + ", "
 
@@ -1218,11 +1224,12 @@ if __name__ == "__main__":
                         line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 
-                        if artifact_path_dict["gpu"] not in additional_results[key]["failures"]:
-                            additional_results[key]["failures"][artifact_path_dict["gpu"]] = []
+                        if artifact_gpu not in additional_results[key]["failures"]:
+                            additional_results[key]["failures"][artifact_gpu] = []
 
-                        additional_results[key]["failures"][artifact_path_dict["gpu"]].append(
-                            {"line": line, "trace": stacktraces.pop(0)}
+                        trace = pop_default(stacktraces, 0, "Cannot retrieve error message.")
+                        additional_results[key]["failures"][artifact_gpu].append(
+                            {"line": line, "trace": trace}
                         )
 
     # Let's only check the warning for the model testing job. Currently, the job `run_extract_warnings` is only run
