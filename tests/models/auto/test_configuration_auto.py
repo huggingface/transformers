@@ -124,8 +124,6 @@ class AutoConfigTest(unittest.TestCase):
             reloaded_config = AutoConfig.from_pretrained(tmp_dir, trust_remote_code=True)
             self.assertTrue(os.path.exists(os.path.join(tmp_dir, "configuration.py")))  # Assert we saved config code
             # Assert we're pointing at local code and not another remote repo
-            # TODO Matt: This will set auto_map["AutoConfig"] correctly but auto_map["AutoModel"] will still point to a
-            #      remote repo with "--". Should we save all modelling code whenever we save config objects?
             self.assertEqual(reloaded_config.auto_map["AutoConfig"], "configuration.NewModelConfig")
         self.assertEqual(reloaded_config.__class__.__name__, "NewModelConfig")
 
