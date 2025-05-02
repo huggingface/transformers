@@ -77,7 +77,6 @@ def sanity_check_tensor_sync(tensor: torch.Tensor, mesh: DeviceMesh, rtol: float
     return True
 
 def main():
-    # Configure TP and DP sizes from environment variables or defaults
     tp_size = int(os.environ.get("TP_SIZE", 2))
     dp_size = int(os.environ.get("DP_SIZE", 2))
     global_batch_size = 4 # Desired global batch size
@@ -94,10 +93,8 @@ def main():
         local_rank = int(os.environ["LOCAL_RANK"])
         torch.cuda.set_device(local_rank)
 
-        # Ensure world_size matches tp_size * dp_size
         assert world_size == tp_size * dp_size, f"World size ({world_size}) must equal TP size ({tp_size}) * DP size ({dp_size})"
 
-        # Create TP device mesh spanning all available ranks/GPUs
         mesh = torch.arange(world_size).reshape(dp_size, tp_size)
         device_mesh = DeviceMesh(device_type="cuda", mesh=mesh, mesh_dim_names=("dp", "tp"))
         tp_mesh = device_mesh["tp"]
@@ -105,7 +102,6 @@ def main():
         logger.info(f"Created DeviceMesh: {device_mesh}")
         logger.info(f"Distributed setup - Rank: {rank}, World size: {world_size}, Local rank: {local_rank}, DP: {dp_mesh.get_local_rank()}, TP: {tp_mesh.get_local_rank()}")
 
-        # Initialize wandb only on rank 0 of the data parallel group
         if dp_mesh.get_local_rank() == 0 and tp_mesh.get_local_rank() == 0:
             wandb.init(
                 project="tp_dp_test",
@@ -113,7 +109,7 @@ def main():
                     "tp_size": tp_size,
                     "dp_size": dp_size,
                     "global_batch_size": global_batch_size,
-                    "model_name": "HuggingFaceTB/SmolLM2-1.7B", # Kept original model
+                    "model_name": "HuggingFaceTB/SmolLM2-1.7B",
                     "dataset": "roneneldan/TinyStories-1M",
                     "seq_len": seq_len,
                 },
@@ -127,14 +123,13 @@ def main():
         world_size = 1
         local_rank = 0
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # Initialize wandb for non-distributed case
         wandb.init(
             project="tp_dp_test",
             config={
                 "tp_size": 1,
                 "dp_size": 1,
                 "global_batch_size": global_batch_size,
-                "model_name": "HuggingFaceTB/SmolLM2-1.7B", # Kept original model
+                "model_name": "HuggingFaceTB/SmolLM2-1.7B",
                 "dataset": "roneneldan/TinyStories-1M",
                 "seq_len": seq_len,
             },
@@ -154,7 +149,7 @@ def main():
         model_name,
         device_mesh=tp_mesh if dist.is_initialized() else None,
         tp_plan="auto",
-        torch_dtype=torch.bfloat16 # Added for potential memory savings/speedup
+        torch_dtype=torch.bfloat16
     )
     logger.info(f"Model loaded onto device mesh: {tp_mesh}")
 
@@ -166,7 +161,6 @@ def main():
 
     logger.info(f"Using device: {device} for non-model tensors")
 
-    # Wrap model with DDP for data parallelism
     if dist.is_initialized() and dp_mesh.size() > 1:
         # TODO: DDP doesn't work with dtensors
         # model = torch.nn.parallel.DistributedDataParallel(
@@ -183,7 +177,6 @@ def main():
 
     model.train()
 
-    # Sanity checks (only if distributed)
     if dist.is_initialized() and not ignore_sanity_checks:
         # assert model is replicated across all dp
         for name, param in model.named_parameters():
