@@ -55,7 +55,7 @@ if is_torchvision_available():
 
 def get_factors(dividend: int) -> Set[int]:
     """
-    Calculate all factors of a given number, i.e. a dividor that leaves
+    Calculate all factors of a given number, i.e. a divisor that leaves
     no remainder. For example, if dividend=12, it will return {1, 2, 3, 4, 6, 12}.
 
     Args:
