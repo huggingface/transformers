@@ -43,24 +43,18 @@ class MMGroundingDinoContrastiveEmbedding(nn.Module):
         self.bias = nn.Parameter(torch.tensor(0.0))
         nn.init.constant_(self.bias, -math.log((1 - 0.01) / 0.01))
 
-    def forward(self, vision_hidden_state, text_hidden_state, text_token_mask) -> torch.FloatTensor:
-        """Forward function.
-
-        Args:
-            visual_feat (Tensor): Visual features.
-            text_feat (Tensor): Text features.
-            text_token_mask (Tensor): A mask used for text feats.
-
-        Returns:
-            Tensor: Classification score.
-        """
-        y = text_hidden_state
-        text_token_mask = text_token_mask
-        res = vision_hidden_state @ y.transpose(-1, -2)
+    def forward(
+        self,
+        vision_hidden_state: torch.FloatTensor,
+        text_hidden_state: torch.FloatTensor,
+        text_token_mask: torch.BoolTensor,
+    ) -> torch.FloatTensor:
+        res = vision_hidden_state @ text_hidden_state.transpose(-1, -2)
         res = res / math.sqrt(vision_hidden_state.shape[-1])
         res = res + self.bias
         res.masked_fill_(~text_token_mask[:, None, :], float("-inf"))
 
+        # padding to max_text_len
         new_res = torch.full((*res.shape[:-1], self.max_text_len), float("-inf"), device=res.device)
         new_res[..., : res.shape[-1]] = res
 
@@ -1214,7 +1208,7 @@ class MMGroundingDinoDecoder(MMGroundingDinoPreTrainedModel):
 
             # In original implementation they apply layer norm before outputting intermediate hidden states
             # Though that's not through between layers so the layers use as input the output of the previous layer
-            # withtout layer norm
+            # without layer norm
             if output_hidden_states:
                 all_hidden_states += (self.layer_norm(hidden_states),)
 
@@ -1993,9 +1987,9 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         _, height, width = mask.shape
         valid_height = torch.sum(mask[:, :, 0], 1)
         valid_width = torch.sum(mask[:, 0, :], 1)
-        valid_ratio_heigth = valid_height.float() / height
+        valid_ratio_height = valid_height.float() / height
         valid_ratio_width = valid_width.float() / width
-        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
+        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
     def generate_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
@@ -2031,8 +2025,8 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
 
             scale = torch.cat([valid_width.unsqueeze(-1), valid_height.unsqueeze(-1)], 1).view(batch_size, 1, 1, 2)
             grid = (grid.unsqueeze(0).expand(batch_size, -1, -1, -1) + 0.5) / scale
-            width_heigth = torch.ones_like(grid) * 0.05 * (2.0**level)
-            proposal = torch.cat((grid, width_heigth), -1).view(batch_size, -1, 4)
+            width_height = torch.ones_like(grid) * 0.05 * (2.0**level)
+            proposal = torch.cat((grid, width_height), -1).view(batch_size, -1, 4)
             proposals.append(proposal)
             current_position += height * width
 
@@ -2350,7 +2344,7 @@ class MMGroundingDinoObjectDetectionOutput(ModelOutput):
             possible padding). You can use [`~MMGroundingDinoProcessor.post_process_grounded_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`List[Dict]`, *optional*):
-            Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+            Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
             `pred_boxes`) for each decoder layer.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
@@ -2555,7 +2549,7 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]] = None,
+        labels: Optional[List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]]] = None,
     ):
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):

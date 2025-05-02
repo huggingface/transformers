@@ -249,24 +249,18 @@ class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):
         self.bias = nn.Parameter(torch.tensor(0.0))
         nn.init.constant_(self.bias, -math.log((1 - 0.01) / 0.01))
 
-    def forward(self, vision_hidden_state, text_hidden_state, text_token_mask):
-        """Forward function.
-
-        Args:
-            visual_feat (Tensor): Visual features.
-            text_feat (Tensor): Text features.
-            text_token_mask (Tensor): A mask used for text feats.
-
-        Returns:
-            Tensor: Classification score.
-        """
-        y = text_hidden_state
-        text_token_mask = text_token_mask
-        res = vision_hidden_state @ y.transpose(-1, -2)
+    def forward(
+        self,
+        vision_hidden_state: torch.FloatTensor,
+        text_hidden_state: torch.FloatTensor,
+        text_token_mask: torch.BoolTensor,
+    ) -> torch.FloatTensor:
+        res = vision_hidden_state @ text_hidden_state.transpose(-1, -2)
         res = res / math.sqrt(vision_hidden_state.shape[-1])
         res = res + self.bias
         res.masked_fill_(~text_token_mask[:, None, :], float("-inf"))
 
+        # padding to max_text_len
         new_res = torch.full((*res.shape[:-1], self.max_text_len), float("-inf"), device=res.device)
         new_res[..., : res.shape[-1]] = res
 
