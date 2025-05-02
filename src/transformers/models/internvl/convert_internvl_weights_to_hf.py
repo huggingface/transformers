@@ -304,7 +304,9 @@ def write_model(
     del model
 
 
-def write_tokenizer(save_dir: str, push_to_hub: bool = False, path: Optional[str] = None, hub_dir: Optional[str] = None):
+def write_tokenizer(
+    save_dir: str, push_to_hub: bool = False, path: Optional[str] = None, hub_dir: Optional[str] = None
+):
     if LM_TYPE_CORRESPONDENCE[path] == "qwen2":
         tokenizer = AutoTokenizer.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct",
