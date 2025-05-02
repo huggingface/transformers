@@ -18,6 +18,7 @@ import torch.distributed.checkpoint as dcp
 from torch.distributed.checkpoint.stateful import Stateful
 from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_dict
 from torch.distributed._composable.replicate import replicate
+from torch.distributed.tensor.placement_types import Replicate
 
 # Set up logging
 logging.basicConfig(
@@ -130,8 +131,9 @@ def main():
         # )
 
         # Warning this API is still experimental
-        model = replicate(model, device_mesh=dp_mesh, bucket_cap_mb=100)
-        logger.info("Applied DDP")
+        # model = replicate(model, device_mesh=dp_mesh, bucket_cap_mb=100)
+        # logger.info("Applied DDP")
+        pass
 
     model.train()
 
@@ -205,6 +207,23 @@ def main():
     logger.info(f"Calculated Loss: {loss.item()}")
 
     loss.backward()
+
+    # all reduce grads across dp
+    if dp_mesh.size() > 1:
+        for name, param in model.named_parameters():
+            # param.grad = param.grad.redistribute(
+            #     device_mesh=dp_mesh,
+            #     placements=[Replicate()]
+            # ) # TODO: doesn't support cross mesh comms
+
+            # workaround for the above
+            local_grad = param.grad.to_local()
+            torch.distributed.all_reduce(
+                local_grad, 
+                op=torch.distributed.ReduceOp.AVG, 
+                group=dp_mesh.get_group()
+            )
+            param.grad._local_tensor = local_grad
 
     # check grads are not same across all tp
     for name, param in model.named_parameters():
