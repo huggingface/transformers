@@ -1064,7 +1064,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.residual_multiplier = config.residual_multiplier
-        self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeHybridMLP(config)
+        self.shared_mlp = GraniteMoeHybridMLP(config)
         self.mamba = None
 
         if config.layers_block_type[layer_idx] == "mamba":
@@ -1141,11 +1141,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.post_attention_layernorm(hidden_states)
         moe_hidden_states, router_logits = self.block_sparse_moe(hidden_states)
 
-        if self.shared_mlp is None:
-            hidden_states = moe_hidden_states
-        else:
-            hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
-
+        hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
         hidden_states = residual + hidden_states * self.residual_multiplier
 
         outputs = (hidden_states,)

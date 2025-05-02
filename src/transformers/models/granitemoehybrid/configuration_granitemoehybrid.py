@@ -95,8 +95,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
             Whether or not the router logits should be returned by the model. Enabeling this will also
             allow the model to output the auxiliary loss.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxialiary loss coefficient
-        shared_intermediate_size (`int`, *optional*, defaults to 0): intermediate size for shared experts.
-            0 implies no shared experts.
+        shared_intermediate_size (`int`, *optional*, defaults to 1024): intermediate size for shared experts.
         position_embedding_type (`str`, *optional*): Positional embedding
             type to be used; defaults to None. Allowed options: `[None, "rope"]`
         layer_types (`List`, *optional*): list of strings to be used as layer types.
@@ -166,11 +165,9 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         num_experts_per_tok=2,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
-        shared_intermediate_size=0,
+        shared_intermediate_size=1024,
         position_embedding_type=None,
-        # layer types should be a List of str
         layer_types=None,
-        # took defaults from bamba config
         mamba_n_heads=128,
         mamba_n_groups=1,
         mamba_d_state=256,

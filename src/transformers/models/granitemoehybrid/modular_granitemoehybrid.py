@@ -69,7 +69,7 @@ class GraniteMoeHybridMLP(GraniteMoeSharedMLP):
 class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeHybridMLP(config)
+        self.shared_mlp = GraniteMoeHybridMLP(config)
         # Either attention or mamba will be initialized, depending on the layer type.
         self.self_attn = None
         self.mamba = None
@@ -148,11 +148,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         hidden_states = self.post_attention_layernorm(hidden_states)
         moe_hidden_states, router_logits = self.block_sparse_moe(hidden_states)
 
-        if self.shared_mlp is None:
-            hidden_states = moe_hidden_states
-        else:
-            hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
-
+        hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
         hidden_states = residual + hidden_states * self.residual_multiplier
 
         outputs = (hidden_states,)
