@@ -19,6 +19,7 @@ from torch.distributed.checkpoint.stateful import Stateful
 from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_dict
 from torch.distributed._composable.replicate import replicate
 from torch.distributed.tensor.placement_types import Replicate
+from torch.distributed.tensor import DTensor
 
 # Set up logging
 logging.basicConfig(
@@ -56,7 +57,6 @@ def sanity_check_tensor_sync(tensor: torch.Tensor, mesh: DeviceMesh, rtol: float
     
     # Gather tensors from all processes
     world_size = dist.get_world_size(pg)
-    rank = dist.get_rank(pg)
     
     # Create a list to store gathered tensors
     gathered_tensors = [torch.empty_like(local_tensor) for _ in range(world_size)]
@@ -65,14 +65,11 @@ def sanity_check_tensor_sync(tensor: torch.Tensor, mesh: DeviceMesh, rtol: float
     dist.all_gather(gathered_tensors, local_tensor, group=pg)
     
     # Compare each tensor with the first one
-    is_synced = True
     for i in range(1, world_size):
         if not torch.allclose(gathered_tensors[0], gathered_tensors[i], rtol=rtol, atol=atol):
-            is_synced = False
-            logger.warning(f"Tensor mismatch between rank 0 and rank {i}")
-            break
+            return False
     
-    return is_synced
+    return True
 
 def main():
     tp_size = 2
@@ -186,15 +183,9 @@ def main():
 
     optimizer.zero_grad()
 
-    # list(model.named_parameters())
-    # [('model.embed_tokens.weight', DTensor(... -- ALL THE PARAMETERS...
-    
     outputs = model(**batch)
     loss = outputs.loss
     logits = outputs.logits
-
-    # list(model.named_parameters())
-    # [('lm_head.weight', Parameter containing: tensor([[ 0.0227,  0.0123, -0.0127,  ..., -0.1187,  0.0344,  0....      device='cuda:1', requires_grad=True))]
 
     # TODO: only true without sequence parallel
     assert sanity_check_tensor_sync(logits, tp_mesh), f"Logits are not same across all tp when not using sequence parallel {logits}"
@@ -265,51 +256,66 @@ def main():
         logger.info(f"Saved model to test_model_{rank}")
 
     # Example of loading the checkpoint
-    # if dist.is_initialized():
-    #     # Create a new model instance
-    #     logger.info("Creating new model instance for verification")
-    #     new_model = AutoModelForCausalLM.from_pretrained(
-    #         model_name,
-    #         tp_plan="auto",
-    #         device_mesh=tp_mesh
-    #     )
-    #     new_optimizer = optim.AdamW(new_model.parameters(), lr=1e-5)
+    if dist.is_initialized():
+        # Create a new model instance
+        logger.info("Creating new model instance for verification")
+        new_model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            tp_plan="auto",
+            device_mesh=tp_mesh
+        )
+        new_optimizer = optim.AdamW(new_model.parameters(), lr=1e-5)
         
-    #     # Load checkpoint into new model
-    #     state_dict = {"app": AppState(new_model, new_optimizer)}
-    #     dcp.load(
-    #         state_dict=state_dict,
-    #         checkpoint_id=CHECKPOINT_DIR,
-    #     )
-    #     logger.info("Loaded checkpoint into new model")
+        # Load checkpoint into new model
+        state_dict = {"app": AppState(new_model, new_optimizer)}
+        dcp.load(
+            state_dict=state_dict,
+            checkpoint_id=CHECKPOINT_DIR,
+        )
+        logger.info("Loaded checkpoint into new model")
 
-    #     # Verify model weights match
-    #     logger.info("Verifying model weights match...")
-    #     for (name1, param1), (name2, param2) in zip(model.named_parameters(), new_model.named_parameters()):
-    #         torch.testing.assert_allclose(param1.to_local(), param2.to_local(), rtol=1e-5, atol=1e-5, msg=f"Weights mismatch in {name1} vs {name2}")
+        # Verify model weights match
+        logger.info("Verifying model weights match...")
+        for (name1, param1), (name2, param2) in zip(model.named_parameters(), new_model.named_parameters()):
+            torch.testing.assert_close(param1.to_local(), param2.to_local(), rtol=1e-5, atol=1e-5, msg=f"Weights mismatch in {name1} vs {name2}")
 
-    #     # Verify optimizer states match
-    #     logger.info("Verifying optimizer states match...")
-    #     for (name1, state1), (name2, state2) in zip(optimizer.state_dict().items(), new_optimizer.state_dict().items()):
-    #         if isinstance(state1, torch.Tensor) and isinstance(state2, torch.Tensor):
-    #             torch.testing.assert_allclose(state1, state2, rtol=1e-5, atol=1e-5, msg=f"Optimizer state mismatch in {name1} vs {name2}")
-    #         else:
-    #             # For non-tensor states, just check equality
-    #             if state1 != state2:
-    #                 logger.error(f"Optimizer state mismatch in {name1} vs {name2}")
+        # Verify optimizer states match
+        logger.info("Verifying optimizer states match...")
+        for name1, state1 in optimizer.state_dict().items():
+            state2 = new_optimizer.state_dict()[name1]
+            if name1 == 'state':
+                # Compare state dictionaries for each parameter
+                for param_id, param_state1 in state1.items():
+                    param_state2 = state2[param_id]
+                    # Compare each state component (step, exp_avg, exp_avg_sq)
+                    for key, value1 in param_state1.items():
+                        value2 = param_state2[key]
+                        if isinstance(value1, DTensor):
+                            # Convert DTensors to local tensors for comparison
+                            torch.testing.assert_close(
+                                value1.to_local(), value2.to_local(), 
+                                rtol=1e-5, atol=1e-5, 
+                                msg=f"Optimizer state mismatch in state[{param_id}][{key}]"
+                            )
+                        else:
+                            torch.testing.assert_close(
+                                value1, value2, 
+                                rtol=1e-5, atol=1e-5, 
+                                msg=f"Optimizer state mismatch in state[{param_id}][{key}]"
+                            )
+            elif name1 == 'param_groups':
+                # Compare param_groups (excluding the actual params list)
+                for i, (group1, group2) in enumerate(zip(state1, state2)):
+                    for key in group1:
+                        if key != 'params':  # Skip comparing the params list
+                            assert group1[key] == group2[key], f"Param group mismatch in param_groups[{i}][{key}]"
 
-    #     # Run a forward pass with both models to verify outputs match
-    #     logger.info("Running forward pass verification...")
-    #     with torch.no_grad():
-    #         original_outputs = model(**batch)
-    #         new_outputs = new_model(**batch)
-            
-    #         if not torch.allclose(original_outputs.logits, new_outputs.logits, rtol=1e-5, atol=1e-5):
-    #             logger.error("Model outputs do not match!")
-    #             logger.error(f"Original logits: {original_outputs.logits}")
-    #             logger.error(f"Loaded logits: {new_outputs.logits}")
-    #         else:
-    #             logger.info("Model outputs match!")
+        # Run a forward pass with both models to verify outputs match
+        logger.info("Running forward pass verification...")
+        with torch.no_grad():
+            original_outputs = model(**batch)
+            new_outputs = new_model(**batch)
+            torch.testing.assert_close(original_outputs.logits, new_outputs.logits, rtol=1e-5, atol=1e-5, msg="Model outputs do not match!")
 
     # Clean up distributed environment
     if dist.is_initialized():
