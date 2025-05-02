@@ -1256,6 +1256,15 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    # Make modules available throught conditional class for BC
+    @property
+    def text_model(self):
+        return self.model.text_model
+
+    @property
+    def vqmodel(self):
+        return self.model.vqmodel
+
     @can_return_tuple
     @add_start_docstrings_to_model_forward(EMU3_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -1376,7 +1385,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        model_inputs = self.model.text_model.prepare_inputs_for_generation(
+        model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,

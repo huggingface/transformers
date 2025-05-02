@@ -521,6 +521,23 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    # Make modules available throught conditional class for BC
+    @property
+    def language_model(self):
+        return self.model.language_model
+
+    @property
+    def video_tower(self):
+        return self.model.video_tower
+
+    @property
+    def image_tower(self):
+        return self.model.image_tower
+
+    @property
+    def multi_modal_projector(self):
+        return self.model.multi_modal_projector
+
     @can_return_tuple
     @add_start_docstrings_to_model_forward(VIDEO_LLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=VideoLlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -690,7 +707,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        model_inputs = self.model.language_model.prepare_inputs_for_generation(
+        model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,

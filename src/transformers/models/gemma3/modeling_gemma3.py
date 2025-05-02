@@ -514,7 +514,7 @@ GEMMA3_START_DOCSTRING = r"""
 )
 class Gemma3PreTrainedModel(PreTrainedModel):
     config_class = Gemma3Config
-    base_model_prefix = "language_model"
+    base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Gemma3DecoderLayer",
@@ -1105,7 +1105,6 @@ class Gemma3MultiModalProjector(nn.Module):
 )
 class Gemma3Model(Gemma3PreTrainedModel):
     _key_mapping = {"language_model.model": "language_model"}
-    base_model_prefix = "model"
 
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
@@ -1208,6 +1207,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
         image_features = self.multi_modal_projector(vision_outputs)
         return image_features
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1287,19 +1287,18 @@ class Gemma3Model(Gemma3PreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
             **lm_kwargs,
         )
 
-        output = Gemma3ModelOutputWithPast(
+        return Gemma3ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values if use_cache else None,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
-        return output if return_dict else output.to_tuple()
 
 
 @add_start_docstrings(
@@ -1332,6 +1331,19 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    # Make modules available throught conditional class for BC
+    @property
+    def language_model(self):
+        return self.model.language_model
+
+    @property
+    def vision_tower(self):
+        return self.model.vision_tower
+
+    @property
+    def multi_modal_projector(self):
+        return self.model.multi_modal_projector
 
     @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Gemma3CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -1486,7 +1498,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         # Overwritten -- custom `position_ids` and `pixel_values` handling
-        model_inputs = self.model.language_model.prepare_inputs_for_generation(
+        model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,

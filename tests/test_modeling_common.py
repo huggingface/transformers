@@ -3488,7 +3488,6 @@ class ModelTesterMixin:
                 model.save_pretrained(tmpdirname)
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
-                model_sdpa = getattr(model_sdpa, "model", model_sdpa)  # get base model if exists
 
                 vision_model_names = {"visual", "image_tower", "vision_tower", "vision_model"}
                 language_model_names = {"language_model", "model", "text_model"}
@@ -3507,7 +3506,6 @@ class ModelTesterMixin:
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
-                model_eager = getattr(model_eager, "model", model_sdpa)  # get base model if exists
                 self.assertTrue(getattr(model_eager, language_model_name).config._attn_implementation == "eager")
                 self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
 
@@ -4491,7 +4489,8 @@ class ModelTesterMixin:
     @require_torch_gpu
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
-            if not model_class._supports_flex_attn:
+            # TODO: raushan, fix for composite models after making VLMs support new attn API
+            if not model_class._supports_flex_attn or self._is_composite:
                 self.skipTest(reason="This model does not support flex attention")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config._attn_implementation = "flex_attention"

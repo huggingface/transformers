@@ -2122,6 +2122,15 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    # Make modules available throught conditional class for BC
+    @property
+    def language_model(self):
+        return self.model.language_model
+
+    @property
+    def vision_model(self):
+        return self.model.vision_model
+
     @can_return_tuple
     @add_start_docstrings_to_model_forward(MLLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="MllamaConfig")
@@ -2248,7 +2257,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        model_inputs = self.model.language_model.prepare_inputs_for_generation(
+        model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,

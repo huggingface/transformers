@@ -1666,7 +1666,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         logits_to_keep=None,
         **kwargs,
     ):
-        model_inputs = self.model.language_model.prepare_inputs_for_generation(
+        model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,

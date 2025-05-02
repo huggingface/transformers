@@ -521,7 +521,7 @@ GEMMA3_START_DOCSTRING = None
 
 
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
-    base_model_prefix = "language_model"
+    base_model_prefix = ""
     _no_split_modules = [
         "Gemma3DecoderLayer",
         "SiglipVisionEmbeddings",
@@ -732,7 +732,6 @@ class Gemma3MultiModalProjector(nn.Module):
 
 
 class Gemma3Model(PaliGemmaModel):
-    base_model_prefix = "model"
 
     def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
@@ -817,6 +816,7 @@ class Gemma3Model(PaliGemmaModel):
 
         return causal_mask
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -896,19 +896,18 @@ class Gemma3Model(PaliGemmaModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
             **lm_kwargs,
         )
 
-        output = Gemma3ModelOutputWithPast(
+        return Gemma3ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values if use_cache else None,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
-        return output if return_dict else output.to_tuple()
 
 
 @add_start_docstrings(
@@ -1069,7 +1068,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         **kwargs,
     ):
         # Overwritten -- custom `position_ids` and `pixel_values` handling
-        model_inputs = self.model.language_model.prepare_inputs_for_generation(
+        model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,

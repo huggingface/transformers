@@ -669,6 +669,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = False
     _supports_sdpa = True
     _supports_cache_class = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1531,6 +1532,19 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    # Make modules available throught conditional class for BC
+    @property
+    def language_model(self):
+        return self.model.language_model
+
+    @property
+    def vision_tower(self):
+        return self.model.vision_tower
+
+    @property
+    def multi_modal_projector(self):
+        return self.model.multi_modal_projector
+
     @can_return_tuple
     @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -1665,7 +1679,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         logits_to_keep=None,
         **kwargs,
     ):
-        model_inputs = self.model.language_model.prepare_inputs_for_generation(
+        model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,

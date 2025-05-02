@@ -282,6 +282,18 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
+    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
+    def test_disk_offload_safetensors(self):
+        pass
+
 
 @require_torch
 class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):

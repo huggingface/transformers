@@ -393,7 +393,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
             return_dict=return_dict,
-            **kwargs,
+            # don't pass kwargs because Persimmon-backbone doesn't accept FA2 kwargs yet, TODO: raushan
         )
 
         hidden_states = outputs[0]
