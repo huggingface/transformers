@@ -29,11 +29,10 @@ VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "convaiinnovations/hindi-causal-lm": "https://huggingface.co/convaiinnovations/hindi-causal-lm/resolve/main/tokenizer.model",
-        # Add other pretrained model identifiers here if needed
     },
 }
 
-# Assuming max sequence length used during training was 512
+# Set max sequence length from your config
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "convaiinnovations/hindi-causal-lm": 512,
 }
@@ -58,7 +57,7 @@ class ConvaiCausalLMTokenizer(PreTrainedTokenizer):
             The end of sequence token.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The padding token. Used for batching sequences. **Important:** The default behavior assumes this token corresponds to ID 0.
-            Ensure your SentencePiece model was trained with this or set it explicitly if different.
+            Ensure your SentencePiece model was trained with this or set it explicitly if different. Check `self.pad_token_id`.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for SentencePiece](https://github.com/google/sentencepiece/tree/master/python)
             can be used, among other things, to set:
@@ -93,59 +92,64 @@ class ConvaiCausalLMTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         bos_token="<s>",
         eos_token="</s>",
-        pad_token="<pad>",  # Default pad token
+        pad_token="<pad>",  # Matches training default
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
-        from_slow=False,  # Added for consistency with newer tokenizer patterns
+        from_slow=False,
         **kwargs,
     ):
         requires_backends(self, "sentencepiece")
-        # Import sentencepiece here so it's only required if the tokenizer is actually used
-        import sentencepiece as spm
+        import sentencepiece as spm  # Import sentencepiece here
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        self.from_slow = from_slow  # Track if converting from slow
+        self.from_slow = from_slow
 
         self.vocab_file = vocab_file
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
 
-        # Validate pad token ID assumption
-        sp_pad_id = self.sp_model.pad_id()
-        # Default <pad> to ID 0 if not defined in SP model or explicitly passed differently
-        # Set the pad_token attribute using the logic below before calling super().__init__
-        effective_pad_token = pad_token
-        if pad_token is None and sp_pad_id != -1:
-            logger.info(f"Using pad_token_id {sp_pad_id} from SentencePiece model.")
-            effective_pad_token = self.sp_model.IdToPiece(sp_pad_id)
-        elif pad_token is None and sp_pad_id == -1:
-            logger.warning(
-                "The SentencePiece model does not define a pad token, using default `<pad>`. "
-                "Make sure `<pad>` is ID 0 in your model."
-            )
-            effective_pad_token = "<pad>"  # Keep default
-        elif pad_token is not None and self.sp_model.piece_to_id(pad_token) == 0:
-            pass  # User provided pad token matches ID 0 assumption, all good
-        elif pad_token is not None and self.sp_model.piece_to_id(pad_token) != 0:
-            logger.warning(
-                f"You passed pad_token='{pad_token}' but the default uses ID 0. "
-                "If your model expects pad ID 0, this might lead to unexpected behavior."
-                f"The ID for '{pad_token}' in the vocab is {self.sp_model.piece_to_id(pad_token)}."
-            )
-            # Use the user-provided pad_token, but log warning.
-
-        # Ensure special tokens are AddedTokens (important for internal handling)
+        # Ensure special tokens are AddedTokens
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        pad_token = (
-            AddedToken(effective_pad_token, lstrip=False, rstrip=False)
-            if isinstance(effective_pad_token, str)
-            else effective_pad_token
-        )
 
+        # Validate pad_token and its ID
+        sp_pad_id = self.sp_model.pad_id()
+        if pad_token is None and sp_pad_id != -1:
+            # Use pad token from SentencePiece model if specified and pad_token is None
+            pad_token_str = self.sp_model.IdToPiece(sp_pad_id)
+            logger.info(f"Using pad_token='{pad_token_str}' with ID {sp_pad_id} from SentencePiece model.")
+            pad_token = AddedToken(pad_token_str, lstrip=False, rstrip=False)
+        elif pad_token is None and sp_pad_id == -1:
+            # Default to <pad> ID 0 if neither is set
+            logger.warning(
+                "The SentencePiece model does not define a pad token, and none was provided. "
+                "Defaulting to pad_token='<pad>' (ID 0). Ensure this matches your model's training."
+            )
+            pad_token = AddedToken("<pad>", lstrip=False, rstrip=False)
+        elif pad_token is not None:
+            # Use user-provided pad_token
+            pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+            pad_token_id_in_sp = self.sp_model.piece_to_id(str(pad_token))
+            if pad_token_id_in_sp == -1:
+                logger.warning(
+                    f"The specified pad_token '{pad_token}' is not found in the SentencePiece vocabulary. "
+                    "This might cause issues if padding is needed."
+                )
+            elif pad_token_id_in_sp != 0:
+                logger.warning(
+                    f"The pad_token='{pad_token}' provided has ID {pad_token_id_in_sp} in the SentencePiece vocabulary. "
+                    "Hugging Face models often expect pad_token_id=0. Ensure this is intended."
+                )
+            # If pad_token_id_in_sp == 0, it matches the common HF expectation.
+        else:
+            # This case should not be reachable due to the logic above, but as a safeguard:
+            logger.error("Unexpected condition while setting pad_token. Defaulting to '<pad>'.")
+            pad_token = AddedToken("<pad>", lstrip=False, rstrip=False)
+
+        # Call super().__init__ AFTER defining special tokens
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -155,8 +159,36 @@ class ConvaiCausalLMTokenizer(PreTrainedTokenizer):
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            from_slow=from_slow,  # Pass from_slow
             **kwargs,
         )
+
+        # Set pad_token_id explicitly AFTER super().__init__ to ensure consistency
+        # self.pad_token_id should ideally be 0 based on the training script logic
+        if self.pad_token is not None:
+            self._pad_token_id = self.sp_model.piece_to_id(str(self.pad_token))
+            if self._pad_token_id == self.sp_model.unk_id():
+                logger.warning(
+                    f"pad_token '{self.pad_token}' maps to the unknown token ID. This is likely unintended."
+                )
+            # Ensure the internal attribute matches the property
+            # self.pad_token_id = self._pad_token_id # Property setter handles this
+
+    # Define pad_token_id property explicitly if needed, otherwise base class handles it
+    @property
+    def pad_token_id(self) -> Optional[int]:
+        """
+        `Optional[int]`: Id of the padding token in the vocabulary. Returns `None` if the token has not been set.
+        We explicitly set it to 0 by default or based on the SentencePiece model / user input.
+        """
+        # The base class property setter handles setting self._pad_token_id correctly during __init__
+        # based on the pad_token argument. We just need to ensure the logic in __init__ is sound.
+        return super().pad_token_id
+
+    @pad_token_id.setter
+    def pad_token_id(self, value):
+        # Use the setter from the base class to handle AddedToken updates etc.
+        super(ConvaiCausalLMTokenizer, type(self)).pad_token_id.__set__(self, value)
 
     @property
     def vocab_size(self):
@@ -169,30 +201,18 @@ class ConvaiCausalLMTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
+    # bos/eos/unk properties rely on SentencePiece model's ids
     @property
     def bos_token_id(self) -> Optional[int]:
-        """
-        `Optional[int]`: Id of the beginning of sequence token in the vocabulary. Returns `None` if the token has not
-        been set.
-        """
         return self.sp_model.bos_id()
 
     @property
     def eos_token_id(self) -> Optional[int]:
-        """
-        `Optional[int]`: Id of the end of sequence token in the vocabulary. Returns `None` if the token has not been
-        set.
-        """
         return self.sp_model.eos_id()
 
     @property
     def unk_token_id(self) -> Optional[int]:
-        """
-        `Optional[int]`: Id of the unknown token in the vocabulary. Returns `None` if the token has not been set.
-        """
         return self.sp_model.unk_id()
-
-    # pad_token_id property is handled by the base class using self.pad_token
 
     def _tokenize(self, text: str) -> List[str]:
         """Return a list of tokens"""
@@ -209,26 +229,9 @@ class ConvaiCausalLMTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
-        # Uses Huey's logic from https://github.com/huggingface/transformers/pull/19566
-        if len(tokens) == 0:
-            return ""
-        current_sub_tokens = []
-        out_string = ""
-        prev_is_special = False
-        for token in tokens:
-            # Compatibility with BPE tokenizer's pattern to handle spaces properly
-            # If the previous token was special, sequences of special tokens don't add spaces
-            if token in self.all_special_tokens:
-                if not prev_is_special:
-                    out_string += self.sp_model.decode(current_sub_tokens)
-                    current_sub_tokens = []
-                out_string += token
-                prev_is_special = True
-            else:
-                current_sub_tokens.append(token)
-                prev_is_special = False
-        out_string += self.sp_model.decode(current_sub_tokens)
-        return out_string
+        # SentencePiece inherently handles space prefix markers (like ' ')
+        # Using sp_model.decode should correctly reconstruct the string.
+        return self.sp_model.decode(tokens)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
@@ -245,39 +248,37 @@ class ConvaiCausalLMTokenizer(PreTrainedTokenizer):
         """
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return ()  # Return empty tuple on error
+            return ()
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
-            try:
-                copyfile(self.vocab_file, out_vocab_file)
-            except OSError as e:
-                logger.error(f"Error copying vocabulary file: {e}")
-                return ()  # Return empty tuple on error
-
+            copyfile(self.vocab_file, out_vocab_file)
+            logger.info(f"Vocabulary saved in {out_vocab_file}")
         elif not os.path.isfile(self.vocab_file):
-            logger.warning(
-                f"Can't copy source vocab file '{self.vocab_file}' to '{out_vocab_file}' as it doesn't exist. "
-                "Check the path."
-            )
-            return ()  # Return empty tuple if source doesn't exist
+            logger.error(f"Can't save vocabulary to {out_vocab_file}: source file '{self.vocab_file}' not found.")
+            return ()
+        else:
+            logger.info(f"Vocabulary already exists in {out_vocab_file}. Skipping copy.")
 
         return (out_vocab_file,)
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """Build model inputs from a sequence or a pair of sequence for sequence classification tasks."""
-        bos_token_id = [self.bos_token_id] if self.add_bos_token else []
-        eos_token_id = [self.eos_token_id] if self.add_eos_token else []
+        bos_token_id = [self.bos_token_id] if self.add_bos_token and self.bos_token_id is not None else []
+        eos_token_id = [self.eos_token_id] if self.add_eos_token and self.eos_token_id is not None else []
 
-        output = bos_token_id + token_ids_0 + eos_token_id
+        output = bos_token_id + token_ids_0
 
         if token_ids_1 is not None:
-            # Usually BOS is not added between segments for Causal LMs
-            # output = output + bos_token_id + token_ids_1 + eos_token_id
+            # For causal LMs, typically don't add BOS between segments, but do add EOS at the end
             output = output + token_ids_1 + eos_token_id
+        else:
+            # Add EOS only if it's a single segment and add_eos_token is True
+            output = output + eos_token_id
 
         return output
 
-    # No need for create_token_type_ids_from_sequences for a Causal LM typically
+    # Usually no special handling needed for get_special_tokens_mask or create_token_type_ids_from_sequences
+    # for single-segment causal LMs unless doing specific classification tasks.

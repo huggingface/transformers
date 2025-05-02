@@ -1,5 +1,6 @@
 # coding=utf-8
 # Copyright 2024 Convai Innovations and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +23,6 @@ logger = logging.get_logger(__name__)
 
 CONVAICAUSALLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "convaiinnovations/hindi-causal-lm": "https://huggingface.co/convaiinnovations/hindi-causal-lm/resolve/main/config.json",
-    # Add other checkpoints here if any
 }
 
 
@@ -55,30 +55,52 @@ class ConvaiCausalLMConfig(PretrainedConfig):
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by averaging the weights of the heads in the group. For more details visit
-            [this blog post](https://huggingface.co/blog/GQA).
+            [this blog post](https://huggingface.co/blog/GQA). If not specified, will default to `num_attention_heads`.
+        head_dim (`int`, *optional*):
+            The attention head dimension. If not specified, will default to `hidden_size // num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder MLP layers.
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers. Changed name from rms_norm_eps for clarity as we use LayerNorm.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the RMS normalization layers. Matches Llama's default for easier inheritance.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
         pad_token_id (`int`, *optional*, defaults to 0):
-            Padding token id.
+            Padding token id. Matches the default from the training script.
         bos_token_id (`int`, *optional*, defaults to 1):
-            Beginning of stream token id.
+            Beginning of stream token id. Matches the default from the training script.
         eos_token_id (`int`, *optional*, defaults to 2):
-            End of stream token id.
+            End of stream token id. Matches the default from the training script.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight matrices of input and output embeddings.
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings.
+        rope_scaling (`Dict`, *optional*):
+            Dictionary containing the scaling configuration for RoPE embeddings. Currently supports `linear` and `dynamic` scaling. For dynamic scaling, pass {'type': 'dynamic', 'factor': scaling_factor}. For linear scaling, pass {'type': 'linear', 'factor': scaling_factor}. Unused if null.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether or not the model uses bias in attention projections. Matches Llama's default.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether or not the model uses bias in the MLP layers. Matches Llama's default.
 
-        Example: ... (Add example later)
+        Example:
+        ```python
+        >>> from transformers import ConvaiCausalLMModel, ConvaiCausalLMConfig
+
+        >>> # Initializing a ConvaiCausalLM convaiinnovations/hindi-causal-lm style configuration
+        >>> configuration = ConvaiCausalLMConfig()
+
+        >>> # Initializing a model from the convaiinnovations/hindi-causal-lm style configuration
+        >>> model = ConvaiCausalLMModel(configuration)
+
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
+        ```
     """
 
     model_type = "convaicausallm"
@@ -92,16 +114,21 @@ class ConvaiCausalLMConfig(PretrainedConfig):
         num_hidden_layers=12,
         num_attention_heads=16,
         num_key_value_heads=4,
+        head_dim=None,  # Will be calculated if None
         hidden_act="silu",
         max_position_embeddings=512,
         initializer_range=0.02,
-        layer_norm_eps=1e-5,  # Changed name from rms_norm_eps
+        rms_norm_eps=1e-5,  # Using RMSNorm like Llama
         use_cache=True,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
         tie_word_embeddings=False,
-        attention_dropout=0.0,  # Added dropout
+        rope_theta=10000.0,
+        rope_scaling=None,
+        attention_bias=False,  # Matches Llama default
+        attention_dropout=0.0,
+        mlp_bias=False,  # Matches Llama default
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -116,10 +143,31 @@ class ConvaiCausalLMConfig(PretrainedConfig):
             num_key_value_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
 
+        # Head dim calculation
+        if head_dim is None:
+            self.head_dim = hidden_size // num_attention_heads
+        else:
+            self.head_dim = head_dim
+        # Ensure hidden_size is consistent
+        if (self.head_dim * self.num_attention_heads) != self.hidden_size:
+            raise ValueError(
+                f"hidden_size must be divisible by num_attention_heads (got `hidden_size`: {self.hidden_size}"
+                f" and `num_attention_heads`: {self.num_attention_heads})."
+                f" If you specified `head_dim`, make sure `head_dim * num_attention_heads == hidden_size`."
+            )
+
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
+        self.rms_norm_eps = rms_norm_eps
         self.attention_dropout = attention_dropout
+        self.attention_bias = attention_bias
+        self.mlp_bias = mlp_bias  # Store mlp_bias
+
+        # RoPE parameters
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
+        self._rope_scaling_validation()  # Validate RoPE scaling config if present
+
         self.use_cache = use_cache
 
         super().__init__(
@@ -129,3 +177,24 @@ class ConvaiCausalLMConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+    def _rope_scaling_validation(self):
+        """
+        Validate the `rope_scaling` configuration.
+        """
+        if self.rope_scaling is None:
+            return
+
+        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
+            raise ValueError(
+                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
+                f"got {self.rope_scaling}"
+            )
+        rope_scaling_type = self.rope_scaling.get("type", None)
+        rope_scaling_factor = self.rope_scaling.get("factor", None)
+        if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic"]:
+            raise ValueError(
+                f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
+            )
+        if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
+            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
