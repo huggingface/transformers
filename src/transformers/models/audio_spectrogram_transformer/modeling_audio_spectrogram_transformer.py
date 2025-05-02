@@ -25,23 +25,11 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import add_code_sample_docstrings, auto_docstring, logging
+from ...utils import auto_docstring, logging
 from .configuration_audio_spectrogram_transformer import ASTConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "ASTConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "MIT/ast-finetuned-audioset-10-10-0.4593"
-_EXPECTED_OUTPUT_SHAPE = [1, 1214, 768]
-
-# Audio classification docstring
-_SEQ_CLASS_CHECKPOINT = "MIT/ast-finetuned-audioset-10-10-0.4593"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'Speech'"
-_SEQ_CLASS_EXPECTED_LOSS = 0.17
 
 
 class ASTEmbeddings(nn.Module):
@@ -446,12 +434,6 @@ class ASTModel(ASTPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
     def forward(
         self,
         input_values: Optional[torch.Tensor] = None,
@@ -537,13 +519,6 @@ class ASTForAudioClassification(ASTPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @add_code_sample_docstrings(
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
-    )
     def forward(
         self,
         input_values: Optional[torch.Tensor] = None,
@@ -560,7 +535,6 @@ class ASTForAudioClassification(ASTPreTrainedModel):
             the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
             tensor of type `torch.FloatTensor`. See [`~ASTFeatureExtractor.__call__`]
-
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the audio classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

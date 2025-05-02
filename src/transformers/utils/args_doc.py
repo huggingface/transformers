@@ -44,166 +44,253 @@ _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
 
 
 class ImageProcessorArgs:
-    images = r""":
+    images = {
+        "description": """
     Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
     passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-    """
+    """,
+        "shape": None,
+    }
 
-    videos = r""":
+    videos = {
+        "description": """
     Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
     passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
-    """
+    """,
+        "shape": None,
+    }
 
-    do_resize = r""":
+    do_resize = {
+        "description": """
     Whether to resize the image.
-    """
+    """,
+        "shape": None,
+    }
 
-    size = r""":
+    size = {
+        "description": """
     Describes the maximum input dimensions to the model.
-    """
+    """,
+        "shape": None,
+    }
 
-    default_to_square = r""":
+    default_to_square = {
+        "description": """
     Whether to default to a square image when resizing, if size is an int.
-    """
+    """,
+        "shape": None,
+    }
 
-    resample = r""":
+    resample = {
+        "description": """
     Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
     has an effect if `do_resize` is set to `True`.
-    """
+    """,
+        "shape": None,
+    }
 
-    do_center_crop = r""":
+    do_center_crop = {
+        "description": """
     Whether to center crop the image.
-    """
+    """,
+        "shape": None,
+    }
 
-    crop_size = r""":
+    crop_size = {
+        "description": """
     Size of the output image after applying `center_crop`.
-    """
+    """,
+        "shape": None,
+    }
 
-    do_rescale = r""":
+    do_rescale = {
+        "description": """
     Whether to rescale the image.
-    """
+    """,
+        "shape": None,
+    }
 
-    rescale_factor = r""":
+    rescale_factor = {
+        "description": """
     Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-    """
+    """,
+        "shape": None,
+    }
 
-    do_normalize = r""":
+    do_normalize = {
+        "description": """
     Whether to normalize the image.
-    """
+    """,
+        "shape": None,
+    }
 
-    image_mean = r""":
+    image_mean = {
+        "description": """
     Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-    """
+    """,
+        "shape": None,
+    }
 
-    image_std = r""":
+    image_std = {
+        "description": """
     Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
     `True`.
-    """
+    """,
+        "shape": None,
+    }
 
-    do_convert_rgb = r""":
+    do_convert_rgb = {
+        "description": """
     Whether to convert the image to RGB.
-    """
+    """,
+        "shape": None,
+    }
 
-    return_tensors = r""":
+    return_tensors = {
+        "description": """
     Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
-    """
+    """,
+        "shape": None,
+    }
 
-    data_format = r""":
+    data_format = {
+        "description": """
     Only `ChannelDimension.FIRST` is supported. Added for compatibility with slow processors.
-    """
+    """,
+        "shape": None,
+    }
 
-    input_data_format = r""":
+    input_data_format = {
+        "description": """
     The channel dimension format for the input image. If unset, the channel dimension format is inferred
     from the input image. Can be one of:
     - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
     - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
     - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-    """
+    """,
+        "shape": None,
+    }
 
-    device = r""":
+    device = {
+        "description": """
     The device to process the images on. If unset, the device is inferred from the input images.
-    """
+    """,
+        "shape": None,
+    }
 
 
 class ModelArgs:
-    labels = r""" of shape `(batch_size, sequence_length)`:
+    labels = {
+        "description": """
     Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
     config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
     (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-    """
+    """,
+        "shape": "of shape `(batch_size, sequence_length)`",
+    }
 
-    num_logits_to_keep = r""":
+    num_logits_to_keep = {
+        "description": """
     Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
     `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
     token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-    """
+    """,
+        "shape": None,
+    }
 
-    input_ids = r"""of shape `(batch_size, sequence_length)`):
+    input_ids = {
+        "description": """
     Indices of input sequence tokens in the vocabulary. Padding will be ignored by default.
 
     Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
     [`PreTrainedTokenizer.__call__`] for details.
 
     [What are input IDs?](../glossary#input-ids)
-    """
+    """,
+        "shape": "of shape `(batch_size, sequence_length)`",
+    }
 
-    input_values = r"""of shape `(batch_size, sequence_length)`:
+    input_values = {
+        "description": """
     Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
     into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
     soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
     conversion into a tensor of type `torch.FloatTensor`. See [`{processor_class}.__call__`] for details.
-    """
+    """,
+        "shape": "of shape `(batch_size, sequence_length)`",
+    }
 
-    attention_mask = r""" of shape `(batch_size, sequence_length)`:
+    attention_mask = {
+        "description": """
     Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
     - 1 for tokens that are **not masked**,
     - 0 for tokens that are **masked**.
 
     [What are attention masks?](../glossary#attention-mask)
-    """
+    """,
+        "shape": "of shape `(batch_size, sequence_length)`",
+    }
 
-    head_mask = r""" of shape `(num_heads,)` or `(num_layers, num_heads)`:
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+    head_mask = {
+        "description": """
+    Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
+    - 1 indicates the head is **not masked**,
+    - 0 indicates the head is **masked**.
+    """,
+        "shape": "of shape `(num_heads,)` or `(num_layers, num_heads)`",
+    }
 
-    """
+    cross_attn_head_mask = {
+        "description": """
+    Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 
-    cross_attn_head_mask = r""" of shape `(num_layers, num_heads)`:
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
+    - 1 indicates the head is **not masked**,
+    - 0 indicates the head is **masked**.
+    """,
+        "shape": "of shape `(num_layers, num_heads)`",
+    }
 
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-    """
-
-    decoder_attention_mask = r"""of shape `(batch_size, target_sequence_length)`:
+    decoder_attention_mask = {
+        "description": """
     Mask to avoid performing attention on certain token indices. By default, a causal mask will be used, to
     make sure the model can only look at previous inputs in order to predict the future.
-    """
+    """,
+        "shape": "of shape `(batch_size, target_sequence_length)`",
+    }
 
-    decoder_head_mask = r"""of shape `(decoder_layers, decoder_attention_heads)`:
+    decoder_head_mask = {
+        "description": """
     Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
 
     - 1 indicates the head is **not masked**,
     - 0 indicates the head is **masked**.
-"""
+    """,
+        "shape": "of shape `(decoder_layers, decoder_attention_heads)`",
+    }
 
-    encoder_hidden_states = r"""of shape `(batch_size, sequence_length, hidden_size)`:
+    encoder_hidden_states = {
+        "description": """
     Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
     if the model is configured as a decoder.
-    """
+    """,
+        "shape": "of shape `(batch_size, sequence_length, hidden_size)`",
+    }
 
-    encoder_attention_mask = r""" of shape `(batch_size, sequence_length)`:
+    encoder_attention_mask = {
+        "description": """
     Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
     the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
     - 1 for tokens that are **not masked**,
     - 0 for tokens that are **masked**.
-    """
+    """,
+        "shape": "of shape `(batch_size, sequence_length)`",
+    }
 
-    token_type_ids = r""" of shape `(batch_size, input_ids_length)`:
+    token_type_ids = {
+        "description": """
     Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
     1]`:
 
@@ -211,21 +298,27 @@ class ModelArgs:
     - 1 corresponds to a *sentence B* token.
 
     [What are token type IDs?](../glossary#token-type-ids)
-    """
+    """,
+        "shape": "of shape `(batch_size, sequence_length)`",
+    }
 
-    position_ids = r""":
+    position_ids = {
+        "description": """
     Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.n_positions - 1]`.
 
     [What are position IDs?](../glossary#position-ids)
-    """
+    """,
+        "shape": "of shape `(batch_size, sequence_length)`",
+    }
 
-    past_key_values = r""":
+    past_key_values = {
+        "description": """
     Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
     blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
     returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
     Two formats are allowed:
-        - a `~cache_utils.Cache` instance, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
+        - a [`~cache_utils.Cache`] instance, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
         - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
         shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
         cache format.
@@ -236,28 +329,40 @@ class ModelArgs:
     If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
     have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
     of shape `(batch_size, sequence_length)`.
-    """
+    """,
+        "shape": None,
+    }
 
-    past_key_value = r""":
+    past_key_value = {
+        "description": """
     deprecated in favor of `past_key_values`
-    """
+    """,
+        "shape": None,
+    }
 
-    inputs_embeds = r""":
+    inputs_embeds = {
+        "description": """
     Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
     is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
     model's internal embedding lookup matrix.
-    """
+    """,
+        "shape": "of shape `(batch_size, sequence_length, hidden_size)`",
+    }
 
-    decoder_input_ids = r""" of shape `(batch_size, target_sequence_length)`:
+    decoder_input_ids = {
+        "description": """
     Indices of decoder input sequence tokens in the vocabulary.
 
     Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
     [`PreTrainedTokenizer.__call__`] for details.
 
     [What are decoder input IDs?](../glossary#decoder-input-ids)
-    """
+    """,
+        "shape": "of shape `(batch_size, target_sequence_length)`",
+    }
 
-    decoder_inputs_embeds = r"""of shape `(batch_size, target_sequence_length, hidden_size)`:
+    decoder_inputs_embeds = {
+        "description": """
     Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
     representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
     input (see `past_key_values`). This is useful if you want more control over how to convert
@@ -265,109 +370,169 @@ class ModelArgs:
 
     If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
     of `inputs_embeds`.
-    """
+    """,
+        "shape": "of shape `(batch_size, target_sequence_length, hidden_size)`",
+    }
 
-    use_cache = r""":
+    use_cache = {
+        "description": """
     If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
     `past_key_values`).
-    """
+    """,
+        "shape": None,
+    }
 
-    output_attentions = r""":
+    output_attentions = {
+        "description": """
     Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
     tensors for more detail.
-    """
+    """,
+        "shape": None,
+    }
 
-    output_hidden_states = r""":
+    output_hidden_states = {
+        "description": """
     Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
     more detail.
-    """
+    """,
+        "shape": None,
+    }
 
-    return_dict = r""":
+    return_dict = {
+        "description": """
     Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-    """
+    """,
+        "shape": None,
+    }
 
-    cache_position = r""":
+    cache_position = {
+        "description": """
     Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
     this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
     the complete sequence length.
-    """
+    """,
+        "shape": "of shape `(sequence_length)`",
+    }
 
-    hidden_states = r""": input to the layer of shape `(batch, seq_len, embed_dim)"""
+    hidden_states = {
+        "description": """ input to the layer of shape `(batch, seq_len, embed_dim)""",
+        "shape": None,
+    }
 
-    interpolate_pos_encoding = r""":
+    interpolate_pos_encoding = {
+        "description": """
     Whether to interpolate the pre-trained position encodings.
-    """
+    """,
+        "shape": None,
+    }
 
-    position_embeddings = r""":
+    position_embeddings = {
+        "description": """
     Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
     with `head_dim` being the embedding dimension of each attention head.
-    """
+    """,
+        "shape": None,
+    }
 
-    config = r""":
+    config = {
+        "description": """
     Model configuration class with all the parameters of the model. Initializing with a config file does not
     load the weights associated with the model, only the configuration. Check out the
     [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-    """
+    """,
+        "shape": None,
+    }
 
-    start_positions = r""" of shape `(batch_size,)`:
+    start_positions = {
+        "description": """
     Labels for position (index) of the start of the labelled span for computing the token classification loss.
     Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
     are not taken into account for computing the loss.
-    """
+    """,
+        "shape": "of shape `(batch_size,)`",
+    }
 
-    end_positions = r""" of shape `(batch_size,)`:
+    end_positions = {
+        "description": """
     Labels for position (index) of the end of the labelled span for computing the token classification loss.
     Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
     are not taken into account for computing the loss.
-    """
+    """,
+        "shape": "of shape `(batch_size,)`",
+    }
 
-    encoder_outputs = r""":
+    encoder_outputs = {
+        "description": """
     Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
     `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
     hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-    """
-    output_router_logits = r""":
+    """,
+        "shape": None,
+    }
+
+    output_router_logits = {
+        "description": """
     Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
     should not be returned during inference.
-    """
+    """,
+        "shape": None,
+    }
 
-    logits_to_keep = r""":
+    logits_to_keep = {
+        "description": """
     If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
     `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
     token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
     If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
     This is useful when using packed tensor format (single dimension for batch and sequence length).
-    """
+    """,
+        "shape": None,
+    }
 
-    pixel_values = r""" of shape `(batch_size, num_channels, image_size, image_size)`:
+    pixel_values = {
+        "description": """
     The tensors corresponding to the input images. Pixel values can be obtained using
     [`{image_processor_class}`]. See [`{image_processor_class}.__call__`] for details ([`{processor_class}`] uses
     [`{image_processor_class}`] for processing images).
-    """
+    """,
+        "shape": "of shape `(batch_size, num_channels, image_size, image_size)`",
+    }
 
-    vision_feature_layer = r""":
+    vision_feature_layer = {
+        "description": """
     The index of the layer to select the vision feature. If multiple indices are provided,
     the vision feature of the corresponding indices will be concatenated to form the
     vision features.
-    """
+    """,
+        "shape": None,
+    }
 
-    vision_feature_select_strategy = r""":
+    vision_feature_select_strategy = {
+        "description": """
     The feature selection strategy used to select the vision feature from the vision backbone.
     Can be one of `"default"` or `"full"`.
-    """
+    """,
+        "shape": None,
+    }
 
-    image_sizes = r"""of shape `(batch_size, 2)`:
+    image_sizes = {
+        "description": """
     The sizes of the images in the batch, being (height, width) for each image.
-    """
+    """,
+        "shape": "of shape `(batch_size, 2)`",
+    }
 
-    pixel_mask = r"""of shape `(batch_size, height, width)`:
+    pixel_mask = {
+        "description": """
     Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
 
     - 1 for pixels that are real (i.e. **not masked**),
     - 0 for pixels that are padding (i.e. **masked**).
 
     [What are attention masks?](../glossary#attention-mask)
-    """
+    """,
+        "shape": "of shape `(batch_size, height, width)`",
+    }
 
 
 class ClassDocstring:
@@ -399,15 +564,6 @@ class ClassDocstring:
 
     ForSequenceClassification = r"""
     The {model_name} Model with a sequence classification/regression head on top e.g. for GLUE tasks.
-
-    [`LlamaForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
     """
 
     ForQuestionAnswering = r"""
@@ -789,9 +945,10 @@ def _process_parameter_type(param, param_name, func):
             if param_type[0] == ".":
                 param_type = param_type[1:]
         else:
-            print(
-                f"🚨 {param_type} for {param_name} of {func.__qualname__} in file {func.__code__.co_filename} has an invalid type"
-            )
+            if False:
+                print(
+                    f"🚨 {param_type} for {param_name} of {func.__qualname__} in file {func.__code__.co_filename} has an invalid type"
+                )
         if "ForwardRef" in param_type:
             param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
         if "Optional" in param_type:
@@ -828,14 +985,12 @@ def _get_parameter_info(param_name, documented_params, source_args_dict, param_t
         optional = documented_params[param_name]["optional"]
         shape = documented_params[param_name]["shape"]
         shape_string = shape if shape else ""
-        description = f":{documented_params[param_name]['description']}\n"
+        description = f"{documented_params[param_name]['description']}\n"
     elif param_name in source_args_dict:
         # Parameter is documented in ModelArgs or ImageProcessorArgs
-        indented_doc = source_args_dict[param_name]
-        pre_doc = indented_doc.split(":\n")[0]
-        shape = parse_shape(pre_doc)
-        shape_string = shape if shape else ""
-        description = ":\n" + ":\n".join(indented_doc.split(":\n")[1:])
+        shape = source_args_dict[param_name]["shape"]
+        shape_string = " " + shape if shape else ""
+        description = source_args_dict[param_name]["description"]
     else:
         # Parameter is not documented
         is_documented = False
@@ -883,11 +1038,12 @@ def _process_regular_parameters(sig, func, class_name, documented_params, indent
         if is_documented:
             # Check if type is missing
             if param_type == "":
-                print(f"🚨 {param_name} for {func.__qualname__} in file {func.__code__.co_filename} has no type")
+                if False:
+                    print(f"🚨 {param_name} for {func.__qualname__} in file {func.__code__.co_filename} has no type")
 
             # Format the parameter docstring
             docstring += set_min_indent(
-                f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}){description}",
+                f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}):{description}",
                 indent_level + 8,
             )
         else:
@@ -978,7 +1134,7 @@ def _process_kwargs_parameters(
 
                     # Format the parameter docstring
                     docstring += set_min_indent(
-                        f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}){description}",
+                        f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}):{description}",
                         indent_level + 8,
                     )
                 else:
