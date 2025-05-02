@@ -1102,8 +1102,13 @@ if __name__ == "__main__":
                         if artifact_gpu not in model_results[model]["failures"]:
                             model_results[model]["failures"][artifact_gpu] = []
 
+                        if len(stacktraces) > 0:
+                            trace = stacktraces.pop(0)
+                        else:
+                            trace = "Cannot retrieve error message."
+
                         model_results[model]["failures"][artifact_gpu].append(
-                            {"line": line, "trace": stacktraces.pop(0)}
+                            {"line": line, "trace": trace}
                         )
 
                         if re.search("test_modeling_tf_", line):
