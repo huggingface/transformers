@@ -1,5 +1,5 @@
 """:
-This script is used to test training with the SmolLM2-135M model using Tensor Parallelism.
+This script is used to test training a model using Tensor Parallelism and Data Parallelism.
 
 Usage:
 torchrun --nproc_per_node=<num_gpus> test_train.py
@@ -74,8 +74,8 @@ def sanity_check_tensor_sync(tensor: torch.Tensor, mesh: DeviceMesh, rtol: float
     return is_synced
 
 def main():
-    tp_size = 4
-    dp_size = 1
+    tp_size = 2
+    dp_size = 2
     CHECKPOINT_DIR = "checkpoint"
     
     # Initialize distributed environment
@@ -183,9 +183,16 @@ def main():
         assert not sanity_check_tensor_sync(batch["input_ids"], dp_mesh), f"Batch is same across dp {batch['input_ids']}"
 
     optimizer.zero_grad()
+
+    # list(model.named_parameters())
+    # [('model.embed_tokens.weight', DTensor(... -- ALL THE PARAMETERS...
+    
     outputs = model(**batch)
     loss = outputs.loss
     logits = outputs.logits
+
+    # list(model.named_parameters())
+    # [('lm_head.weight', Parameter containing: tensor([[ 0.0227,  0.0123, -0.0127,  ..., -0.1187,  0.0344,  0....      device='cuda:1', requires_grad=True))]
 
     # TODO: only true without sequence parallel
     assert sanity_check_tensor_sync(logits, tp_mesh), f"Logits are not same across all tp when not using sequence parallel {logits}"
