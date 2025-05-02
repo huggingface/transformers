@@ -755,7 +755,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
 
 class SemanticSegmentationMixin:
-    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         """
         Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 

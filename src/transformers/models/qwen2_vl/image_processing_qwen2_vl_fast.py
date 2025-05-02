@@ -256,7 +256,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         images: ImageInput,
         videos: VideoInput = None,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,

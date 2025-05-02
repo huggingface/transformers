@@ -37,7 +37,6 @@ from ..cache_utils import (
     OffloadedCache,
     OffloadedHybridCache,
     QuantizedCacheConfig,
-    StaticCache,
 )
 from ..configuration_utils import PretrainedConfig
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
@@ -362,7 +361,7 @@ class GenerationMixin:
            inherit from `GenerationMixin` to benefit from all generation-related automation in our codebase;
         - `BarkModel` has a custom `generate` method and one of its inner models calls `GenerationMixin.generate`.
             However, its `generate` does not share the same interface as `GenerationMixin.generate`. In this case,
-            `BarkModel` shoud NOT inherit from `GenerationMixin`, as it breaks the `generate` interface.
+            `BarkModel` should NOT inherit from `GenerationMixin`, as it breaks the `generate` interface.
 
     The class exposes [`~generation.GenerationMixin.generate`], which can be used for:
         - *greedy decoding* if `num_beams=1` and `do_sample=False`
@@ -392,7 +391,7 @@ class GenerationMixin:
         - Exception 1: when passing input_embeds, input_ids may be missing entries
         - Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         - Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
-        - Excpetion 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
+        - Exception 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
           generate the first token for each sequence. Later use the generated Input ids for continuation.
 
         The current implementation does not rely on ``self`` and could be
@@ -553,8 +552,14 @@ class GenerationMixin:
                     model_input = model_input.clone(memory_format=torch.contiguous_format)
                 model_inputs[model_input_name] = model_input
 
-        # 6. Create 4D attention mask is we are using a `StaticCache` (important for performant compiled forward pass)
-        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
+        # 6. Create 4D attention mask is we are using a compilable cache (important for performant compiled forward
+        # pass)
+        if (
+            isinstance(past_key_values, Cache)
+            and past_key_values.is_compileable
+            and attention_mask is not None
+            and attention_mask.ndim == 2
+        ):
             if model_inputs["inputs_embeds"] is not None:
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
             else:
@@ -967,7 +972,7 @@ class GenerationMixin:
                     assistant_model=assistant_model,
                     assistant_prune_lm_head=True,  # prune LM head of assistant model
                 )
-                # Since we prune the LM head, we cannot use the repetition penalty on the assistant model due to mismaches between token ids and logits index
+                # Since we prune the LM head, we cannot use the repetition penalty on the assistant model due to mismatches between token ids and logits index
                 assistant_model.generation_config.repetition_penalty = None
                 candidate_generator = UniversalSpeculativeDecodingGenerator(
                     input_ids=input_ids,

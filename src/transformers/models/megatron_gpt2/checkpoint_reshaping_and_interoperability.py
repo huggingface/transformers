@@ -98,7 +98,7 @@ def add_megatron_checkpoint_args(parser):
         default=128,
         help=(
             "Pad the vocab size to be divisible by this value. "
-            "This is added for computational efficieny reasons. "
+            "This is added for computational efficiency reasons. "
             "Only used when converting a Transformers checkpoint to a Megatron checkpoint."
         ),
     )
@@ -235,7 +235,7 @@ def transformers_to_megatron_fix_query_key_value_ordering(
     param, checkpoint_version, num_splits, num_heads, hidden_size
 ):
     """
-    Permutes layout of param tensor to the one compatible with respective NVIDIA Megatron-LM chekpoint versions. Input
+    Permutes layout of param tensor to the one compatible with respective NVIDIA Megatron-LM checkpoint versions. Input
     is [num_splits * num_heads * hidden_size, :] and output is [num_heads * hidden_size * num_splits, :] for version
     1.0 and [num_heads * num_splits * hidden_size, :] for version 2.0 and later. If param is the weight tensor of the
     self-attention block, the param needs to be already transposed before calling this function.
@@ -348,7 +348,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
         raise ValueError(
             "Megatron-LM checkpoint does not contain arguments. This utility only supports Megatron-LM checkpoints"
             " containing all the megatron arguments. This is because it loads all config related to model"
-            " architecture, the tensor and pipeline model parallel size from the checkpoint insead of user having to"
+            " architecture, the tensor and pipeline model parallel size from the checkpoint instead of user having to"
             " manually specify all the details. Please save Megatron-LM checkpoint along with all the megatron"
             " arguments to use this utility."
         )
