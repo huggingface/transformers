@@ -154,7 +154,7 @@ def write_model(
     params,
     image_token_id,
     safe_serialization=True,
-    vocab_size=None,
+    tokenizer=None,
     num_shards=None,
     push_to_hub=False,
 ):
@@ -307,8 +307,8 @@ def write_model(
             model_params["multiple_of"] if "multiple_of" in model_params else 256
         )
 
-        bos_token_id = 128000
-        eos_token_id = [128001, 128008, 128009]
+        bos_token_id = tokenizer.convert_tokens_to_ids("<|begin_of_text|>")
+        eos_token_id = [tokenizer.convert_tokens_to_ids(t) for t in ["<|end_of_text|>", "<|eot_id|>"]]
 
         use_scaled_rope = model_params["use_scaled_rope"]
         if use_scaled_rope:
@@ -331,7 +331,7 @@ def write_model(
             num_hidden_layers=model_params["n_layers"],
             rms_norm_eps=model_params["norm_eps"],
             num_key_value_heads=num_key_value_heads,
-            vocab_size=vocab_size,
+            vocab_size=len(tokenizer),
             rope_theta=base,
             rope_scaling=rope_scaling,
             max_position_embeddings=max_position_embeddings,
@@ -560,14 +560,13 @@ def main():
         params=params,
         push_to_hub=args.push_to_hub,
     )
-    vocab_size = len(tokenizer)
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
         params=params,
         image_token_id=tokenizer.image_token_id,
         safe_serialization=args.safe_serialization,
-        vocab_size=vocab_size,
+        tokenizer=tokenizer,
         num_shards=args.num_shards,
         push_to_hub=args.push_to_hub,
     )

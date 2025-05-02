@@ -3,7 +3,7 @@
 import math
 from functools import reduce
 from logging import getLogger
-from typing import Any, Callable, Tuple, Union
+from typing import Any, Callable, Tuple, Union, Sequence
 
 import numpy as np
 import torch
@@ -11,12 +11,37 @@ import torchvision.transforms as tv
 from PIL import Image
 from torchvision.transforms import functional as F
 from torchvision.transforms.functional import InterpolationMode
+from torchvision.transforms import ToPILImage, PILToTensor
+
 
 logger = getLogger()
 
 
 MEAN = (0.5, 0.5, 0.5)
 STD = (0.5, 0.5, 0.5)
+
+
+"""
+Resize the image to the given size. Supports both PIL images and torch.Tensor.
+If the image is a tensor, it's supposed to be a batch of images with shape (B, C, H, W) and dtype uint8.
+If use_pil_resize is True, the images will be resized using PIL implementation of interpolation.
+"""
+
+
+def _resize(
+    image: Union[Image.Image, torch.Tensor],
+    size: Sequence[int],
+    use_pil_resize: bool = True,
+) -> Union[Image.Image, torch.Tensor]:
+    if isinstance(image, torch.Tensor) and use_pil_resize:
+        ims = []
+        for im in image:
+            im = ToPILImage()(im)
+            im = F.resize(im, size, interpolation=InterpolationMode.BICUBIC)
+            ims.append(PILToTensor()(im))
+        return torch.stack(ims, dim=0)
+    else:
+        return F.resize(image, size, interpolation=InterpolationMode.BICUBIC)
 
 
 def get_image_transform(
@@ -84,12 +109,11 @@ class ImageTransform(object):
         if isinstance(image, Image.Image):
             w, h = image.size
         else:
-            w, h = image.shape[-2:]
+            h, w = image.shape[-2:]
 
-        image = F.resize(
+        image = _resize(
             image,
             (self.size, self.size),
-            interpolation=InterpolationMode.BICUBIC,
         )
         if isinstance(image, Image.Image):
             image = self.to_tensor(image)
@@ -236,25 +260,6 @@ class VariableSizeImageTransform(object):
             tgt_idx = max(heights, key=lambda x: x[1])[0]
         out = v[tgt_idx]
         return out
-
-    def _resize(
-        self, image: Image.Image, target_width: int, target_height: int
-    ) -> Image.Image:
-        # Resize longer edge to given size.
-        w, h = image.size
-        scale = w / h
-
-        if scale > 1.0:
-            # width > height
-            new_w = target_width
-            new_h = math.floor(new_w / scale)
-        else:
-            # height >= width
-            new_h = target_height
-            new_w = math.floor(new_h * scale)
-
-        image = F.resize(image, (new_h, new_w))
-        return image
 
     def _pad(
         self, image: Union[Image.Image, torch.Tensor], new_width: int, new_height: int
@@ -407,20 +412,21 @@ class VariableSizeImageTransform(object):
         if isinstance(image, Image.Image):
             w, h = image.size
         else:
-            w, h = image.shape[-2:]
+            h, w = image.shape[-2:]
 
         # Check if the image can be fit to the canvas without downsampling
         ar = self._fit_image_to_canvas(
             img_width=w, img_height=h, area_limit=self.area_limit
         )
+        print("orginal w, h", w, h)
         if ar is None:
             # If we did not find a canvas, we have to find the closest aspect ratio and downsample the image
             ar = self._find_closest_aspect_ratio(img_width=w, img_height=h)
 
-        image = F.resize(
+        print("closest aspect ratio", ar)
+        image = _resize(
             image,
             (ar[1] * self.size, ar[0] * self.size),  # (h, w)
-            interpolation=InterpolationMode.BICUBIC,
         )
         image = self._pad(image, ar[0] * self.size, ar[1] * self.size)
 
@@ -437,5 +443,4 @@ class VariableSizeImageTransform(object):
             image = torch.cat((image, thumbnail), dim=1)
         elif self.use_thumbnail == "both":
             image = torch.cat((thumbnail, image, thumbnail), dim=1)
-
         return image, ar
