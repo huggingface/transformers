@@ -533,10 +533,12 @@ def is_torch_bf16_gpu_available() -> bool:
 
     if torch.cuda.is_available():
         return torch.cuda.is_bf16_supported()
-    if torch.xpu.is_available():
+    if is_torch_xpu_available():
         return torch.xpu.is_bf16_supported()
     if is_torch_hpu_available():
         return True
+    if is_torch_npu_available():
+        return torch.npu.is_bf16_supported()
     return False
 
 
@@ -1387,6 +1389,16 @@ def is_rich_available():
     return _rich_available
 
 
+def check_torch_load_is_safe():
+    if not is_torch_greater_or_equal("2.6"):
+        raise ValueError(
+            "Due to a serious vulnerability issue in `torch.load`, even with `weights_only=True`, we now require users "
+            "to upgrade torch to at least v2.6 in order to use the function. This version restriction does not apply "
+            "when loading files with safetensors."
+            "\nSee the vulnerability report here https://nvd.nist.gov/vuln/detail/CVE-2025-32434"
+        )
+
+
 # docstyle-ignore
 AV_IMPORT_ERROR = """
 {0} requires the PyAv library but it was not found in your environment. You can install it with:
@@ -1718,14 +1730,14 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 LIBROSA_IMPORT_ERROR = """
-{0} requires thes librosa library. But that was not found in your environment. You can install them with pip:
+{0} requires the librosa library. But that was not found in your environment. You can install them with pip:
 `pip install librosa`
 Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 PRETTY_MIDI_IMPORT_ERROR = """
-{0} requires thes pretty_midi library. But that was not found in your environment. You can install them with pip:
+{0} requires the pretty_midi library. But that was not found in your environment. You can install them with pip:
 `pip install pretty_midi`
 Please note that you may need to restart your runtime after installation.
 """
@@ -1867,7 +1879,7 @@ class _LazyModule(ModuleType):
         module_file: str,
         import_structure: IMPORT_STRUCTURE_T,
         module_spec: Optional[importlib.machinery.ModuleSpec] = None,
-        extra_objects: Dict[str, object] = None,
+        extra_objects: Optional[Dict[str, object]] = None,
     ):
         super().__init__(name)
 
@@ -2402,7 +2414,7 @@ def spread_import_structure(nested_import_structure):
 
 
 @lru_cache()
-def define_import_structure(module_path: str, prefix: str = None) -> IMPORT_STRUCTURE_T:
+def define_import_structure(module_path: str, prefix: Optional[str] = None) -> IMPORT_STRUCTURE_T:
     """
     This method takes a module_path as input and creates an import structure digestible by a _LazyModule.
 

@@ -375,7 +375,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_av
     def test_apply_chat_template_video_frame_sampling(self):
-        # overriden because SmolVLM has special preprocessing for videos
+        # overridden because SmolVLM has special preprocessing for videos
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")

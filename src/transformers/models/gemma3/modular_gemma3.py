@@ -128,7 +128,7 @@ class Gemma3TextConfig(Gemma2Config):
             Scaling factor when applying tanh softcapping on the attention scores.
         cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
         rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings used in gloabl attention. NOTE: if you apply new rope type
+            Dictionary containing the scaling configuration for the RoPE embeddings used in global attention. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
             accordingly.
             Expected contents:
@@ -494,7 +494,7 @@ class Gemma3DecoderLayer(nn.Module):
                 # In case we are beyond the sliding window, we need to correctly offset the mask slicing
                 offset = cache_position[-1] - effective_seq_len + 1
                 # Should only be used when beyond the sliding window (i.e. offset > 0)
-                offset = max(0, offset)
+                offset = torch.clamp(offset, min=0)
                 # equivalent to: `attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]`,
                 # but without data-dependent slicing (i.e. torch.compile friendly)
                 mask_indexes = torch.arange(
@@ -926,7 +926,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         is_training = token_type_ids is not None and labels is not None
 
-        # Replace image id woth PAD if the image token if OOV, to avoid index-errors
+        # Replace image id with PAD if the image token if OOV, to avoid index-errors
         if input_ids is not None and self.config.image_token_id >= self.vocab_size:
             special_image_mask = input_ids == self.config.image_token_id
             llm_input_ids = input_ids.clone()
