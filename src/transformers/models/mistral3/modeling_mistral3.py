@@ -247,6 +247,8 @@ class Mistral3PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
+        elif isinstance(module, Mistral3RMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 MISTRAL3_INPUTS_DOCSTRING = r"""

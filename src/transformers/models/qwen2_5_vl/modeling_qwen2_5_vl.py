@@ -1854,7 +1854,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         r"^model(?!\.(language_model|visual))": "model.language_model",
     }
     _tied_weights_keys = ["lm_head.weight"]
-    base_model_prefix = "model"
 
     def __init__(self, config):
         super().__init__(config)

@@ -342,7 +342,7 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
         elif isinstance(module, InstructBlipVisionEmbeddings):
             nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
             nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
-        elif isinstance(module, InstructBlipForConditionalGeneration):
+        elif isinstance(module, (InstructBlipForConditionalGeneration, InstructBlipModel)):
             module.query_tokens.data.zero_()
 
 
@@ -1279,7 +1279,7 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
 
 @add_start_docstrings(
     """
-    InstructBLIP  base Model consisting of language model, qformer and vision encoder.
+    InstructBLIP base Model consisting of language model, qformer and vision encoder.
     """,
     INSTRUCTBLIP_START_DOCSTRING,
 )
