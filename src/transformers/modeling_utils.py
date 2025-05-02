@@ -3490,12 +3490,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         state_dict = self._fix_state_dict_keys_on_save(state_dict)
 
         if safe_serialization:
+            # TODO: fix safe_serialization for tied weights
             # Safetensors does not allow tensor aliasing.
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
             for name, tensor in state_dict.items():
                 if isinstance(tensor, torch.distributed.tensor.DTensor):
-                    use_dtensor = True
                     tensor = tensor.to_local()
                 # Sometimes in the state_dict we have non-tensor objects.
                 # e.g. in bitsandbytes we have some `str` objects in the state_dict
@@ -3635,7 +3635,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 del shard_state_dict
                 gc.collect()
 
-            # dtensor -> tensor
             for name, tensor in shard.items():
                 if isinstance(tensor, torch.distributed.tensor.DTensor):
                     shard[name] = tensor.to_local()
@@ -4155,7 +4154,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
                 device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
         else:
-            print("DEBUG: device_mesh", device_mesh)
+            # TODO: make device_mesh support multiple dimensions
+            assert device_mesh.ndim == 1, "device_mesh must be 1 dimensional and will be used for TP"
             device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
 
         if use_auth_token is not None:
