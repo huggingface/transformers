@@ -174,9 +174,9 @@ CSM supports full-graph compilation with CUDA graphs!
 import torch
 import copy
 from transformers import CsmForConditionalGeneration, AutoProcessor
-from datasets import load_dataset, Audio
+from datasets import load_dataset
 
-model_id = "eustlb/csm-1b"
+model_id = "/home/eustache_lebihan/add-sesame/convert-TMP"
 device = "cuda"
 
 # set logs to ensure no recompilation and graph breaks
@@ -186,15 +186,10 @@ torch._logging.set_logs(graph_breaks=True, recompiles=True, cudagraphs=True)
 processor = AutoProcessor.from_pretrained(model_id)
 model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
 
-# compile
+# use static cache, enabling automatically torch compile with fullgraph and reduce-overhead
+model.generation_config.max_length = 250 # big enough to avoid recompilation
 model.generation_config.cache_implementation = "static"
 model.depth_decoder.generation_config.cache_implementation = "static"
-model.depth_decoder.forward = torch.compile(model.depth_decoder.forward, fullgraph=True, mode="reduce-overhead")
-model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
-
-# set padding lengths to accommodate the largest expected inputs
-text_kwargs = {"padding": "max_length", "max_length": 150}
-audio_kwargs = {"padding": "max_length", "max_length": 100000}
 
 # generation kwargs
 gen_kwargs = {
@@ -226,8 +221,6 @@ class TimerContext:
 
 # prepare the inputs 
 ds = load_dataset("eustlb/dailytalk-dummy", split="train")
-# ensure the audio is 24kHz
-ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 
 conversation = [
     {
@@ -256,31 +249,17 @@ padded_inputs_1 = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
-    text_kwargs=copy.deepcopy(text_kwargs),
-    audio_kwargs=copy.deepcopy(audio_kwargs),
 ).to(device)
 
 print("\n" + "="*50)
-print("First generation - compiling...")
+print("First generation - compiling asnd recording CUDA graphs...")
 with TimerContext("First generation"):
     _ = model.generate(**padded_inputs_1, **gen_kwargs)
 print("="*50)
 
 print("\n" + "="*50)
-print("Second generation - recording cuda graph...")
+print("Second generation - fast !!!")
 with TimerContext("Second generation"):
-    _ = model.generate(**padded_inputs_1, **gen_kwargs)
-print("="*50)
-
-print("\n" + "="*50)
-print("Third generation - recording cuda graph...")
-with TimerContext("Third generation"):
-    _ = model.generate(**padded_inputs_1, **gen_kwargs)
-print("="*50)
-
-print("\n" + "="*50)
-print("Fourth generation - fast !!!")
-with TimerContext("Fourth generation"):
     _ = model.generate(**padded_inputs_1, **gen_kwargs)
 print("="*50)
 
@@ -311,8 +290,6 @@ padded_inputs_2 = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
-    text_kwargs=copy.deepcopy(text_kwargs),
-    audio_kwargs=copy.deepcopy(audio_kwargs),
 ).to(device)
 
 print("\n" + "="*50)
