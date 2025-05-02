@@ -210,7 +210,9 @@ class TorchAoTest(unittest.TestCase):
             granularity=granularity,
             mapping_type=mapping_type,
         )
-        config = AOPerModuleConfig({"_default": None, "model.embed_tokens": embedding_config, "lm_head": embedding_config})
+        config = AOPerModuleConfig(
+            {"_default": None, "model.embed_tokens": embedding_config, "lm_head": embedding_config}
+        )
         # need set `include_embedding` to True
         quant_config = TorchAoConfig(quant_type=config, include_embedding=True)
         quantized_model = AutoModelForCausalLM.from_pretrained(
