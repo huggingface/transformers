@@ -1555,6 +1555,7 @@ class TorchAoConfig(QuantizationConfigMixin):
     modules_to_not_convert: Optional[List]
     quant_type_kwargs: Dict[str, Any]
     include_embedding: bool
+    untie_embedding_weights: bool
 
     """This is a config class for torchao quantization/sparsity techniques.
 
@@ -1569,6 +1570,9 @@ class TorchAoConfig(QuantizationConfigMixin):
         inlcude_embedding (`bool`, default to `False`):
             Whether to include embedding in quantization or not, input embedding will be removed from
             the module_not_to_convert list as well if this flag is set.
+        untie_embedding_weights (`bool`, default to `False`):
+            Whether to untie the weights when we are quantizing input embedding weights that is tied
+            to other weights.
         kwargs (`Dict[str, Any]`, *optional*):
             The keyword arguments for the chosen type of quantization, for example, int4_weight_only quantization supports two keyword arguments
             `group_size` and `inner_k_tiles` currently. More API examples and documentation of arguments can be found in
@@ -1614,6 +1618,7 @@ class TorchAoConfig(QuantizationConfigMixin):
         quant_type: Union[str, "AOBaseConfig"],  # noqa: F821
         modules_to_not_convert: Optional[List] = None,
         include_embedding: bool = False,
+        untie_embedding_weights: bool = False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.TORCHAO
@@ -1621,6 +1626,7 @@ class TorchAoConfig(QuantizationConfigMixin):
         self.modules_to_not_convert = modules_to_not_convert
         self.quant_type_kwargs = kwargs.get("quant_type_kwargs", kwargs)
         self.include_embedding = include_embedding
+        self.untie_embedding_weights = untie_embedding_weights
         self.post_init()
 
     @staticmethod
