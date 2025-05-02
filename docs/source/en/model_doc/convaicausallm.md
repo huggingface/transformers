@@ -1,19 +1,3 @@
-language: hi
-library_name: transformers
-tags:
-  - text-generation
-  - hindi
-  - causal-lm
-  - convaicausallm
-  - rope
-license: apache-2.0 # Confirm license if different
-pipeline_tag: text-generation
-model_name: ConvaiCausalLM # Should match class name prefix
-datasets:
-  - internal_hindi_corpus # Placeholder, update if applicable
-base_model: Llama Architecture # Reflects the inherited base
----
-
 # ConvaiCausalLM
 
 <div class="flex flex-wrap space-x-1">
@@ -26,9 +10,9 @@ base_model: Llama Architecture # Reflects the inherited base
 
 ConvaiCausalLM is a decoder-only transformer model developed by Convai Innovations, specifically pre-trained for Hindi causal language modeling. It is designed to generate coherent and contextually relevant Hindi text.
 
-This implementation leverages the **Llama architecture** within Hugging Face Transformers, incorporating features like **Rotary Positional Embeddings (RoPE)**, **RMS Normalization**, and **Grouped-Query Attention (GQA)** inherited from Llama.
+This implementation leverages the **Llama architecture** within Hugging Face Transformers, incorporating features like **Rotary Positional Embeddings (RoPE)** using `LlamaRotaryEmbedding`, **RMS Normalization** via `LlamaRMSNorm`, and **Grouped-Query Attention (GQA)** based on `LlamaAttention`. The core building blocks like the MLP layer (`LlamaMLP`) are also inherited.
 
-The reference checkpoint for this model can be found on the Hub at [convaiinnovations/hindi-causal-lm](https://huggingface.co/convaiinnovations/hindi-causal-lm).
+The reference checkpoint for this model can be found on the Hugging Face Hub at [convaiinnovations/hindi-causal-lm](https://huggingface.co/convaiinnovations/hindi-causal-lm).
 
 This model was contributed by [NandhaKishorM](https://huggingface.co/NandhaKishorM).
 
@@ -38,11 +22,11 @@ Key architectural features:
 -   **Positional Embeddings:** Rotary Positional Embeddings (RoPE).
 -   **Attention:** Grouped-Query Attention (GQA). The reference checkpoint uses 16 query heads and 4 key-value heads.
 -   **Activation Function:** SiLU (SwiGLU).
--   **Vocabulary:** Trained using a **custom Hindi SentencePiece tokenizer** (Unigram, vocab size: 16,000). This tokenizer is available separately on the Hub at [convaiinnovations/hindi-embedding-foundational-model](https://huggingface.co/convaiinnovations/hindi-embedding-foundational-model).
+-   **Vocabulary:** SentencePiece tokenizer with 16,000 tokens.
 
 ## Usage Tips
 
-The model and its specific tokenizer can be loaded via the standard `Auto*` classes. Note that the tokenizer should be loaded from its dedicated repository.
+The model and tokenizer can be loaded via the standard `Auto*` classes:
 
 ```python
 # pip install transformers sentencepiece torch accelerate
@@ -50,24 +34,20 @@ The model and its specific tokenizer can be loaded via the standard `Auto*` clas
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
-# ID for the causal LM model
 model_id = "convaiinnovations/hindi-causal-lm"
-# ID for the custom Hindi tokenizer used during training
-tokenizer_id = "convaiinnovations/hindi-embedding-foundational-model"
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Load the custom tokenizer
-tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
-# Load the causal language model
+tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id).to(device)
 
 # Example generation
 prompt_hindi = "भारत की अर्थव्यवस्था" # "India's economy"
 messages = [{"role": "user", "content": prompt_hindi}] # Use a simple prompt structure
 
-# Note: This model likely does not have a specific chat template.
-# Using a basic prompt structure directly.
+# Note: This model might not have a specific chat template.
+# Using a basic prompt structure directly. Adjust if a template exists.
+# inputs = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(device)
+# Alternative for non-chat models:
 inputs = tokenizer(prompt_hindi, return_tensors="pt").to(device)
 
 
@@ -81,7 +61,6 @@ gen_tokens = model.generate(
     pad_token_id=tokenizer.eos_token_id # Important for generation
 )
 
-# Decode using the same tokenizer
 gen_text = tokenizer.decode(gen_tokens, skip_special_tokens=True)
 print(f"Prompt: {prompt_hindi}")
 print(f"Generated: {gen_text}")
@@ -91,7 +70,6 @@ print(f"Generated: {gen_text}")
 
 ## Resources
 -   Model Hub: [convaiinnovations/hindi-causal-lm](https://huggingface.co/convaiinnovations/hindi-causal-lm)
--   Tokenizer Hub: [convaiinnovations/hindi-embedding-foundational-model](https://huggingface.co/convaiinnovations/hindi-embedding-foundational-model)
 -   Llama Paper (for architectural reference): [LLaMA: Open and Efficient Foundation Language Models](https://arxiv.org/abs/2302.13971)
 
 ## ConvaiCausalLMConfig
@@ -100,7 +78,6 @@ print(f"Generated: {gen_text}")
 
 ## ConvaiCausalLMTokenizer
 
-*This class wraps the custom SentencePiece tokenizer model available at [convaiinnovations/hindi-embedding-foundational-model](https://huggingface.co/convaiinnovations/hindi-embedding-foundational-model).*
 [[autodoc]] ConvaiCausalLMTokenizer
 
 ## ConvaiCausalLMModel
