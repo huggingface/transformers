@@ -1327,7 +1327,7 @@ GRANITEMOEHYBRID_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare GraniteMoeShared Model outputting raw hidden-states without any specific head on top.",
+    "The bare GraniteMoeHybrid Model outputting raw hidden-states without any specific head on top.",
     GRANITEMOEHYBRID_START_DOCSTRING,
 )
 class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
