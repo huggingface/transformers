@@ -69,13 +69,14 @@ class PerceptionEncoder(PE):
             use_attn_pool=False,
             use_proj=False,
         )
-    
+
     def forward(self, x):
         x = super().forward(x)
         if self.use_cls_token:
             return x[:, 1:, :]
         else:
             return x
+
 
 @dataclass
 # Copied from transformers.models.llava.modeling_llava.LlavaCausalLMOutputWithPast with Llava->PerceptionLM
@@ -385,8 +386,13 @@ class PerceptionLMForConditionalGeneration(
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
         print("pixel_values shape: ", pixel_values.shape)
+        # torch.save(pixel_values, "/tmp/occhi/0/_1.pt")
+        # pixel_values = (
+        #     torch.load("/tmp/occhi/0/images_dump_1.pt").unsqueeze(0).to(pixel_values)
+        # )
         image_outputs = self.vision_model(pixel_values[0])
         print("image_outputs shape: ", image_outputs.shape)
+        # image_outputs = torch.load("/tmp/occhi/0/h_img_dump_0.pt").to(image_outputs)
         image_features = self.multi_modal_projector(image_outputs)
         return image_features
 
