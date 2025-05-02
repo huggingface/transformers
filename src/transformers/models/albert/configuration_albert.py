@@ -16,16 +16,18 @@
 """ALBERT model configuration"""
 
 from collections import OrderedDict
+from dataclasses import dataclass
 from typing import Literal, Mapping, Optional
 
-from huggingface_hub.utils import strict_dataclass, validated_field
+from huggingface_hub.dataclasses import strict, validated_field
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
-from ...validators import activation_fn_key, interval, probability
+from ...validators import activation_fn_key, interval, probability, token
 
 
-@strict_dataclass
+@strict(accept_kwargs=True)
+@dataclass
 class AlbertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AlbertModel`] or a [`TFAlbertModel`]. It is used
@@ -124,21 +126,15 @@ class AlbertConfig(PretrainedConfig):
     layer_norm_eps: float = validated_field(interval(min=0.0), default=1e-12)
     classifier_dropout_prob: float = validated_field(probability, default=0.1)
     position_embedding_type: Literal["absolute", "relative_key", "relative_key_query"] = "absolute"
-    pad_token_id: Optional[int] = 0
-    bos_token_id: Optional[int] = 2
-    eos_token_id: Optional[int] = 3
+    pad_token_id: Optional[int] = validated_field(token, default=0)
+    bos_token_id: Optional[int] = validated_field(token, default=2)
+    eos_token_id: Optional[int] = validated_field(token, default=3)
 
     # Not part of __init__
     model_type = "albert"
 
     def __post_init__(self):
-        """Called after `__init__` from the dataclass: initializes parent classes and validates the instance."""
-        super().__init__(
-            pad_token_id=self.pad_token_id,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            # **kwargs  -> this is missing
-        )
+        """Called after `__init__`: validates the instance."""
         self.validate()
 
     def validate(self):
