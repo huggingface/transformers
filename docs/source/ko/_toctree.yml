@@ -97,6 +97,8 @@
     sections:
     - local: generation_strategies
       title: 텍스트 생성 전략 사용자 정의
+    - local: serving
+      title: 모델 서빙하기기
     title: 생성
   - isExpanded: false
     sections:
@@ -123,6 +125,8 @@
     title: Amazon SageMaker에서 학습 실행하기
   - local: serialization
     title: ONNX로 내보내기
+  - local: gpu_selection
+    title: GPU 선택하기
   - local: tflite
     title: TFLite로 내보내기
   - local: torchscript
