@@ -279,18 +279,11 @@ class ReplicateParallel(TensorParallelLayer):
         if not isinstance(input_tensor, DTensor):
             input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
 
-        # transform the input layouts to the desired layouts of ColwiseParallel
-        # if input_layouts != desired_input_layouts:
-        #     input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=False)
         return input_tensor
 
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        # outputs is a shard on last dimension DTensor, i.e. Shard(-1)
-        # if outputs.placements != output_layouts:
-        #     outputs = outputs.redistribute(placements=output_layouts, async_op=False)
-        # back to local tensor
         return outputs.to_local() if use_local_output else outputs
 
 
