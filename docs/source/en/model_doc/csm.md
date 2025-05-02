@@ -47,9 +47,8 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
 
 # prepare the inputs
-text = "The past is just a story we tell ourselves."
-speaker_id = 0
-inputs = processor(f"[{speaker_id}]{text}", add_special_tokens=True).to(device)
+text = "[0]The past is just a story we tell ourselves." # `[0]` for speaker id 0
+inputs = processor(text, add_special_tokens=True).to(device)
 
 # another equivalent way to prepare the inputs
 conversation = [
