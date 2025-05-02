@@ -449,7 +449,9 @@ class CvtStage(nn.Module):
             dropout_rate=config.drop_rate[self.stage],
         )
 
-        drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate[self.stage], config.depth[stage])]
+        drop_path_rates = [
+            x.item() for x in torch.linspace(0, config.drop_path_rate[self.stage], config.depth[stage], device="cpu")
+        ]
 
         self.layers = nn.Sequential(
             *[

@@ -19,6 +19,7 @@ import os
 import unittest
 from copy import deepcopy
 from functools import partial
+from typing import Optional
 
 import datasets
 from parameterized import parameterized
@@ -1073,10 +1074,10 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
             def _convert_to_features(example_batch):
                 input_encodings = tokenizer.batch_encode_plus(
-                    example_batch["input_text"], pad_to_max_length=True, max_length=512, truncation=True
+                    example_batch["input_text"], padding="max_length", max_length=512, truncation=True
                 )
                 target_encodings = tokenizer.batch_encode_plus(
-                    example_batch["target_text"], pad_to_max_length=True, max_length=16, truncation=True
+                    example_batch["target_text"], padding="max_length", max_length=16, truncation=True
                 )
 
                 encodings = {
@@ -1252,8 +1253,8 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         do_eval: bool = True,
         quality_checks: bool = True,
         fp32: bool = False,
-        extra_args_str: str = None,
-        remove_args_str: str = None,
+        extra_args_str: Optional[str] = None,
+        remove_args_str: Optional[str] = None,
     ):
         # we are doing quality testing so using a small real model
         output_dir = self.run_trainer(
@@ -1285,8 +1286,8 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         do_eval: bool = True,
         distributed: bool = True,
         fp32: bool = False,
-        extra_args_str: str = None,
-        remove_args_str: str = None,
+        extra_args_str: Optional[str] = None,
+        remove_args_str: Optional[str] = None,
     ):
         max_len = 32
         data_dir = self.test_file_dir / "../fixtures/tests_samples/wmt_en_ro"

@@ -47,7 +47,7 @@ def convert_tf_gptsan_to_pt(args):
                     player = int(key_name[9])
                 elif key_name.startswith("pasts/out"):
                     player = 8
-                name = "model.sqout.%d.weight" % (player * 2)  # enter to nn.Sequencial with Tanh, so 2 at a time
+                name = "model.sqout.%d.weight" % (player * 2)  # enter to nn.Sequential with Tanh, so 2 at a time
                 state = vnp.transpose([1, 0]).copy()  # Mesh-Tensorflow is a diagonal matrix
                 new_state[name] = torch.tensor(state)
             elif key_name.startswith("model/moe"):

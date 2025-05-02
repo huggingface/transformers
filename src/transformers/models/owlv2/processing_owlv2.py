@@ -58,7 +58,7 @@ class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
 class Owlv2Processor(ProcessorMixin):
     r"""
     Constructs an Owlv2 processor which wraps [`Owlv2ImageProcessor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into
-    a single processor that interits both the image processor and tokenizer functionalities. See the
+    a single processor that inherits both the image processor and tokenizer functionalities. See the
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
 
     Args:

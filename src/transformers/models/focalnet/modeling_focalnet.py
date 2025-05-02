@@ -360,7 +360,7 @@ class FocalNetModulation(nn.Module):
         x = self.projection_in(hidden_state).permute(0, 3, 1, 2).contiguous()
         q, ctx, gates = torch.split(x, (num_channels, num_channels, self.focal_level + 1), 1)
 
-        # context aggreation
+        # context aggregation
         ctx_all = 0
         for level in range(self.focal_level):
             ctx = self.focal_layers[level](ctx)
@@ -379,7 +379,7 @@ class FocalNetModulation(nn.Module):
         if self.use_post_layernorm_in_modulation:
             x_out = self.layernorm(x_out)
 
-        # post linear porjection
+        # post linear projection
         x_out = self.projection_out(x_out)
         x_out = self.projection_dropout(x_out)
         return x_out
@@ -415,7 +415,7 @@ class FocalNetLayer(nn.Module):
         dim (`int`):
             Number of input channels.
         input_resolution (`Tuple[int]`):
-            Input resulotion.
+            Input resolution.
         drop_path (`float`, *optional*, defaults to 0.0):
             Stochastic depth rate.
     """
@@ -486,7 +486,7 @@ class FocalNetStage(nn.Module):
         downsample = FocalNetPatchEmbeddings if (index < self.num_stages - 1) else None
 
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
         drop_path = dpr[sum(config.depths[:index]) : sum(config.depths[: index + 1])]
 
         self.layers = nn.ModuleList(

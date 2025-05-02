@@ -23,6 +23,7 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature
 from ...tokenization_utils import AddedToken, BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TruncationStrategy
 from ...utils import TensorType, is_pretty_midi_available, logging, requires_backends, to_numpy
+from ...utils.import_utils import requires
 
 
 if is_pretty_midi_available():
@@ -59,6 +60,7 @@ def token_note_to_note(number, current_velocity, default_velocity, note_onsets_r
     return notes
 
 
+@requires(backends=("pretty_midi", "torch"))
 class Pop2PianoTokenizer(PreTrainedTokenizer):
     """
     Constructs a Pop2Piano tokenizer. This tokenizer does not require training.
@@ -667,7 +669,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
                 )
 
         if attention_masks_present:
-            # check for zeros(since token_ids are seperated by zero arrays)
+            # check for zeros(since token_ids are separated by zero arrays)
             batch_idx = np.where(feature_extractor_output["attention_mask"][:, 0] == 0)[0]
         else:
             batch_idx = [token_ids.shape[0]]
