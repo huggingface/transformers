@@ -22,7 +22,7 @@ import os
 import re
 import sys
 import time
-from typing import Dict, List, Optional, Union, Any
+from typing import Any, Dict, List, Optional, Union
 
 import requests
 from get_ci_error_statistics import get_jobs
@@ -1110,9 +1110,7 @@ if __name__ == "__main__":
                             model_results[model]["failures"][artifact_gpu] = []
 
                         trace = pop_default(stacktraces, 0, "Cannot retrieve error message.")
-                        model_results[model]["failures"][artifact_gpu].append(
-                            {"line": line, "trace": trace}
-                        )
+                        model_results[model]["failures"][artifact_gpu].append({"line": line, "trace": trace})
 
                         if re.search("test_modeling_tf_", line):
                             model_results[model]["failed"]["TensorFlow"][artifact_gpu] += 1
@@ -1228,9 +1226,7 @@ if __name__ == "__main__":
                             additional_results[key]["failures"][artifact_gpu] = []
 
                         trace = pop_default(stacktraces, 0, "Cannot retrieve error message.")
-                        additional_results[key]["failures"][artifact_gpu].append(
-                            {"line": line, "trace": trace}
-                        )
+                        additional_results[key]["failures"][artifact_gpu].append({"line": line, "trace": trace})
 
     # Let's only check the warning for the model testing job. Currently, the job `run_extract_warnings` is only run
     # when `inputs.job` (in the workflow file) is `run_models_gpu`. The reason is: otherwise we need to save several
