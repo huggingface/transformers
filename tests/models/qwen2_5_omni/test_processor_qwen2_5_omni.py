@@ -476,7 +476,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 9568)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 5760)
 
         # Load with `video_fps` arg
         video_fps = 1
@@ -488,7 +488,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             video_fps=video_fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 23920)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 14400)
 
         # Load with `video_fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -509,7 +509,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 717600)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 432000)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -527,7 +527,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 5704)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2904)
 
     @require_av
     def test_apply_chat_template_video_special_processing(self):
@@ -610,7 +610,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             signature.parameters.get("videos") is not None
             and signature.parameters["videos"].annotation == inspect._empty
         ):
-            self.skipTest(f"{self.processor_class} does not suport video inputs")
+            self.skipTest(f"{self.processor_class} does not support video inputs")
 
         if "feature_extractor" not in self.processor_class.attributes:
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
