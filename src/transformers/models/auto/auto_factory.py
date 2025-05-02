@@ -560,6 +560,7 @@ class _BaseAutoModelClass:
             )
             _ = hub_kwargs.pop("code_revision", None)
             cls.register(config.__class__, model_class, exist_ok=True)
+            class_ref._auto_class = cls.__name__
             model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
