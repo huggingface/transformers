@@ -33,7 +33,7 @@ if is_vision_available():
         from transformers.models.smolvlm.video_processing_smolvlm import get_resize_output_image_size
 
 
-class SmolVLMVideoProcessingTester(unittest.TestCase):
+class SmolVLMVideoProcessingTester:
     def __init__(
         self,
         parent,

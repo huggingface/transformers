@@ -30,7 +30,7 @@ if is_vision_available():
         from transformers import InternVLVideoProcessor
 
 
-class InternVLVideoProcessingTester(unittest.TestCase):
+class InternVLVideoProcessingTester:
     def __init__(
         self,
         parent,

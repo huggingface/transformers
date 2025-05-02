@@ -37,7 +37,7 @@ if is_vision_available():
         from transformers import Qwen2VLVideoProcessor
 
 
-class Qwen2VLVideoProcessingTester(unittest.TestCase):
+class Qwen2VLVideoProcessingTester:
     def __init__(
         self,
         parent,
