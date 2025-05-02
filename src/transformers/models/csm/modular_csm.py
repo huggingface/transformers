@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -52,7 +52,6 @@ from .configuration_csm import (
     CsmDepthDecoderConfig,
 )
 from .generation_csm import CsmGenerationMixin
-
 
 
 logger = logging.get_logger(__name__)
@@ -738,28 +737,13 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
             batched_audio_token_ids = torch.stack(
                 [nn.functional.pad(el, (0, 0, 0, max_audio_frames - el.shape[0])) for el in audio_tokens_list]
             )
+            audio_codes_mask = self.codec_model.get_audio_codes_mask(input_values_mask)
             # =======================================
-
-            audio_embeds = self.backbone_model.embed_tokens(batched_audio_token_ids)
-
-            # batched_audio_codes is a tensor of shape (batch_size, max_audio_frames, num_codebooks)
-            # We need to:
-            # 1. Select only the valid frames for each audio (excluding padding frames)
-            # 2. Embed such frames and place then to their sequence corresponding idxs
             audio_token_id = self.config.audio_token_id
             audio_token_mask = input_ids == audio_token_id
 
-            # retreive the number of audio tokens for each audio from the input_ids
-            change_idxs = (audio_token_mask[:, 1:] != audio_token_mask[:, :-1]).nonzero(as_tuple=True)[-1]
-            num_audio_tokens = change_idxs.diff()
-            num_audio_tokens = torch.stack([num_audio_tokens[i] for i in range(0, len(num_audio_tokens), 2)])
-
-            frames_mask = torch.arange(max_audio_frames, device=batched_audio_token_ids.device).expand(
-                len(num_audio_tokens), -1
-            ) < num_audio_tokens.unsqueeze(-1)
-            frames_mask = frames_mask.flatten()
-
-            inputs_embeds[audio_token_mask] = audio_embeds.view(-1, audio_embeds.shape[-1])[frames_mask]
+            audio_embeds = self.backbone_model.embed_tokens(batched_audio_token_ids)
+            inputs_embeds[audio_token_mask] = audio_embeds[audio_codes_mask]
 
             # same for the audio eos token
             audio_eos_frame_ids = (
@@ -774,9 +758,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
             # if the labels are provided, we need to expand the labels to (batch_size, seq_length, num_codebooks)
             if labels is not None:
                 labels_expanded = labels.unsqueeze(-1).repeat(1, 1, self.config.num_codebooks)
-                labels_expanded[audio_token_mask] = batched_audio_token_ids.view(-1, self.config.num_codebooks)[
-                    frames_mask
-                ]
+                labels_expanded[audio_token_mask] = batched_audio_token_ids[audio_codes_mask]
                 # mask depth decoder
                 depth_decoder_ignore_frames_idxs = (labels == -101).nonzero(as_tuple=True)
                 labels_expanded[depth_decoder_ignore_frames_idxs[0], depth_decoder_ignore_frames_idxs[1], 1:] = -100
