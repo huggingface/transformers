@@ -139,6 +139,7 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
 
 
 def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
+    # TODO: make this support multiple dimensions world_mesh or make `redistribute` support cross mesh comms
     if dim == 0:
         size_ = empty_param.shape[0]
         param = param[rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()), ...]
