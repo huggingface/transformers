@@ -143,4 +143,4 @@ class DiaGenerationMixin(GenerationMixin):
             total_duration = time.time() - total_start_time
             print(f"generate: total step={total_step}, total duration={total_duration:.3f}s")
 
-        return self._generate_output(generated_codes)
+        return self._generate_output(generated_codes) # TODO not sure best way to do this, most probably let the audio tokenizer handle via the audio_processor

@@ -30,32 +30,6 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-# fmt: off
-NON_SPEECH_TOKENS = [
-    1, 2, 7, 8, 9, 10, 14, 25,
-    26, 27, 28, 29, 31, 58, 59, 60, 61, 62,
-    63, 90, 91, 92, 93, 357, 366, 438, 532, 685,
-    705, 796, 930, 1058, 1220, 1267, 1279, 1303, 1343, 1377,
-    1391, 1635, 1782, 1875, 2162, 2361, 2488, 3467, 4008, 4211,
-    4600, 4808, 5299, 5855, 6329, 7203, 9609, 9959, 10563, 10786,
-    11420, 11709, 11907, 13163, 13697, 13700, 14808, 15306, 16410, 16791,
-    17992, 19203, 19510, 20724, 22305, 22935, 27007, 30109, 30420, 33409,
-    34949, 40283, 40493, 40549, 47282, 49146, 50257, 50359, 50360, 50361
-]
-NON_SPEECH_TOKENS_MULTI = [
-    1, 2, 7, 8, 9, 10, 14, 25,
-    26, 27, 28, 29, 31, 58, 59, 60, 61, 62,
-    63, 90, 91, 92, 93, 359, 503, 522, 542, 873,
-    893, 902, 918, 922, 931, 1350, 1853, 1982, 2460, 2627,
-    3246, 3253, 3268, 3536, 3846, 3961, 4183, 4667, 6585, 6647,
-    7273, 9061, 9383, 10428, 10929, 11938, 12033, 12331, 12562, 13793,
-    14157, 14635, 15265, 15618, 16553, 16604, 18362, 18956, 20075, 21675,
-    22520, 26130, 26161, 26435, 28279, 29464, 31650, 32302, 32470, 36865,
-    42863, 47425, 49870, 50254, 50258, 50360, 50361, 50362
-]
-# fmt: on
-
-
 class DiaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DiaModel`]. It is used to instantiate a
@@ -285,63 +259,5 @@ class DiaConfig(PretrainedConfig):
         )
 
 
-class DiaOnnxConfig(OnnxSeq2SeqConfigWithPast):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = OrderedDict(
-            [
-                ("input_features", {0: "batch", 1: "feature_size", 2: "encoder_sequence"}),
-            ]
-        )
-        if self.use_past:
-            common_inputs["decoder_input_ids"] = {0: "batch"}
-        else:
-            common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
 
-        if self.use_past:
-            self.fill_with_past_key_values_(common_inputs, direction="inputs")
-
-        return common_inputs
-
-    def generate_dummy_inputs(
-        self,
-        preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin"],
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        framework: Optional["TensorType"] = None,
-        sampling_rate: int = 22050,
-        time_duration: float = 5.0,
-        frequency: int = 220,
-    ) -> Mapping[str, Any]:
-        dummy_inputs = OrderedDict()
-        encoder_inputs = OnnxConfig.generate_dummy_inputs(
-            self,
-            preprocessor=preprocessor.feature_extractor,
-            batch_size=batch_size,
-            framework=framework,
-            sampling_rate=sampling_rate,
-            time_duration=time_duration,
-            frequency=frequency,
-        )
-        encoder_sequence_length = encoder_inputs["input_features"].shape[2]
-        seq_length = encoder_sequence_length // 2 if self.use_past else seq_length
-
-        decoder_inputs = super().generate_dummy_inputs(
-            preprocessor.tokenizer, batch_size, seq_length, is_pair, framework
-        )
-
-        dummy_inputs["input_features"] = encoder_inputs.pop("input_features")
-        dummy_inputs["decoder_input_ids"] = decoder_inputs.pop("decoder_input_ids")
-
-        if "past_key_values" in decoder_inputs:
-            dummy_inputs["past_key_values"] = decoder_inputs.pop("past_key_values")
-
-        return dummy_inputs
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-3
-
-
-__all__ = ["DiaConfig", "DiaOnnxConfig"]
+__all__ = ["DiaConfig"]
