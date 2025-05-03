@@ -42,11 +42,13 @@ The example below demonstrates how to classify text with [`Pipeline`], [`AutoMod
 <hfoption id="Pipeline>
 
 ```py
+import torch
 from transformers import pipeline
 
 classifier = pipeline(
     task="text-classification",
-    model="microsoft/deberta-base-mnli"
+    model="microsoft/deberta-base-mnli",
+    device=0,
 )
 
 classifier({
@@ -60,17 +62,17 @@ classifier({
 
 ```py
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 model_name = "microsoft/deberta-base-mnli"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForSequenceClassification.from_pretrained(model_name)
+tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-base-mnli")
+model = AutoModelForSequenceClassification.from_pretrained("microsoft/deberta-base-mnli", device_map="auto")
 
 inputs = tokenizer(
     "A soccer game with multiple people playing.",
     "Some people are playing a sport.",
     return_tensors="pt"
-)
+).to("cuda")
 
 with torch.no_grad():
     logits = model(**inputs).logits
