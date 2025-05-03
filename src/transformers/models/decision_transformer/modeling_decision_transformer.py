@@ -319,7 +319,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
             else:
                 # Attention functions are consistent with previous equivalent attention classes, however they do not support some options
                 # (e.g. layer scaling, head mask) that eager supports. These implementations are thus equivalent to previous code, but
-                # not necessarily to eager (if mentionned options are provided).
+                # not necessarily to eager (if mentioned options are provided).
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         if using_eager and self.reorder_and_upcast_attn:
@@ -396,6 +396,7 @@ class DecisionTransformerGPT2Block(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
+        **kwargs,
     ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
@@ -407,6 +408,7 @@ class DecisionTransformerGPT2Block(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            **kwargs,
         )
         # residual connection
         hidden_states = attn_output + residual

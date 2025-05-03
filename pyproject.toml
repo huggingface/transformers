@@ -55,3 +55,4 @@ markers = [
 ]
 log_cli = 1
 log_cli_level = "WARNING"
+asyncio_default_fixture_loop_scope = "function"
