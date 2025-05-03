@@ -196,7 +196,7 @@ model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_m
 input_text = "Hello, my llama is cute"
 inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
 
-with sdpa_kernel(SDPBackend.FLASH_ATTENTION)::
+with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
     outputs = model.generate(**inputs)
 
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
