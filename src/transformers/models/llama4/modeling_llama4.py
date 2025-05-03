@@ -20,13 +20,13 @@ from typing import Callable, List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint
 
 from transformers.models.llama4.configuration_llama4 import Llama4VisionConfig
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, HybridChunkedCache
+from ...cache_utils import Cache, DynamicCache, HybridChunkedCache
 from ...generation import GenerationMixin
+from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -59,7 +59,7 @@ _CONFIG_FOR_DOC = "Llama4Config"
 
 
 class Llama4TextExperts(nn.Module):
-    def __init__(self, config: Llama4Config):
+    def __init__(self, config: Llama4TextConfig):
         super().__init__()
         self.num_experts = config.num_local_experts
         self.intermediate_size = config.intermediate_size
@@ -110,7 +110,7 @@ class Llama4TextMLP(nn.Module):
 
 
 class Llama4TextL2Norm(torch.nn.Module):
-    def __init__(self, dim: int = None, eps: float = 1e-6):
+    def __init__(self, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
 
@@ -144,6 +144,7 @@ class Llama4TextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
+@use_kernel_forward_from_hub("Llama4TextMoe")
 class Llama4TextMoe(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -157,14 +158,12 @@ class Llama4TextMoe(nn.Module):
     def forward(self, hidden_states):
         batch, seq_len, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, self.hidden_dim)
-        router_logits = self.router(hidden_states).transpose(0, 1)
+        router_logits = self.router(hidden_states)
         tokens_per_expert = batch * seq_len
 
-        router_top_value, router_indices = torch.topk(router_logits.transpose(0, 1), self.top_k, dim=1)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=1)
         router_scores = (
-            torch.full_like(router_logits.transpose(0, 1), float("-inf"))
-            .scatter_(1, router_indices, router_top_value)
-            .transpose(0, 1)
+            torch.full_like(router_logits, float("-inf")).scatter_(1, router_indices, router_top_value).transpose(0, 1)
         )
         # We do this to make sure we have -inf for non topK tokens before going through the !
         # Here we are just creating a tensor to index each and every single one of the hidden states. Let s maybe register a buffer for this!
@@ -287,7 +286,7 @@ class Llama4TextAttention(nn.Module):
         self.attn_temperature_tuning = config.attn_temperature_tuning
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        self.use_rope = int((layer_idx + 1) % 4 != 0)  # rope unused for dense layers
+        self.use_rope = config.no_rope_layers[layer_idx]
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
@@ -301,7 +300,7 @@ class Llama4TextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         if self.config.use_qk_norm and self.use_rope:
-            self.qk_norm = Llama4TextL2Norm()
+            self.qk_norm = Llama4TextL2Norm(config.rms_norm_eps)
 
     def forward(
         self,
@@ -374,7 +373,7 @@ class Llama4TextDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Llama4TextAttention(config, layer_idx)
-        self.use_chunked_attention = int((layer_idx + 1) % 4 != 0)  # <=> use rope
+        self.use_chunked_attention = config.attention_chunk_size is not None and bool(config.no_rope_layers[layer_idx])
         self.is_moe_layer = layer_idx in config.moe_layers
         if self.is_moe_layer:  # the 128E model interleaves dense / sparse
             self.feed_forward = Llama4TextMoe(config)
@@ -467,7 +466,7 @@ class Llama4PreTrainedModel(PreTrainedModel):
     config_class = Llama4Config
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn_2 = False
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
@@ -489,6 +488,17 @@ class Llama4PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, Llama4TextRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, Llama4TextExperts):
+            module.gate_up_proj.data.normal_(mean=0.0, std=std)
+            module.down_proj.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, Llama4VisionModel):
+            module.class_embedding.data.normal_(std=module.scale)
+            module.positional_embedding_vlm.data.normal_(std=module.scale)
 
 
 LLAMA4_INPUTS_DOCSTRING = r"""
@@ -632,7 +642,10 @@ class Llama4TextModel(Llama4PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids.to(self.embed_tokens.weight.device))
 
         if use_cache and past_key_values is None:
-            past_key_values = HybridChunkedCache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
+            if self.config.get_text_config().get("attention_chunk_size") is not None:
+                past_key_values = HybridChunkedCache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
+            else:
+                past_key_values = DynamicCache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -729,35 +742,37 @@ class Llama4TextModel(Llama4PreTrainedModel):
         sequence_length = input_tensor.shape[1]
         cache_position = cache_position.to(self.device)
         attention_chunk_size = self.config.attention_chunk_size
+        using_chunked_attention = attention_chunk_size is not None
 
         first_cache_position = cache_position[0]
-        last_cache_position = cache_position[-1]
 
         if past_key_values is not None:
             full_cache_length = past_key_values.get_max_cache_shape() or sequence_length
         else:
             full_cache_length = attention_mask.shape[-1] if attention_mask is not None else sequence_length
 
-        cond1 = first_cache_position >= attention_chunk_size
-        cond2 = (first_cache_position < attention_chunk_size) & (
-            first_cache_position + sequence_length > attention_chunk_size
-        )
-        key_length = (
-            torch.where(
-                cond1,
-                attention_chunk_size + sequence_length - 1,
-                torch.where(cond2, first_cache_position + sequence_length, attention_chunk_size),
+        if using_chunked_attention:
+            cond1 = first_cache_position >= attention_chunk_size
+            cond2 = (first_cache_position < attention_chunk_size) & (
+                first_cache_position + sequence_length > attention_chunk_size
             )
-            if use_cache
-            else full_cache_length
-        )
+            key_length = (
+                torch.where(
+                    cond1,
+                    attention_chunk_size + sequence_length - 1,
+                    torch.where(cond2, first_cache_position + sequence_length, attention_chunk_size),
+                )
+                if use_cache
+                else full_cache_length
+            )
 
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
-                offsets = (first_cache_position, max(last_cache_position - key_length, 0))
-                chunked_attention_mask = make_flex_block_causal_mask(
-                    attention_mask, self.config.attention_chunk_size, sequence_length, key_length, offsets=offsets
-                )
+                if using_chunked_attention:
+                    offsets = (first_cache_position, max(first_cache_position - attention_chunk_size + 1, 0))
+                    chunked_attention_mask = make_flex_block_causal_mask(
+                        attention_mask, attention_chunk_size, sequence_length, key_length, offsets=offsets
+                    )
                 attention_mask = make_flex_block_causal_mask(
                     attention_mask,
                     query_length=sequence_length,
@@ -770,20 +785,18 @@ class Llama4TextModel(Llama4PreTrainedModel):
 
         # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
         dtype, device = input_tensor.dtype, input_tensor.device
+        target_length = max(full_cache_length, attention_chunk_size) if using_chunked_attention else full_cache_length
         causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
             attention_mask,
             sequence_length=sequence_length,
-            target_length=max(full_cache_length, attention_chunk_size),
+            target_length=target_length,
             dtype=dtype,
-            device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
-        if full_cache_length > self.config.attention_chunk_size:
-            start_idx = max(last_cache_position - key_length, 0)
-            end_idx = last_cache_position + 1 if sequence_length > 1 else last_cache_position
-            # We always need a mask of at least attention_chunk_size, so we use the max here
-            end_idx = max(end_idx, start_idx + attention_chunk_size)
+        if using_chunked_attention and full_cache_length > attention_chunk_size:
+            start_idx = max(first_cache_position - attention_chunk_size + 1, 0)
+            end_idx = start_idx + key_length
             chunked_attention_mask = self.create_chunked_attention_mask(
                 self.config.attention_chunk_size,
                 start=start_idx,  # same offset as with flex
@@ -813,7 +826,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and attention_mask.ndim == 4
             and not output_attentions  # Only unmask for 4d masks
         ):
@@ -850,7 +863,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         '?'         :  5 ⬚ ⬚ ⬚ ■ ■ ■     |
 
         If the chunk size is 3.
-        This can just be appplied over the already created attention mask
+        This can just be applied over the already created attention mask
         """
         arange_vector = torch.arange(start, end, device=device)
         block_pos = torch.abs(
@@ -866,7 +879,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         **kwargs,
@@ -887,7 +899,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
             device (`torch.device`):
-                The device to plcae the 4D attention mask on.
+                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -899,16 +911,18 @@ class Llama4TextModel(Llama4PreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.to(device).reshape(-1, 1)
+            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(device)
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    cache_position.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
@@ -918,6 +932,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
 
 
 class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
+    _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "language_model"
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -1279,7 +1294,7 @@ class Llama4VisionEncoderLayer(nn.Module):
         hidden_state: torch.Tensor,
         freqs_ci: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = None,
+        output_attentions: Optional[bool] = None,
     ):
         # Self Attention
         residual = hidden_state
@@ -1574,6 +1589,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
 
 
 class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
+    _no_split_modules = ["Llama4TextDecoderLayer", "Llama4VisionEncoderLayer"]
     _tp_plan = {}
     base_model_prefix = ""
     config_class = Llama4Config
@@ -1736,7 +1752,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             vision_flat = image_features.view(-1, image_features.size(-1))
             projected_vision_flat = self.multi_modal_projector(vision_flat)
 
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
             final_mask = special_image_mask.to(inputs_embeds.device)
             inputs_embeds = inputs_embeds.view(-1, inputs_embeds.size(-1))
 
@@ -1836,7 +1852,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         **kwargs,
@@ -1856,8 +1871,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
                 to account for the 0 padding, the part of the cache that is not filled yet.
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -1869,11 +1882,11 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit

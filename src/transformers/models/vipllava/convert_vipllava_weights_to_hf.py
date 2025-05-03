@@ -78,7 +78,7 @@ def convert_vipllava_llama_to_hf(text_model_id, vision_model_id, output_hub_path
 
     state_dict_path = hf_hub_download(old_state_dict_id, "model_state_dict_7b.bin")
 
-    state_dict = torch.load(state_dict_path, map_location="cpu")
+    state_dict = torch.load(state_dict_path, map_location="cpu", weights_only=True)
     state_dict = convert_state_dict_to_hf(state_dict)
 
     model.load_state_dict(state_dict, strict=True, assign=True)

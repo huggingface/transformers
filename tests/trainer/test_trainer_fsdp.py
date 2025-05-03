@@ -21,7 +21,6 @@ from transformers.testing_utils import (
     get_torch_dist_unique_port,
     require_accelerate,
     require_fp8,
-    require_fsdp,
     require_torch_multi_accelerator,
     run_first,
     torch_device,
@@ -68,7 +67,6 @@ if is_torch_available():
 class TestFSDPTrainer(TestCasePlus):
     @require_torch_multi_accelerator
     @require_accelerate
-    @require_fsdp
     @run_first
     def test_trainer(self):
         output_dir = self.get_auto_remove_tmp_dir()
@@ -95,7 +93,6 @@ class TestFSDPTrainer(TestCasePlus):
 class TestFSDPTrainerFP8(TestCasePlus):
     @require_torch_multi_accelerator
     @require_accelerate
-    @require_fsdp
     @require_fp8
     @run_first
     def test_trainer(self):
@@ -125,7 +122,6 @@ class TestFSDPTrainerFP8(TestCasePlus):
 class TestFSDPTrainerWrap(TestCasePlus):
     @require_torch_multi_accelerator
     @require_accelerate
-    @require_fsdp
     @run_first
     def test_trainer(self):
         output_dir = self.get_auto_remove_tmp_dir()

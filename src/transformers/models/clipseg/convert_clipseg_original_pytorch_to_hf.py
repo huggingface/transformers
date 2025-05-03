@@ -169,7 +169,7 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     model = CLIPSegForImageSegmentation(config)
     model.eval()
 
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     # remove some keys
     for key in state_dict.copy().keys():
