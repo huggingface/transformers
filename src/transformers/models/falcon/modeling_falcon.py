@@ -998,7 +998,7 @@ class FalconModel(FalconPreTrainedModel):
         # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
 
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and torch.any(attention_mask == 0.0):
                 return attention_mask
             return None
 
