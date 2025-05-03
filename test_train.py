@@ -25,7 +25,7 @@ from torch.distributed.tensor.placement_types import Replicate
 from torch.distributed.tensor import DTensor
 import wandb
 from datasets import load_dataset
-ignore_sanity_checks = True
+ignore_sanity_checks = False
 # Set up logging
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -34,47 +34,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def sanity_check_tensor_sync(tensor: torch.Tensor, mesh: DeviceMesh, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
-    """
-    Verify that a tensor is synchronized across all processes in the mesh's process group.
-    Handles both regular tensors and DTensors.
-    
-    Args:
-        tensor (torch.Tensor): The tensor to check for synchronization (can be DTensor)
-        mesh (DeviceMesh): The device mesh containing the process group
-        rtol (float): Relative tolerance for comparison
-        atol (float): Absolute tolerance for comparison
-        
-    Returns:
-        bool: True if tensors are synchronized, False otherwise
-    """
-    if not dist.is_initialized() or mesh.size() == 1:
-        return True  # No need to check in non-distributed mode
-        
-    # Get the process group from the mesh
-    pg = mesh.get_group()
-    
-    # Convert DTensor to local tensor if needed
-    if hasattr(tensor, 'to_local'):
-        local_tensor = tensor.to_local()
-    else:
-        local_tensor = tensor
-    
-    # Gather tensors from all processes
-    world_size = dist.get_world_size(pg)
-    
-    # Create a list to store gathered tensors
-    gathered_tensors = [torch.empty_like(local_tensor) for _ in range(world_size)]
-    
-    # Gather all tensors
-    dist.all_gather(gathered_tensors, local_tensor, group=pg)
-    
-    # Compare each tensor with the first one
-    for i in range(1, world_size):
-        if not torch.allclose(gathered_tensors[0], gathered_tensors[i], rtol=rtol, atol=atol):
-            return False
-    
-    return True
 
 def main():
     tp_size = int(os.environ.get("TP_SIZE", 2))
@@ -264,7 +223,7 @@ def main():
 
             # Log loss to wandb (only on rank 0 of dp group)
             if not dist.is_initialized() or dist.get_rank() == 0:
-                logger.info(f"Step: {step}, Calculated Loss: {current_loss}")
+                logger.info(f"Step: {step} | GBS: {global_batch_size} | DP: {dp_mesh.size()} | TP: {tp_mesh.size()} | Loss: {current_loss}")
                 wandb.log({"train/loss": current_loss, "step": step})
 
             # Sanity checks for logits (only if distributed and no sequence parallelism)
@@ -451,6 +410,49 @@ class AppState(Stateful):
             optim_state_dict=state_dict["optim"]
         )
 
+
+
+def sanity_check_tensor_sync(tensor: torch.Tensor, mesh: DeviceMesh, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
+    """
+    Verify that a tensor is synchronized across all processes in the mesh's process group.
+    Handles both regular tensors and DTensors.
+    
+    Args:
+        tensor (torch.Tensor): The tensor to check for synchronization (can be DTensor)
+        mesh (DeviceMesh): The device mesh containing the process group
+        rtol (float): Relative tolerance for comparison
+        atol (float): Absolute tolerance for comparison
+        
+    Returns:
+        bool: True if tensors are synchronized, False otherwise
+    """
+    if not dist.is_initialized() or mesh.size() == 1:
+        return True  # No need to check in non-distributed mode
+        
+    # Get the process group from the mesh
+    pg = mesh.get_group()
+    
+    # Convert DTensor to local tensor if needed
+    if hasattr(tensor, 'to_local'):
+        local_tensor = tensor.to_local()
+    else:
+        local_tensor = tensor
+    
+    # Gather tensors from all processes
+    world_size = dist.get_world_size(pg)
+    
+    # Create a list to store gathered tensors
+    gathered_tensors = [torch.empty_like(local_tensor) for _ in range(world_size)]
+    
+    # Gather all tensors
+    dist.all_gather(gathered_tensors, local_tensor, group=pg)
+    
+    # Compare each tensor with the first one
+    for i in range(1, world_size):
+        if not torch.allclose(gathered_tensors[0], gathered_tensors[i], rtol=rtol, atol=atol):
+            return False
+    
+    return True
 
 if __name__ == "__main__":
     main() 
