@@ -45,6 +45,48 @@ class DiaProcessor(ProcessorMixin):
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
 
+
+    def _prepare_audio_prompt(self, audio_prompt: torch.Tensor | None) -> tuple[torch.Tensor, int]:
+        num_channels = self.config.data.channels
+        audio_bos_value = self.config.data.audio_bos_value
+        audio_pad_value = self.config.data.audio_pad_value
+        delay_pattern = self.config.data.delay_pattern
+        max_delay_pattern = max(delay_pattern)
+
+        prefill = torch.full(
+            (1, num_channels),
+            fill_value=audio_bos_value,
+            dtype=torch.int,
+            device=self.device,
+        )
+
+        prefill_step = 1
+
+        if audio_prompt is not None:
+            prefill_step += audio_prompt.shape[0]
+            prefill = torch.cat([prefill, audio_prompt], dim=0)
+
+        delay_pad_tensor = torch.full(
+            (max_delay_pattern, num_channels), fill_value=-1, dtype=torch.int, device=self.device
+        )
+        prefill = torch.cat([prefill, delay_pad_tensor], dim=0)
+
+        delay_precomp = build_delay_indices(
+            B=1,
+            T=prefill.shape[0],
+            C=num_channels,
+            delay_pattern=delay_pattern,
+        )
+
+        prefill = apply_audio_delay(
+            audio_BxTxC=prefill.unsqueeze(0),
+            pad_value=audio_pad_value,
+            bos_value=audio_bos_value,
+            precomp=delay_precomp,
+        ).squeeze(0)
+
+        return prefill, prefill_step
+
     def __call__(self, *args, **kwargs):
         """
         Forwards the `audio` argument to DiaFeatureExtractor's [`~DiaFeatureExtractor.__call__`] and the `text`
