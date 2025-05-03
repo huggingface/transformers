@@ -579,11 +579,13 @@ WHISPER_ATTENTION_CLASSES = {
 }
 
 class MLPWrapper(nn.Module):
-    def __init__(self, fc1, fc2, activation_function, activation_dropout, dropout):
+    def __init__(self, fc1, fc2, activation_function, activation_dropout, dropout, location):
         super().__init__()
 
         self.in_features = fc1.in_features
         self.out_features = fc2.out_features
+
+        self.location = location
 
         self.fc1 = fc1
         self.fc2 = fc2
@@ -621,7 +623,7 @@ class WhisperEncoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
 
         self.mlp = MLPWrapper(self.fc1, self.fc2, activation_function=self.activation_fn,
-                              activation_dropout=self.activation_dropout, dropout=self.dropout)
+                              activation_dropout=self.activation_dropout, dropout=self.dropout, location="encoder")
 
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
@@ -704,7 +706,7 @@ class WhisperDecoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
 
         self.mlp = MLPWrapper(self.fc1, self.fc2, activation_function=self.activation_fn,
-                              activation_dropout=self.activation_dropout, dropout=self.dropout)
+                              activation_dropout=self.activation_dropout, dropout=self.dropout, location="decoder")
 
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
