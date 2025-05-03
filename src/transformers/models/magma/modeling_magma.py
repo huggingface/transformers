@@ -784,14 +784,16 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
                         flattened_image_features.append(image_feature.flatten(0, 1))
 
                 # NOTE we only support multimodal_patch_merge_type == "spatial_unpad"
-                inputs_embeds, attention_mask, position_ids, labels = self._merge_input_ids_with_image_features(
-                    flattened_image_features,
-                    inputs_embeds,
-                    input_ids,
-                    attention_mask,
-                    position_ids,
-                    labels=labels,
-                )
+                # inputs_embeds, attention_mask, position_ids, labels = self._merge_input_ids_with_image_features(
+                #     flattened_image_features,
+                #     inputs_embeds,
+                #     input_ids,
+                #     attention_mask,
+                #     position_ids,
+                #     labels=labels,
+                # )
+
+                inputs_embeds[input_ids == self.config.image_token_index] = torch.cat(flattened_image_features, dim=0)
 
             elif past_key_values is not None and pixel_values is None and input_ids.shape[1] == 1:
                 # Retrieve the first layer to inspect the logits and mask out the hidden states

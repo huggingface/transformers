@@ -18,6 +18,7 @@ Processor class for Magma.
 
 from typing import List, Optional, Union
 
+import torch
 import transformers
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import ImageInput
@@ -65,6 +66,7 @@ class MagmaProcessor(ProcessorMixin):
         self.image_processor = image_processor
         self.tokenizer = tokenizer        
         self.image_token = "<image>"
+        self.image_token_id = self.tokenizer.convert_tokens_to_ids(self.image_token)
 
     def __call__(
         self,
@@ -132,6 +134,34 @@ class MagmaProcessor(ProcessorMixin):
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
+
+        if len(image_inputs) > 0:
+            # expand the image_token_id to the number of image tokens
+            image_token_id = self.image_token_id
+            input_ids = text_inputs["input_ids"]
+            # replace the image_token_id with the number of image tokens that is equal to the number of image tokens in the image
+            image_sizes = image_inputs["image_sizes"]  # (batch_size, num_images, 2)
+            assert input_ids.shape[0] == image_sizes.shape[0]
+            input_ids_list = input_ids.tolist()
+            assert len(input_ids_list) == image_sizes.shape[0]
+            
+            input_ids_list_filled = []
+            for i in range(input_ids.shape[0]):
+                input_ids_orig = input_ids[i].tolist()
+                input_ids_list_filled.append([])
+                img_idx = 0
+                for id in input_ids_orig:
+                    if id == image_token_id:
+                        # replace the image_token_id with the number of image tokens that is equal to the number of image tokens in the image
+                        assert image_sizes[i][img_idx][0] != 0 and image_sizes[i][img_idx][1] != 0, "some mismatch happens, please double check your prompt processor"
+                        num_image_tokens = image_sizes[i][img_idx][0] * image_sizes[i][img_idx][1] * 256 + image_sizes[i][img_idx][0] * 16
+                        input_ids_list_filled[i].extend([image_token_id] * num_image_tokens)                        
+                        img_idx += 1
+                    else:
+                        input_ids_list_filled[i].append(id)
+            
+            text_inputs["input_ids"] = torch.tensor(input_ids_list_filled)
+            text_inputs["attention_mask"] = torch.ones_like(text_inputs["input_ids"])
 
         return BatchFeature(data={**text_inputs, **image_inputs})
 
