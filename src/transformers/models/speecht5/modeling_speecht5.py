@@ -1979,10 +1979,10 @@ SPEECHT5_BASE_START_DOCSTRING = r"""
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
         encoder ([`SpeechT5EncoderWithSpeechPrenet`] or [`SpeechT5EncoderWithTextPrenet`] or `None`):
-            The Transformer encoder module that applies the appropiate speech or text encoder prenet. If `None`,
+            The Transformer encoder module that applies the appropriate speech or text encoder prenet. If `None`,
             [`SpeechT5EncoderWithoutPrenet`] will be used and the `input_values` are assumed to be hidden states.
         decoder ([`SpeechT5DecoderWithSpeechPrenet`] or [`SpeechT5DecoderWithTextPrenet`] or `None`):
-            The Transformer decoder module that applies the appropiate speech or text decoder prenet. If `None`,
+            The Transformer decoder module that applies the appropriate speech or text decoder prenet. If `None`,
             [`SpeechT5DecoderWithoutPrenet`] will be used and the `decoder_input_values` are assumed to be hidden
             states.
 """

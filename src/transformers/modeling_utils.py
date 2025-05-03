@@ -507,13 +507,14 @@ def load_state_dict(
                 )
             state_dict = {}
             for k in f.keys():
-                k_dtype = f.get_slice(k).get_dtype()
-                if k_dtype in str_to_torch_dtype:
-                    dtype = str_to_torch_dtype[k_dtype]
-                else:
-                    raise ValueError(f"Cannot load safetensors of unknown dtype {k_dtype}")
                 if map_location == "meta":
-                    state_dict[k] = torch.empty(size=f.get_slice(k).get_shape(), dtype=dtype, device="meta")
+                    _slice = f.get_slice(k)
+                    k_dtype = _slice.get_dtype()
+                    if k_dtype in str_to_torch_dtype:
+                        dtype = str_to_torch_dtype[k_dtype]
+                    else:
+                        raise ValueError(f"Cannot load safetensors of unknown dtype {k_dtype}")
+                    state_dict[k] = torch.empty(size=_slice.get_shape(), dtype=dtype, device="meta")
                 else:
                     state_dict[k] = f.get_tensor(k)
             return state_dict
@@ -4108,6 +4109,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     elif device_type == "xpu":
                         torch.distributed.init_process_group("ccl", rank=rank, world_size=world_size)
                         torch.xpu.set_device(int(os.environ["LOCAL_RANK"]))
+                    elif device_type == "hpu":
+                        torch.distributed.init_process_group("hccl", rank=rank, world_size=world_size)
+                        torch.hpu.set_device(int(os.environ["LOCAL_RANK"]))
 
                 except Exception as e:
                     raise EnvironmentError(
@@ -4118,6 +4122,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             # Get device with index assuming equal number of devices per host
             if device_type == "xpu":
                 index = torch.xpu.current_device()
+            elif device_type == "hpu":
+                index = torch.hpu.current_device()
             else:
                 index = None if device_type == "cpu" else torch.cuda.current_device()
             tp_device = torch.device(device_type, index)
