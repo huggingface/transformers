@@ -3,12 +3,13 @@ This script is used to test training a model using Tensor Parallelism and Data P
 
 Usage:
 TP_SIZE=2 DP_SIZE=2 torchrun --nproc_per_node=4 test_train.py
+CP_SIZE=2 DP_SIZE=2 torchrun --nproc_per_node=4 test_train.py
 TP_SIZE=1 DP_SIZE=4 torchrun --nproc_per_node=4 test_train.py
 TP_SIZE=4 DP_SIZE=1 torchrun --nproc_per_node=4 test_train.py
 TP_SIZE=1 DP_SIZE=1 torchrun --rdzv_id=4 --rdzv_backend=c10d --rdzv_endpoint=localhost:29503 test_train.py
 """
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 import os
 import logging
 import torch.distributed as dist
@@ -25,7 +26,14 @@ from torch.distributed.tensor.placement_types import Replicate
 from torch.distributed.tensor import DTensor
 import wandb
 from datasets import load_dataset
+from typing import Dict, Any, Optional
+from torch.distributed.tensor.experimental import context_parallel
+from torch.utils.data import default_collate
+from torch.nn.attention import sdpa_kernel, SDPBackend
+
+
 ignore_sanity_checks = False
+
 # Set up logging
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -36,13 +44,16 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    tp_size = int(os.environ.get("TP_SIZE", 2))
+    tp_size = int(os.environ.get("TP_SIZE", 1))
     dp_size = int(os.environ.get("DP_SIZE", 2))
+    cp_size = int(os.environ.get("CP_SIZE", 2))  # Add CP size configuration
+    # sdpa_backend = SDPBackend.FLASH_ATTENTION # For CP
+    sdpa_backend = SDPBackend.MATH # For CP
     global_batch_size = 4 # Desired global batch size
-    seq_len = 2048 # Sequence length
+    seq_len = 256 # Sequence length
     num_train_steps = 10000 # Number of training steps
 
-    CHECKPOINT_DIR = f"checkpoint_tp{tp_size}_dp{dp_size}"
+    CHECKPOINT_DIR = f"checkpoint_tp{tp_size}_dp{dp_size}_cp{cp_size}"
 
     # Initialize distributed environment
     if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
@@ -52,27 +63,29 @@ def main():
         local_rank = int(os.environ["LOCAL_RANK"])
         torch.cuda.set_device(local_rank)
 
-        assert world_size == tp_size * dp_size, f"World size ({world_size}) must equal TP size ({tp_size}) * DP size ({dp_size})"
+        assert world_size == tp_size * dp_size * cp_size, f"World size ({world_size}) must equal TP size ({tp_size}) * DP size ({dp_size}) * CP size ({cp_size})"
 
-        mesh = torch.arange(world_size).reshape(dp_size, tp_size)
-        device_mesh = DeviceMesh(device_type="cuda", mesh=mesh, mesh_dim_names=("dp", "tp"))
-        tp_mesh = device_mesh["tp"]
-        dp_mesh = device_mesh["dp"]
-        logger.info(f"Created DeviceMesh: {device_mesh}")
-        logger.info(f"Distributed setup - Rank: {rank}, World size: {world_size}, Local rank: {local_rank}, DP: {dp_mesh.get_local_rank()}, TP: {tp_mesh.get_local_rank()}")
+        mesh = torch.arange(world_size).reshape(dp_size, tp_size, cp_size)
+        world_mesh = DeviceMesh(device_type="cuda", mesh=mesh, mesh_dim_names=("dp", "tp", "cp"))
+        tp_mesh = world_mesh["tp"]
+        dp_mesh = world_mesh["dp"]
+        cp_mesh = world_mesh["cp"]
+        logger.info(f"Created DeviceMesh: {world_mesh}")
+        logger.info(f"Distributed setup - Rank: {rank}, World size: {world_size}, Local rank: {local_rank}, DP: {dp_mesh.get_local_rank()}, TP: {tp_mesh.get_local_rank()}, CP: {cp_mesh.get_local_rank()}")
 
-        if dp_mesh.get_local_rank() == 0 and tp_mesh.get_local_rank() == 0:
+        if dist.get_rank() == 0:
             wandb.init(
                 project="tp_dp_test",
                 config={
                     "tp_size": tp_size,
                     "dp_size": dp_size,
+                    "cp_size": cp_size,
                     "global_batch_size": global_batch_size,
                     "model_name": "HuggingFaceTB/SmolLM2-1.7B",
                     "dataset": "roneneldan/TinyStories-1M",
                     "seq_len": seq_len,
                 },
-                name=f"tp{tp_size}_dp{dp_size}"
+                name=f"tp{tp_size}_dp{dp_size}_cp{cp_size}"
             )
             logger.info("Wandb initialized.")
 
@@ -108,7 +121,7 @@ def main():
         model_name,
         device_mesh=tp_mesh if dist.is_initialized() else None,
         tp_plan="auto",
-        torch_dtype=torch.bfloat16
+        torch_dtype=torch.bfloat16,
     )
     logger.info(f"Model loaded onto device mesh: {tp_mesh}")
 
@@ -151,6 +164,10 @@ def main():
                  # Replicated parameters should be the same across TP
                  assert sanity_check_tensor_sync(param, tp_mesh), f"Replicated param {name} is not replicated across all tp {param}"
 
+        # assert model is replicated across cp
+        for name, param in model.named_parameters():
+            assert sanity_check_tensor_sync(param, cp_mesh), f"Param {name} is not replicated across all cp {param}"
+
     # Load and preprocess TinyStories dataset
     logger.info("Loading TinyStories dataset...")
     raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:1%]") # Use 1% for faster testing
@@ -181,11 +198,16 @@ def main():
     else:
         sampler = None
         shuffle = True
+
+    # Create collator for context parallel
+    # collator = ContextParallelCollator(cp_mesh=cp_mesh if dist.is_initialized() else None)
+    
     dataloader = DataLoader(
         tokenized_dataset,
         batch_size=local_batch_size,
         sampler=sampler,
         shuffle=shuffle,
+        # collate_fn=collator,
         # num_workers=2, # Optional: Add workers for faster data loading
         # pin_memory=True # Optional: Pin memory if using GPU
     )
@@ -212,87 +234,108 @@ def main():
                 # check batch is different across dp
                 if dp_mesh.size() > 1:
                     assert not sanity_check_tensor_sync(batch["input_ids"], dp_mesh), f"Batch is same across dp {batch['input_ids']}"
+                # TODO: context_parallel handles the sharding
+                # check batch is different across cp (for sequence chunks)
+                # if cp_mesh.size() > 1:
+                #     assert not sanity_check_tensor_sync(batch["input_ids"], cp_mesh), f"Batch is same across cp {batch['input_ids']}"
 
             optimizer.zero_grad()
 
-            outputs = model(**batch)
-            loss = outputs.loss
-            logits = outputs.logits # Logits might not be needed unless debugging
+            # make attention mask all ones for now
+            # batch["attention_mask"] = torch.ones_like(batch["input_ids"])
 
-            current_loss = loss.item() # Get scalar loss value
+            with sdpa_kernel(sdpa_backend): # TODO: ideally move this to attention implementation
+                with context_parallel(
+                    cp_mesh, 
+                    buffers=[batch["input_ids"], batch["labels"]], 
+                    buffer_seq_dims=[1, 1],
+                ):
+                    outputs = model(**batch) # [mbs, seq_len/cp]
+                    loss = outputs.loss
+                    logits = outputs.logits # Logits might not be needed unless debugging
 
-            # Log loss to wandb (only on rank 0 of dp group)
-            if not dist.is_initialized() or dist.get_rank() == 0:
-                logger.info(f"Step: {step} | GBS: {global_batch_size} | DP: {dp_mesh.size()} | TP: {tp_mesh.size()} | Loss: {current_loss}")
-                wandb.log({"train/loss": current_loss, "step": step})
+                    current_loss = loss.item() # Get scalar loss value
 
-            # Sanity checks for logits (only if distributed and no sequence parallelism)
-            # TODO: only true without sequence parallel
-            if dist.is_initialized() and not ignore_sanity_checks:
-                assert sanity_check_tensor_sync(logits, tp_mesh), f"Logits are not same across all tp when not using sequence parallel {logits}"
-                # check logits are not same across dp
-                if dp_mesh.size() > 1:
-                    assert not sanity_check_tensor_sync(logits, dp_mesh), f"Logits are same across dp {logits}"
+                    # Log loss to wandb (only on rank 0 of dp group)
+                    if not dist.is_initialized() or dist.get_rank() == 0:
+                        logger.info(f"Step: {step} | GBS: {global_batch_size} | DP: {dp_mesh.size()} | TP: {tp_mesh.size()} | CP: {cp_mesh.size()} | Loss: {current_loss}")
+                        wandb.log({"train/loss": current_loss, "step": step})
 
-            # logger.info(f"Input IDs shape: {batch['input_ids'].shape}")
-            # logger.info(f"Logits shape: {logits.shape}")
+                    # Sanity checks for logits (only if distributed and no sequence parallelism)
+                    # TODO: only true without sequence parallel
+                    if dist.is_initialized() and not ignore_sanity_checks:
+                        assert sanity_check_tensor_sync(logits, tp_mesh), f"Logits are not same across all tp when not using sequence parallel {logits}"
+                        # check logits are not same across dp
+                        if dp_mesh.size() > 1:
+                            assert not sanity_check_tensor_sync(logits, dp_mesh), f"Logits are same across dp {logits}"
+                        # check logits are not same across cp (for sequence chunks)
+                        if cp_mesh.size() > 1:
+                            assert not sanity_check_tensor_sync(logits, cp_mesh), f"Logits are same across cp {logits}"
 
-            loss.backward()
+                    loss.backward()
 
-            # all reduce grads across dp if applicable
-            if dist.is_initialized() and dp_mesh.size() > 1:
-                for name, param in model.named_parameters():
-                    if param.grad is not None:
-                        # Workaround for cross-mesh communication limitation with DTensor gradients
-                        if isinstance(param.grad, DTensor):
-                            local_grad = param.grad.to_local()
-                            # Ensure grad requires grad for inplace modification checks (might not be needed)
-                            # local_grad = local_grad.detach().requires_grad_(True) 
-                            torch.distributed.all_reduce(
-                                local_grad,
-                                op=torch.distributed.ReduceOp.AVG,
-                                group=dp_mesh.get_group()
-                            )
-                            # Assign averaged grad back - need careful handling if DTensor structure is complex
-                            # This simple assignment might work if the grad structure matches param structure
-                            param.grad = DTensor.from_local(local_grad, device_mesh=param.grad.device_mesh, placements=param.grad.placements)
-                        else:
-                             # Handle regular tensors if any exist (e.g. buffers not converted to DTensor)
-                             torch.distributed.all_reduce(
-                                param.grad,
-                                op=torch.distributed.ReduceOp.AVG,
-                                group=dp_mesh.get_group()
-                            )
+                # all reduce grads across dp_cp if applicable
+                dp_cp_mesh = world_mesh["dp", "cp"]._flatten(mesh_dim_name="dp_cp")
+                if dist.is_initialized() and dp_cp_mesh.size() > 1:
+                    for name, param in model.named_parameters():
+                        if param.grad is not None:
+                            # Workaround for cross-mesh communication limitation with DTensor gradients
+                            if isinstance(param.grad, DTensor):
+                                local_grad = param.grad.to_local()
+                                # Ensure grad requires grad for inplace modification checks (might not be needed)
+                                # local_grad = local_grad.detach().requires_grad_(True) 
+                                torch.distributed.all_reduce(
+                                    local_grad,
+                                    op=torch.distributed.ReduceOp.AVG,
+                                    group=dp_cp_mesh.get_group()
+                                )
+                                # Assign averaged grad back - need careful handling if DTensor structure is complex
+                                # This simple assignment might work if the grad structure matches param structure
+                                param.grad = DTensor.from_local(local_grad, device_mesh=param.grad.device_mesh, placements=param.grad.placements)
+                            else:
+                                 # Handle regular tensors if any exist (e.g. buffers not converted to DTensor)
+                                 torch.distributed.all_reduce(
+                                    param.grad,
+                                    op=torch.distributed.ReduceOp.AVG,
+                                    group=dp_mesh.get_group()
+                                )
 
-            # Sanity checks for gradients (only if distributed)
-            if dist.is_initialized() and not ignore_sanity_checks:
-                # check grads are not same across all tp (for sharded grads)
-                for name, param in model.named_parameters():
-                     if param.grad is not None and isinstance(param.grad, DTensor):
-                         if param.grad.placements[0].is_shard() and tp_mesh.size() > 1:
-                            assert not sanity_check_tensor_sync(param.grad, tp_mesh), f"Sharded Grad {name} is unexpectedly same across all tp {param.grad}"
-                         elif param.grad.placements[0].is_replicate():
-                            assert sanity_check_tensor_sync(param.grad, tp_mesh), f"Replicated Grad {name} is not replicated across all tp {param.grad}"
-                # check grads are same across dp
-                for name, param in model.named_parameters():
-                    if param.grad is not None and dp_mesh.size() > 1:
-                         assert sanity_check_tensor_sync(param.grad, dp_mesh), f"Grad {name} is not same across dp {param.grad}"
+                # Sanity checks for gradients (only if distributed)
+                if dist.is_initialized() and not ignore_sanity_checks:
+                    # check grads are not same across all tp (for sharded grads)
+                    for name, param in model.named_parameters():
+                         if param.grad is not None and isinstance(param.grad, DTensor):
+                             if param.grad.placements[0].is_shard() and tp_mesh.size() > 1:
+                                assert not sanity_check_tensor_sync(param.grad, tp_mesh), f"Sharded Grad {name} is unexpectedly same across all tp {param.grad}"
+                             elif param.grad.placements[0].is_replicate():
+                                assert sanity_check_tensor_sync(param.grad, tp_mesh), f"Replicated Grad {name} is not replicated across all tp {param.grad}"
+                    # check grads are same across dp
+                    for name, param in model.named_parameters():
+                        if param.grad is not None and dp_mesh.size() > 1:
+                             assert sanity_check_tensor_sync(param.grad, dp_mesh), f"Grad {name} is not same across dp {param.grad}"
+                    # check grads are same across cp
+                    for name, param in model.named_parameters():
+                        if param.grad is not None and cp_mesh.size() > 1:
+                             assert sanity_check_tensor_sync(param.grad, cp_mesh), f"Grad {name} is not same across cp {param.grad}"
 
-            optimizer.step()
-            
-            # Sanity checks for updated model parameters (only if distributed)
-            if dist.is_initialized() and not ignore_sanity_checks:
-                 # check updated model is different across all tp (for sharded params)
-                 for name, param in model.named_parameters():
-                    if isinstance(param, DTensor):
-                         if param.placements[0].is_shard() and tp_mesh.size() > 1:
-                            assert not sanity_check_tensor_sync(param, tp_mesh), f"Updated sharded model {name} is unexpectedly same across all tp {param}"
-                         elif param.placements[0].is_replicate():
-                            assert sanity_check_tensor_sync(param, tp_mesh), f"Updated replicated model {name} is not replicated across all tp {param}"
-                 # check updated model is same across dp
-                 for name, param in model.named_parameters():
-                    if dp_mesh.size() > 1:
-                         assert sanity_check_tensor_sync(param, dp_mesh), f"Updated model {name} is not same across dp {param}"
+                optimizer.step()
+                # Sanity checks for updated model parameters (only if distributed)
+                if dist.is_initialized() and not ignore_sanity_checks:
+                    # check updated model is different across all tp (for sharded params)
+                    for name, param in model.named_parameters():
+                        if isinstance(param, DTensor):
+                            if param.placements[0].is_shard() and tp_mesh.size() > 1:
+                                assert not sanity_check_tensor_sync(param, tp_mesh), f"Updated sharded model {name} is unexpectedly same across all tp {param}"
+                            elif param.placements[0].is_replicate():
+                                assert sanity_check_tensor_sync(param, tp_mesh), f"Updated replicated model {name} is not replicated across all tp {param}"
+                    # check updated model is same across dp
+                    for name, param in model.named_parameters():
+                        if dp_mesh.size() > 1:
+                            assert sanity_check_tensor_sync(param, dp_mesh), f"Updated model {name} is not same across dp {param}"
+                    # check updated model is same across cp
+                    for name, param in model.named_parameters():
+                        if cp_mesh.size() > 1:
+                            assert sanity_check_tensor_sync(param, cp_mesh), f"Updated model {name} is not same across cp {param}"
 
             step += 1 # Increment step count
 
@@ -382,12 +425,34 @@ def main():
         dist.destroy_process_group()
         logger.info("Cleaned up distributed process group")
         # Finish wandb run on rank 0
-        if dp_mesh.get_local_rank() == 0 and tp_mesh.get_local_rank() == 0:
+        if dist.get_rank() == 0:
             wandb.finish()
             logger.info("Wandb run finished.")
     else:
         wandb.finish()
         logger.info("Wandb run finished.")
+class ContextParallelCollator:
+    """Collator for context parallel training that splits sequences into chunks."""
+    def __init__(self, cp_mesh: Optional[DeviceMesh] = None):
+        self.cp_mesh = cp_mesh
+        
+    def __call__(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        batch = default_collate(batch)
+        if self.cp_mesh is not None and self.cp_mesh.size() > 1:
+            # Get sequence length from the input batch
+            seq_len = batch["input_ids"].shape[1]
+            assert seq_len % self.cp_mesh.size() == 0, f"Sequence length {seq_len} must be divisible by CP size {self.cp_mesh.size()}"
+            chunk_size = seq_len // self.cp_mesh.size()
+            cp_rank = self.cp_mesh.get_local_rank()
+            start_idx = cp_rank * chunk_size
+            end_idx = start_idx + chunk_size
+            
+            # Keep only the local chunk of the sequence
+            batch["input_ids"] = batch["input_ids"][:, start_idx:end_idx]
+            batch["attention_mask"] = batch["attention_mask"][:, start_idx:end_idx]
+            batch["labels"] = batch["labels"][:, start_idx:end_idx]
+            
+        return batch
 
 class AppState(Stateful):
     """Wrapper for checkpointing the Application State including model and optimizer."""

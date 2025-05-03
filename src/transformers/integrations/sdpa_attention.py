@@ -55,10 +55,10 @@ def sdpa_attention_forward(
         query,
         key,
         value,
-        attn_mask=causal_mask,
+        # attn_mask=causal_mask,
         dropout_p=dropout,
         scale=scaling,
-        is_causal=is_causal,
+        # is_causal=is_causal,
     )
     attn_output = attn_output.transpose(1, 2).contiguous()
 
