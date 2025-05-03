@@ -24,22 +24,19 @@ rendered properly in your Markdown viewer.
 
 # DeBERTa
 
-[DeBERTa](https://arxiv.org/abs/2006.03654) stands for *Decoding-enhanced BERT with Disentangled Attention*, and it's like BERT and RoBERTa's smarter cousin. It builds on those models but takes things up a notch with two key ideas: disentangled attention and an enhanced mask decoder. Instead of mixing everything together like BERT, DeBERTa separates a word's *content* from its *position* and processes them independently—giving it a clearer sense of what's being said and where in the sentence it's happening.
+[DeBERTa](https://huggingface.co/papers/2006.03654) improves the pretraining efficiency of BERT and RoBERTa with two key ideas, disentangled attention and an enhanced mask decoder. Instead of mixing everything together like BERT, DeBERTa separates a word's *content* from its *position* and processes them independently. This gives it a clearer sense of what's being said and where in the sentence it's happening.
 
-Another cool thing is how DeBERTa handles masked language modeling. Rather than relying on the traditional softmax decoder, it introduces a more powerful mechanism that makes better predictions and trains more efficiently.
+The enhanced mask decoder replaces the traditional softmax decoder to make better predictions.
 
-Even with less training data than RoBERTa, DeBERTa manages to outperform it on several benchmarks. It's become a go-to model for high-performance language tasks, and it's especially great when you need strong accuracy without maxing out compute.
+Even with less training data than RoBERTa, DeBERTa manages to outperform it on several benchmarks.
 
-You can find all DeBERTa checkpoints here
-[microsoft/deberta-base](https://huggingface.co/microsoft/deberta-base)
-[microsoft/deberta-large](https://huggingface.co/microsoft/deberta-large)
-[microsoft/deberta-large-mnli](https://huggingface.co/microsoft/deberta-large-mnli)
+You can find all the original DeBERTa checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=deberta) organization.
 
 
 > [!TIP]
 > Click on the DeBERTa models in the right sidebar for more examples of how to apply DeBERTa to different language tasks.
 
-The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to classify text with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline>
@@ -88,17 +85,16 @@ print(f"The predicted relation is: {labels[predicted_class]}")
 <hfoption id="transformers-cli">
 
 ```bash
-echo -e '{"text": "A soccer game with multiple people playing.", "text_pair": "Some people are playing a sport."}' | transformers-cli run --task text-classification --model microsoft/deberta-base-mnli
+echo -e '{"text": "A soccer game with multiple people playing.", "text_pair": "Some people are playing a sport."}' | transformers-cli run --task text-classification --model microsoft/deberta-base-mnli --device 0
 ```
 
 </hfoption>
 </hfoptions
 
 ## Notes
-- DeBERTa uses **relative position embeddings**, so it does **not require right-padding** like BERT.
-- It separates **content** and **position** information in its attention mechanism, which improves contextual understanding.
-- For best results, use DeBERTa on **sentence-level or sentence-pair classification tasks** like MNLI, RTE, or SST-2.
-- If you're using DeBERTa for token-level tasks like masked language modeling, make sure to load a checkpoint that was specifically pre-trained or fine-tuned for it
+- DeBERTa uses **relative position embeddings**, so it does not require **right-padding** like BERT.
+- For best results, use DeBERTa on sentence-level or sentence-pair classification tasks like MNLI, RTE, or SST-2.
+- If you're using DeBERTa for token-level tasks like masked language modeling, make sure to load a checkpoint specifically pretrained or fine-tuned for token-level tasks.
 
 ## DebertaConfig
 
