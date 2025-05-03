@@ -34,7 +34,7 @@ from transformers.modeling_outputs import (
 )
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_utils import PreTrainedModel
@@ -1364,7 +1364,7 @@ class UdopStack(UdopPreTrainedModel):
 
         if inputs_embeds is None:
             if self.embed_tokens is None:
-                raise ValueError("You have to intialize the model with valid token embeddings")
+                raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
 
         if pixel_values is not None:
@@ -1556,10 +1556,10 @@ class UdopStack(UdopPreTrainedModel):
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_static_cache = isinstance(past_key_values, StaticCache)
+        using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -1570,7 +1570,7 @@ class UdopStack(UdopPreTrainedModel):
 
         dtype = input_tensor.dtype
         sequence_length = input_tensor.shape[1]
-        if using_static_cache:
+        if using_compilable_cache:
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
@@ -1716,9 +1716,9 @@ class UdopModel(UdopPreTrainedModel):
         self,
         input_ids: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
-        bbox: Dict[str, Any] = None,
+        bbox: Optional[Dict[str, Any]] = None,
         pixel_values: Optional[Tensor] = None,
-        visual_bbox: Dict[str, Any] = None,
+        visual_bbox: Optional[Dict[str, Any]] = None,
         decoder_input_ids: Optional[Tensor] = None,
         decoder_attention_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
@@ -1892,9 +1892,9 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         self,
         input_ids: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
-        bbox: Dict[str, Any] = None,
+        bbox: Optional[Dict[str, Any]] = None,
         pixel_values: Optional[Tensor] = None,
-        visual_bbox: Dict[str, Any] = None,
+        visual_bbox: Optional[Dict[str, Any]] = None,
         decoder_input_ids: Optional[Tensor] = None,
         decoder_attention_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
@@ -2104,10 +2104,10 @@ class UdopEncoderModel(UdopPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[Tensor] = None,
-        bbox: Dict[str, Any] = None,
+        bbox: Optional[Dict[str, Any]] = None,
         attention_mask: Optional[Tensor] = None,
         pixel_values: Optional[Tensor] = None,
-        visual_bbox: Dict[str, Any] = None,
+        visual_bbox: Optional[Dict[str, Any]] = None,
         head_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         output_attentions: Optional[bool] = None,
