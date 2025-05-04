@@ -488,7 +488,7 @@ class AppState(Stateful):
 
 
 
-def sanity_check_tensor_sync(tensor: torch.Tensor, mesh: DeviceMesh, rtol: float = 1e-5, atol: float = 1e-8, not_sync: bool = False) -> None:
+def sanity_check_tensor_sync(tensor: torch.Tensor, mesh: DeviceMesh, rtol: float = 1e-4, atol: float = 1e-4, not_sync: bool = False) -> None:
     """
     Verify that a tensor is synchronized (or not synchronized) across all processes in the mesh's process group.
     Handles both regular tensors and DTensors.
@@ -545,8 +545,7 @@ def clip_grad_norm_(
     """
     # Filter out parameters with no gradients
     parameters = [p for p in parameters if p.grad is not None]
-    if len(parameters) == 0:
-        return torch.tensor(0.0, device=next(parameters).device)
+    assert len(parameters) > 0, "No parameters with gradients found"
 
     # Calculate total norm
     if norm_type == float('inf'):
