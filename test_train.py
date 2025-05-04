@@ -146,28 +146,27 @@ def main():
         # model = replicate(model, device_mesh=dp_mesh, bucket_cap_mb=100)
         # logger.info("Applied DDP")
         use_ddp = True
-        pass
 
     model.train()
 
     if dist.is_initialized() and not ignore_sanity_checks:
         # assert model is replicated across all dp
         for name, param in model.named_parameters():
-            assert sanity_check_tensor_sync(param, dp_mesh), f"Param {name} is not replicated across all dp {param}"
+            sanity_check_tensor_sync(param, dp_mesh)
 
         # assert model is different across tp (only for sharded params)
         for name, param in model.named_parameters():
             if isinstance(param, DTensor) and param.placements[0].is_shard():
                  # Only check sharded parameters for non-sync across TP
                  if tp_mesh.size() > 1:
-                    assert not sanity_check_tensor_sync(param, tp_mesh), f"Sharded param {name} is unexpectedly the same across all tp {param}"
+                    sanity_check_tensor_sync(param, tp_mesh, not_sync=True)
             elif isinstance(param, DTensor) and param.placements[0].is_replicate():
                  # Replicated parameters should be the same across TP
-                 assert sanity_check_tensor_sync(param, tp_mesh), f"Replicated param {name} is not replicated across all tp {param}"
+                 sanity_check_tensor_sync(param, tp_mesh)
 
         # assert model is replicated across cp
         for name, param in model.named_parameters():
-            assert sanity_check_tensor_sync(param, cp_mesh), f"Param {name} is not replicated across all cp {param}"
+            sanity_check_tensor_sync(param, cp_mesh)
 
     # Load and preprocess TinyStories dataset
     logger.info("Loading TinyStories dataset...")
@@ -231,19 +230,12 @@ def main():
             # Sanity checks for batch distribution (only if distributed)
             if dist.is_initialized() and not ignore_sanity_checks:
                 # check batch is same across all tp
-                assert sanity_check_tensor_sync(batch["input_ids"], tp_mesh), f"Batch is not same across all tp {batch['input_ids']}"
+                sanity_check_tensor_sync(batch["input_ids"], tp_mesh)
                 # check batch is different across dp
                 if dp_mesh.size() > 1:
-                    assert not sanity_check_tensor_sync(batch["input_ids"], dp_mesh), f"Batch is same across dp {batch['input_ids']}"
-                # TODO: context_parallel handles the sharding
-                # check batch is different across cp (for sequence chunks)
-                # if cp_mesh.size() > 1:
-                #     assert not sanity_check_tensor_sync(batch["input_ids"], cp_mesh), f"Batch is same across cp {batch['input_ids']}"
+                    sanity_check_tensor_sync(batch["input_ids"], dp_mesh, not_sync=True)
 
             optimizer.zero_grad()
-
-            # make attention mask all ones for now
-            # batch["attention_mask"] = torch.ones_like(batch["input_ids"])
 
             with sdpa_kernel(sdpa_backend): # TODO: ideally move this to attention implementation
                 with context_parallel(
@@ -260,13 +252,13 @@ def main():
                     # Sanity checks for logits (only if distributed and no sequence parallelism)
                     # TODO: only true without sequence parallel
                     if dist.is_initialized() and not ignore_sanity_checks:
-                        assert sanity_check_tensor_sync(logits, tp_mesh), f"Logits are not same across all tp when not using sequence parallel {logits}"
+                        sanity_check_tensor_sync(logits, tp_mesh)
                         # check logits are not same across dp
                         if dp_mesh.size() > 1:
-                            assert not sanity_check_tensor_sync(logits, dp_mesh), f"Logits are same across dp {logits}"
+                            sanity_check_tensor_sync(logits, dp_mesh, not_sync=True)
                         # check logits are not same across cp (for sequence chunks)
                         if cp_mesh.size() > 1:
-                            assert not sanity_check_tensor_sync(logits, cp_mesh), f"Logits are same across cp {logits}"
+                            sanity_check_tensor_sync(logits, cp_mesh, not_sync=True)
 
                     loss.backward()
 
@@ -279,17 +271,17 @@ def main():
                     for name, param in model.named_parameters():
                          if param.grad is not None and isinstance(param.grad, DTensor):
                              if param.grad.placements[0].is_shard() and tp_mesh.size() > 1:
-                                assert not sanity_check_tensor_sync(param.grad, tp_mesh), f"Sharded Grad {name} is unexpectedly same across all tp {param.grad}"
+                                sanity_check_tensor_sync(param.grad, tp_mesh, not_sync=True)
                              elif param.grad.placements[0].is_replicate():
-                                assert sanity_check_tensor_sync(param.grad, tp_mesh), f"Replicated Grad {name} is not replicated across all tp {param.grad}"
+                                sanity_check_tensor_sync(param.grad, tp_mesh)
                     # check grads are same across dp
                     for name, param in model.named_parameters():
                         if param.grad is not None and dp_mesh.size() > 1:
-                             assert sanity_check_tensor_sync(param.grad, dp_mesh), f"Grad {name} is not same across dp {param.grad}"
+                             sanity_check_tensor_sync(param.grad, dp_mesh)
                     # check grads are same across cp
                     for name, param in model.named_parameters():
                         if param.grad is not None and cp_mesh.size() > 1:
-                             assert sanity_check_tensor_sync(param.grad, cp_mesh), f"Grad {name} is not same across cp {param.grad}"
+                             sanity_check_tensor_sync(param.grad, cp_mesh)
 
                 optimizer.step()
                 # Sanity checks for updated model parameters (only if distributed)
@@ -298,17 +290,17 @@ def main():
                     for name, param in model.named_parameters():
                         if isinstance(param, DTensor):
                             if param.placements[0].is_shard() and tp_mesh.size() > 1:
-                                assert not sanity_check_tensor_sync(param, tp_mesh), f"Updated sharded model {name} is unexpectedly same across all tp {param}"
+                                sanity_check_tensor_sync(param, tp_mesh, not_sync=True)
                             elif param.placements[0].is_replicate():
-                                assert sanity_check_tensor_sync(param, tp_mesh), f"Updated replicated model {name} is not replicated across all tp {param}"
+                                sanity_check_tensor_sync(param, tp_mesh)
                     # check updated model is same across dp
                     for name, param in model.named_parameters():
                         if dp_mesh.size() > 1:
-                            assert sanity_check_tensor_sync(param, dp_mesh), f"Updated model {name} is not same across dp {param}"
+                            sanity_check_tensor_sync(param, dp_mesh)
                     # check updated model is same across cp
                     for name, param in model.named_parameters():
                         if cp_mesh.size() > 1:
-                            assert sanity_check_tensor_sync(param, cp_mesh), f"Updated model {name} is not same across cp {param}"
+                            sanity_check_tensor_sync(param, cp_mesh)
 
                 # Calculate gradient norm and clip gradients
                 assert len(list(model.parameters()))>0, "No parameters found in model. Probably DDP bug.."
@@ -496,9 +488,9 @@ class AppState(Stateful):
 
 
 
-def sanity_check_tensor_sync(tensor: torch.Tensor, mesh: DeviceMesh, rtol: float = 1e-5, atol: float = 1e-8) -> bool:
+def sanity_check_tensor_sync(tensor: torch.Tensor, mesh: DeviceMesh, rtol: float = 1e-5, atol: float = 1e-8, not_sync: bool = False) -> None:
     """
-    Verify that a tensor is synchronized across all processes in the mesh's process group.
+    Verify that a tensor is synchronized (or not synchronized) across all processes in the mesh's process group.
     Handles both regular tensors and DTensors.
     
     Args:
@@ -506,12 +498,10 @@ def sanity_check_tensor_sync(tensor: torch.Tensor, mesh: DeviceMesh, rtol: float
         mesh (DeviceMesh): The device mesh containing the process group
         rtol (float): Relative tolerance for comparison
         atol (float): Absolute tolerance for comparison
-        
-    Returns:
-        bool: True if tensors are synchronized, False otherwise
+        not_sync (bool): If True, asserts that tensors are NOT synchronized. If False, asserts they are synchronized.
     """
     if not dist.is_initialized() or mesh.size() == 1:
-        return True  # No need to check in non-distributed mode
+        return  # No need to check in non-distributed mode
         
     # Get the process group from the mesh
     pg = mesh.get_group()
@@ -533,10 +523,16 @@ def sanity_check_tensor_sync(tensor: torch.Tensor, mesh: DeviceMesh, rtol: float
     
     # Compare each tensor with the first one
     for i in range(1, world_size):
-        if not torch.allclose(gathered_tensors[0], gathered_tensors[i], rtol=rtol, atol=atol):
-            return False
-    
-    return True
+        if not_sync:
+            tensors_are_different = False
+            try:
+                torch.testing.assert_close(gathered_tensors[0], gathered_tensors[i], rtol=rtol, atol=atol)
+            except AssertionError:
+                tensors_are_different = True
+            assert tensors_are_different, f"Tensors should be different but they are identical at indices 0 and {i}, gathered_tensors[0]: {gathered_tensors[0]}, gathered_tensors[i]: {gathered_tensors[i]}"
+        else:
+            torch.testing.assert_close(gathered_tensors[0], gathered_tensors[i], rtol=rtol, atol=atol)
+
 def clip_grad_norm_(
     parameters: Iterable[torch.Tensor],
     max_norm: float,
@@ -572,6 +568,23 @@ def clip_grad_norm_(
             p.grad.detach().mul_(clip_coef)
 
     return total_norm
+
+def check_params_sync(model_params, original_params):
+    """
+    Check if original_params are being updated in sync with model parameters.
+    
+    Args:
+        model_params: Iterator of model parameters after update
+        original_params: List of original parameters before DDP wrapping
+    """
+    for mp, op in zip(model_params, original_params):
+        if isinstance(mp, DTensor):
+            mp = mp.to_local()
+        if isinstance(op, DTensor):
+            op = op.to_local()
+        if not torch.allclose(mp.data, op.data, rtol=0, atol=0):
+            raise RuntimeError(f"Parameters out of sync: model param {mp.data} != original param {op.data}")
+    return True
 
 if __name__ == "__main__":
     main() 
