@@ -56,11 +56,11 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer  
 
 tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
-model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf")
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors= "pt")["input_ids"]
+model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", torch_dtype=torch.float16, device_map="auto",)  
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")  
 
-out = model.generate(input_ids, max_new_tokens=10)
-print(tokenizer.batch_decode(out))
+output = model.generate(**input_ids)  
+print(tokenizer.decode(output[0], skip_special_tokens=True)
 ```
 
 </hfoption>
