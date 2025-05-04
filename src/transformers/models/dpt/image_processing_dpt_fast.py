@@ -16,7 +16,7 @@
 
 import math
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Dict, Optional, List, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from transformers.image_processing_base import BatchFeature
 from transformers.image_transforms import (
@@ -51,6 +51,7 @@ from ...utils import (
     is_torchvision_v2_available,
     requires_backends,
 )
+
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
@@ -403,7 +404,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
                 f" {size}."
             )
         return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
-    
+
     # Copied from transformers.models.dpt.image_processing_dpt.DPTImageProcessor.post_process_depth_estimation
     def post_process_depth_estimation(
         self,
@@ -445,5 +446,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
             results.append({"predicted_depth": depth})
 
         return results
+
 
 __all__ = ["DPTImageProcessorFast"]
