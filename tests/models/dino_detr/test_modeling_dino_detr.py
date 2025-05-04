@@ -54,6 +54,8 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
+CHECKPOINT = "kostaspitas/dino_detr"  # "/Users/konstantinospitas/Desktop/checkpoint_tmp"
+
 
 class DinoDetrModelTester:
     def __init__(
@@ -702,9 +704,7 @@ class DinoDetrModelIntegrationTests(unittest.TestCase):
         return DinoDetrImageProcessor() if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        model = DinoDetrForObjectDetection.from_pretrained("/Users/konstantinospitas/Desktop/checkpoint_tmp").to(
-            torch_device
-        )
+        model = DinoDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
