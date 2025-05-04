@@ -60,7 +60,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 # Pass image to the pipeline
 results = pipe(image)
 print(results)
-# Example output: [{'score': 0.971..., 'label': 'tabby, tabby cat'}, ...]
+# Example output: [{'label': 'tabby, tabby cat', 'score': 0.918...}, ...]
 ```
 
 </hfoption>
@@ -119,7 +119,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 results = pipe(image)
 # `results` is a list of masks, one per detected class
 # Example showing one mask: print(results[0]['mask'])
-# Example output: <PIL.Image.Image image mode=L size=512x341 at 0x...>
+# Example output: <PIL.Image.Image image mode=L size=640x480 at 0x...>
 ```
 
 </hfoption>
@@ -158,7 +158,7 @@ upsampled_logits = torch.nn.functional.interpolate(
 # Get predicted segmentation map
 pred_seg = upsampled_logits.argmax(dim=1)[0]
 print(pred_seg.shape)
-# Example output: torch.Size([341, 512])
+# Example output: torch.Size([480, 640])
 ```
 
 </hfoption>
