@@ -979,52 +979,37 @@ def _find_sig_line(lines, line_end):
     return sig_line_end
 
 
-def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
+def find_matching_model_files():
     """
-    Check docstrings of all public objects that are decorated with `@auto_docstrings`.
-
-    Args:
-        overwrite (`bool`, *optional*, defaults to `False`):
-            Whether to fix inconsistencies or not.
-        check_all (`bool`, *optional*, defaults to `False`):
-            Whether to check all files.
+    Find all model files in the transformers repo that should be checked for @auto_docstring,
+    excluding files with certain substrings.
+    Returns:
+        List of file paths.
     """
-    # Get all objects that are decorated with `@auto_docstrings`
-    # Get all objects that are decorated with `@auto_docstrings`
-    print(PATH_TO_TRANSFORMERS)
     full_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/mod**")
-
-    # Substrings to exclude from the filename
     exclude_substrings = ["modeling_tf_", "modeling_flax_"]
-    # --------------------
-
     matching_files = []
-
-    # Use glob.glob() to find initial potential matches
     potential_files = glob.glob(full_glob_pattern)
     for file_path in potential_files:
-        # Ensure it's actually a file (glob might match directories if named *.py, though unlikely)
         if os.path.isfile(file_path):
-            filename = os.path.basename(file_path)  # Get just the filename
-
-            # Check if *any* of the exclude substrings are present in the filename
+            filename = os.path.basename(file_path)
             is_excluded = any(exclude in filename for exclude in exclude_substrings)
-
-            # If it's not excluded, add it to our list
             if not is_excluded:
                 matching_files.append(file_path)
+    return sorted(matching_files)
 
-    matching_files = sorted(matching_files)
 
+def find_files_with_auto_docstring(matching_files, decorator="@auto_docstring"):
+    """
+    From a list of files, return those that contain the @auto_docstring decorator.
+    """
     auto_docstrings_files = []
-    auto_docstring_decorator = "@auto_docstring"
     for file_path in matching_files:
         with open(file_path, "r", encoding="utf-8") as f:
             content_base_file = f.read()
-            if auto_docstring_decorator in content_base_file:
+            if decorator in content_base_file:
                 lines = content_base_file.split("\n")
-                # get the line number of all occurrences of "add_start_docstring"
-                line_numbers = [i for i, line in enumerate(lines) if auto_docstring_decorator in line]
+                line_numbers = [i for i, line in enumerate(lines) if decorator in line]
                 for line_number in line_numbers:
                     line_end = line_number
                     end_patterns = ["class ", "    def"]
@@ -1039,266 +1024,212 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
                     if stop_condition and candidate:
                         auto_docstrings_files.append(file_path)
                         break
+    return auto_docstrings_files
+
+
+def get_auto_docstring_candidate_lines(lines, decorator="@auto_docstring"):
+    """
+    For a file's lines, find the start and end line indices of all @auto_docstring candidates.
+    Returns two lists: starts and ends.
+    """
+    line_numbers = [i for i, line in enumerate(lines) if decorator in line]
+    line_starts_candidates = []
+    line_ends_candidates = []
+    for line_number in line_numbers:
+        line_end = line_number
+        end_patterns = ["class ", "    def"]
+        stop_condition = False
+        while line_end < len(lines) and not stop_condition:
+            line_end += 1
+            stop_condition = any(lines[line_end].startswith(end_pattern) for end_pattern in end_patterns)
+        candidate_patterns = ["class ", "    def"]
+        candidate = any(lines[line_end].startswith(candidate_pattern) for candidate_pattern in candidate_patterns)
+        if stop_condition and candidate:
+            line_ends_candidates.append(line_end)
+            line_starts_candidates.append(line_number)
+    return line_starts_candidates, line_ends_candidates
+
+
+def generate_new_docstring_for_signature(
+    lines,
+    sig_start_line,
+    sig_end_line,
+    docstring_line,
+    arg_indent="    ",
+):
+    """
+    Generalized docstring generator for a function or class signature.
+    Args:
+        lines: List of lines from the file.
+        sig_start_line: Line index where the signature starts.
+        sig_end_line: Line index where the signature ends.
+        docstring_line: Line index where the docstring starts (or None if not present).
+        arg_indent: Indentation for missing argument doc entries.
+    Returns:
+        new_docstring, sig_end_line, docstring_end (last docstring line index)
+    """
+    # Extract and clean signature
+    signature_content = lines[sig_start_line:sig_end_line]
+    signature_content = [line.split("#")[0] for line in signature_content]
+    signature_content = "".join(signature_content)
+    signature_content = "".join(signature_content.split(")")[:-1])
+    args_in_signature = re.findall(r"(?:[,(]\s*)(\w+)\s*(?::\s*[^=)]+)?(?:\s*=\s*[^,)]+)?", signature_content)
+    if "self" in args_in_signature:
+        args_in_signature.remove("self")
+    # Parse docstring if present
+    args_docstring_dict = {}
+    remaining_docstring = ""
+    docstring_end = sig_end_line - 1
+    if docstring_line is not None:
+        docstring_end = docstring_line
+        if not lines[docstring_line].count('"""') >= 2:
+            docstring_end += 1
+            while '"""' not in lines[docstring_end]:
+                docstring_end += 1
+        docstring_content = lines[docstring_line : docstring_end + 1]
+        parsed_docstring, remaining_docstring = parse_docstring("\n".join(docstring_content))
+        args_docstring_dict.update(parsed_docstring)
+    # Fill missing args
+    for arg in args_in_signature:
+        if arg not in args_docstring_dict and arg not in ModelArgs.__dict__:
+            args_docstring_dict[arg] = {
+                "type": "<fill_type>",
+                "optional": False,
+                "shape": None,
+                "description": f"\n{arg_indent}<fill_docstring>",
+                "default": None,
+                "additional_info": None,
+            }
+    # Build new docstring
+    new_docstring = ""
+    if len(args_docstring_dict) > 0 or remaining_docstring:
+        new_docstring += 'r"""\n'
+        for arg in args_docstring_dict:
+            additional_info = args_docstring_dict[arg]["additional_info"] or ""
+            custom_arg_description = args_docstring_dict[arg]["description"]
+            if custom_arg_description.endswith('"""'):
+                custom_arg_description = "\n".join(custom_arg_description.split("\n")[:-1])
+            new_docstring += f"{arg} ({args_docstring_dict[arg]['type']}{additional_info}):{custom_arg_description}\n"
+        close_docstring = True
+        if remaining_docstring:
+            if remaining_docstring.endswith('"""'):
+                close_docstring = False
+            end_docstring = "\n" if close_docstring else ""
+            new_docstring += f"{set_min_indent(remaining_docstring, 0)}{end_docstring}"
+        if close_docstring:
+            new_docstring += '"""'
+        new_docstring = set_min_indent(new_docstring, 8)
+    return new_docstring, sig_end_line, docstring_end
+
+
+def generate_new_docstring_for_function(lines, current_line_end):
+    """
+    Wrapper for function docstring generation using the generalized helper.
+    """
+    sig_line_end = _find_sig_line(lines, current_line_end)
+    docstring_line = sig_line_end if '"""' in lines[sig_line_end] else None
+    return generate_new_docstring_for_signature(
+        lines,
+        current_line_end,
+        sig_line_end,
+        docstring_line,
+        arg_indent="    ",
+    )
+
+
+def generate_new_docstring_for_class(lines, current_line_end):
+    """
+    Wrapper for class docstring generation (via __init__) using the generalized helper.
+    Returns the new docstring and relevant signature/docstring indices.
+    """
+    init_method_line = current_line_end
+    found_init_method = False
+    while init_method_line < len(lines) - 1 and not found_init_method:
+        init_method_line += 1
+        if "    def __init__" in lines[init_method_line]:
+            found_init_method = True
+        elif lines[init_method_line].startswith("class "):
+            break
+    if not found_init_method:
+        return "", None, None, None
+    init_method_sig_line_end = _find_sig_line(lines, init_method_line)
+    docstring_line = init_method_sig_line_end if '"""' in lines[init_method_sig_line_end] else None
+    new_docstring, _, init_method_docstring_end = generate_new_docstring_for_signature(
+        lines,
+        init_method_line,
+        init_method_sig_line_end,
+        docstring_line,
+        arg_indent="",
+    )
+    return new_docstring, init_method_line, init_method_sig_line_end, init_method_docstring_end
+
+
+def update_file_with_new_docstrings(candidate_file, lines, line_starts_candidates, line_ends_candidates):
+    """
+    For a given file, update the docstrings for all @auto_docstring candidates and write the new content.
+    """
+    content_base_file_new_lines = lines[: line_ends_candidates[0]]
+    current_line_end = line_ends_candidates[0]
+    index = 1
+    while index <= len(line_starts_candidates):
+        new_docstring = ""
+        found_init_method = False
+        # Function
+        if "    def" in lines[current_line_end]:
+            new_docstring, sig_line_end, docstring_end = generate_new_docstring_for_function(lines, current_line_end)
+        # Class
+        elif "class " in lines[current_line_end]:
+            new_docstring, init_method_line, init_method_sig_line_end, init_method_docstring_end = (
+                generate_new_docstring_for_class(lines, current_line_end)
+            )
+            found_init_method = init_method_line is not None
+        # Write new lines
+        if index >= len(line_ends_candidates) or line_ends_candidates[index] > current_line_end:
+            if "    def" in lines[current_line_end]:
+                content_base_file_new_lines += lines[current_line_end:sig_line_end]
+                if new_docstring != "":
+                    content_base_file_new_lines += new_docstring.split("\n")
+                if index < len(line_ends_candidates):
+                    content_base_file_new_lines += lines[docstring_end + 1 : line_ends_candidates[index]]
+                else:
+                    content_base_file_new_lines += lines[docstring_end + 1 :]
+            elif found_init_method:
+                content_base_file_new_lines += lines[current_line_end:init_method_sig_line_end]
+                if new_docstring != "":
+                    content_base_file_new_lines += new_docstring.split("\n")
+                if index < len(line_ends_candidates):
+                    content_base_file_new_lines += lines[init_method_docstring_end + 1 : line_ends_candidates[index]]
+                else:
+                    content_base_file_new_lines += lines[init_method_docstring_end + 1 :]
+            elif index < len(line_ends_candidates):
+                content_base_file_new_lines += lines[current_line_end : line_ends_candidates[index]]
+            else:
+                content_base_file_new_lines += lines[current_line_end:]
+            if index < len(line_ends_candidates):
+                current_line_end = line_ends_candidates[index]
+        index += 1
+    content_base_file_new = "\n".join(content_base_file_new_lines)
+    with open(candidate_file, "w", encoding="utf-8") as f:
+        f.write(content_base_file_new)
+
+
+def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
+    """
+    Check docstrings of all public objects that are decorated with `@auto_docstrings`.
+    This function orchestrates the process by finding relevant files, scanning for decorators,
+    generating new docstrings, and updating files as needed.
+    """
+    print(PATH_TO_TRANSFORMERS)
+    # 1. Find all model files to check
+    matching_files = find_matching_model_files()
+    # 2. Find files that contain the @auto_docstring decorator
+    auto_docstrings_files = find_files_with_auto_docstring(matching_files)
+    # 3. For each file, update docstrings for all candidates
     for candidate_file in auto_docstrings_files:
         with open(candidate_file, "r", encoding="utf-8") as f:
-            content_base_file = f.read()
-            lines = content_base_file.split("\n")
-        # get the line number of all occurrences of "add_auto_docstring"
-        line_numbers = [i for i, line in enumerate(lines) if auto_docstring_decorator in line]
-        line_starts_candidates = []
-        line_ends_candidates = []
-        for line_number in line_numbers:
-            line_end = line_number
-            end_patterns = ["class ", "    def"]
-            stop_condition = False
-            while line_end < len(lines) and not stop_condition:
-                line_end += 1
-                stop_condition = any(lines[line_end].startswith(end_pattern) for end_pattern in end_patterns)
-            candidate_patterns = ["class ", "    def"]
-            candidate = any(lines[line_end].startswith(candidate_pattern) for candidate_pattern in candidate_patterns)
-            if stop_condition and candidate:
-                line_ends_candidates.append(line_end)
-                line_starts_candidates.append(line_number)
-
-        content_base_file_new_lines = lines[: line_ends_candidates[0]]
-
-        current_line_end = line_ends_candidates[0]
-        current_line_start = line_starts_candidates[0]
-        index = 1
-        while index <= len(line_starts_candidates):
-            args_docstring_dict = {}
-            remaining_docstring = ""
-            if "    def" in lines[current_line_end]:
-                # find end of the function signature:
-                sig_line_end = _find_sig_line(lines, current_line_end)
-                signature_content = lines[current_line_end:sig_line_end]
-                signature_content = [line.split("#")[0] for line in signature_content]
-                signature_content = "".join(signature_content)
-                signature_content = "".join(signature_content.split(")")[:-1])
-
-                # find all the arguments in the signature, they are all the words that precede a colon in the signature
-                args_in_signature = re.findall(
-                    r"(?:[,\(]\s*)(\w+)\s*(?::\s*[^=)]+)?(?:\s*=\s*[^,)]+)?", signature_content
-                )
-                if "self" in args_in_signature:
-                    args_in_signature.remove("self")
-                docstring_present = '"""' in lines[sig_line_end]
-                docstring_end = sig_line_end
-                if docstring_present:
-                    # find the end of the docstring:
-                    if not lines[sig_line_end].count('"""') >= 2:
-                        docstring_end += 1
-                        while '"""' not in lines[docstring_end]:
-                            docstring_end += 1
-                    docstring_content = lines[sig_line_end : docstring_end + 1]
-                    parsed_docstring, remaining_docstring = parse_docstring("\n".join(docstring_content))
-                    args_docstring_dict.update(parsed_docstring)
-                else:
-                    docstring_end = sig_line_end - 1
-
-                for arg in args_in_signature:
-                    if arg not in args_docstring_dict and arg not in ModelArgs.__dict__:
-                        args_docstring_dict[arg] = {
-                            "type": "<fill_type>",
-                            "optional": False,
-                            "shape": None,
-                            "description": "\n    <fill_docstring>",
-                            "default": None,
-                            "additional_info": None,
-                        }
-
-                new_docstring = ""
-                if len(args_docstring_dict) > 0 or remaining_docstring:
-                    new_docstring += 'r"""\n'
-                    for arg in args_docstring_dict:
-                        # shape = args_docstring_dict[arg]["shape"] if args_docstring_dict[arg]["shape"] else ""
-                        # optional_string = ", *optional*" if args_docstring_dict[arg]["optional"] else ""
-                        # default_string = (
-                        #     f",{args_docstring_dict[arg]['default']}" if args_docstring_dict[arg]["default"] else ""
-                        # )
-                        additional_info = args_docstring_dict[arg]["additional_info"]
-                        additional_info = additional_info if additional_info else ""
-                        custom_arg_description = args_docstring_dict[arg]["description"]
-                        if custom_arg_description.endswith('"""'):
-                            custom_arg_description = "\n".join(custom_arg_description.split("\n")[:-1])
-                        new_docstring += (
-                            f"{arg} ({args_docstring_dict[arg]['type']}{additional_info}):{custom_arg_description}\n"
-                        )
-                    close_docstring = True
-                    if remaining_docstring:
-                        # remaining_docstring = remaining_docstring.strip("\n")
-                        if remaining_docstring.endswith('"""'):
-                            close_docstring = False
-
-                        end_docstring = "\n" if close_docstring else ""
-                        new_docstring += f"{set_min_indent(remaining_docstring, 0)}{end_docstring}"
-                    if close_docstring:
-                        new_docstring += '"""'
-                    new_docstring = set_min_indent(new_docstring, 8)
-
-            elif "class " in lines[current_line_end]:
-                # find the __init__ method:
-                init_method_line = current_line_end
-                found_init_method = False
-                while init_method_line < len(lines) - 1 and not found_init_method:
-                    init_method_line += 1
-                    if "    def __init__" in lines[init_method_line]:
-                        found_init_method = True
-                    elif lines[init_method_line].startswith("class "):
-                        break
-                if found_init_method:
-                    init_method_sig_line_end = _find_sig_line(lines, init_method_line)
-                    init_method_content = "".join(lines[init_method_line:init_method_sig_line_end])
-                    # find all the arguments in the signature, they are all the words that precede a colon in the signature
-                    args_in_signature = re.findall(
-                        r"(?:[,\(]\s*)(\w+)\s*(?::\s*[^=)]+)?(?:\s*=\s*[^,)]+)?",
-                        init_method_content,
-                    )
-                    args_in_signature.remove("self")
-                    is_docstring_present = '"""' in lines[init_method_sig_line_end]
-                    init_method_docstring_end = init_method_sig_line_end
-                    if is_docstring_present:
-                        # find the end of the docstring:
-                        if not lines[init_method_sig_line_end].count('"""') >= 2:
-                            init_method_docstring_end += 1
-                            while '"""' not in lines[init_method_docstring_end]:
-                                init_method_docstring_end += 1
-                        docstring_content = lines[init_method_sig_line_end : init_method_docstring_end + 1]
-                        parsed_docstring, remaining_docstring = parse_docstring("\n".join(docstring_content))
-                        args_docstring_dict.update(parsed_docstring)
-                    else:
-                        init_method_docstring_end = init_method_sig_line_end - 1
-
-                    for arg in args_in_signature:
-                        if arg not in args_docstring_dict and arg not in ModelArgs.__dict__:
-                            args_docstring_dict[arg] = {
-                                "type": "<fill_type>",
-                                "optional": False,
-                                "shape": None,
-                                "description": "\n<fill_docstring>",
-                                "default": None,
-                                "additional_info": None,
-                            }
-
-                    new_docstring = ""
-                    if len(args_docstring_dict) > 0 or remaining_docstring:
-                        new_docstring += 'r"""\n'
-                        for arg in args_docstring_dict:
-                            # shape = args_docstring_dict[arg]["shape"] if args_docstring_dict[arg]["shape"] else ""
-                            # optional_string = ", *optional*" if args_docstring_dict[arg]["optional"] else ""
-                            # default_string = (
-                            #     f",{args_docstring_dict[arg]['default']}"
-                            #     if args_docstring_dict[arg]["default"]
-                            #     else ""
-                            # )
-                            additional_info = args_docstring_dict[arg]["additional_info"]
-                            additional_info = additional_info if additional_info else ""
-                            custom_arg_description = args_docstring_dict[arg]["description"]
-                            if custom_arg_description.endswith('"""'):
-                                custom_arg_description = "\n".join(custom_arg_description.split("\n")[:-1])
-                            new_docstring += f"{arg} ({args_docstring_dict[arg]['type']}{additional_info}):{custom_arg_description}\n"
-                        close_docstring = True
-                        if remaining_docstring:
-                            if remaining_docstring.endswith('"""'):
-                                close_docstring = False
-                            end_docstring = "\n" if close_docstring else ""
-                            new_docstring += f"{set_min_indent(remaining_docstring, 0)}{end_docstring}"
-                        if close_docstring:
-                            new_docstring += '"""'
-                        new_docstring = set_min_indent(new_docstring, 8)
-
-            if index >= len(line_ends_candidates) or line_ends_candidates[index] > current_line_end:
-                if "    def" in lines[current_line_end]:
-                    content_base_file_new_lines += lines[current_line_end:sig_line_end]
-                    if new_docstring != "":
-                        content_base_file_new_lines += new_docstring.split("\n")
-                    if index < len(line_ends_candidates):
-                        content_base_file_new_lines += lines[docstring_end + 1 : line_ends_candidates[index]]
-                    else:
-                        content_base_file_new_lines += lines[docstring_end + 1 :]
-                elif found_init_method:
-                    content_base_file_new_lines += lines[current_line_end:init_method_sig_line_end]
-                    if new_docstring != "":
-                        content_base_file_new_lines += new_docstring.split("\n")
-                    if index < len(line_ends_candidates):
-                        content_base_file_new_lines += lines[
-                            init_method_docstring_end + 1 : line_ends_candidates[index]
-                        ]
-                    else:
-                        content_base_file_new_lines += lines[init_method_docstring_end + 1 :]
-                elif index < len(line_ends_candidates):
-                    content_base_file_new_lines += lines[current_line_end : line_ends_candidates[index]]
-                else:
-                    content_base_file_new_lines += lines[current_line_end:]
-                if index < len(line_ends_candidates):
-                    current_line_end = line_ends_candidates[index]
-                    current_line_start = line_starts_candidates[index]
-            index += 1
-
-        content_base_file_new = "\n".join(content_base_file_new_lines)
-        # write the new content to the file
-        with open(candidate_file, "w", encoding="utf-8") as f:
-            f.write(content_base_file_new)
-
-
-# def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
-#     """
-#     Check docstrings of all public objects that are decorated with `@auto_docstrings`.
-
-#     Args:
-#         overwrite (`bool`, *optional*, defaults to `False`):
-#             Whether to fix inconsistencies or not.
-#         check_all (`bool`, *optional*, defaults to `False`):
-#             Whether to check all files.
-#     """
-#     module_diff_files = None
-#     if not check_all:
-#         module_diff_files = set()
-#         repo = Repo(PATH_TO_REPO)
-#         # Diff from index to unstaged files
-#         for modified_file_diff in repo.index.diff(None):
-#             if modified_file_diff.a_path.startswith("src/transformers"):
-#                 module_diff_files.add(modified_file_diff.a_path)
-#         # Diff from index to `main`
-#         for modified_file_diff in repo.index.diff(repo.refs.main.commit):
-#             if modified_file_diff.a_path.startswith("src/transformers"):
-#                 module_diff_files.add(modified_file_diff.a_path)
-#         # quick escape route: if there are no module files in the diff, skip this check
-#         if len(module_diff_files) == 0:
-#             return
-#         print("    Checking docstrings in the following files:" + "\n    - " + "\n    - ".join(module_diff_files))
-
-#     failures = []
-#     hard_failures = []
-#     to_clean = []
-#     obj_with_auto_docstring = []
-#     for name in dir(transformers):
-#         # Skip objects that are private or not documented.
-#         if name.startswith("_") or ignore_undocumented(name) or name in OBJECTS_TO_IGNORE:
-#             continue
-
-#         obj = getattr(transformers, name)
-#         if not callable(obj) or not isinstance(obj, type) or getattr(obj, "__doc__", None) is None:
-#             continue
-
-#         # If we are checking against the diff, we skip objects that are not part of the diff.
-#         if module_diff_files is not None:
-#             object_file = find_source_file(getattr(transformers, name))
-#             object_file_relative_path = "src/" + str(object_file).split("/src/")[1]
-#             if object_file_relative_path not in module_diff_files:
-#                 continue
-
-#         try:
-#             # Get source lines and line number where the definition starts
-#             source_lines, starting_line_num = inspect.getsourcelines(obj)
-
-#             if "@auto_docstring" in source_lines[0]:
-#                 obj_with_auto_docstring.append(name)
-#         except (TypeError, OSError) as e:
-#             # TypeError: happens for built-ins
-#             # OSError: happens if source code is not available (e.g., REPL, compiled)
-#             print(f"Could not get source for {obj}: {e}")
-#     print("obj_with_auto_docstring", obj_with_auto_docstring)
+            lines = f.read().split("\n")
+        line_starts_candidates, line_ends_candidates = get_auto_docstring_candidate_lines(lines)
+        update_file_with_new_docstrings(candidate_file, lines, line_starts_candidates, line_ends_candidates)
 
 
 def check_docstrings(overwrite: bool = False, check_all: bool = False):

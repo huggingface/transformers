@@ -1011,18 +1011,20 @@ def _get_parameter_info(param_name, documented_params, source_args_dict, param_t
         optional = documented_params[param_name]["optional"]
         shape = documented_params[param_name]["shape"]
         shape_string = shape if shape else ""
+        additional_info = documented_params[param_name]["additional_info"] or ""
         description = f"{documented_params[param_name]['description']}\n"
     elif param_name in source_args_dict:
         # Parameter is documented in ModelArgs or ImageProcessorArgs
         shape = source_args_dict[param_name]["shape"]
         shape_string = " " + shape if shape else ""
         description = source_args_dict[param_name]["description"]
+        additional_info = None
     else:
         # Parameter is not documented
         is_documented = False
     optional_string = r", *optional*" if optional else ""
 
-    return param_type, optional_string, shape_string, description, is_documented
+    return param_type, optional_string, shape_string, additional_info, description, is_documented
 
 
 def _process_regular_parameters(sig, func, class_name, documented_params, indent_level, undocumented_parameters):
@@ -1058,7 +1060,7 @@ def _process_regular_parameters(sig, func, class_name, documented_params, indent
         if param.default != inspect._empty and param.default is not None:
             param_default = f", defaults to `{str(param.default)}`"
 
-        param_type, optional_string, shape_string, description, is_documented = _get_parameter_info(
+        param_type, optional_string, shape_string, additional_info, description, is_documented = _get_parameter_info(
             param_name, documented_params, source_args_dict, param_type, optional
         )
 
@@ -1067,10 +1069,16 @@ def _process_regular_parameters(sig, func, class_name, documented_params, indent
             if param_type == "":
                 if False:
                     print(f"🚨 {param_name} for {func.__qualname__} in file {func.__code__.co_filename} has no type")
-
+            param_type = param_type if "`" in param_type else f"`{param_type}`"
             # Format the parameter docstring
+            if additional_info:
+                param_docstring = f"{param_name} ({param_type}{additional_info}):{description}"
+            else:
+                param_docstring = (
+                    f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}"
+                )
             docstring += set_min_indent(
-                f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}",
+                param_docstring,
                 indent_level + 8,
             )
         else:
@@ -1237,8 +1245,8 @@ def _process_kwargs_parameters(
                     param_default = str(getattr(parent_class, param_name, ""))
                     param_default = f", defaults to `{param_default}`" if param_default != "" else ""
 
-                param_type, optional_string, shape_string, description, is_documented = _get_parameter_info(
-                    param_name, documented_kwargs, source_args_dict, param_type, optional
+                param_type, optional_string, shape_string, additional_info, description, is_documented = (
+                    _get_parameter_info(param_name, documented_kwargs, source_args_dict, param_type, optional)
                 )
 
                 if is_documented:
@@ -1247,12 +1255,18 @@ def _process_kwargs_parameters(
                         print(
                             f"🚨 {param_name} for {kwarg_param.annotation.__args__[0].__qualname__} in file {func.__code__.co_filename} has no type"
                         )
-
+                    param_type = param_type if "`" in param_type else f"`{param_type}`"
                     # Format the parameter docstring
-                    docstring += set_min_indent(
-                        f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}",
-                        indent_level + 8,
-                    )
+                    if additional_info:
+                        docstring += set_min_indent(
+                            f"{param_name} ({param_type}{additional_info}):{description}",
+                            indent_level + 8,
+                        )
+                    else:
+                        docstring += set_min_indent(
+                            f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}",
+                            indent_level + 8,
+                        )
                 else:
                     undocumented_parameters.append(
                         f"🚨 `{param_name}` is part of {kwarg_param.annotation.__args__[0].__qualname__}, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
