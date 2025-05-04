@@ -21,7 +21,7 @@ import random
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -380,7 +380,7 @@ class DinoDetrEncoderOutput(ModelOutput):
             used to compute the weighted average in the cross-attention heads.
     """
 
-    output: torch.FloatTensor = None
+    output: torch.FloatTensor
     intermediate_output: Optional[torch.FloatTensor] = None
     intermediate_ref: Optional[torch.FloatTensor] = None
     encoder_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -416,9 +416,9 @@ class DinoDetrDecoderOutput(ModelOutput):
             used to compute the weighted average in the cross-attention heads.
     """
 
-    intermediate: List[torch.FloatTensor] = None
-    ref_points: List[torch.FloatTensor] = None
-    attentions: List[torch.FloatTensor] = None
+    intermediate: List[torch.FloatTensor]
+    ref_points: Optional[List[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -450,12 +450,12 @@ class DinoDetrDeformableTransformerOutput(ModelOutput):
             used to compute the weighted average in the cross-attention heads.
     """
 
-    hidden_states: torch.FloatTensor = None
-    reference_points: torch.FloatTensor = None
-    hidden_states_encoder: torch.FloatTensor = None
-    reference_points_encoder: torch.FloatTensor = None
-    init_box_proposal: torch.FloatTensor = None
-    encoder_states: torch.FloatTensor = None
+    hidden_states: torch.FloatTensor
+    reference_points: Optional[torch.FloatTensor] = None
+    hidden_states_encoder: Optional[torch.FloatTensor] = None
+    reference_points_encoder: Optional[torch.FloatTensor] = None
+    init_box_proposal: Optional[torch.FloatTensor] = None
+    encoder_states: Optional[torch.FloatTensor] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -504,15 +504,15 @@ class DinoDetrModelOutput(ModelOutput):
             Logits of predicted bounding boxes coordinates in the first stage.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: list[torch.FloatTensor] = None
-    references: list[torch.FloatTensor] = None
-    encoder_last_hidden_state: torch.FloatTensor = None
-    encoder_reference: torch.FloatTensor = None
-    init_box_proposal: torch.FloatTensor = None
-    denoising_meta: dict = None
-    encoder_hidden_states: Tuple[torch.FloatTensor] = None
-    decoder_hidden_states: Tuple[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor
+    hidden_states: Optional[list[torch.FloatTensor]] = None
+    references: Optional[list[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_reference: Optional[torch.FloatTensor] = None
+    init_box_proposal: Optional[torch.FloatTensor] = None
+    denoising_meta: Optional[dict] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -578,30 +578,30 @@ class DinoDetrObjectDetectionOutput(ModelOutput):
             Logits of predicted bounding boxes coordinates in the first stage.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    reference: torch.FloatTensor = None
-    encoder_last_hidden_state: torch.FloatTensor = None
-    encoder_reference: torch.FloatTensor = None
+    last_hidden_state: torch.FloatTensor
+    reference: Optional[torch.FloatTensor] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_reference: Optional[torch.FloatTensor] = None
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
-    logits: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
     auxiliary_outputs: Optional[List[Dict]] = None
-    denoising_meta: dict = None
-    encoder_hidden_states: Tuple[torch.FloatTensor] = None
-    decoder_hidden_states: Tuple[torch.FloatTensor] = None
+    denoising_meta: Optional[dict] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-def _get_clones(module, N, layer_share=False):
+def _get_clones(module: torch.nn.Module, N: int, layer_share: bool = False):
     if layer_share:
         return nn.ModuleList([module for i in range(N)])
     else:
         return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 
-def inverse_sigmoid(x, eps=1e-3):
+def inverse_sigmoid(x: torch.FloatTensor, eps: float = 1e-3):
     x = x.clamp(min=0, max=1)
     x1 = x.clamp(min=eps)
     x2 = (1 - x).clamp(min=eps)
@@ -609,10 +609,16 @@ def inverse_sigmoid(x, eps=1e-3):
 
 
 class DinoDetrRandomBoxPerturber:
-    def __init__(self, x_noise_scale=0.2, y_noise_scale=0.2, w_noise_scale=0.2, h_noise_scale=0.2) -> None:
+    def __init__(
+        self,
+        x_noise_scale: float = 0.2,
+        y_noise_scale: float = 0.2,
+        w_noise_scale: float = 0.2,
+        h_noise_scale: float = 0.2,
+    ) -> None:
         self.noise_scale = torch.Tensor([x_noise_scale, y_noise_scale, w_noise_scale, h_noise_scale])
 
-    def __call__(self, refanchors: Tensor) -> Tensor:
+    def __call__(self, refanchors: torch.FloatTensor) -> torch.FloatTensor:
         nq, bs, query_dim = refanchors.shape
         device = refanchors.device
 
@@ -664,8 +670,6 @@ class DinoDetrFrozenBatchNorm2d(nn.Module):
         )
 
     def forward(self, x):
-        # move reshapes to the beginning
-        # to make it user-friendly
         weight = self.weight.reshape(1, -1, 1, 1)
         bias = self.bias.reshape(1, -1, 1, 1)
         running_var = self.running_var.reshape(1, -1, 1, 1)
@@ -800,7 +804,15 @@ class DinoDetrConvModel(nn.Module):
         return out, pos
 
 
-def prepare_for_cdn(dn_args, training, num_queries, num_classes, d_model, label_enc, device):
+def prepare_for_cdn(
+    dn_args: torch.FloatTensor,
+    training: bool,
+    num_queries: int,
+    num_classes: int,
+    d_model: int,
+    label_enc: Callable,
+    device: torch.device,
+):
     """
     A major difference of DINO from DN-DETR is that the author process pattern embedding pattern embedding in its detector
     forward function and use learnable tgt embedding, so we change this function a little bit.
@@ -814,7 +826,6 @@ def prepare_for_cdn(dn_args, training, num_queries, num_classes, d_model, label_
     """
     if training:
         targets, dn_number, label_noise_ratio, box_noise_scale = dn_args
-        # positive and negative dn queries
         dn_number = dn_number * 2
         known = [(torch.ones_like(t["class_labels"])).to(device) for t in targets]
         batch_size = len(known)
@@ -845,8 +856,8 @@ def prepare_for_cdn(dn_args, training, num_queries, num_classes, d_model, label_
 
         if label_noise_ratio > 0:
             p = torch.rand_like(known_labels_expaned.float())
-            chosen_indice = torch.nonzero(p < (label_noise_ratio * 0.5)).view(-1)  # half of bbox prob
-            new_label = torch.randint_like(chosen_indice, 0, num_classes)  # randomly put a new one here
+            chosen_indice = torch.nonzero(p < (label_noise_ratio * 0.5)).view(-1)
+            new_label = torch.randint_like(chosen_indice, 0, num_classes)
             known_labels_expaned.scatter_(0, chosen_indice, new_label)
         single_pad = int(max(known_num))
 
@@ -885,7 +896,7 @@ def prepare_for_cdn(dn_args, training, num_queries, num_classes, d_model, label_
 
         map_known_indice = torch.tensor([]).to(device)
         if len(known_num):
-            map_known_indice = torch.cat([torch.tensor(range(num)) for num in known_num])  # [1,2, 1,2,3]
+            map_known_indice = torch.cat([torch.tensor(range(num)) for num in known_num])
             map_known_indice = torch.cat([map_known_indice + single_pad * i for i in range(2 * dn_number)]).long()
         if len(known_bid):
             input_query_label[(known_bid.long(), map_known_indice)] = input_label_embed
@@ -893,9 +904,7 @@ def prepare_for_cdn(dn_args, training, num_queries, num_classes, d_model, label_
 
         tgt_size = pad_size + num_queries
         attn_mask = torch.ones(tgt_size, tgt_size).to(device) < 0
-        # match query cannot see the reconstruct
         attn_mask[pad_size:, :pad_size] = True
-        # reconstruct cannot see each other
         for i in range(dn_number):
             if i == 0:
                 attn_mask[
@@ -924,7 +933,13 @@ def prepare_for_cdn(dn_args, training, num_queries, num_classes, d_model, label_
     return input_query_label, input_query_bbox, attn_mask, dn_meta
 
 
-def dn_post_process(outputs_class, outputs_coord, dn_meta, aux_loss, _set_aux_loss):
+def dn_post_process(
+    outputs_class: torch.FloatTensor,
+    outputs_coord: torch.FloatTensor,
+    dn_meta: Dict,
+    aux_loss: bool,
+    _set_aux_loss: Callable,
+):
     """
     post process of dn after output from the transformer
     put the dn part in the dn_meta
@@ -952,11 +967,11 @@ class DinoDetrPositionEmbeddingSineHW(nn.Module):
 
     def __init__(
         self,
-        num_pos_feats=64,
-        temperatureH=10000,
-        temperatureW=10000,
-        normalize=False,
-        scale=None,
+        num_pos_feats: int = 64,
+        temperatureH: int = 10000,
+        temperatureW: int = 10000,
+        normalize: bool = False,
+        scale: Optional[float] = None,
     ):
         super().__init__()
         self.num_pos_feats = num_pos_feats
@@ -969,7 +984,7 @@ class DinoDetrPositionEmbeddingSineHW(nn.Module):
             scale = 2 * math.pi
         self.scale = scale
 
-    def forward(self, pixel_values, pixel_mask):
+    def forward(self, pixel_values: torch.FloatTensor, pixel_mask: torch.LongTensor):
         y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
         x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
 
@@ -998,7 +1013,7 @@ class DinoDetrPositionEmbeddingLearned(nn.Module):
     Absolute pos embedding, learned.
     """
 
-    def __init__(self, num_pos_feats=256):
+    def __init__(self, num_pos_feats: int = 256):
         super().__init__()
         self.row_embed = nn.Embedding(50, num_pos_feats)
         self.col_embed = nn.Embedding(50, num_pos_feats)
@@ -1008,7 +1023,7 @@ class DinoDetrPositionEmbeddingLearned(nn.Module):
         nn.init.uniform_(self.row_embed.weight)
         nn.init.uniform_(self.col_embed.weight)
 
-    def forward(self, pixel_values, pixel_mask):
+    def forward(self, pixel_values: torch.FloatTensor, pixel_mask: torch.LongTensor):
         height, width = pixel_values.shape[-2:]
         width_indices = torch.arange(width, device=pixel_values.device)
         height_indices = torch.arange(height, device=pixel_values.device)
@@ -1046,7 +1061,7 @@ def build_position_encoding(config):
     return position_embeddings
 
 
-def _get_activation_fn(activation, d_model=256, batch_dim=0):
+def _get_activation_fn(activation: str):
     """Return an activation function given a string"""
     if activation == "relu":
         return F.relu
@@ -1062,9 +1077,7 @@ def _get_activation_fn(activation, d_model=256, batch_dim=0):
     raise RuntimeError(f"activation should be relu/gelu/glu/prelu/selu, not {activation}.")
 
 
-def gen_sineembed_for_position(reference_points, d_model):
-    # n_query, bs, _ = reference_points.size()
-    # sineembed_tensor = torch.zeros(n_query, bs, 256)
+def gen_sineembed_for_position(reference_points: torch.FloatTensor, d_model: int):
     scale = 2 * math.pi
     dim_t = torch.arange(d_model / 2, dtype=torch.float32, device=reference_points.device)
     dim_t = 10000 ** (2 * (dim_t // 2) / (d_model / 2))
@@ -1091,7 +1104,12 @@ def gen_sineembed_for_position(reference_points, d_model):
     return pos
 
 
-def gen_encoder_output_proposals(memory: Tensor, memory_padding_mask: Tensor, spatial_shapes: Tensor, learnedwh=None):
+def gen_encoder_output_proposals(
+    memory: torch.FloatTensor,
+    memory_padding_mask: torch.LongTensor,
+    spatial_shapes: torch.FloatTensor,
+    learned_wh=torch.FloatTensor,
+):
     r"""
     Input:
         - memory: bs, \sum{hw}, d_model
@@ -1121,8 +1139,8 @@ def gen_encoder_output_proposals(memory: Tensor, memory_padding_mask: Tensor, sp
         scale = torch.cat([valid_width.unsqueeze(-1), valid_height.unsqueeze(-1)], 1).view(batch_size, 1, 1, 2)
         grid = (grid.unsqueeze(0).expand(batch_size, -1, -1, -1) + 0.5) / scale
 
-        if learnedwh is not None:
-            wh = torch.ones_like(grid) * learnedwh.sigmoid() * (2.0**level)
+        if learned_wh is not None:
+            wh = torch.ones_like(grid) * learned_wh.sigmoid() * (2.0**level)
         else:
             wh = torch.ones_like(grid) * 0.05 * (2.0**level)
 
@@ -1291,33 +1309,21 @@ class DinoDetrEncoderLayer(nn.Module):
 
 class DinoDetrDecoderLayer(nn.Module):
     def __init__(self, config: DinoDetrConfig):
-        """
-        d_model=256,
-        d_ffn=1024,
-        dropout=0.1,
-        activation="relu",
-        num_feature_levels=4,
-        num_heads=8,
-        n_points=4,
-        key_aware_type=None,
-        decoder_sa_type="ca",
-        module_seq=["sa", "ca", "ffn"],
-        """
         super().__init__()
         self.module_seq = config.module_seq
-        # cross attention
+        # Cross attention
         self.cross_attn = DinoDetrMultiscaleDeformableAttention(config, config.num_heads, config.decoder_n_points)
         self.dropout1 = nn.Dropout(config.dropout)
         self.norm1 = nn.LayerNorm(config.d_model)
 
-        # self attention
+        # Self attention
         self.self_attn = nn.MultiheadAttention(config.d_model, config.num_heads, dropout=config.dropout)
         self.dropout2 = nn.Dropout(config.dropout)
         self.norm2 = nn.LayerNorm(config.d_model)
 
-        # ffn
+        # Fully Connected Layer
         self.linear1 = nn.Linear(config.d_model, config.d_ffn)
-        self.activation = _get_activation_fn(config.activation, d_model=config.d_ffn, batch_dim=1)
+        self.activation = _get_activation_fn(config.activation)
         self.dropout3 = nn.Dropout(config.dropout)
         self.linear2 = nn.Linear(config.d_ffn, config.d_model)
         self.dropout4 = nn.Dropout(config.dropout)
@@ -1336,10 +1342,10 @@ class DinoDetrDecoderLayer(nn.Module):
         self.norm2 = None
 
     @staticmethod
-    def with_pos_embed(tensor, pos):
+    def with_pos_embed(tensor: torch.FloatTensor, pos: torch.FloatTensor):
         return tensor if pos is None else tensor + pos
 
-    def forward_ffn(self, pixel_values):
+    def forward_ffn(self, pixel_values: torch.FloatTensor):
         transformed_values = self.linear2(self.dropout3(self.activation(self.linear1(pixel_values))))
         output = pixel_values + self.dropout4(transformed_values)
         output = self.norm3(output)
@@ -1347,20 +1353,16 @@ class DinoDetrDecoderLayer(nn.Module):
 
     def forward_sa(
         self,
-        # for queries
-        queries: Optional[Tensor],  # nq, bs, d_model
-        query_position_embeddings: Optional[Tensor] = None,  # pos for query. MLP(Sine(pos))
-        query_reference_points: Optional[Tensor] = None,  # nq, bs, 4
-        # for memory
-        memory: Optional[Tensor] = None,  # hw, bs, d_model
-        memory_key_padding_mask: Optional[Tensor] = None,
-        memory_level_start_index: Optional[Tensor] = None,  # num_levels
-        memory_spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
-        memory_spatial_shapes_list: Optional[Tensor] = None,  # bs, num_levels, 2
-        # sa
-        self_attn_mask: Optional[Tensor] = None,  # mask used for self-attention
+        queries: torch.FloatTensor,
+        query_position_embeddings: torch.FloatTensor,
+        query_reference_points: torch.FloatTensor,
+        memory: torch.FloatTensor,
+        memory_key_padding_mask: torch.LongTensor,
+        memory_level_start_index: torch.FloatTensor,
+        memory_spatial_shapes: torch.FloatTensor,
+        memory_spatial_shapes_list: List[torch.FloatTensor],
+        self_attn_mask: torch.LongTensor,
     ):
-        # self attention
         attn_weights = None
         if self.self_attn is not None:
             if self.decoder_sa_type == "sa":
@@ -1394,18 +1396,15 @@ class DinoDetrDecoderLayer(nn.Module):
 
     def forward_ca(
         self,
-        # for queries
-        queries: Optional[Tensor],  # nq, bs, d_model
-        query_position_embeddings: Optional[Tensor] = None,  # pos for query. MLP(Sine(pos))
-        query_reference_points: Optional[Tensor] = None,  # nq, bs, 4
-        # for memory
-        memory: Optional[Tensor] = None,  # hw, bs, d_model
-        memory_key_padding_mask: Optional[Tensor] = None,
-        memory_level_start_index: Optional[Tensor] = None,  # num_levels
-        memory_spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
-        memory_spatial_shapes_list: Optional[Tensor] = None,  # bs, num_levels, 2
+        queries: torch.FloatTensor,
+        query_position_embeddings: torch.FloatTensor,
+        query_reference_points: torch.FloatTensor,
+        memory: torch.FloatTensor,
+        memory_key_padding_mask: torch.LongTensor,
+        memory_level_start_index: torch.FloatTensor,
+        memory_spatial_shapes: torch.FloatTensor,
+        memory_spatial_shapes_list: List[torch.FloatTensor],
     ):
-        # cross attention
         if self.key_aware_type is not None:
             if self.key_aware_type == "mean":
                 queries = queries + memory.mean(0, keepdim=True)
@@ -1430,18 +1429,15 @@ class DinoDetrDecoderLayer(nn.Module):
 
     def forward(
         self,
-        # for queries
-        queries: Optional[Tensor],  # nq, bs, d_model
-        query_position_embeddings: Optional[Tensor] = None,  # pos for query. MLP(Sine(pos))
-        query_reference_points: Optional[Tensor] = None,  # nq, bs, 4
-        # for memory
-        memory: Optional[Tensor] = None,  # hw, bs, d_model
-        memory_key_padding_mask: Optional[Tensor] = None,
-        memory_level_start_index: Optional[Tensor] = None,  # num_levels
-        memory_spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
-        memory_spatial_shapes_list: Optional[Tensor] = None,  # bs, num_levels, 2
-        # sa
-        self_attn_mask: Optional[Tensor] = None,  # mask used for self-attention
+        queries: torch.FloatTensor,
+        query_position_embeddings: torch.FloatTensor,
+        query_reference_points: torch.FloatTensor,
+        memory: torch.FloatTensor,
+        memory_key_padding_mask: torch.LongTensor,
+        memory_level_start_index: torch.FloatTensor,
+        memory_spatial_shapes: torch.FloatTensor,
+        memory_spatial_shapes_list: List[torch.FloatTensor],
+        self_attn_mask: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
     ):
         attn_weights_total = ()
@@ -1469,6 +1465,7 @@ class DinoDetrDecoderLayer(nn.Module):
                     memory_key_padding_mask=memory_key_padding_mask,
                     memory_level_start_index=memory_level_start_index,
                     memory_spatial_shapes=memory_spatial_shapes,
+                    memory_spatial_shapes_list=memory_spatial_shapes_list,
                     self_attn_mask=self_attn_mask,
                 )
                 attn_weights_total += (attn_weights,)
@@ -1505,19 +1502,13 @@ class DinoDetrMLPPredictionHead(nn.Module):
 
 
 class DinoDetrEncoder(DinoDetrPreTrainedModel):
-    def __init__(self, encoder_layer, norm, config):
-        """
-        encoder_layer,
-        num_encoder_layers,
-        norm=None,
-        d_model=256,
-        num_queries=300,
-        enc_layer_share=False,
-        enc_layer_dropout_prob=None,
-        two_stage_type="no",  # ['no', 'standard', 'early', 'combine', 'enceachlayer', 'enclayer1']
-        """
+    def __init__(
+        self,
+        encoder_layer: DinoDetrEncoderLayer,
+        norm: torch.nn.Module,
+        config: DinoDetrConfig,
+    ):
         super().__init__(config)
-        # prepare layers
         if config.num_encoder_layers > 0:
             self.layers = _get_clones(
                 encoder_layer,
@@ -1550,7 +1541,11 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         self.post_init()
 
     @staticmethod
-    def get_reference_points(spatial_shapes, valid_ratios, device):
+    def get_reference_points(
+        spatial_shapes: torch.FloatTensor,
+        valid_ratios: torch.FloatTensor,
+        device: torch.device,
+    ):
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes):
             ref_y, ref_x = torch.meshgrid(
@@ -1567,15 +1562,15 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
 
     def forward(
         self,
-        input_embeddings: Tensor,
-        position_embeddings: Tensor,
-        spatial_shapes: Tensor,
-        spatial_shapes_list: List,
-        level_start_index: Tensor,
-        valid_ratios: Tensor,
-        key_padding_mask: Tensor,
-        ref_token_index: Optional[Tensor] = None,
-        ref_token_coord: Optional[Tensor] = None,
+        input_embeddings: torch.FloatTensor,
+        position_embeddings: torch.FloatTensor,
+        spatial_shapes: torch.FloatTensor,
+        spatial_shapes_list: List[Tuple[int, int]],
+        level_start_index: torch.FloatTensor,
+        valid_ratios: torch.FloatTensor,
+        key_padding_mask: torch.LongTensor,
+        ref_token_index: Optional[torch.FloatTensor] = None,
+        ref_token_coord: Optional[torch.FloatTensor] = None,
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
     ):
@@ -1600,7 +1595,7 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         output = input_embeddings
-        # preparation and reshape
+
         if self.num_encoder_layers > 0:
             reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=input_embeddings.device)
 
@@ -1611,10 +1606,9 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
             intermediate_output.append(out_i)
             intermediate_ref.append(ref_token_coord)
         encoder_states = ()
-        # main process
+
         for layer_id, layer in enumerate(self.layers):
             encoder_states = encoder_states + (output,)
-            # main process
             dropflag = False
             if self.enc_layer_dropout_prob is not None:
                 prob = random.random()
@@ -1646,15 +1640,13 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
                 )
                 output_memory = self.enc_norm[layer_id](self.enc_proj[layer_id](output_memory))
 
-                # gather boxes
                 topk = self.num_queries
                 enc_outputs_class = self.class_embed[layer_id](output_memory)
-                ref_token_index = torch.topk(enc_outputs_class.max(-1)[0], topk, dim=1)[1]  # bs, nq
+                ref_token_index = torch.topk(enc_outputs_class.max(-1)[0], topk, dim=1)[1]
                 ref_token_coord = torch.gather(output_proposals, 1, ref_token_index.unsqueeze(-1).repeat(1, 1, 4))
 
                 output = output_memory
 
-            # aux loss
             if (layer_id != self.num_encoder_layers - 1) and ref_token_index is not None:
                 out_i = torch.gather(output, 1, ref_token_index.unsqueeze(-1).repeat(1, 1, self.d_model))
                 intermediate_output.append(out_i)
@@ -1665,7 +1657,7 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
             output = self.norm(output)
 
         if ref_token_index is not None:
-            intermediate_output = torch.stack(intermediate_output)  # n_enc/n_enc-1, bs, \sum{hw}, d_model
+            intermediate_output = torch.stack(intermediate_output)
             intermediate_ref = torch.stack(intermediate_ref)
         else:
             intermediate_output = intermediate_ref = None
@@ -1683,29 +1675,22 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
                 # if v is not None
             )
         return DinoDetrEncoderOutput(
-            output=output,  # last layer
-            intermediate_output=intermediate_output,  # all layers
-            intermediate_ref=intermediate_ref,  # all layers
-            encoder_states=encoder_states,  # all layers
-            attentions=all_self_attns,  # all layers
+            output=output,
+            intermediate_output=intermediate_output,
+            intermediate_ref=intermediate_ref,
+            encoder_states=encoder_states,
+            attentions=all_self_attns,
         )
 
 
 class DinoDetrDecoder(DinoDetrPreTrainedModel):
-    def __init__(self, decoder_layer, norm, decoder_query_perturber, config):
-        """
-        decoder_layer,
-        num_decoder_layers,
-        norm=None,
-        d_model=256,
-        query_dim=4,
-        num_feature_levels=1,
-        decoder_query_perturber=None,
-        dec_layer_number=None,  # number of queries each layer in decoder
-        dec_layer_share=False,
-        dec_layer_dropout_prob=None,
-        use_detached_boxes_dec_out=False,
-        """
+    def __init__(
+        self,
+        decoder_layer: DinoDetrDecoderLayer,
+        norm: torch.nn.Module,
+        decoder_query_perturber: Callable[[torch.Tensor], torch.Tensor],
+        config: DinoDetrConfig,
+    ):
         super().__init__(config)
         if config.num_decoder_layers > 0:
             self.layers = _get_clones(
@@ -1736,16 +1721,15 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
 
     def forward(
         self,
-        queries,
-        memory,
-        self_attn_mask: Optional[Tensor] = None,
-        memory_key_padding_mask: Optional[Tensor] = None,
-        refpoints_unsigmoid: Optional[Tensor] = None,  # num_queries, bs, 2
-        # for memory
-        level_start_index: Optional[Tensor] = None,  # num_levels
-        spatial_shapes: Optional[Tensor] = None,  # bs, num_levels, 2
-        spatial_shapes_list: Optional[List] = None,
-        valid_ratios: Optional[Tensor] = None,
+        queries: torch.FloatTensor,
+        memory: torch.FloatTensor,
+        refpoints_unsigmoid: torch.FloatTensor,
+        spatial_shapes_list: List[Tuple[int, int]],
+        self_attn_mask: Optional[torch.LongTensor] = None,
+        memory_key_padding_mask: Optional[torch.LongTensor] = None,
+        level_start_index: Optional[torch.FloatTensor] = None,
+        spatial_shapes: Optional[torch.FloatTensor] = None,
+        valid_ratios: Optional[torch.FloatTensor] = None,
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
     ):
@@ -1947,7 +1931,7 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         if self.two_stage_learn_wh:
             nn.init.constant_(self.two_stage_wh_embedding.weight, math.log(0.05 / (1 - 0.05)))
 
-    def get_valid_ratio(self, mask):
+    def get_valid_ratio(self, mask: torch.FloatTensor):
         _, height, width = mask.shape
         valid_H = torch.sum(mask[:, :, 0], 1)
         valid_W = torch.sum(mask[:, 0, :], 1)
@@ -1956,7 +1940,7 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
         valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
         return valid_ratio
 
-    def init_ref_points(self, use_num_queries):
+    def init_ref_points(self, use_num_queries: int):
         self.content_query_reference_points = nn.Embedding(use_num_queries, 4)
 
         if self.random_refpoints_xy:
@@ -1968,12 +1952,12 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
 
     def forward(
         self,
-        pixel_values,
-        pixel_masks,
-        pixel_position_embeddings,
-        query_reference_points,
-        queries,
-        attn_mask=None,
+        pixel_values: List[torch.FloatTensor],
+        pixel_masks: List[torch.LongTensor],
+        pixel_position_embeddings: List[torch.FloatTensor],
+        query_reference_points: torch.FloatTensor,
+        queries: torch.FloatTensor,
+        attn_mask: Optional[torch.FloatTensor] = None,
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
     ):
@@ -2397,10 +2381,10 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
     @replace_return_docstrings(output_type=DinoDetrModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values,
-        pixel_mask=None,
-        labels: List = None,
-        output_hidden_states=False,
+        pixel_values: torch.FloatTensor,
+        pixel_mask: Optional[torch.LongTensor] = None,
+        labels: Optional[List[dict]] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
     ):
@@ -2594,10 +2578,10 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
     @replace_return_docstrings(output_type=DinoDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values,
-        pixel_mask=None,
-        labels: List = None,
-        output_hidden_states=False,
+        pixel_values: torch.FloatTensor,
+        pixel_mask: Optional[torch.LongTensor] = None,
+        labels: Optional[List[dict]] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
     ):
