@@ -924,6 +924,10 @@ LUKE_CUSTOM_ARGS_DOCSTRINGS = r"""
 @auto_docstring
 class LukeModel(LukePreTrainedModel):
     def __init__(self, config: LukeConfig, add_pooling_layer: bool = True):
+        r"""
+        add_pooling_layer (`bool`, defaults to `True`):
+            <fill_description>
+        """
         super().__init__(config)
         self.config = config
 

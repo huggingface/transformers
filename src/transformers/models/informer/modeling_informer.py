@@ -1422,6 +1422,12 @@ class InformerModel(InformerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Seq2SeqTSModelOutput, Tuple]:
         r"""
+        past_time_features (`torch.Tensor`):
+            <fill_description>
+        past_observed_mask (`torch.Tensor`):
+            <fill_description>
+        static_categorical_features (`torch.Tensor`, *optional*):
+            <fill_description>
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Past values of the time series, that serve as context in order to predict the future. The sequence size of
             this tensor must be larger than the `context_length` of the model, since the model will use the larger size
@@ -1501,6 +1507,7 @@ class InformerModel(InformerPreTrainedModel):
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+
 
         Examples:
 
@@ -1633,6 +1640,14 @@ class InformerForPrediction(InformerPreTrainedModel):
 
     @torch.jit.ignore
     def output_distribution(self, params, loc=None, scale=None, trailing_n=None) -> torch.distributions.Distribution:
+        r"""
+        past_time_features (`torch.Tensor`):
+            <fill_description>
+        past_observed_mask (`torch.Tensor`):
+            <fill_description>
+        static_categorical_features (`torch.Tensor`, *optional*):
+            <fill_description>
+        """
         sliced_params = params
         if trailing_n is not None:
             sliced_params = [p[:, -trailing_n:] for p in params]
@@ -1661,6 +1676,12 @@ class InformerForPrediction(InformerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Seq2SeqTSModelOutput, Tuple]:
         r"""
+        past_time_features (`torch.Tensor`):
+            <fill_description>
+        past_observed_mask (`torch.Tensor`):
+            <fill_description>
+        static_categorical_features (`torch.Tensor`, *optional*):
+            <fill_description>
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Past values of the time series, that serve as context in order to predict the future. The sequence size of
             this tensor must be larger than the `context_length` of the model, since the model will use the larger size
@@ -1748,6 +1769,7 @@ class InformerForPrediction(InformerPreTrainedModel):
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+
 
         Examples:
 

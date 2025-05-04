@@ -1034,6 +1034,14 @@ class IdeficsModel(IdeficsPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, IdeficsBaseModelOutputWithPast]:
+        r"""
+        image_encoder_embeddings (`torch.Tensor`, *optional*):
+            The embeddings from the image encoder.
+        perceiver_embeddings (`torch.Tensor` of shape, *optional*):
+            The embeddings from the perceiver resampler.
+        image_attention_mask (`torch.Tensor`, *optional*):
+            The attention mask for the images.
+        """
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1489,6 +1497,13 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, IdeficsCausalLMOutputWithPast]:
         r"""
+        image_encoder_embeddings (`torch.Tensor`, *optional*):
+            The embeddings from the image encoder.
+        perceiver_embeddings (`torch.Tensor` of shape, *optional*):
+            The embeddings from the perceiver resampler.
+        image_attention_mask (`torch.Tensor`, *optional*):
+            The attention mask for the images.
+
         Example:
 
         ```python

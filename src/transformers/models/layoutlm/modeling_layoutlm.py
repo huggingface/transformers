@@ -1177,6 +1177,10 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
 )
 class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
     def __init__(self, config, has_visual_segment_embedding=True):
+        r"""
+        has_visual_segment_embedding (`<fill_type>`, defaults to `True`):
+            <fill_description>
+        """
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1206,6 +1210,9 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
+        bbox (`torch.LongTensor`, *optional*):
+            <fill_description>
+
 
         Example:
 

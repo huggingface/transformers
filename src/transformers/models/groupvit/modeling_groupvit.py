@@ -1339,8 +1339,11 @@ class GroupViTModel(GroupViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, GroupViTModelOutput]:
         r"""
+        output_segmentation (`bool`, *optional*):
+            <fill_description>
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
+
 
         Examples:
 

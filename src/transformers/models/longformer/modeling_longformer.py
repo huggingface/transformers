@@ -1430,6 +1430,10 @@ class LongformerModel(LongformerPreTrainedModel):
     """
 
     def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (`<fill_type>`, defaults to `True`):
+            <fill_description>
+        """
         super().__init__(config)
         self.config = config
 

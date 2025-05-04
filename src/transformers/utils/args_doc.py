@@ -1,6 +1,7 @@
 import inspect
 import os
 import textwrap
+from pathlib import Path
 from typing import List, Optional, Tuple, Union, get_args
 
 import regex as re
@@ -12,6 +13,9 @@ from .doc import (
     _prepare_output_docstrings,
 )
 from .generic import ModelOutput
+
+
+PATH_TO_TRANSFORMERS = Path("src").resolve() / "transformers"
 
 
 AUTODOC_FILES = [
@@ -698,7 +702,15 @@ def parse_shape(docstring):
     return None
 
 
-def parse_docstring(docstring):
+def parse_default(docstring):
+    default_pattern = re.compile(r"(defaults to \s*[^)]*)")
+    match = default_pattern.search(docstring)
+    if match:
+        return " " + match.group(1)
+    return None
+
+
+def parse_docstring(docstring, max_indent_level=0):
     """
     Parse the docstring to extract the Args section and return it as a dictionary.
     The docstring is expected to be in the format:
@@ -712,29 +724,36 @@ def parse_docstring(docstring):
     """
     match = re.search(r"(?m)^([ \t]*)(?=Example|Return)", docstring)
     if match:
-        remainder_docstring = "\n" + docstring[match.start() :]
+        remainder_docstring = docstring[match.start() :]
         docstring = docstring[: match.start()]
     else:
         remainder_docstring = ""
-    args_pattern = re.compile(r"(Args:)(\n.*)?(\n)?$", re.DOTALL)
+    args_pattern = re.compile(r"(?:Args:)(\n.*)?(\n)?$", re.DOTALL)
 
     args_match = args_pattern.search(docstring)
     # still try to find args description in the docstring, if args are not preceded by "Args:"
-    args_section = args_match.group(2).lstrip("\n") if args_match else docstring
+    args_section = args_match.group(1).lstrip("\n") if args_match else docstring
+    if args_section.split("\n")[-1].strip() == '"""':
+        args_section = "\n".join(args_section.split("\n")[:-1])
+    if args_section.split("\n")[0].strip() == 'r"""' or args_section.split("\n")[0].strip() == '"""':
+        args_section = "\n".join(args_section.split("\n")[1:])
+    args_section = set_min_indent(args_section, 0)
 
     params = {}
     if args_section:
         param_pattern = re.compile(
             # |--- Group 1 ---|| Group 2 ||- Group 3 -||---------- Group 4 ----------|
-            r"^\s*(\w+)\s*\(\s*([^, \)]*)\s*(.*?)\s*\)\s*:\s*((?:(?!\n^\s*\w+\s*\().)*)",
+            rf"^\s{{0,{max_indent_level}}}(\w+)\s*\(\s*([^, \)]*)(\s*.*?)\s*\)\s*:\s*((?:(?!\n^\s{{0,{max_indent_level}}}\w+\s*\().)*)",
             re.DOTALL | re.MULTILINE,
         )
         for match in param_pattern.finditer(args_section):
             param_name = match.group(1)
-            param_type = match.group(2).replace("`", "")
+            param_type = match.group(2)
+            # param_type = match.group(2).replace("`", "")
             additional_info = match.group(3)
             optional = "optional" in additional_info
             shape = parse_shape(additional_info)
+            default = parse_default(additional_info)
             param_description = match.group(4).strip()
             param_description = equalize_indent(f"\n{param_description}\n", 4)
             params[param_name] = {
@@ -742,7 +761,14 @@ def parse_docstring(docstring):
                 "description": param_description,
                 "optional": optional,
                 "shape": shape,
+                "default": default,
+                "additional_info": additional_info,
             }
+
+    if params and remainder_docstring:
+        remainder_docstring = "\n" + remainder_docstring
+
+    remainder_docstring = set_min_indent(remainder_docstring, 0)
 
     return params, remainder_docstring
 
@@ -1013,6 +1039,7 @@ def _process_regular_parameters(sig, func, class_name, documented_params, indent
     """
     docstring = ""
     source_args_dict = source_args_doc([ModelArgs, ImageProcessorArgs])
+    missing_args = {}
 
     for param_name, param in sig.parameters.items():
         # Skip parameters that should be ignored
@@ -1043,15 +1070,104 @@ def _process_regular_parameters(sig, func, class_name, documented_params, indent
 
             # Format the parameter docstring
             docstring += set_min_indent(
-                f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}):{description}",
+                f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}",
                 indent_level + 8,
             )
         else:
+            missing_args[param_name] = {
+                "type": param_type if param_type else "<fill_type>",
+                "optional": optional,
+                "shape": shape_string,
+                "description": description if description else "\n    <fill_description>",
+                "default": param_default,
+            }
             undocumented_parameters.append(
                 f"🚨 `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
             )
 
-    return docstring
+    return docstring, missing_args
+
+
+def find_sig_line(lines, line_end):
+    parenthesis_count = 0
+    sig_line_end = line_end
+    found_sig = False
+    while not found_sig:
+        for char in lines[sig_line_end]:
+            if char == "(":
+                parenthesis_count += 1
+            elif char == ")":
+                parenthesis_count -= 1
+                if parenthesis_count == 0:
+                    found_sig = True
+                    break
+        sig_line_end += 1
+    return sig_line_end
+
+
+def fix_docstring(obj, missing_args):
+    # reload the module to make sure we have the latest version
+    # source_module = importlib.import_module(obj.__module__)
+    # importlib.reload(source_module)
+    source, line_number = inspect.getsourcelines(obj)
+    source = [line.strip("\n") for line in source]
+    sig_line_end = find_sig_line(source, 0)
+    docstring_present = '"""' in source[sig_line_end]
+    docstring_end = sig_line_end
+    args_docstring_dict = missing_args
+    remaining_docstring = ""
+    if docstring_present:
+        # find the end of the docstring:
+        if not source[sig_line_end].count('"""') >= 2:
+            docstring_end += 1
+            while '"""' not in source[docstring_end]:
+                docstring_end += 1
+
+        docstring_content = source[sig_line_end : docstring_end + 1]
+        parsed_docstring, remaining_docstring = parse_docstring("\n".join(docstring_content))
+        args_docstring_dict.update(parsed_docstring)
+    else:
+        docstring_end = sig_line_end - 1
+
+    new_docstring = ""
+    if len(args_docstring_dict) > 0 or remaining_docstring:
+        new_docstring += 'r"""\n'
+        for arg in args_docstring_dict:
+            shape = args_docstring_dict[arg]["shape"] if args_docstring_dict[arg]["shape"] else ""
+            optional_string = ", *optional*" if args_docstring_dict[arg]["optional"] else ""
+            custom_arg_description = args_docstring_dict[arg]["description"]
+            param_default = args_docstring_dict[arg].get("default", "")
+            if custom_arg_description.endswith('"""'):
+                custom_arg_description = "\n".join(custom_arg_description.split("\n")[:-1])
+            new_docstring += f"{arg} (`{args_docstring_dict[arg]['type']}`{shape}{optional_string}{param_default}):{custom_arg_description}\n"
+        close_docstring = True
+        if remaining_docstring:
+            if remaining_docstring.endswith('"""'):
+                close_docstring = False
+            pattern = r"^(?:\s*Return.*\n(?:^$(?:\n|\Z)))|^\s*Return.*(?:\n|\Z)\Z"
+
+            # Use re.sub to find all occurrences matching the pattern and replace
+            # them with an empty string ("").
+            # The re.MULTILINE flag makes '^' match the start of each line.
+            remaining_docstring = re.sub(pattern, "", remaining_docstring, flags=re.MULTILINE)
+            end_docstring = "\n" if close_docstring else ""
+            new_docstring += f"\n{set_min_indent(remaining_docstring, 0)}{end_docstring}"
+        if close_docstring:
+            new_docstring += '"""'
+        new_docstring = set_min_indent(new_docstring, 8)
+    new_docstring_lines = new_docstring.split("\n")
+
+    obj_file = obj.__code__.co_filename
+    with open(obj_file, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Replace content
+    lines = content.split("\n")
+    lines[line_number + sig_line_end - 1 : line_number + docstring_end] = new_docstring_lines
+
+    print(f"Fixing the docstring of {obj.__name__} in {obj_file}.")
+    with open(obj_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
 
 
 def _process_kwargs_parameters(
@@ -1134,7 +1250,7 @@ def _process_kwargs_parameters(
 
                     # Format the parameter docstring
                     docstring += set_min_indent(
-                        f"{param_name} (`{param_type}`{shape_string}{optional_string}{param_default}):{description}",
+                        f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}",
                         indent_level + 8,
                     )
                 else:
@@ -1173,7 +1289,7 @@ def _process_parameters_section(
             documented_params = format_args_docstring(documented_params, model_name_lowercase)
 
     # Process regular parameters
-    param_docstring = _process_regular_parameters(
+    param_docstring, missing_args = _process_regular_parameters(
         sig, func, class_name, documented_params, indent_level, undocumented_parameters
     )
     docstring += param_docstring
@@ -1187,6 +1303,14 @@ def _process_parameters_section(
     # Report undocumented parameters
     if len(undocumented_parameters) > 0:
         print("\n".join(undocumented_parameters))
+
+    # Fix missing args
+    if missing_args:
+        if parent_class is not None:
+            obj = parent_class.__init__
+        else:
+            obj = func
+        # fix_docstring(obj, missing_args)
 
     return docstring
 
@@ -1318,7 +1442,7 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, custom_arg
     model_name_lowercase, class_name, config_class = _get_model_info(func, parent_class)
     func_documentation = func.__doc__
     if custom_args is not None and func_documentation is not None:
-        func_documentation = custom_args + "\n" + func_documentation
+        func_documentation = set_min_indent(custom_args, indent_level + 4) + "\n" + func_documentation
     elif custom_args is not None:
         func_documentation = custom_args
 

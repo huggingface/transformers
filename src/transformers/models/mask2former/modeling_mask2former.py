@@ -24,17 +24,10 @@ import torch
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_scipy_available,
-    replace_return_docstrings,
-    requires_backends,
-)
+from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_accelerate_available, logging
+from ...utils import auto_docstring, is_accelerate_available, logging
 from ...utils.backbone_utils import load_backbone
 from .configuration_mask2former import Mask2FormerConfig
 
@@ -49,8 +42,6 @@ if is_accelerate_available():
 logger = logging.get_logger(__name__)
 
 
-_CONFIG_FOR_DOC = "Mask2FormerConfig"
-_CHECKPOINT_FOR_DOC = "facebook/mask2former-swin-small-coco-instance"
 _IMAGE_PROCESSOR_FOR_DOC = "Mask2FormerImageProcessor"
 
 
@@ -2097,39 +2088,7 @@ class Mask2FormerTransformerModule(nn.Module):
         return decoder_output
 
 
-MASK2FORMER_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`Mask2FormerConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-MASK2FORMER_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.preprocess`] for details.
-        pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
-
-            - 1 for pixels that are real (i.e. **not masked**),
-            - 0 for pixels that are padding (i.e. **masked**).
-
-            [What are attention masks?](../glossary#attention-mask)
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of Detr's decoder attention layers.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~Mask2FormerModelOutput`] instead of a plain tuple.
-"""
-
-
+@auto_docstring
 class Mask2FormerPreTrainedModel(PreTrainedModel):
     config_class = Mask2FormerConfig
     base_model_prefix = "model"
@@ -2205,10 +2164,7 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.reference_points.bias.data, 0.0)
 
 
-@add_start_docstrings(
-    "The bare Mask2Former Model outputting raw hidden-states without any specific head on top.",
-    MASK2FORMER_START_DOCSTRING,
-)
+@auto_docstring
 class Mask2FormerModel(Mask2FormerPreTrainedModel):
     main_input_name = "pixel_values"
 
@@ -2219,8 +2175,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
 
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MASK2FORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Mask2FormerModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Tensor,
@@ -2230,6 +2185,10 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Mask2FormerModelOutput:
         r"""
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of Detr's decoder attention layers.
+
+
         Returns:
             `Mask2FormerModelOutput`
 
@@ -2309,9 +2268,8 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         return output
 
 
-@add_start_docstrings(
-    "The Mask2Former Model with heads on top for instance/semantic/panoptic segmentation.",
-    MASK2FORMER_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="The Mask2Former Model with heads on top for instance/semantic/panoptic segmentation.",
 )
 class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
     main_input_name = "pixel_values"
@@ -2366,8 +2324,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
 
         return auxiliary_logits
 
-    @add_start_docstrings_to_model_forward(MASK2FORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Mask2FormerForUniversalSegmentationOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Tensor,
@@ -2380,14 +2337,14 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Mask2FormerForUniversalSegmentationOutput:
         r"""
+        output_auxiliary_logits (`bool`, *optional*):
+            <fill_description>
         mask_labels (`List[torch.Tensor]`, *optional*):
             List of mask labels of shape `(num_labels, height, width)` to be fed to a model
         class_labels (`List[torch.LongTensor]`, *optional*):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
 
-        Returns:
-            `Mask2FormerUniversalSegmentationOutput`
 
         Examples:
 

@@ -1453,6 +1453,8 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
+        image_embeds (`torch.Tensor`, *optional*):
+            <fill_description>
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1655,6 +1657,10 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         return self.text_model.model.embed_tokens
 
     def set_input_embeddings(self, value):
+        r"""
+        image_embeds (`torch.Tensor`, *optional*):
+            <fill_description>
+        """
         self.text_model.model.embed_tokens = value
 
     @auto_docstring
@@ -1676,6 +1682,8 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Kosmos2ModelOutput]:
         r"""
+        image_embeds (`torch.Tensor`, *optional*):
+            <fill_description>
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
             1]`:
@@ -1690,6 +1698,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
             image_embeds: (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
+
 
         Examples:
 
@@ -1805,9 +1814,17 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         self.text_model.model.embed_tokens = value
 
     def get_output_embeddings(self) -> nn.Module:
+        r"""
+        image_embeds (`torch.Tensor`, *optional*):
+            <fill_description>
+        """
         return self.text_model.get_output_embeddings()
 
     def set_output_embeddings(self, new_embeddings):
+        r"""
+        image_embeds (`torch.Tensor`, *optional*):
+            <fill_description>
+        """
         self.text_model.set_output_embeddings(new_embeddings)
 
     @auto_docstring
@@ -1829,6 +1846,8 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Kosmos2ForConditionalGenerationModelOutput]:
         r"""
+        image_embeds (`torch.Tensor`, *optional*):
+            <fill_description>
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
             1]`:
@@ -1846,6 +1865,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
+
 
         Examples:
 

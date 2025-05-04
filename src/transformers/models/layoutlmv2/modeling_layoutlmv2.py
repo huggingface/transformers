@@ -1201,6 +1201,10 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 )
 class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
     def __init__(self, config, has_visual_segment_embedding=True):
+        r"""
+        has_visual_segment_embedding (`<fill_type>`, defaults to `True`):
+            <fill_description>
+        """
         super().__init__(config)
         self.num_labels = config.num_labels
         config.has_visual_segment_embedding = has_visual_segment_embedding

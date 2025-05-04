@@ -476,6 +476,12 @@ _EXPECTED_OUTPUT_SHAPE = [1, 256, 1280]
 @auto_docstring
 class IJepaModel(IJepaPreTrainedModel):
     def __init__(self, config: IJepaConfig, add_pooling_layer: bool = False, use_mask_token: bool = False):
+        r"""
+        add_pooling_layer (`bool`, defaults to `False`):
+            <fill_description>
+        use_mask_token (`bool`, defaults to `False`):
+            <fill_description>
+        """
         super().__init__(config)
         self.config = config
         self.embeddings = IJepaEmbeddings(config, use_mask_token=use_mask_token)
