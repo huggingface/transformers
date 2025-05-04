@@ -47,9 +47,9 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    tp_size = int(os.environ.get("TP_SIZE", 1))
+    tp_size = int(os.environ.get("TP_SIZE", 2))
     dp_size = int(os.environ.get("DP_SIZE", 2))
-    cp_size = int(os.environ.get("CP_SIZE", 2))  # Add CP size configuration
+    cp_size = int(os.environ.get("CP_SIZE", 1))  # Add CP size configuration
     # sdpa_backend = SDPBackend.FLASH_ATTENTION # For CP
     sdpa_backend = SDPBackend.MATH # For CP
     global_batch_size = 4 # Desired global batch size
@@ -142,12 +142,15 @@ def main():
             model,
             device_mesh=dp_mesh
         )
+        update_model_parameters(model)
         # Warning this API is still experimental
         # model = replicate(model, device_mesh=dp_mesh, bucket_cap_mb=100)
         # logger.info("Applied DDP")
         use_ddp = True
 
     model.train()
+    assert len(list(model.parameters()))>0, "No parameters found in model. Probably DDP bug.."
+    assert len([p for p in model.parameters() if p.requires_grad])>0, "No gradients found in model. Probably DDP bug.."
 
     if dist.is_initialized() and not ignore_sanity_checks:
         # assert model is replicated across all dp
@@ -283,6 +286,17 @@ def main():
                         if param.grad is not None and cp_mesh.size() > 1:
                              sanity_check_tensor_sync(param.grad, cp_mesh)
 
+                # Calculate gradient norm and clip gradients
+                assert len(list(model.parameters()))>0, "No parameters found in model. Probably DDP bug.."
+                assert len([p for p in model.parameters() if p.requires_grad])>0, "No gradients found in model. Probably DDP bug.."
+                assert len([p for p in model.parameters() if p.grad is not None])>0, "No gradients found in model. Probably DDP bug.."
+                gradnorm = clip_grad_norm_(
+                    model.parameters(),
+                    max_norm=1.0,
+                    norm_type=2.0,
+                    foreach=True
+                )
+
                 optimizer.step()
                 # Sanity checks for updated model parameters (only if distributed)
                 if dist.is_initialized() and not ignore_sanity_checks:
@@ -302,14 +316,6 @@ def main():
                         if cp_mesh.size() > 1:
                             sanity_check_tensor_sync(param, cp_mesh)
 
-                # Calculate gradient norm and clip gradients
-                assert len(list(model.parameters()))>0, "No parameters found in model. Probably DDP bug.."
-                gradnorm = clip_grad_norm_(
-                    model.parameters(),
-                    max_norm=1.0,
-                    norm_type=2.0,
-                    foreach=True
-                )
 
                 # Log loss and gradnorm to wandb (only on rank 0 of dp group)
                 if not dist.is_initialized() or dist.get_rank() == 0:
@@ -584,6 +590,51 @@ def check_params_sync(model_params, original_params):
         if not torch.allclose(mp.data, op.data, rtol=0, atol=0):
             raise RuntimeError(f"Parameters out of sync: model param {mp.data} != original param {op.data}")
     return True
+
+def get_parameters(model: nn.Module) -> Iterable[torch.Tensor]:
+    """
+    Get all parameters from a model by iterating over its modules.
+    This is an alternative to model.parameters() that works with DTensor models.
+    
+    Args:
+        model (nn.Module): The model to get parameters from
+        
+    Returns:
+        Iterable[torch.Tensor]: An iterator over all parameters in the model
+    """
+    for name, module in model._modules.items():
+        # Look for parameters in module attributes
+        for attr_name, attr in module.__dict__.items():
+            if isinstance(attr, torch.Tensor) and attr.requires_grad:
+                yield attr
+        # Recursively get parameters from submodules
+        for param in get_parameters(module):
+            yield param
+
+def update_model_parameters(model: nn.Module) -> None:
+    """
+    Update model._parameters using named_modules() to ensure all parameters are properly tracked.
+    
+    Args:
+        model (nn.Module): The model to update parameters for
+    """
+    # Clear existing parameters
+    model._parameters = {}
+    
+    # Add parameters from named_modules
+    for name, module in model.named_modules():
+        # Skip the root module itself
+        if name == '':
+            continue
+            
+        # Get the parameter name by removing 'module.' prefix if it exists
+        param_name = name.replace('module.', '')
+        
+        # Add weight and bias parameters if they exist
+        if hasattr(module, 'weight') and module.weight is not None:
+            model._parameters[f'{param_name}.weight'] = module.weight
+        if hasattr(module, 'bias') and module.bias is not None:
+            model._parameters[f'{param_name}.bias'] = module.bias
 
 if __name__ == "__main__":
     main() 
