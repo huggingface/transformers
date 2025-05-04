@@ -14,7 +14,6 @@ rendered properly in your Markdown viewer.
 
 -->
 
-<!-- Floating div for badges, image classification task -->
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=pytorch&logoColor=white">
@@ -91,8 +90,8 @@ print(predicted_label)
 </hfoption>
 </hfoptions>
 
-<!-- Quantization section omitted - HF checkpoints not quantized per original docs -->
-<!-- Attention Visualization section omitted - Not applicable for this model type -->
+<!-- Quantization - Not applicable -->
+<!-- Attention Visualization - Not applicable for this model type -->
 
 
 ## Notes
