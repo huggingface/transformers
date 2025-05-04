@@ -31,7 +31,6 @@ from torch.distributed.tensor.experimental import context_parallel
 from torch.utils.data import default_collate
 from torch.nn.attention import sdpa_kernel, SDPBackend
 
-
 ignore_sanity_checks = False
 
 # Set up logging
@@ -44,9 +43,9 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    tp_size = int(os.environ.get("TP_SIZE", 1))
+    tp_size = int(os.environ.get("TP_SIZE", 2))
     dp_size = int(os.environ.get("DP_SIZE", 2))
-    cp_size = int(os.environ.get("CP_SIZE", 2))  # Add CP size configuration
+    cp_size = int(os.environ.get("CP_SIZE", 1))  # Add CP size configuration
     # sdpa_backend = SDPBackend.FLASH_ATTENTION # For CP
     sdpa_backend = SDPBackend.MATH # For CP
     global_batch_size = 4 # Desired global batch size
@@ -134,13 +133,11 @@ def main():
     logger.info(f"Using device: {device} for non-model tensors")
 
     if dist.is_initialized() and dp_mesh.size() > 1:
-        # TODO: DDP doesn't work with dtensors
-        # model = torch.nn.parallel.DistributedDataParallel(
-        #     model,
-        #     # device_ids=[local_rank],
-        #     # output_device=local_rank,
-        #     device_mesh=dp_mesh
-        # )
+        # TODO: this only works with DDP patch
+        model = torch.nn.parallel.DistributedDataParallel(
+            model,
+            device_mesh=dp_mesh
+        )
 
         # Warning this API is still experimental
         # model = replicate(model, device_mesh=dp_mesh, bucket_cap_mb=100)
@@ -275,30 +272,30 @@ def main():
                     loss.backward()
 
                 # all reduce grads across dp_cp if applicable
-                dp_cp_mesh = world_mesh["dp", "cp"]._flatten(mesh_dim_name="dp_cp")
-                if dist.is_initialized() and dp_cp_mesh.size() > 1:
-                    for name, param in model.named_parameters():
-                        if param.grad is not None:
-                            # Workaround for cross-mesh communication limitation with DTensor gradients
-                            if isinstance(param.grad, DTensor):
-                                local_grad = param.grad.to_local()
-                                # Ensure grad requires grad for inplace modification checks (might not be needed)
-                                # local_grad = local_grad.detach().requires_grad_(True) 
-                                torch.distributed.all_reduce(
-                                    local_grad,
-                                    op=torch.distributed.ReduceOp.AVG,
-                                    group=dp_cp_mesh.get_group()
-                                )
-                                # Assign averaged grad back - need careful handling if DTensor structure is complex
-                                # This simple assignment might work if the grad structure matches param structure
-                                param.grad = DTensor.from_local(local_grad, device_mesh=param.grad.device_mesh, placements=param.grad.placements)
-                            else:
-                                 # Handle regular tensors if any exist (e.g. buffers not converted to DTensor)
-                                 torch.distributed.all_reduce(
-                                    param.grad,
-                                    op=torch.distributed.ReduceOp.AVG,
-                                    group=dp_mesh.get_group()
-                                )
+                # dp_cp_mesh = world_mesh["dp", "cp"]._flatten(mesh_dim_name="dp_cp")
+                # if dist.is_initialized() and dp_cp_mesh.size() > 1:
+                #     for name, param in model.named_parameters():
+                #         if param.grad is not None:
+                #             # Workaround for cross-mesh communication limitation with DTensor gradients
+                #             if isinstance(param.grad, DTensor):
+                #                 local_grad = param.grad.to_local()
+                #                 # Ensure grad requires grad for inplace modification checks (might not be needed)
+                #                 # local_grad = local_grad.detach().requires_grad_(True) 
+                #                 torch.distributed.all_reduce(
+                #                     local_grad,
+                #                     op=torch.distributed.ReduceOp.AVG,
+                #                     group=dp_cp_mesh.get_group()
+                #                 )
+                #                 # Assign averaged grad back - need careful handling if DTensor structure is complex
+                #                 # This simple assignment might work if the grad structure matches param structure
+                #                 param.grad = DTensor.from_local(local_grad, device_mesh=param.grad.device_mesh, placements=param.grad.placements)
+                #             else:
+                #                  # Handle regular tensors if any exist (e.g. buffers not converted to DTensor)
+                #                  torch.distributed.all_reduce(
+                #                     param.grad,
+                #                     op=torch.distributed.ReduceOp.AVG,
+                #                     group=dp_mesh.get_group()
+                #                 )
 
                 # Sanity checks for gradients (only if distributed)
                 if dist.is_initialized() and not ignore_sanity_checks:
