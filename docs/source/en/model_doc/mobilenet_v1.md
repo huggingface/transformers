@@ -18,10 +18,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=pytorch&logoColor=white">
-        <a href="https://huggingface.co/docs/transformers/tasks/image_classification">
-            <img alt="Image Classification" src="https://img.shields.io/badge/Task-Image%20Classification-yellow">
-        </a>
-        <!-- Add TF/Flax badges if supported -->
     </div>
 </div>
 
@@ -36,7 +32,7 @@ You can find checkpoints like [`google/mobilenet_v1_1.0_224`](https://huggingfac
 
 
 
-The example below demonstrates how to perform image classification using [`pipeline`] or [`AutoModelForImageClassification`].
+The example below demonstrates how to perform image classification with [`Pipeline`] or [`AutoModel`].
 
 
 <hfoptions id="usage">
@@ -57,7 +53,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 # Pass image to the pipeline
 results = pipe(image)
 print(results)
-# Example output: [{'score': 0.963..., 'label': 'tabby, tabby cat'}, ...]
+# Example output: [{'label': 'tabby, tabby cat', 'score': 0.910...}, ...]
 ```
 
 </hfoption>

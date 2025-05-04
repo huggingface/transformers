@@ -18,13 +18,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=pytorch&logoColor=white">
-        <a href="https://huggingface.co/docs/transformers/tasks/image_classification">
-            <img alt="Image Classification" src="https://img.shields.io/badge/Task-Image%20Classification-yellow">
-        </a>
-        <a href="https://huggingface.co/docs/transformers/tasks/semantic_segmentation">
-            <img alt="Semantic Segmentation" src="https://img.shields.io/badge/Task-Semantic%20Segmentation-purple">
-        </a>
-        <!-- Add TF/Flax badges if supported -->
     </div>
 </div>
 
@@ -38,7 +31,7 @@ You can find checkpoints like [`google/mobilenet_v2_1.4_224`](https://huggingfac
 > Click on the MobileNet V2 models in the right sidebar for more examples of how to apply MobileNet to different vision tasks.
 
 
-The examples below demonstrate how to use MobileNetV2 for image classification and semantic segmentation using [`pipeline`] or the `AutoModel` classes.
+The examples below demonstrate how to use MobileNetV2 for image classification and semantic segmentation with [`Pipeline`] or [`AutoModel`].
 
 **Image Classification**
 
