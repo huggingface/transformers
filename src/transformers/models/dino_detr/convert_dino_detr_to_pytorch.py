@@ -38,11 +38,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 
 
 @torch.no_grad()
-def convert_dino_detr_checkpoint(
-    checkpoint_path,
-    pytorch_dump_folder_path,
-    push_to_hub,
-):
+def convert_dino_detr_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub, repo_id):
     """
     Copy/paste/tweak model's weights to our Deformable DETR structure.
     """
@@ -51,9 +47,9 @@ def convert_dino_detr_checkpoint(
     config = DinoDetrConfig()
     # set labels
     config.num_labels = 91
-    repo_id = "huggingface/label-files"
+    label_repo_id = "huggingface/label-files"
     filename = "coco-detection-id2label.json"
-    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
+    id2label = json.loads(Path(hf_hub_download(label_repo_id, filename, repo_type="dataset")).read_text())
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -122,6 +118,23 @@ def convert_dino_detr_checkpoint(
     model.save_pretrained(pytorch_dump_folder_path)
     processor.save_pretrained(pytorch_dump_folder_path)
 
+    # Push to hub
+    if push_to_hub:
+        # Upload model, image processor and config to the hub
+        logger.info("Uploading PyTorch model and image processor to the hub...")
+        config.push_to_hub(
+            repo_id=repo_id,
+            commit_message="Add config from convert_dino_detr_original_pytorch_checkpoint_to_pytorch.py",
+        )
+        model.push_to_hub(
+            repo_id=repo_id,
+            commit_message="Add model from convert_dino_detr_original_pytorch_checkpoint_to_pytorch.py",
+        )
+        processor.push_to_hub(
+            repo_id=repo_id,
+            commit_message="Add image processor from convert_dino_detr_original_pytorch_checkpoint_to_pytorch.py",
+        )
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -144,9 +157,15 @@ if __name__ == "__main__":
         action="store_true",
         help="Whether or not to push the converted model to the 🤗 hub.",
     )
+    parser.add_argument(
+        "--repo_id",
+        type=str,
+        help="repo_id where the model will be pushed to.",
+    )
     args = parser.parse_args()
     convert_dino_detr_checkpoint(
         args.checkpoint_path,
         args.pytorch_dump_folder_path,
         args.push_to_hub,
+        args.repo_id,
     )
