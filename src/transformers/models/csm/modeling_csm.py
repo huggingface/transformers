@@ -1575,23 +1575,23 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         depth_decoder_outputs = None
         if labels is not None:
             # select first codebook as labels for the backbone model
-            backbone_labels = labels[:, :, 0] if labels is not None else None
+            backbone_labels = labels[:, :, 0]
             backbone_loss = self.loss_function(
                 logits=backbone_logits, labels=backbone_labels, vocab_size=self.config.vocab_size, **kwargs
             )
 
             # for the depth decoder, we need to select the frames to train on
             # those are frames where the label is not uniformly `ignore_index` along the codebook dimension
-            depth_decoder_labels = labels
-            mask_idxs = (depth_decoder_labels[:, :, 1:] == -100).all(dim=-1)
-            train_idxs = (~mask_idxs).nonzero(as_tuple=True)
-
-            depth_decoder_input_ids = labels[train_idxs[0], train_idxs[1], : self.config.num_codebooks - 1]
-            # adds place holder in position 0 that will be replaced by the backbone_last_hidden_state
+            train_mask = ~(labels[:, :, 1:] == -100).all(dim=-1)
+            depth_decoder_input_ids = labels[train_mask][..., : self.config.num_codebooks - 1]
+            # add place holder in position 0 that will be replaced by the backbone_last_hidden_state
             depth_decoder_input_ids = nn.functional.pad(depth_decoder_input_ids, (1, 0), value=0)
 
-            backbone_last_hidden_states = backbone_hidden_states[train_idxs[0], train_idxs[1] - 1, :]
-            depth_decoder_labels = depth_decoder_labels[train_idxs[0], train_idxs[1], :]
+            backbone_last_hidden_states_mask = train_mask.roll(-1, dims=1)
+            backbone_last_hidden_states_mask[:, -1] = False
+            backbone_last_hidden_states = backbone_hidden_states[backbone_last_hidden_states_mask]
+
+            depth_decoder_labels = labels[train_mask]
 
             depth_decoder_outputs = self.depth_decoder(
                 input_ids=depth_decoder_input_ids,
