@@ -14,43 +14,105 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# MobileNet V1
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<!-- Floating div for badges, image classification task -->
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=pytorch&logoColor=white">
+        <a href="https://huggingface.co/docs/transformers/tasks/image_classification">
+            <img alt="Image Classification" src="https://img.shields.io/badge/Task-Image%20Classification-yellow">
+        </a>
+        <!-- Add TF/Flax badges if supported -->
+    </div>
 </div>
 
-## Overview
+# MobileNet V1
 
-The MobileNet model was proposed in [MobileNets: Efficient Convolutional Neural Networks for Mobile Vision Applications](https://arxiv.org/abs/1704.04861) by Andrew G. Howard, Menglong Zhu, Bo Chen, Dmitry Kalenichenko, Weijun Wang, Tobias Weyand, Marco Andreetto, Hartwig Adam.
+MobileNet V1 is a family of efficient convolutional neural networks optimized for on-device or embedded vision tasks. It achieves this efficiency by using depth-wise separable convolutions instead of standard convolutions. The architecture allows for easy trade-offs between latency and accuracy using two main hyperparameters: a width multiplier (alpha) and an image resolution multiplier.
 
-The abstract from the paper is the following:
+You can find checkpoints like [`google/mobilenet_v1_1.0_224`](https://huggingface.co/google/mobilenet_v1_1.0_224) on the Hub. Check the [Google organization page](https://huggingface.co/google) for other variants. <!-- Consider linking to a dedicated Collection if one exists -->
 
-*We present a class of efficient models called MobileNets for mobile and embedded vision applications. MobileNets are based on a streamlined architecture that uses depth-wise separable convolutions to build light weight deep neural networks. We introduce two simple global hyper-parameters that efficiently trade off between latency and accuracy. These hyper-parameters allow the model builder to choose the right sized model for their application based on the constraints of the problem. We present extensive experiments on resource and accuracy tradeoffs and show strong performance compared to other popular models on ImageNet classification. We then demonstrate the effectiveness of MobileNets across a wide range of applications and use cases including object detection, finegrain classification, face attributes and large scale geo-localization.*
+> [!TIP]
+> Refer to the [Image classification task guide](../tasks/image_classification) for more detailed examples of how to apply MobileNet V1 for classifying images.
 
-This model was contributed by [matthijs](https://huggingface.co/Matthijs). The original code and weights can be found [here](https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1.md).
+The example below demonstrates how to perform image classification using [`pipeline`] or [`AutoModelForImageClassification`].
 
-## Usage tips
 
-- The checkpoints are named **mobilenet\_v1\_*depth*\_*size***, for example **mobilenet\_v1\_1.0\_224**, where **1.0** is the depth multiplier (sometimes also referred to as "alpha" or the width multiplier) and **224** is the resolution of the input images the model was trained on.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-- Even though the checkpoint is trained on images of specific size, the model will work on images of any size. The smallest supported image size is 32x32.
+```python
+import requests
+from PIL import Image
+from transformers import pipeline
 
-- One can use [`MobileNetV1ImageProcessor`] to prepare images for the model.
+# Use a pipeline as a high-level helper
+pipe = pipeline("image-classification", model="google/mobilenet_v1_1.0_224")
 
-- The available image classification checkpoints are pre-trained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k) (also referred to as ILSVRC 2012, a collection of 1.3 million images and 1,000 classes). However, the model predicts 1001 classes: the 1000 classes from ImageNet plus an extra “background” class (index 0).
+# Load image from the web
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-- The original TensorFlow checkpoints use different padding rules than PyTorch, requiring the model to determine the padding amount at inference time, since this depends on the input image size. To use native PyTorch padding behavior, create a [`MobileNetV1Config`] with `tf_padding = False`.
+# Pass image to the pipeline
+results = pipe(image)
+print(results)
+# Example output: [{'score': 0.963..., 'label': 'tabby, tabby cat'}, ...]
+```
 
-Unsupported features:
+</hfoption>
+<hfoption id="AutoModel">
 
-- The [`MobileNetV1Model`] outputs a globally pooled version of the last hidden state. In the original model it is possible to use a 7x7 average pooling layer with stride 2 instead of global pooling. For larger inputs, this gives a pooled output that is larger than 1x1 pixel. The HuggingFace implementation does not support this.
+```python
+import requests
+import torch
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-- It is currently not possible to specify an `output_stride`. For smaller output strides, the original model invokes dilated convolution to prevent the spatial resolution from being reduced further. The output stride of the HuggingFace model is always 32.
+# Load processor and model
+processor = AutoImageProcessor.from_pretrained("google/mobilenet_v1_1.0_224")
+model = AutoModelForImageClassification.from_pretrained("google/mobilenet_v1_1.0_224")
 
-- The original TensorFlow checkpoints include quantized models. We do not support these models as they include additional "FakeQuantization" operations to unquantize the weights.
+# Load image from the web
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-- It's common to extract the output from the pointwise layers at indices 5, 11, 12, 13 for downstream purposes. Using `output_hidden_states=True` returns the output from all intermediate layers. There is currently no way to limit this to specific layers.
+# Preprocess image
+inputs = processor(images=image, return_tensors="pt")
+
+# Perform inference
+with torch.no_grad():
+    outputs = model(**inputs)
+    logits = outputs.logits
+
+# Post-process to get labels
+predicted_label_id = logits.argmax(-1).item()
+predicted_label = model.config.id2label[predicted_label_id]
+print(predicted_label)
+# Example output: tabby, tabby cat
+```
+
+</hfoption>
+</hfoptions>
+
+<!-- Quantization section omitted - HF checkpoints not quantized per original docs -->
+<!-- Attention Visualization section omitted - Not applicable for this model type -->
+
+
+## Notes
+
+-   **Checkpoint Naming:** Checkpoints often follow the pattern `mobilenet_v1_{depth_multiplier}_{resolution}`, like `mobilenet_v1_1.0_224`.
+-   **Variable Input Size:** While trained on fixed sizes (e.g., 224x224), the model architecture works with images of different sizes (minimum 32x32). The [`MobileNetV1ImageProcessor`] handles the necessary preprocessing.
+-   **1001 Classes:** Models pretrained on ImageNet-1k output 1001 classes. Index 0 is a "background" class, and indices 1-1000 correspond to the standard ImageNet classes.
+-   **Padding Differences:** Original TensorFlow checkpoints had dynamic padding behavior based on input size. The Hugging Face PyTorch implementation uses standard, static padding by default. To enable dynamic padding (matching TensorFlow behavior), instantiate the configuration with `tf_padding=True`.
+    ```python
+    from transformers import MobileNetV1Config
+
+    # Example: Load config with dynamic padding enabled
+    config = MobileNetV1Config.from_pretrained("google/mobilenet_v1_1.0_224", tf_padding=True)
+    ```
+-   **Unsupported Features:** The Hugging Face implementation has some differences from the original paper/TF implementation:
+    -   Uses global average pooling instead of the optional 7x7 average pooling with stride 2.
+    -   Does not support specifying a custom `output_stride` (which would require dilated convolutions). The output stride is fixed at 32.
+    -   `output_hidden_states=True` returns *all* intermediate hidden states; selecting specific layers is not directly supported.
 
 ## Resources
 
