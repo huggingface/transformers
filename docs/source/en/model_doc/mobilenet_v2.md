@@ -95,11 +95,6 @@ print(predicted_label)
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
-
-<!-- transformers-cli is not typically used for direct image model inference -->
-
-</hfoption>
 </hfoptions>
 
 **Semantic Segmentation**
@@ -164,11 +159,6 @@ pred_seg = upsampled_logits.argmax(dim=1)[0]
 print(pred_seg.shape)
 # Example output: torch.Size([341, 512])
 ```
-
-</hfoption>
-<hfoption id="transformers-cli">
-
-<!-- transformers-cli is not typically used for direct image model inference -->
 
 </hfoption>
 </hfoptions>
