@@ -35,7 +35,8 @@ MobileNet V2 builds upon MobileNet V1, improving performance on mobile and embed
 You can find checkpoints like [`google/mobilenet_v2_1.4_224`](https://huggingface.co/google/mobilenet_v2_1.4_224) (for classification) or [`google/deeplabv3_mobilenet_v2_1.0_513`](https://huggingface.co/google/deeplabv3_mobilenet_v2_1.0_513) (for segmentation) on the Hub. Check the [Google organization page](https://huggingface.co/google) for other variants. <!-- Consider linking to a dedicated Collection if one exists -->
 
 > [!TIP]
-> Refer to the [Image classification task guide](../tasks/image_classification) and [Semantic segmentation task guide](../tasks/semantic_segmentation) for more examples of how to apply MobileNet V2.
+> Click on the MobileNet V2 models in the right sidebar for more examples of how to apply MobileNet to different vision tasks.
+
 
 The examples below demonstrate how to use MobileNetV2 for image classification and semantic segmentation using [`pipeline`] or the `AutoModel` classes.
 
