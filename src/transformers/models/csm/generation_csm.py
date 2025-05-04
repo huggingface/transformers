@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 
-from ...cache_utils import Cache
 from ...generation import (
     GenerateDecoderOnlyOutput,
     GenerationConfig,
@@ -192,7 +191,6 @@ class CsmGenerationMixin(GenerationMixin):
 
         # keep track of which sequences are already finished
         batch_size, cur_len = input_ids.shape[:2]
-
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
@@ -207,14 +205,10 @@ class CsmGenerationMixin(GenerationMixin):
         # ============================================
 
         model_forward = self.__call__
-        if isinstance(model_kwargs.get("past_key_values"), Cache):
-            is_compileable = model_kwargs["past_key_values"].is_compileable and self._supports_static_cache
-            is_compileable = is_compileable and not self.generation_config.disable_compile
-            if is_compileable and (
-                self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
-            ):
-                os.environ["TOKENIZERS_PARALLELISM"] = "0"
-                model_forward = self.get_compiled_call(generation_config.compile_config)
+        compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
+        if compile_forward:
+            os.environ["TOKENIZERS_PARALLELISM"] = "0"
+            model_forward = self.get_compiled_call(generation_config.compile_config)
 
         is_prefill = True
         while self._has_unfinished_sequences(
