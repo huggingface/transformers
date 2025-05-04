@@ -23,32 +23,66 @@ rendered properly in your Markdown viewer.
 
 [Mamba2](https://huggingface.co/papers/2405.21060) is a selective structured state space model (SSMs) It brings many improvements to the original architecture such as parallelism, a larger head dimension and optimized state space model parameterization.
 
+You can find all the original Mamba checkpoints under the [State Space Models](https://huggingface.co/state-spaces) organization.
 
+> [!TIP]
+> Click on the Mamba models in the right sidebar for more examples of how to apply Mamba to different language tasks.
 
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
-Tips:
+hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This version should support all implementations of Mamba 2, and in particular [Mamba-2 codestral](https://huggingface.co/mistralai/Mamba-Codestral-7B-v0.1) from Mistral AI. In particular, mamba 2 codestral was released with a number of `groups` equal to 8, which can be thought intuitively as similar to the number of kv heads in an attention-based model. 
-This model has two different forward passes, `torch_forward` or `cuda_kernels_forward`. The latter uses the original cuda kernels if they are found in your environment, and is slower on the prefill i.e. requires a "warmup run" due to high cpu overhead, see [here](https://github.com/state-spaces/mamba/issues/389#issuecomment-2171755306) and [also here](https://github.com/state-spaces/mamba/issues/355#issuecomment-2147597457). Without compilation, the `torch_forward` implementation is faster by a factor 3 to 4. Further, there are no positional embeddings in this model, but there is an `attention_mask` and a specific logic to mask out hidden states in two places in the case of batched generation, see [here](https://github.com/state-spaces/mamba/issues/66#issuecomment-1863563829) as well. Due to this, in addition to the reimplementation of mamba2 kernels, batched generation and cached generation are expected to have slight discrepancies. Further, the results given by the cuda kernels or the torch forward are expected to be slightly different. The SSM algorithm heavily relies on tensor contractions, which have matmul equivalents but the order of operations is slightly different, making the difference greater at smaller precisions. 
-Another note, shutdown of hidden states corresponding to padding tokens is done in 2 places and mostly has been tested with left-padding. Right-padding will propagate noise down the line and is not guaranteed to yield satisfactory results. `tokenizer.padding_side = "left"` ensures you are using the correct padding side.
-
-
-# Usage
-
-### A simple generation example: 
-```python 
-from transformers import Mamba2Config, Mamba2ForCausalLM, AutoTokenizer
+```python
 import torch
-model_id = 'mistralai/Mamba-Codestral-7B-v0.1'
-tokenizer = AutoTokenizer.from_pretrained(model_id, revision='refs/pr/9', from_slow=True, legacy=False)
-model = Mamba2ForCausalLM.from_pretrained(model_id, revision='refs/pr/9')
-input_ids = tokenizer("Hey how are you doing?", return_tensors= "pt")["input_ids"]
+from transformers import pipeline
 
-out = model.generate(input_ids, max_new_tokens=10)
-print(tokenizer.batch_decode(out))
+pipeline = pipeline(
+    task="text-generation",
+    model="state-spaces/mamba2-130m",
+    torch_dtype=torch.float16,
+    device=0
+)
+pipeline("Plants create energy through a process known as")
 ```
 
-Here's a draft script for finetuning: 
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+import torch  
+from transformers import AutoModelForCausalLM, AutoTokenizer  
+
+tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba2-130m")
+model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba2-130m", torch_dtype=torch.float16, device_map="auto")  
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")  
+
+output = model.generate(**input_ids)  
+print(tokenizer.decode(output[0], skip_special_tokens=True)
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model state-spaces/mamba2-130m --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+## Notes
+
+- Mamba-2 has two different forward passes, `torch_forward` or `cuda_kernels_forward`. The latter uses the original cuda kernels if they are found in your environment, and is slower on the prefill i.e. requires a "warmup run" due to high cpu overhead.
+
+- Without compilation, the `torch_forward` implementation is faster by a factor 3 to 4. Further, there are no positional embeddings in this model, but there is an `attention_mask` and a specific logic to mask out hidden states in two places in the case of batched generation.
+ 
+- Due to this, in addition to the reimplementation of mamba2 kernels, batched generation and cached generation are expected to have slight discrepancies. Further, the results given by the cuda kernels or the torch forward are expected to be slightly different. The SSM algorithm heavily relies on tensor contractions, which have matmul equivalents but the order of operations is slightly different, making the difference greater at smaller precisions. 
+
+- Shutdown of hidden states corresponding to padding tokens is done in 2 places. Right-padding will propagate noise down the line and is not guaranteed to yield satisfactory results. `tokenizer.padding_side = "left"` ensures you are using the correct padding side.
+
+- The example below demonstrates how to fine-tune Mamba with [PEFT](https://huggingface.co/docs/peft).
+
 ```python 
 from trl import SFTTrainer
 from peft import LoraConfig
