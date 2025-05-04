@@ -19,8 +19,9 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from ...activations import ACT2FN
+
 from ...cache_utils import Cache
+from ..clip.modeling_clip import CLIPMLP
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -90,20 +91,8 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
     return q_embed, k_embed
 
 
-class PLMMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_state):
-        h = self.up_proj(hidden_state)
-        h = self.act_fn(h)
-        h = self.down_proj(h)
-        return h
+class PLMMLP(CLIPMLP):
+    pass
 
 
 class PLMAttention(nn.Module):
@@ -232,14 +221,11 @@ class PLMAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class PLMDecoderLayer(LlamaDecoderLayer, nn.Module):
+class PLMDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: PLMConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.self_attn = PLMAttention(config, layer_idx)
+        super().__init__(config, layer_idx)
+        self.self_attn = PLMAttention(config=config, layer_idx=layer_idx)
         self.mlp = PLMMLP(config)
-        self.input_layernorm = PLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = PLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class PLMPreTrainedModel(LlamaPreTrainedModel):
