@@ -52,8 +52,8 @@ pipeline("Plants create energy through a process known as")
 <hfoption id="AutoModel">
 
 ```py
-from transformers import MambaConfig, MambaForCausalLM, AutoTokenizer
-import torch
+import torch  
+from transformers import AutoModelForCausalLM, AutoTokenizer  
 
 tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
 model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf")
