@@ -29,10 +29,12 @@ rendered properly in your Markdown viewer.
 
 MobileNet V1 is a family of efficient convolutional neural networks optimized for on-device or embedded vision tasks. It achieves this efficiency by using depth-wise separable convolutions instead of standard convolutions. The architecture allows for easy trade-offs between latency and accuracy using two main hyperparameters: a width multiplier (alpha) and an image resolution multiplier.
 
-You can find checkpoints like [`google/mobilenet_v1_1.0_224`](https://huggingface.co/google/mobilenet_v1_1.0_224) on the Hub. Check the [Google organization page](https://huggingface.co/google) for other variants. <!-- Consider linking to a dedicated Collection if one exists -->
+You can find checkpoints like [`google/mobilenet_v1_1.0_224`](https://huggingface.co/google/mobilenet_v1_1.0_224), [`google/mobilenet_v1_0.75_192`](https://huggingface.co/google/mobilenet_v1_0.75_192) on the Hub.
 
 > [!TIP]
-> Refer to the [Image classification task guide](../tasks/image_classification) for more detailed examples of how to apply MobileNet V1 for classifying images.
+> Click on the MobileNet V1 models in the right sidebar for more examples of how to apply MobileNet to different vision tasks.
+
+
 
 The example below demonstrates how to perform image classification using [`pipeline`] or [`AutoModelForImageClassification`].
 
