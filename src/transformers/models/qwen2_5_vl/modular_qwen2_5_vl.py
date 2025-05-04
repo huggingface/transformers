@@ -559,6 +559,11 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
                     range_tensor = torch.arange(llm_grid_t).view(-1, 1)
                     expanded_range = range_tensor.expand(-1, llm_grid_h * llm_grid_w)
 
+                    ## normalize type, send to device.
+                    second_per_grid_t = torch.as_tensor(
+                        second_per_grid_t, dtype=range_tensor.dtype, device=range_tensor.device
+                    )
+
                     time_tensor = expanded_range * second_per_grid_t * self.config.vision_config.tokens_per_second
 
                     time_tensor_long = time_tensor.long()

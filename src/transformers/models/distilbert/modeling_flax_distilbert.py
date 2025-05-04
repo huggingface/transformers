@@ -459,7 +459,7 @@ class FlaxDistilBertPreTrainedModel(FlaxPreTrainedModel):
         input_ids,
         attention_mask=None,
         head_mask=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
