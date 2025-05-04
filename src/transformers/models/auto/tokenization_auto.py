@@ -81,6 +81,7 @@ else:
             ),
             ("bartpho", ("BartphoTokenizer", None)),
             ("bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("character-bert", ("CharacterBertTokenizer", "CharacterBertTokenizerFast" if is_tokenizers_available() else None)),
             ("bert-generation", ("BertGenerationTokenizer" if is_sentencepiece_available() else None, None)),
             ("bert-japanese", ("BertJapaneseTokenizer", None)),
             ("bertweet", ("BertweetTokenizer", None)),
