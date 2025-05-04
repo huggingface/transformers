@@ -34,7 +34,7 @@ You can find all the original [RoFormer](link) checkpoints under the [RoFormer](
 > [!TIP]
 > Click on the [RoFormer] models in the right sidebar for more examples of how to apply [RoFormer] to different NLP tasks.
 
-The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`] class, and from the command line.
+The example below demonstrates how to predict masked tokens using the mask-filling [`Pipeline`] or the [`AutoModel`] class, and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline>
