@@ -334,7 +334,7 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndar
     return masks
 
 
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation with DETR->DeformableDetr
+# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation with DETR->DinoDetr
 def prepare_coco_detection_annotation(
     image,
     target,
@@ -433,7 +433,7 @@ def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
     return np.stack([x_min, y_min, x_max, y_max], 1)
 
 
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation with DETR->DeformableDetr
+# Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation with DETR->DinoDetr
 def prepare_coco_panoptic_annotation(
     image: np.ndarray,
     target: Dict,
@@ -951,7 +951,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         ]
 
     @classmethod
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->DeformableDetr
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->DinoDetr
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
@@ -965,7 +965,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
             image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
         return super().from_dict(image_processor_dict, **kwargs)
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->DeformableDetr
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->DinoDetr
     def prepare_annotation(
         self,
         image: np.ndarray,
