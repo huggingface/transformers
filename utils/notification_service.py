@@ -1258,7 +1258,7 @@ if __name__ == "__main__":
             json.dump(model_job_links, fp, indent=4, ensure_ascii=False)
 
         # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
-        if is_scheduled_ci_run:
+        if True or is_scheduled_ci_run:
             api.upload_file(
                 path_or_fileobj=f"ci_results_{job_name}/model_job_links.json",
                 path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/model_job_links.json",
