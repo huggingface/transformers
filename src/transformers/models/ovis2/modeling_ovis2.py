@@ -554,7 +554,7 @@ class Ovis2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
             if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, Ovis2VisionEmbeddings):
+        elif isinstance(module, Ovis2VisualEmbeddingTable):
             module.reset_parameters()
 
 
