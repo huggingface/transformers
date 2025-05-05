@@ -162,13 +162,6 @@ class GraniteMoeSharedPreTrainedModel(GraniteMoePreTrainedModel):
 
 @auto_docstring
 class GraniteMoeSharedModel(GraniteMoeModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GraniteMoeDecoderLayer`]
-
-    Args:
-        config: GraniteMoeSharedConfig
-    """
-
     def __init__(self, config: GraniteMoeSharedConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(

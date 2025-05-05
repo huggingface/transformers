@@ -1219,7 +1219,6 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
     This function orchestrates the process by finding relevant files, scanning for decorators,
     generating new docstrings, and updating files as needed.
     """
-    print(PATH_TO_TRANSFORMERS)
     # 1. Find all model files to check
     matching_files = find_matching_model_files()
     # 2. Find files that contain the @auto_docstring decorator

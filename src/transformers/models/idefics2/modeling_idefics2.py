@@ -550,7 +550,7 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
         patch_attention_mask (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -835,7 +835,7 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
     ) -> torch.Tensor:
         r"""
         context (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         # seq embed -> bsz seq embed
         latents = self.latents.unsqueeze(0).expand((context.shape[0], *self.latents.size()))

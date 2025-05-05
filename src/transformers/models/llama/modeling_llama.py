@@ -362,13 +362,6 @@ class LlamaPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class LlamaModel(LlamaPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
-
-    Args:
-        config: LlamaConfig
-    """
-
     def __init__(self, config: LlamaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

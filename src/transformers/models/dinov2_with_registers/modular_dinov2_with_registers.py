@@ -343,8 +343,6 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         """
-        Returns:
-
         Examples:
 
         ```python

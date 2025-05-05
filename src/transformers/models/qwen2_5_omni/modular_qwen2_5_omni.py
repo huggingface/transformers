@@ -1722,15 +1722,13 @@ class SinusoidsPositionEmbedding(nn.Module):
         return self.positional_embedding[:seqlen, :]
 
 
-class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
-    """
+@auto_docstring(
+    custom_intro="""
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     [`Qwen2_5OmniAudioEncoderLayer`].
-
-    Args:
-        config: Qwen2_5OmniAudioEncoderConfig
     """
-
+)
+class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
     config_class = Qwen2_5OmniAudioEncoderConfig
     main_input_name = "input_features"
     _no_split_modules = ["Qwen2_5OmniAudioEncoderLayer"]

@@ -37,8 +37,6 @@ from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionCo
 
 logger = logging.get_logger(__name__)
 
-# General docstring
-
 
 def _trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
@@ -572,6 +570,7 @@ class SiglipEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`SiglipEncoderLayer`].
+
     Args:
         config: SiglipConfig
     """

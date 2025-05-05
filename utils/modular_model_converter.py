@@ -30,7 +30,6 @@ from libcst.metadata import MetadataWrapper, ParentNodeProvider, PositionProvide
 
 from transformers import logging
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
-from transformers.utils.args_doc import parse_docstring, set_min_indent
 
 
 logger = logging.get_logger(__name__)
@@ -259,7 +258,7 @@ def get_docstring_indent(docstring):
     return 0
 
 
-def is_full_docstring(new_docstring: str) -> bool:
+def is_full_docstring(original_docstring: str, new_docstring: str, original_level: int) -> bool:
     """Check if `new_docstring` is a full docstring, or if it is only part of a docstring that should then
     be merged with the existing old one.
     """
@@ -267,6 +266,17 @@ def is_full_docstring(new_docstring: str) -> bool:
     new_docstring = new_docstring.split('"""', 1)[1]
     # The docstring contains Args definition, so it is self-contained
     if re.search(r"\n\s*Args:\n", new_docstring):
+        return True
+    elif re.search(r"\n\s*Args:\n", original_docstring):
+        return False
+    # Check if the docstring contains args docstring (meaning it is self contained):
+    param_pattern = re.compile(
+        # |--- Group 1 ---|| Group 2 ||- Group 3 -||---------- Group 4 ----------|
+        rf"^\s{{0,{original_level}}}(\w+)\s*\(\s*([^, \)]*)(\s*.*?)\s*\)\s*:\s*((?:(?!\n^\s{{0,{original_level}}}\w+\s*\().)*)",
+        re.DOTALL | re.MULTILINE,
+    )
+    match_object = param_pattern.search(new_docstring)
+    if match_object is not None:
         return True
     # If it contains Returns, but starts with text indented with an additional 4 spaces before, it is self-contained
     # (this is the scenario when using `@add_start_docstrings_to_model_forward`, but adding more args to docstring)
@@ -281,29 +291,39 @@ def is_full_docstring(new_docstring: str) -> bool:
 
 def merge_docstrings(original_docstring, updated_docstring):
     original_level = get_docstring_indent(original_docstring)
-
-    docstring_args_dict, original_remaining_docstring = parse_docstring(original_docstring)
-    updated_docstring_args_dict, updated_remaining_docstring = parse_docstring(updated_docstring)
-    start_docstring = original_docstring.split('"""', 1)[0]
-    # Merge the args dicts
-    docstring_args_dict.update(updated_docstring_args_dict)
-    new_docstring = ""
-    for arg in docstring_args_dict:
-        additional_info = docstring_args_dict[arg]["additional_info"] or ""
-        custom_arg_description = docstring_args_dict[arg]["description"]
-        if custom_arg_description.endswith('"""'):
-            custom_arg_description = "\n".join(custom_arg_description.split("\n")[:-1])
-        new_docstring += f"{arg} ({docstring_args_dict[arg]['type']}{additional_info}):{custom_arg_description}\n"
-
-    if not updated_remaining_docstring and original_remaining_docstring:
-        new_docstring += original_remaining_docstring
-    elif updated_remaining_docstring:
-        new_docstring += updated_remaining_docstring
-
-    new_docstring = set_min_indent(new_docstring, original_level)
-    new_docstring = '"""\n' + new_docstring + '\n"""'
-
-    return new_docstring
+    if not is_full_docstring(original_docstring, updated_docstring, original_level):
+        # Split the docstring at the example section, assuming `"""` is used to define the docstring
+        parts = original_docstring.split("```")
+        if "```" in updated_docstring and len(parts) > 1:
+            updated_docstring = updated_docstring.lstrip('r"')
+            new_parts = updated_docstring.split("```")
+            if len(new_parts) != 3:
+                raise ValueError("There should only be one example, and it should have opening and closing '```'")
+            parts[1] = new_parts[1]
+            updated_docstring = "".join(
+                [
+                    f"\n{original_level * ' '}```",
+                    parts[1],
+                    "```",
+                    parts[2],
+                ]
+            )
+            docstring_opening, original_start_docstring = parts[0].rstrip(" \n").split('"""')[:2]
+            new_start_docstring = new_parts[0].rstrip(" \n")
+            docstring_opening += '"""'
+            if new_start_docstring.startswith(original_start_docstring):
+                updated_docstring = new_start_docstring + "\n" + updated_docstring
+            elif original_start_docstring.endswith(new_start_docstring):
+                updated_docstring = original_start_docstring + "\n" + updated_docstring
+            else:
+                updated_docstring = original_start_docstring + "\n" + new_start_docstring + "\n" + updated_docstring
+            updated_docstring = docstring_opening + updated_docstring
+        elif updated_docstring not in original_docstring:
+            # add tabulation if we are at the lowest level.
+            if re.search(r"\n\s*.*\(.*\)\:\n\s*\w", updated_docstring):
+                updated_docstring = updated_docstring.replace("\n    ", "\n        ")
+            updated_docstring = original_docstring.rstrip('"') + "\n" + updated_docstring.lstrip('r"\n')
+    return updated_docstring
 
 
 class SuperTransformer(cst.CSTTransformer):

@@ -812,13 +812,6 @@ class GraniteMoePreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GraniteMoeModel(GraniteMoePreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GraniteMoeDecoderLayer`]
-
-    Args:
-        config: GraniteMoeConfig
-    """
-
     def __init__(self, config: GraniteMoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

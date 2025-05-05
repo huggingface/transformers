@@ -807,8 +807,6 @@ class JanusVQVAEDecoder(nn.Module):
 
 
 class JanusVQVAE(ChameleonVQVAE):
-    """Vision Transformer-based VQ-VAE model for encoding and decoding pixel values."""
-
     _no_split_modules = [
         "JanusVQVAEAttnBlock",
         "JanusVQVAEResnetBlock",
@@ -844,21 +842,11 @@ class JanusVQVAE(ChameleonVQVAE):
         return pixel_values
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
-        """
-        Encodes pixel values into quantized tokens and decodes them back.
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-                The tensors corresponding to the input images.
-        Returns:
-            decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                Reconstructed pixel values after encoding and decoding the input.
-            embedding_loss (`torch.FloatTensor`): Embedding loss.
-        """
-
         batch_size = pixel_values.shape[0]
         quant, embedding_loss, indices = self.encode(pixel_values)
         decoded_pixel_values = self.decode(indices.view(batch_size, -1))
@@ -1075,8 +1063,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

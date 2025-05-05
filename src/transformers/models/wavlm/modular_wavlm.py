@@ -521,11 +521,6 @@ class WavLMGumbelVectorQuantizer(nn.Module):
 
 
 class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = WavLMConfig
     base_model_prefix = "wavlm"
     main_input_name = "input_values"

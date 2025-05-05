@@ -119,11 +119,6 @@ class Data2VecAudioAdapter(Wav2Vec2Adapter):
 
 
 class Data2VecAudioPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = Data2VecAudioConfig
     base_model_prefix = "data2vec_audio"
     main_input_name = "input_values"

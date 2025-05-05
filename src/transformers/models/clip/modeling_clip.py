@@ -829,7 +829,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> BaseModelOutputWithPooling:
         r"""
-        Examples:
+        Example:
 
         ```python
         >>> from PIL import Image

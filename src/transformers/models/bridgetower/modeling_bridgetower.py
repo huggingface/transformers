@@ -1017,6 +1017,10 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
     config_class = BridgeTowerTextConfig
 
     def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
+        """
         super().__init__(config)
         self.config = config
 

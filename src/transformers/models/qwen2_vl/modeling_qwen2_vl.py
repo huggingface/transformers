@@ -907,6 +907,7 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
+@auto_docstring
 class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
     config_class = Qwen2VLVisionConfig
     _no_split_modules = ["Qwen2VLVisionBlock"]
@@ -968,7 +969,12 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb
 
+    @auto_docstring
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
+        r"""
+        grid_thw (<fill_type>):
+            <fill_docstring>
+        """
         hidden_states = self.patch_embed(hidden_states)
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
@@ -1022,6 +1028,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1296,6 +1303,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         return causal_mask
 
 
+@auto_docstring
 class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 

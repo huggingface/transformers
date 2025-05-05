@@ -37,16 +37,8 @@ from ...image_utils import (
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils import (
-    PreTokenizedInput,
-    TextInput,
-)
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
+from ...tokenization_utils import PreTokenizedInput, TextInput
+from ...utils import TensorType, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
@@ -1444,8 +1436,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             Otherwise, slice according to the 1D tensor in the sequence length dimension
         cache_position (`torch.LongTensor`, *optional*):
             Cache positions.
-            **loss_kwargs:
-            Additional keyword arguments for loss calculation.
 
         Example:
 

@@ -421,7 +421,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-
+    UniSpeech Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
     """
 )
 class UniSpeechForCTC(Wav2Vec2ForCTC):

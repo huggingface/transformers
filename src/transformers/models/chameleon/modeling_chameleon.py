@@ -1063,13 +1063,6 @@ class ChameleonVQVAE(ChameleonPreTrainedModel):
 
 @auto_docstring
 class ChameleonModel(ChameleonPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ChameleonDecoderLayer`]
-
-    Args:
-        config: ChameleonConfig
-    """
-
     def __init__(self, config: ChameleonConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

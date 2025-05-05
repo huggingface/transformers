@@ -33,11 +33,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
+from ...utils import auto_docstring, can_return_tuple, logging
 from ..phi3.configuration_phi3 import Phi3Config
 from ..phi3.modeling_phi3 import (
     Phi3DecoderLayer,
@@ -1480,12 +1476,6 @@ class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
 
 
 class Phi4MultimodalModel(Phi3Model, nn.Module):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Phi4MultimodalMMDecoderLayer`]
-    Args:
-        config: Phi4MultimodalMMConfig
-    """
-
     def __init__(self, config: Phi4MultimodalConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
