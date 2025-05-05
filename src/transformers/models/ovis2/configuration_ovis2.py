@@ -26,12 +26,10 @@ class Ovis2VisionConfig(PretrainedConfig):
             The epsilon used by the RMSNorm layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        projection_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the projection layers.
         qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a learnable bias to the query, key, and value sequences at each attention head.
-        use_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias term in SwiGLUFFN layers.
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether to add a learnable bias to the MLP layers.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
@@ -62,10 +60,8 @@ class Ovis2VisionConfig(PretrainedConfig):
         patch_size: int = 14,
         rms_norm_eps: float = 1e-5,
         attention_dropout: float = 0.0,
-        projection_dropout: float = 0.0,
         qkv_bias: bool = False,
         mlp_bias: bool = False,
-        use_bias: bool = False,
         hidden_act="silu",
         vocab_size=16384,
         hidden_stride=1,
@@ -86,11 +82,9 @@ class Ovis2VisionConfig(PretrainedConfig):
 
         self.attention_dropout = attention_dropout
         self.hidden_act = hidden_act
-        self.use_bias = use_bias
         self.qkv_bias = qkv_bias
         self.mlp_bias = mlp_bias
         self.rms_norm_eps = rms_norm_eps
-        self.projection_dropout = projection_dropout
         self.vocab_size = vocab_size
         self.hidden_stride = hidden_stride
         self.vision_feature_select_strategy = vision_feature_select_strategy

@@ -1,17 +1,18 @@
 import math
-from typing import Callable, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import nn
 
-from transformers.models.llama.modeling_llama import LlamaRMSNorm, LlamaMLP, eager_attention_forward, LlamaAttention
-from transformers.models.llava_next.modeling_llava_next import LlavaNextCausalLMOutputWithPast, LlavaNextPreTrainedModel, LlavaNextForConditionalGeneration
-from transformers.models.siglip.modeling_siglip import SiglipEncoder, SiglipAttention, SiglipEncoderLayer
+from transformers.models.llama.modeling_llama import LlamaMLP, LlamaRMSNorm
+from transformers.models.llava_next.modeling_llava_next import (
+    LlavaNextCausalLMOutputWithPast,
+    LlavaNextPreTrainedModel,
+)
+from transformers.models.siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipEncoderLayer
 
-from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import add_start_docstrings_to_model_forward, logging
 from ..auto import AutoModelForCausalLM
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
