@@ -30,17 +30,17 @@ class DiaEncoderConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_hidden_layers,
-        hidden_size,
-        intermediate_size,
-        num_attention_heads,
-        head_dim,
+        num_hidden_layers=12,
+        hidden_size=1024,
+        intermediate_size=4096,
+        num_attention_heads=16,
+        head_dim=128,
         **kwargs,
     ):
-        self.num_hidden_layers = num_hidden_layers  # was: n_layer
-        self.hidden_size = hidden_size             # was: n_embd
-        self.intermediate_size = intermediate_size # was: n_hidden
-        self.num_attention_heads = num_attention_heads  # was: n_head
+        self.num_hidden_layers = num_hidden_layers
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_attention_heads = num_attention_heads
         self.head_dim = head_dim
 
         super().__init__(**kwargs)
@@ -50,22 +50,22 @@ class DiaDecoderConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_hidden_layers,
-        hidden_size,
-        intermediate_size,
-        num_attention_heads,
-        num_key_value_heads,
-        head_dim,
-        cross_query_heads,
-        cross_head_dim,
+        num_hidden_layers=18,
+        hidden_size=2048,
+        intermediate_size=8192,
+        num_attention_heads=16,
+        num_key_value_heads=4,
+        head_dim=128,
+        cross_query_heads=16,
+        cross_head_dim=128,
         **kwargs,
     ):
-        self.num_hidden_layers = num_hidden_layers      # was: n_layer
-        self.hidden_size = hidden_size                 # was: n_embd
-        self.intermediate_size = intermediate_size     # was: n_hidden
-        self.num_attention_heads = num_attention_heads  # was: gqa_query_heads
-        self.num_key_value_heads = num_key_value_heads  # was: kv_heads
-        self.head_dim = head_dim                      # was: gqa_head_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size     
+        self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
+        self.head_dim = head_dim
         self.cross_query_heads = cross_query_heads
         self.cross_head_dim = cross_head_dim
 
