@@ -717,6 +717,7 @@ class MusicgenPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+
 MUSICGEN_START_DOCSTRING = r"""
 
     The Musicgen model was proposed in [Simple and Controllable Music Generation](https://arxiv.org/abs/2306.05284) by
