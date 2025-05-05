@@ -24,9 +24,9 @@ CONTEXT_LENGTH = 32768  # multimodal_max_length
 
 # Mapping from original model key patterns to HF key patterns
 ORIGINAL_TO_HF_MAPPING = {
-    r"trunk.blocks\.(\d+)\.norm_1": r"encoder.layers.\1.rms_norm1",
-    r"trunk.blocks\.(\d+)\.norm_2": r"encoder.layers.\1.rms_norm2",
-    r"trunk.blocks\.(\d+)\.attn.proj": r"encoder.layers.\1.attention.proj_out",
+    r"trunk.blocks\.(\d+)\.norm_1": r"encoder.layers.\1.layer_norm1",
+    r"trunk.blocks\.(\d+)\.norm_2": r"encoder.layers.\1.layer_norm2",
+    r"trunk.blocks\.(\d+)\.attn.proj": r"encoder.layers.\1.self_attn.out_proj",
     r"visual_tokenizer": r"vision_tower",
     r"backbone": r"transformer",
     r"preprocessor": r"embeddings",
@@ -34,7 +34,11 @@ ORIGINAL_TO_HF_MAPPING = {
     r"patchifier.norm": r"rms_norm",
     r"trunk.post_trunk_norm": r"rms_norm",
     r"trunk.blocks": r"encoder.layers",
-    r"mlp.fc": r"ffn.fc",
+    r"mlp.fc1": r"mlp.gate_proj",
+    r"mlp.fc2": r"mlp.down_proj",
+    r"mlp.fc3": r"mlp.up_proj",
+    r"head.0": r"head_linear",
+    r"head.1": r"head_norm",
     r"vte.weight": r"visual_table.weight",
     r"llm": r"language_model",
 }
@@ -57,7 +61,6 @@ UNNECESSARY_CONFIG_KEYS = [
     "use_bfloat16",
     "use_flash_attn",
     "qk_normalization",
-    "qkv_bias",
     "bias",
     "norm_type",
 ]
@@ -144,6 +147,7 @@ def extract_vision_config_from_original(orig_config):
     visual_tokenizer_config["image_size"] = orig_config.visual_tokenizer_config.backbone_config.image_size
     visual_tokenizer_config["num_channels"] = orig_config.visual_tokenizer_config.backbone_config.num_channels
     visual_tokenizer_config["patch_size"] = orig_config.visual_tokenizer_config.backbone_config.patch_size
+    visual_tokenizer_config["qkv_bias"] = orig_config.visual_tokenizer_config.backbone_config.qkv_bias
 
     # Remove unnecessary keys
     return {k: v for k, v in visual_tokenizer_config.items() if k not in UNNECESSARY_CONFIG_KEYS}
@@ -223,13 +227,13 @@ def convert_orig2hf(state_dict, dim):
         # Handle special cases
         if "attn.qkv" in key:
             # Split QKV into separate Q, K, V matrices
-            new_key_query = key.replace("attn.qkv", "attention.q_proj")
+            new_key_query = key.replace("attn.qkv", "self_attn.q_proj")
             new_state_dict[new_key_query] = state_dict[orig_key][:dim]
 
-            new_key_key = key.replace("attn.qkv", "attention.k_proj")
+            new_key_key = key.replace("attn.qkv", "self_attn.k_proj")
             new_state_dict[new_key_key] = state_dict[orig_key][dim : 2 * dim]
 
-            new_key_value = key.replace("attn.qkv", "attention.v_proj")
+            new_key_value = key.replace("attn.qkv", "self_attn.v_proj")
             new_state_dict[new_key_value] = state_dict[orig_key][-dim:]
 
         elif "pos_embed" in key:

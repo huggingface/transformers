@@ -4,9 +4,9 @@ from typing import Callable, List, Optional, Tuple, Union
 import torch
 from torch import nn
 
-from transformers.models.llama.modeling_llama import LlamaRMSNorm
-from transformers.models.llava_next.modeling_llava_next import LlavaNextCausalLMOutputWithPast
-from transformers.models.siglip.modeling_siglip import SiglipEncoder
+from transformers.models.llama.modeling_llama import LlamaRMSNorm, LlamaMLP, eager_attention_forward, LlamaAttention
+from transformers.models.llava_next.modeling_llava_next import LlavaNextCausalLMOutputWithPast, LlavaNextPreTrainedModel, LlavaNextForConditionalGeneration
+from transformers.models.siglip.modeling_siglip import SiglipEncoder, SiglipAttention, SiglipEncoderLayer
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
@@ -56,23 +56,8 @@ class Ovis2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class Ovis2SwiGLUFFN(nn.Module):
-    def __init__(self, config: Ovis2VisionConfig):
-        super().__init__()
-        in_features = config.hidden_size
-        out_features = config.intermediate_size
-        self.act_fn = config.hidden_act
-
-        self.fc1 = nn.Linear(in_features, out_features, bias=config.use_bias)
-        self.fc2 = nn.Linear(out_features, in_features, bias=config.use_bias)
-        self.fc3 = nn.Linear(in_features, out_features, bias=config.use_bias)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        fc3_out = self.fc3(hidden_states)
-        fc1_out = self.fc1(hidden_states)
-        hidden_states = ACT2FN[self.act_fn](fc1_out) * fc3_out
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+class Ovis2VisionMLP(LlamaMLP):
+    pass
 
 
 class Ovis2VisionEmbeddings(nn.Module):
@@ -122,126 +107,22 @@ class Ovis2VisionEmbeddings(nn.Module):
         return hidden_states
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
-    value_states: torch.Tensor,
-    scaling: float,
-    attention_mask: Optional[torch.Tensor] = None,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
-
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-
-    # Only apply attention dropout during training.
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-class Ovis2VisionAttention(nn.Module):
+class Ovis2VisionAttention(SiglipAttention):
     def __init__(self, config: Ovis2VisionConfig):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.attention_dropout = config.attention_dropout
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-
+        super().__init__(config)
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.proj_out = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.proj_drop = nn.Dropout(config.projection_dropout)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        batch_size, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask=attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scale,
-            is_causal=False,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim)
-
-        attn_output = self.proj_out(attn_output)
-        attn_output = self.proj_drop(attn_output)
-
-        output = (attn_output, attn_weights) if output_attentions else (attn_output, None)
-
-        return output
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
 
 
-class Ovis2EncoderLayer(nn.Module):
+class Ovis2EncoderLayer(SiglipEncoderLayer):
     def __init__(self, config: Ovis2VisionConfig):
-        super().__init__()
-        self.attention = Ovis2VisionAttention(config)
-        self.ffn = Ovis2SwiGLUFFN(config)
-        self.rms_norm1 = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.rms_norm2 = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        norm_hidden_states = self.rms_norm1(hidden_states)
-        attn_output, attn_wights = self.attention(
-            hidden_states=norm_hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-        )
-
-        hidden_states = hidden_states + attn_output
-        norm_hidden_states = self.rms_norm2(hidden_states)
-        mlp_output = self.ffn(norm_hidden_states)
-
-        hidden_states = hidden_states + mlp_output
-        return (hidden_states, attn_wights) if output_attentions else (hidden_states, None)
+        super().__init__(config)
+        self.layer_norm1 = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.mlp = Ovis2VisionMLP(config)
+        self.layer_norm2 = Ovis2RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.self_attn = Ovis2VisionAttention(config)
 
 
 class Ovis2Encoder(SiglipEncoder):
@@ -318,14 +199,12 @@ class Ovis2VisionModel(nn.Module):
         self.transformer = Ovis2VisionTransformer(config)
         self.num_visual_indicator_tokens = config.num_visual_indicator_tokens
         self.vocab_size = config.vocab_size
-        self.head = nn.Sequential(
-            nn.Linear(
-                config.hidden_size * config.hidden_stride * config.hidden_stride,
-                self.vocab_size - self.num_visual_indicator_tokens,
-                bias=False,
-            ),
-            nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens),
+        self.head_linear = nn.Linear(
+            config.hidden_size * config.hidden_stride * config.hidden_stride,
+            self.vocab_size - self.num_visual_indicator_tokens,
+            bias=False,
         )
+        self.head_norm = nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens)
 
     def get_prob_token(self, logits):
         if self.config.tokenize_function == "gumbel_argmax":
@@ -362,7 +241,8 @@ class Ovis2VisionModel(nn.Module):
             selected_image_feature = selected_image_feature.permute(0, 1, 3, 2, 4, 5)
             selected_image_feature = selected_image_feature.reshape(n, -1, hs * hs * d)  # (n, (sqrt_l//hs)^2, hs^2*d)
 
-        logits = self.head(selected_image_feature)
+        logits = self.head_linear(selected_image_feature)
+        logits = self.head_norm(logits)
         prob_token = self.get_prob_token(logits)
 
         return prob_token
@@ -372,7 +252,7 @@ class Ovis2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
     pass
 
 
-class Ovis2PreTrainedModel(PreTrainedModel):
+class Ovis2PreTrainedModel(LlavaNextPreTrainedModel):
     config_class = Ovis2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -382,29 +262,6 @@ class Ovis2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_static_cache = True
-
-    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextPreTrainedModel._init_weights
-    def _init_weights(self, module):
-        # important: this ported version of LlavaNext isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/llava_next should serve for that purpose
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
-
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 OVIS2_INPUTS_DOCSTRING = r"""
@@ -494,27 +351,21 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
 
         self.post_init()
 
-    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.get_input_embeddings
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
 
-    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.set_input_embeddings
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.get_output_embeddings
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
-    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.language_model.set_output_embeddings(new_embeddings)
 
-    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.set_decoder
     def set_decoder(self, decoder):
         self.language_model.set_decoder(decoder)
 
-    # Copied from transformers.models.llava_next.modeling_llava_next.LlavaNextForConditionalGeneration.get_decoder
     def get_decoder(self):
         return self.language_model.get_decoder()
 
@@ -726,4 +577,4 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["Ovis2ForConditionalGeneration", "Ovis2PreTrainedModel"]
+__all__ = ["Ovis2PreTrainedModel", "Ovis2ForConditionalGeneration"]
