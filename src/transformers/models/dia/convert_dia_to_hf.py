@@ -56,9 +56,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    model = convert_dia_model_to_hf(
-        args.checkpoint_path, args.pytorch_dump_folder_path
-    )
+    model = convert_dia_model_to_hf(args.checkpoint_path, args.pytorch_dump_folder_path)
 
     if args.convert_preprocessor:
         try:

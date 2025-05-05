@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+
 class DiaEncoderConfig(PretrainedConfig):
     model_type = "dia_encoder"
 
@@ -46,6 +47,7 @@ class DiaEncoderConfig(PretrainedConfig):
         self.norm_eps = norm_eps
         super().__init__(**kwargs)
 
+
 class DiaDecoderConfig(PretrainedConfig):
     model_type = "dia_decoder"
 
@@ -64,7 +66,7 @@ class DiaDecoderConfig(PretrainedConfig):
     ):
         self.num_hidden_layers = num_hidden_layers
         self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size     
+        self.intermediate_size = intermediate_size
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.head_dim = head_dim

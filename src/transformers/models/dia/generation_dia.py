@@ -19,7 +19,7 @@ import torch
 from ...generation import GenerationMixin
 from ...utils import logging
 
-
+import time
 logger = logging.get_logger(__name__)
 
 

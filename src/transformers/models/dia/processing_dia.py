@@ -16,9 +16,16 @@
 Speech processor class for Dia
 """
 
-from ...processing_utils import ProcessorMixin
+import typing
 
-def build_delay_indices(B: int, T: int, C: int, delay_pattern: tp.List[int]) -> tp.Tuple[torch.Tensor, torch.Tensor]:
+import torch
+
+from ...processing_utils import ProcessorMixin
+from ...modeling_utils import AutoModel
+
+def build_delay_indices(
+    B: int, T: int, C: int, delay_pattern: typing.List[int]
+) -> typing.Tuple[torch.Tensor, torch.Tensor]:
     """
     Precompute (t_idx_BxTxC, indices_BTCx3) so that out[t, c] = in[t - delay[c], c].
     Negative t_idx => BOS; t_idx >= T => PAD.
@@ -60,7 +67,7 @@ def apply_audio_delay(
     audio_BxTxC: torch.Tensor,
     pad_value: int,
     bos_value: int,
-    precomp: tp.Tuple[torch.Tensor, torch.Tensor],
+    precomp: typing.Tuple[torch.Tensor, torch.Tensor],
 ) -> torch.Tensor:
     """
     Applies the delay pattern to batched audio tokens using precomputed indices,
@@ -100,7 +107,9 @@ def apply_audio_delay(
     return result_BxTxC
 
 
-def build_revert_indices(B: int, T: int, C: int, delay_pattern: tp.List[int]) -> tp.Tuple[torch.Tensor, torch.Tensor]:
+def build_revert_indices(
+    B: int, T: int, C: int, delay_pattern: typing.List[int]
+) -> typing.Tuple[torch.Tensor, torch.Tensor]:
     """
     Precompute indices for the revert operation using PyTorch.
 
@@ -140,7 +149,7 @@ def build_revert_indices(B: int, T: int, C: int, delay_pattern: tp.List[int]) ->
 def revert_audio_delay(
     audio_BxTxC: torch.Tensor,
     pad_value: int,
-    precomp: tp.Tuple[torch.Tensor, torch.Tensor],
+    precomp: typing.Tuple[torch.Tensor, torch.Tensor],
     T: int,
 ) -> torch.Tensor:
     """

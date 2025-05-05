@@ -301,9 +301,7 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
             batched_speech,
             padding=padding,
             max_length=max_length if max_length else self.n_samples,
-            truncation=truncation,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=return_attention_mask or do_normalize,
+            **kwargs
         )
 
         return_tensors = kwargs.get("return_tensors", None)

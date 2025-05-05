@@ -60,6 +60,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clipseg", "CLIPSegProcessor"),
         ("clvp", "ClvpProcessor"),
         ("colpali", "ColPaliProcessor"),
+        ("dia", "DiaProcessor"),
         ("emu3", "Emu3Processor"),
         ("flava", "FlavaProcessor"),
         ("fuyu", "FuyuProcessor"),
@@ -129,7 +130,6 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("wav2vec2-conformer", "Wav2Vec2Processor"),
         ("wavlm", "Wav2Vec2Processor"),
         ("whisper", "WhisperProcessor"),
-        ("dia", "DiaProcessor"),
         ("xclip", "XCLIPProcessor"),
     ]
 )
