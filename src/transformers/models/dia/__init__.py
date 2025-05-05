@@ -20,12 +20,10 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_dia import *
     from .feature_extraction_dia import *
-    from .modeling_flax_dia import *
-    from .modeling_tf_dia import *
     from .modeling_dia import *
     from .processing_dia import *
     from .tokenization_dia import *
-    from .tokenization_dia_fast import *
+    from .generation_dia import *
 else:
     import sys
 

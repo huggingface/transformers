@@ -82,7 +82,7 @@ class DiaGenerationMixin(GenerationMixin):
         eos_detected = False
         eos_countdown = -1
 
-        if use_torch_compile:
+        if use_torch_compile: # TODO only compile decoding steps?
             step_fn = torch.compile(self._decoder_step, mode="default")
         else:
             step_fn = self._decoder_step
@@ -143,4 +143,4 @@ class DiaGenerationMixin(GenerationMixin):
             total_duration = time.time() - total_start_time
             print(f"generate: total step={total_step}, total duration={total_duration:.3f}s")
 
-        return self._generate_output(generated_codes) # TODO not sure best way to do this, most probably let the audio tokenizer handle via the audio_processor
+        return generated_codes 

@@ -102,40 +102,9 @@ class DiaTokenizer(PreTrainedTokenizer):
         string = bstring.decode("utf-8", errors="ignore")
         return string
 
-    # ByT5Tokenizer has no vocab file
+
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         return ()
-    
-    def _prepare_text_input(self, text: str) -> torch.Tensor:
-        """Encodes text prompt, pads, and creates attention mask and positions."""
-        text_pad_value = self.config.data.text_pad_value
-        max_len = self.config.data.text_length
-
-        byte_text = text.encode("utf-8")
-        replaced_bytes = byte_text.replace(b"[S1]", b"\x01").replace(b"[S2]", b"\x02")
-        text_tokens = list(replaced_bytes)
-
-        current_len = len(text_tokens)
-        padding_needed = max_len - current_len
-        if padding_needed <= 0:
-            text_tokens = text_tokens[:max_len]
-            padded_text_np = np.array(text_tokens, dtype=np.uint8)
-        else:
-            padded_text_np = np.pad(
-                text_tokens,
-                (0, padding_needed),
-                mode="constant",
-                constant_values=text_pad_value,
-            ).astype(np.uint8)
-
-        src_tokens = torch.from_numpy(padded_text_np).to(torch.long).to(self.device).unsqueeze(0)  # [1, S]
-        return src_tokens
-
-    def get_vocab(self):
-        """Returns vocab as a dict"""
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""

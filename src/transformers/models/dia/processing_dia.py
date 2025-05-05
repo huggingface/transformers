@@ -34,17 +34,15 @@ class DiaProcessor(ProcessorMixin):
             An instance of [`DiaTokenizer`]. The tokenizer is a required input.
     """
 
-    feature_extractor_class = "DiaFeatureExtractor"
+    feature_extractor_class = "DacFeatureExtractor"
     tokenizer_class = "DiaTokenizer"
 
-    def __init__(self, feature_extractor, tokenizer):
+
+    def __init__(self, feature_extractor, tokenizer, audio_model=None):
         super().__init__(feature_extractor, tokenizer)
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
-
-    def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
-        return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
-
+        self.audio_tokenizer = AutoModel.from_pretrained(audio_model)
 
     def _prepare_audio_prompt(self, audio_prompt: torch.Tensor | None) -> tuple[torch.Tensor, int]:
         num_channels = self.config.data.channels
@@ -93,10 +91,6 @@ class DiaProcessor(ProcessorMixin):
         argument to [`~DiaTokenizer.__call__`]. Please refer to the docstring of the above two methods for more
         information.
         """
-        # For backward compatibility
-        if self._in_target_context_manager:
-            return self.current_processor(*args, **kwargs)
-
         audio = kwargs.pop("audio", None)
         sampling_rate = kwargs.pop("sampling_rate", None)
         text = kwargs.pop("text", None)
@@ -108,7 +102,14 @@ class DiaProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
         if audio is not None:
-            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
+            input_audio = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
+            audio_tokens = self.audio_tokenizer.encode(input_audio["input_values"], **kwargs)
+            inputs = {
+                "input_values": input_audio["input_values"],
+                "attention_mask": input_audio["attention_mask"],
+                "audio_tokens": audio_tokens["input_ids"],
+            }
+
         if text is not None:
             encodings = self.tokenizer(text, **kwargs)
 
@@ -126,17 +127,13 @@ class DiaProcessor(ProcessorMixin):
         This method forwards all its arguments to DiaTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+        return self.tokenizer.decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to DiaTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    def get_prompt_ids(self, text: str, return_tensors="np"):
-        return self.tokenizer.get_prompt_ids(text, return_tensors=return_tensors)
-
+        return self.audio_tokenizer.decode(*args, **kwargs)
 
 __all__ = ["DiaProcessor"]

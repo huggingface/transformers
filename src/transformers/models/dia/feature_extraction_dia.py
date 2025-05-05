@@ -197,7 +197,16 @@ def revert_audio_delay(
 
 
 
-
+class FeatureExtractionArgs:
+    # add doc
+    truncation: bool = True,
+    sampling_rate: Optional[int] = None,
+    pad_to_multiple_of: Optional[int] = None,
+    return_tensors: Optional[Union[str, TensorType]] = None,
+    return_attention_mask: Optional[bool] = None,
+    padding: Optional[str] = "max_length",
+    max_length: Optional[int] = None,
+    device: Optional[str] = "cpu",
 
 
 class DiaFeatureExtractor(SequenceFeatureExtractor):
@@ -238,19 +247,14 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
 
     def __init__(
         self,
-        feature_size=80,
-        sampling_rate=16000,
-        hop_length=160,
-        chunk_length=30,
-        n_fft=400,
+        sampling_rate=44100,
         padding_value=0.0,
-        dither=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
         audio_tokenizer_path=None,
+        hop_length=160,
         **kwargs,
     ):
-        with torch.no_grad():
-            self.audio_tokenizer = AutoModel.from_pretrained(audio_tokenizer_path, **kwargs)
+        self.hop_length = hop_length
         super().__init__(
             feature_size=feature_size,
             sampling_rate=sampling_rate,
@@ -259,104 +263,22 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
             **kwargs,
         )
 
-    def preprocess(self, audio_data, sample_rate):
-        if sample_rate is None:
-            sample_rate = self.sample_rate
-
+    def load_audio(self, audio_path: str) -> torch.Tensor:
+        audio, sr = torchaudio.load(audio_path, channels_first=True)  # C, T
+        if sr != self.sampling_rate:
+            audio = torchaudio.functional.resample(audio, sr, self.sampling_rate)
+        audio = audio.to(self.device).unsqueeze(0)  # 1, C, T
         length = audio_data.shape[-1]
         right_pad = math.ceil(length / self.hop_length) * self.hop_length - length
         audio_data = nn.functional.pad(audio_data, (0, right_pad))
-
-        return audio_data
-
-    def load_audio(self, audio_path: str) -> torch.Tensor:
-        audio, sr = torchaudio.load(audio_path, channels_first=True)  # C, T
-        if sr != DEFAULT_SAMPLE_RATE:
-            audio = torchaudio.functional.resample(audio, sr, DEFAULT_SAMPLE_RATE)
-        audio = audio.to(self.device).unsqueeze(0)  # 1, C, T
-        audio_data = self.preprocess(audio, DEFAULT_SAMPLE_RATE)
         _, encoded_frame, _, _, _ = self.audio_tokenizer.encode(audio_data)  # 1, C, T
         return encoded_frame.squeeze(0).transpose(0, 1)
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        truncation: bool = True,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
-        padding: Optional[str] = "max_length",
-        max_length: Optional[int] = None,
-        sampling_rate: Optional[int] = None,
-        do_normalize: Optional[bool] = None,
-        device: Optional[str] = "cpu",
-        return_token_timestamps: Optional[bool] = None,
-        **kwargs,
+        files_or_raw_audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        **kwargs: Unpack[FeatureExtractionArgs],
     ) -> BatchFeature:
-        """
-        Main method to featurize and prepare for the model one or several sequence(s). Implementation uses PyTorch for
-        the STFT computation if available, otherwise a slower NumPy based one.
-
-        Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
-                The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
-                stereo, i.e. single float per timestep.
-            truncation (`bool`, *optional*, default to `True`):
-                Activates truncation to cut input sequences longer than *max_length* to *max_length*.
-            pad_to_multiple_of (`int`, *optional*, defaults to None):
-                If set will pad the sequence to a multiple of the provided value.
-
-                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            return_attention_mask (`bool`, *optional*):
-                Whether to return the attention mask. If left to the default, will return the attention mask according
-                to the specific feature_extractor's default.
-
-                [What are attention masks?](../glossary#attention-mask)
-
-                <Tip>
-
-                For Dia models, `attention_mask` should always be passed for batched inference, to avoid subtle
-                bugs.
-
-                </Tip>
-
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of list of python integers. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return Numpy `np.ndarray` objects.
-            sampling_rate (`int`, *optional*):
-                The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
-                `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
-                pipeline.
-            padding_value (`float`, *optional*, defaults to 0.0):
-                The value that is used to fill the padding values / vectors.
-            do_normalize (`bool`, *optional*, defaults to `False`):
-                Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
-                improve the performance of the model.
-            device (`str`, *optional*, defaults to `'cpu'`):
-                Specifies the device for computation of the log-mel spectrogram of audio signals in the
-                `_torch_extract_fbank_features` method. (e.g., "cpu", "cuda")
-            return_token_timestamps (`bool`, *optional*, defaults to `None`):
-                Whether or not to return the number of frames of the input raw_speech.
-                These num_frames can be used by the model to compute word level timestamps.
-        """
-        if sampling_rate is not None:
-            if sampling_rate != self.sampling_rate:
-                raise ValueError(
-                    f"The model corresponding to this feature extractor: {self.__class__.__name__} was trained using a"
-                    f" sampling rate of {self.sampling_rate}. Please make sure that the provided `raw_speech` input"
-                    f" was sampled with {self.sampling_rate} and not {sampling_rate}."
-                )
-        else:
-            logger.warning(
-                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
-                "Failing to do so can result in silent errors that might be hard to debug."
-            )
-
         is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
         if is_batched_numpy and len(raw_speech.shape) > 2:
             raise ValueError(f"Only mono-channel audio is supported for input to {self}")
@@ -377,8 +299,6 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
 
         batched_speech = BatchFeature({"input_features": raw_speech})
 
-        # convert into correct format for padding
-
         padded_inputs = self.pad(
             batched_speech,
             padding=padding,
@@ -392,30 +312,5 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
-
-    @torch.no_grad()
-    @torch.inference_mode()
-    def encode(self, sequence: torch.Tensor) -> List[str]:
-        pass
-
-
-    @torch.no_grad()
-    @torch.inference_mode()
-    def decode(self, sequence: torch.Tensor) -> List[str]:
-        """
-        Decode the sequence of audio tokens into a list of strings.
-
-        Args:
-            sequence (`torch.Tensor`):
-                The sequence of audio tokens to decode.
-
-        Returns:
-            `List[str]`: A list of decoded strings.
-        """
-
-        audio_values = model.quantizer.from_codes(audio_codes)
-        audio_values = model.decode(audio_values[0])
-
-        return self.audio_tokenizer.decode(sequence)
 
 __all__ = ["DiaFeatureExtractor"]
