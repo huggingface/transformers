@@ -2230,7 +2230,7 @@ class xLSTMCache:
     Arguments:
         config (`PretrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
-        batch_size (`int`):
+        max_batch_size (`int`):
             The batch size with which the model will be used.
         dtype (`torch.dtype`, *optional*, defaults to `torch.bfloat16`):
             The default `dtype` to use when initializing the layer.
@@ -2252,7 +2252,7 @@ class xLSTMCache:
         >>> inputs = tokenizer(text="I am an xLSTM", return_tensors="pt")
 
         >>> # Prepare a cache class and pass it to model's forward
-        >>> cache_params = xLSTMCache(config=model.config, batch_size=1, device=model.device, dtype=model.dtype)
+        >>> cache_params = xLSTMCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
         >>> outputs = model(**inputs, cache_params=cache_params, use_cache=True)
         >>> outputs.cache_params
         xLSTMCache()
@@ -2261,7 +2261,7 @@ class xLSTMCache:
     def __init__(
         self,
         config: PretrainedConfig,
-        batch_size: int,
+        max_batch_size: int = 1,
         dtype: torch.dtype = torch.bfloat16,
         device: Optional[str] = None,
         **kwargs,
@@ -2272,10 +2272,12 @@ class xLSTMCache:
         self.rnn_state = {
             layer: (
                 torch.zeros(
-                    [batch_size, config.num_heads, config.qk_head_dim, config.v_head_dim], dtype=dtype, device=device
+                    [max_batch_size, config.num_heads, config.qk_head_dim, config.v_head_dim],
+                    dtype=dtype,
+                    device=device,
                 ),
-                torch.zeros([batch_size, config.num_heads, config.qk_head_dim], dtype=dtype, device=device),
-                torch.zeros([batch_size, config.num_heads, 1], dtype=dtype, device=device),
+                torch.zeros([max_batch_size, config.num_heads, config.qk_head_dim], dtype=dtype, device=device),
+                torch.zeros([max_batch_size, config.num_heads, 1], dtype=dtype, device=device),
             )
             for layer in range(config.num_blocks)
         }
