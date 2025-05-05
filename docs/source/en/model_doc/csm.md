@@ -176,7 +176,7 @@ import copy
 from transformers import CsmForConditionalGeneration, AutoProcessor
 from datasets import load_dataset
 
-model_id = "/home/eustache_lebihan/add-sesame/convert-TMP"
+model_id = "eustlb/csm-1b"
 device = "cuda"
 
 # set logs to ensure no recompilation and graph breaks
@@ -188,6 +188,7 @@ model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
 
 # use static cache, enabling automatically torch compile with fullgraph and reduce-overhead
 model.generation_config.max_length = 250 # big enough to avoid recompilation
+model.generation_config.max_new_tokens = None # would take precedence over max_length
 model.generation_config.cache_implementation = "static"
 model.depth_decoder.generation_config.cache_implementation = "static"
 
