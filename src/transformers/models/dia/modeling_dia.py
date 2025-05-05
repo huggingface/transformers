@@ -71,11 +71,10 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
+def apply_rotary_pos_emb(query, position_embeddings, sin, position_ids=None, unsqueeze_dim=1):
+    cos = position_embeddings[0].unsqueeze(unsqueeze_dim)
+    sin = position_embeddings[1].unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
 
@@ -100,8 +99,7 @@ class DiaRotaryEmbedding(nn.Module):
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (position_ids_expanded.float() / self.timescale).transpose(1, 2)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos,sin = emb.cos(), emb.sin()
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -179,7 +177,8 @@ class DiaSelfAttention(nn.Module): # Modular : LlamaAttentions
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, position_embeddings)
+        key_states = apply_rotary_pos_emb(key_states, cos, sin)
 
         if past_key_value is not None:
             key_states, value_states = past_key_value.update(
@@ -242,11 +241,13 @@ class DiaCrossAttention(nn.Module):
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = apply_rotary_pos_emb(query_states, cos, sin) 
+        # TODO queries needs to have rope applied individually!
         if cross_attention_states is not None:
             key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
             value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
             cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+            key_states = apply_rotary_pos_emb(key_states, cos, sin)
             if past_key_value is not None:
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, cache_position=cache_position
