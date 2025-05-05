@@ -89,7 +89,7 @@ class DiaConfig(PretrainedConfig):
         weight_dtype="float32",
         rope_min_timescale=1,
         rope_max_timescale=10_000,
-        is_encoder_decoder=True
+        is_encoder_decoder=True,
         **kwargs,
     ):
         self.encoder_config = encoder
