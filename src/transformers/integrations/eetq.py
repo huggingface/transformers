@@ -119,3 +119,6 @@ def replace_with_eetq_linear(
         )
 
     return model
+
+
+__all__ = ["replace_with_eetq_linear"]

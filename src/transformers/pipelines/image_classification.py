@@ -224,3 +224,8 @@ class ImageClassificationPipeline(Pipeline):
             dict_scores = dict_scores[:top_k]
 
         return dict_scores
+
+
+__all__ = [
+    "ImageClassificationPipeline",
+]

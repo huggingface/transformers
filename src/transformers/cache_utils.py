@@ -13,6 +13,7 @@ from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
 
 from .configuration_utils import PretrainedConfig
 from .utils import is_hqq_available, is_optimum_quanto_available, is_torch_greater_or_equal, logging
+from .utils.import_utils import requires
 
 
 if is_hqq_available():
@@ -21,6 +22,7 @@ if is_hqq_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torch",))
 class Cache:
     """
     Base, abstract class for all caches. The actual data structure is specific to each subclass.
@@ -100,6 +102,7 @@ class Cache:
 
 
 @dataclass
+@requires(backends=("torch",))
 class CacheConfig:
     """
     Base class for cache configs
@@ -197,6 +200,7 @@ class CacheConfig:
 
 
 @dataclass
+@requires(backends=("torch",))
 class QuantizedCacheConfig(CacheConfig):
     """
     Configuration class for quantized cache settings.
@@ -335,6 +339,7 @@ class StaticCacheConfig(CacheConfig):
             )
 
 
+@requires(backends=("torch",))
 class DynamicCache(Cache):
     """
     A cache that grows dynamically as more tokens are generated. This is the default for generative models.
@@ -598,6 +603,7 @@ if is_torch_greater_or_equal("2.3"):
     torch.fx._pytree.register_pytree_flatten_spec(DynamicCache, _flatten_dynamic_cache_for_fx)
 
 
+@requires(backends=("torch",))
 class OffloadedCache(DynamicCache):
     """
     A drop-in replacement for DynamicCache that conserves accelerator(GPU, XPU) memory at the expense of more CPU memory.
@@ -729,6 +735,7 @@ class OffloadedCache(DynamicCache):
     to_legacy_cache = None
 
 
+@requires(backends=("torch",))
 class QuantizedCache(DynamicCache):
     """
     A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
@@ -819,6 +826,7 @@ class QuantizedCache(DynamicCache):
         raise NotImplementedError("Make sure to implement `_dequantize` in a subclass.")
 
 
+@requires(backends=("torch",))
 class QuantoQuantizedCache(QuantizedCache):
     """
     Quantized Cache class that uses `quanto` as a backend to perform quantization. Current implementation supports `int2` and `int4` dtypes only.
@@ -885,6 +893,7 @@ class QuantoQuantizedCache(QuantizedCache):
         return qtensor.dequantize()
 
 
+@requires(backends=("torch",))
 class HQQQuantizedCache(QuantizedCache):
     """
     Quantized Cache class that uses `HQQ` as a backend to perform quantization. Current implementation supports `int2`, `int4`, `int8` dtypes.
@@ -949,6 +958,7 @@ class HQQQuantizedCache(QuantizedCache):
         return tensor
 
 
+@requires(backends=("torch",))
 class SinkCache(Cache):
     """
     Deprecated.
@@ -1147,6 +1157,7 @@ class SinkCache(Cache):
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
 
+@requires(backends=("torch",))
 class StaticCache(Cache):
     """
     Static Cache class to be used with `torch.compile(model)` and `torch.export()`.
@@ -1303,6 +1314,7 @@ class StaticCache(Cache):
             self.value_cache[layer_idx].zero_()
 
 
+@requires(backends=("torch",))
 class SlidingWindowCache(StaticCache):
     """
     Sliding Window Cache class to be used with `torch.compile` for models like Mistral that support sliding window attention.
@@ -1447,6 +1459,7 @@ class SlidingWindowCache(StaticCache):
             self.value_cache[layer_idx].zero_()
 
 
+@requires(backends=("torch",))
 class EncoderDecoderCache(Cache):
     """
     Base, abstract class for all encoder-decoder caches. Can be used to hold combinations of self-attention and
@@ -1619,6 +1632,7 @@ class EncoderDecoderCache(Cache):
         self.cross_attention_cache.batch_select_indices(indices)
 
 
+@requires(backends=("torch",))
 class HybridCache(Cache):
     """
     Hybrid Cache class to be used with `torch.compile` for models that alternate between a local sliding window
@@ -2123,6 +2137,7 @@ class OffloadedHybridCache(HybridChunkedCache):
             self.device_value_cache[self.active_device_layer].fill_(0.0)
 
 
+@requires(backends=("torch",))
 class MambaCache:
     """
     Cache for mamba model which does not have attention mechanism and key value states.
@@ -2223,6 +2238,7 @@ class MambaCache:
             self.ssm_states[layer_idx].zero_()
 
 
+@requires(backends=("torch",))
 class OffloadedStaticCache(StaticCache):
     """
     Static cache class to be used with `torch.compile(model)` that offloads to the CPU or
@@ -2485,3 +2501,22 @@ class OffloadedStaticCache(StaticCache):
 
         self._device_key_cache[layer_idx & 1].copy_(self.key_cache[layer_idx], non_blocking=True)
         self._device_value_cache[layer_idx & 1].copy_(self.value_cache[layer_idx], non_blocking=True)
+
+
+__all__ = [
+    "Cache",
+    "CacheConfig",
+    "DynamicCache",
+    "EncoderDecoderCache",
+    "HQQQuantizedCache",
+    "HybridCache",
+    "MambaCache",
+    "OffloadedCache",
+    "OffloadedStaticCache",
+    "QuantizedCache",
+    "QuantizedCacheConfig",
+    "QuantoQuantizedCache",
+    "SinkCache",
+    "SlidingWindowCache",
+    "StaticCache",
+]

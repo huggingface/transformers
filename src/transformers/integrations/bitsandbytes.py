@@ -559,3 +559,14 @@ def validate_bnb_backend_availability(raise_exception=False):
     if is_bitsandbytes_multi_backend_available():
         return _validate_bnb_multi_backend_availability(raise_exception)
     return _validate_bnb_cuda_backend_availability(raise_exception)
+
+
+__all__ = [
+    "dequantize_and_replace",
+    "get_keys_to_not_convert",
+    "replace_8bit_linear",
+    "replace_with_bnb_linear",
+    "set_module_8bit_tensor_to_device",
+    "set_module_quantized_tensor_to_device",
+    "validate_bnb_backend_availability",
+]

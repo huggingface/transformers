@@ -127,3 +127,6 @@ def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_conve
         logger.warning("No linear modules were found in your model for quantization.")
 
     return model
+
+
+__all__ = ["prepare_for_hqq_linear"]

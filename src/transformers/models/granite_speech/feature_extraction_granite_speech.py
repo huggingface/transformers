@@ -23,7 +23,7 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...tokenization_utils_base import AudioInput
 from ...utils import is_torch_available, is_torchaudio_available, logging
-from ...utils.import_utils import requires_backends
+from ...utils.import_utils import requires, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -35,6 +35,7 @@ if is_torchaudio_available():
     import torchaudio
 
 
+@requires(backends=("torch", "torchaudio"))
 class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
     model_input_names = ["input_features"]
 

@@ -408,3 +408,30 @@ def disable_progress_bar():
     global _tqdm_active
     _tqdm_active = False
     hf_hub_utils.disable_progress_bars()
+
+
+__all__ = [
+    "enable_propagation",
+    "disable_propagation",
+    "enable_progress_bar",
+    "disable_progress_bar",
+    "get_log_levels_dict",
+    "captureWarnings",
+    "set_verbosity",
+    "get_verbosity",
+    "set_verbosity_info",
+    "set_verbosity_debug",
+    "set_verbosity_warning",
+    "set_verbosity_error",
+    "enable_default_handler",
+    "disable_default_handler",
+    "add_handler",
+    "remove_handler",
+    "enable_explicit_format",
+    "reset_format",
+    "warning_advice",
+    "warning_once",
+    "info_once",
+    "EmptyTqdm",
+    "is_progress_bar_enabled",
+]

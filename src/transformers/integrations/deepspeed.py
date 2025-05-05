@@ -496,3 +496,14 @@ def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path, load_module_str
             raise ValueError(f"[deepspeed] failed to resume from checkpoint {checkpoint_path}")
     else:
         raise ValueError(f"Can't find a valid checkpoint at {checkpoint_path}")
+
+
+__all__ = [
+    "HfDeepSpeedConfig",
+    "HfTrainerDeepSpeedConfig",
+    "deepspeed_config",
+    "is_deepspeed_available",
+    "is_deepspeed_zero3_enabled",
+    "set_hf_deepspeed_config",
+    "unset_hf_deepspeed_config",
+]

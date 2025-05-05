@@ -297,3 +297,6 @@ class TFTrainingArguments(TrainingArguments):
             FutureWarning,
         )
         return self._setup_strategy.num_replicas_in_sync
+
+
+__all__ = ["TFTrainingArguments"]

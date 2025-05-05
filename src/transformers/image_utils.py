@@ -50,6 +50,7 @@ from .utils.constants import (  # noqa: F401
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
 )
+from .utils.import_utils import requires
 
 
 if is_vision_available():
@@ -953,6 +954,7 @@ def validate_preprocess_arguments(
 
 
 # In the future we can add a TF implementation here when we have TF models.
+@requires(backends=("vision",))
 class ImageFeatureExtractionMixin:
     """
     Mixin that contain utilities for preparing image features.
@@ -1354,3 +1356,6 @@ class SizeDict:
         if hasattr(self, key):
             return getattr(self, key)
         raise KeyError(f"Key {key} not found in SizeDict.")
+
+
+__all__ = ["ImageFeatureExtractionMixin"]

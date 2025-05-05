@@ -16,7 +16,10 @@ from functools import partial
 
 import torch.nn as nn
 
+from .utils.import_utils import requires
 
+
+@requires(backends=("torch",))
 class GradientCheckpointingLayer(nn.Module):
     """Base class for layers with gradient checkpointing.
 
@@ -46,3 +49,6 @@ class GradientCheckpointingLayer(nn.Module):
         if self.gradient_checkpointing and self.training:
             return self._gradient_checkpointing_func(partial(super().__call__, **kwargs), *args)
         return super().__call__(*args, **kwargs)
+
+
+__all__ = ["GradientCheckpointingLayer"]

@@ -380,3 +380,6 @@ class TranslationPipeline(Text2TextGenerationPipeline):
               token ids of the translation.
         """
         return super().__call__(*args, **kwargs)
+
+
+__all__ = ["Text2TextGenerationPipeline", "SummarizationPipeline", "TranslationPipeline"]

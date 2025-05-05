@@ -94,3 +94,6 @@ xnli_output_modes = {
 xnli_tasks_num_labels = {
     "xnli": 3,
 }
+
+
+__all__ = ["xnli_processors", "xnli_tasks_num_labels", "xnli_output_modes"]

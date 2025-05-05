@@ -234,3 +234,6 @@ class TextClassificationPipeline(Pipeline):
             if top_k is not None:
                 dict_scores = dict_scores[:top_k]
         return dict_scores
+
+
+__all__ = ["TextClassificationPipeline"]

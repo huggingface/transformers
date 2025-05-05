@@ -441,3 +441,6 @@ class TableQuestionAnsweringPipeline(Pipeline):
             answers = [{"answer": answer} for answer in self.tokenizer.batch_decode(outputs, skip_special_tokens=True)]
 
         return answers if len(answers) > 1 else answers[0]
+
+
+__all__ = ["TableQuestionAnsweringPipeline"]

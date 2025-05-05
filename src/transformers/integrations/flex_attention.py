@@ -32,7 +32,7 @@ import torch
 from packaging import version
 
 from ..utils import is_torch_flex_attn_available
-from ..utils.import_utils import _torch_version
+from ..utils.import_utils import _torch_version, requires
 
 
 if is_torch_flex_attn_available():
@@ -82,6 +82,7 @@ class WrappedFlexAttention:
 Offset = Union[torch.Tensor, int]
 
 
+@requires(backends=("torch>=2.5",))
 def make_flex_block_causal_mask(
     attention_mask_2d: torch.Tensor,
     attention_chunk_size: Optional[int] = None,
@@ -253,3 +254,6 @@ def flex_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attention_weights
+
+
+__all__ = ["make_flex_block_causal_mask"]

@@ -1962,3 +1962,25 @@ class QuarkConfig(QuantizationConfigMixin):
                 self.json_export_config = JsonExporterConfig()
 
         self.quant_method = QuantizationMethod.QUARK
+
+
+__all__ = [
+    "AutoRoundConfig",
+    "HqqConfig",
+    "BitsAndBytesConfig",
+    "GPTQConfig",
+    "AwqConfig",
+    "AqlmConfig",
+    "VptqLayerConfig",
+    "VptqConfig",
+    "QuantoConfig",
+    "EetqConfig",
+    "CompressedTensorsConfig",
+    "FbgemmFp8Config",
+    "HiggsConfig",
+    "TorchAoConfig",
+    "BitNetQuantConfig",
+    "SpQRConfig",
+    "FineGrainedFP8Config",
+    "QuarkConfig",
+]

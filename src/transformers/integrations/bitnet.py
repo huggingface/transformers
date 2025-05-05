@@ -1,3 +1,4 @@
+from .. import requires
 from ..utils import is_accelerate_available, is_torch_available, logging
 
 
@@ -16,6 +17,7 @@ logger = logging.get_logger(__name__)
 VALUES_PER_ITEM = 4
 
 
+@requires(backends=("torch",))
 def pack_weights(quantized_weights: torch.Tensor) -> torch.Tensor:
     """
     Packs a tensor of quantized weights into a compact format using 2 bits per value.
@@ -55,6 +57,7 @@ def pack_weights(quantized_weights: torch.Tensor) -> torch.Tensor:
 
 
 @torch.compile
+@requires(backends=("torch",))
 def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     """
     Unpacks a tensor of quantized weights that were stored in a packed format using 2 bits per value.
@@ -123,6 +126,7 @@ def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     return unpacked.to(dtype) - 1
 
 
+@requires(backends=("torch",))
 class BitLinear(nn.Module):
     def __init__(self, in_features: int, out_features: int, bias: bool, device=None, dtype=None):
         super().__init__()
@@ -345,6 +349,7 @@ def _replace_with_bitnet_linear(
     return model, has_been_replaced
 
 
+@requires(backends=("torch",))
 def replace_with_bitnet_linear(
     model,
     modules_to_not_convert=None,
@@ -390,3 +395,6 @@ def replace_with_bitnet_linear(
         )
 
     return model
+
+
+__all__ = ["BitLinear", "pack_weights", "replace_with_bitnet_linear", "unpack_weights"]

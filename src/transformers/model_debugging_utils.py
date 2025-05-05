@@ -21,9 +21,8 @@ from contextlib import contextmanager, redirect_stdout
 from io import StringIO
 from typing import Optional
 
-from transformers.utils.import_utils import requires
-
 from .utils import is_torch_available
+from .utils.import_utils import requires
 
 
 if is_torch_available():
@@ -335,6 +334,7 @@ def _attach_debugger_logic(
 
 @requires(backends=("torch",))
 @contextmanager
+@requires(backends=("torch",))
 def model_addition_debugger_context(model, debug_path: Optional[str] = None, do_prune_layers: Optional[bool] = True):
     """
     # Model addition debugger - context manager for model adders
@@ -382,3 +382,6 @@ def model_addition_debugger_context(model, debug_path: Optional[str] = None, do_
     finally:
         for module_instance, forward_method in orig_forwards.items():
             module_instance.forward = forward_method
+
+
+__all__ = ["model_addition_debugger_context"]

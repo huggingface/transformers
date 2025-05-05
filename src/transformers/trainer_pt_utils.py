@@ -46,6 +46,7 @@ from .utils import (
     is_training_run_on_sagemaker,
     logging,
 )
+from .utils.import_utils import requires
 
 
 if is_training_run_on_sagemaker():
@@ -247,6 +248,7 @@ def reissue_pt_warnings(caught_warnings):
 
 
 @contextmanager
+@requires(backends=("torch",))
 def torch_distributed_zero_first(local_rank: int):
     """
     Decorator to make all processes in distributed training wait for each local_master to do something.
@@ -1410,3 +1412,6 @@ def set_rng_state_for_device(device_name, device_module, checkpoint_rng_state, i
     except Exception as e:
         # Log error if setting RNG state fails
         logger.error(err_template.format(backend=device_name, exception=e))
+
+
+__all__ = ["torch_distributed_zero_first"]

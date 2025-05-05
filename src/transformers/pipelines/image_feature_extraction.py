@@ -110,3 +110,6 @@ class ImageFeatureExtractionPipeline(Pipeline):
             A nested list of `float`: The features computed by the model.
         """
         return super().__call__(*args, **kwargs)
+
+
+__all__ = ["ImageFeatureExtractionPipeline"]

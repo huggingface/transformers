@@ -14,6 +14,8 @@
 # limitations under the License.
 """Configuration base class and utilities."""
 
+from . import __version__  # noqa
+
 import copy
 import json
 import os
@@ -22,7 +24,6 @@ from typing import Any, Optional, Union
 
 from packaging import version
 
-from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .utils import (
@@ -1202,3 +1203,5 @@ if PretrainedConfig.push_to_hub.__doc__ is not None:
     PretrainedConfig.push_to_hub.__doc__ = PretrainedConfig.push_to_hub.__doc__.format(
         object="config", object_class="AutoConfig", object_files="configuration file"
     )
+
+__all__ = ["PretrainedConfig"]

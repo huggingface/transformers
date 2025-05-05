@@ -53,6 +53,7 @@ from .utils import (
     is_vision_available,
     logging,
 )
+from .utils.import_utils import requires
 
 
 if is_vision_available():
@@ -291,6 +292,7 @@ BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS = r"""
     "Constructs a fast base image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
 )
+@requires(backends=("torchvision",))
 class BaseImageProcessorFast(BaseImageProcessor):
     resample = None
     image_mean = None
@@ -796,3 +798,6 @@ class SemanticSegmentationMixin:
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
+
+
+__all__ = ["BaseImageProcessorFast"]

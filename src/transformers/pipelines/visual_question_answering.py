@@ -198,3 +198,6 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             scores = scores.tolist()
             ids = ids.tolist()
             return [{"score": score, "answer": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]
+
+
+__all__ = ["VisualQuestionAnsweringPipeline"]

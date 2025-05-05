@@ -11,36 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import TYPE_CHECKING
 
-from .data_collator import (
-    DataCollatorForLanguageModeling,
-    DataCollatorForMultipleChoice,
-    DataCollatorForPermutationLanguageModeling,
-    DataCollatorForSeq2Seq,
-    DataCollatorForSOP,
-    DataCollatorForTokenClassification,
-    DataCollatorForWholeWordMask,
-    DataCollatorWithFlattening,
-    DataCollatorWithPadding,
-    DefaultDataCollator,
-    default_data_collator,
-)
-from .metrics import glue_compute_metrics, xnli_compute_metrics
-from .processors import (
-    DataProcessor,
-    InputExample,
-    InputFeatures,
-    SingleSentenceClassificationProcessor,
-    SquadExample,
-    SquadFeatures,
-    SquadV1Processor,
-    SquadV2Processor,
-    glue_convert_examples_to_features,
-    glue_output_modes,
-    glue_processors,
-    glue_tasks_num_labels,
-    squad_convert_examples_to_features,
-    xnli_output_modes,
-    xnli_processors,
-    xnli_tasks_num_labels,
-)
+from ..utils import _LazyModule
+from ..utils.import_utils import define_import_structure
+
+
+if TYPE_CHECKING:
+    from .data_collator import *
+    from .metrics import *
+    from .processors import *
+else:
+    import sys
+
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

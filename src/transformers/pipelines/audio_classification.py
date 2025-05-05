@@ -242,3 +242,6 @@ class AudioClassificationPipeline(Pipeline):
         labels = [{"score": score, "label": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]
 
         return labels
+
+
+__all__ = ["AudioClassificationPipeline"]

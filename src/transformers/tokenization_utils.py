@@ -1131,3 +1131,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             return clean_text
         else:
             return text
+
+
+__all__ = ["PreTrainedTokenizer"]

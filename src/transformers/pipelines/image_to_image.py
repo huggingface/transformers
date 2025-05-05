@@ -134,3 +134,6 @@ class ImageToImagePipeline(Pipeline):
             images.append(Image.fromarray(output))
 
         return images if len(images) > 1 else images[0]
+
+
+__all__ = ["ImageToImagePipeline"]

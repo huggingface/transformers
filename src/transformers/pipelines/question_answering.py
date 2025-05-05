@@ -677,3 +677,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             "start": max(0, char_start_idx),
             "end": min(len(text), char_end_idx),
         }
+
+
+__all__ = ["QuestionAnsweringPipeline"]

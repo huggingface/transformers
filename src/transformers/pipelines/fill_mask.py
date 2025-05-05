@@ -271,3 +271,6 @@ class FillMaskPipeline(Pipeline):
         if isinstance(inputs, list) and len(inputs) == 1:
             return outputs[0]
         return outputs
+
+
+__all__ = ["FillMaskPipeline"]

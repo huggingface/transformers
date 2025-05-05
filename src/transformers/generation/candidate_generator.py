@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import copy
 import weakref
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
@@ -23,6 +22,7 @@ import torch.nn as nn
 
 from ..pytorch_utils import prune_linear_layer
 from ..utils import is_sklearn_available
+from ..utils.import_utils import requires
 
 
 if is_sklearn_available():
@@ -41,6 +41,7 @@ if TYPE_CHECKING:
 from ..utils.deprecation import deprecate_kwarg
 
 
+@requires(backends=("torch",))
 class CandidateGenerator:
     """Abstract base class for all candidate generators that can be applied during assisted generation."""
 
@@ -80,6 +81,7 @@ class CandidateGenerator:
         )
 
 
+@requires(backends=("torch",))
 class AssistedCandidateGenerator(CandidateGenerator):
     """
     `CandidateGenerator` class to be used for assisted generation and speculative decoding. This class generates
@@ -1012,6 +1014,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         return assistant_input_ids, len(assistant_new_ids[0])
 
 
+@requires(backends=("torch",))
 class PromptLookupCandidateGenerator(CandidateGenerator):
     """
     `CandidateGenerator` class to be used for prompt lookup generation. This class generates candidates by looking up
@@ -1124,6 +1127,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         return
 
 
+@requires(backends=("torch",))
 class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
     """
     `CandidateGenerator` class to be used for assisted generation and speculative decoding. This class generates
@@ -1272,3 +1276,11 @@ def _prepare_token_type_ids(model_kwargs: Dict[str, Any], new_length: int) -> Di
         token_type_copies = final_token_type.repeat(1, type_length_diff)
         model_kwargs["token_type_ids"] = torch.cat([model_kwargs["token_type_ids"], token_type_copies], dim=-1)
     return model_kwargs
+
+
+__all__ = [
+    "AssistedCandidateGenerator",
+    "CandidateGenerator",
+    "EarlyExitCandidateGenerator",
+    "PromptLookupCandidateGenerator",
+]

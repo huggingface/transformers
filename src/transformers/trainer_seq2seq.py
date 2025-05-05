@@ -29,6 +29,7 @@ from .integrations.fsdp import is_fsdp_managed_module
 from .trainer import Trainer
 from .utils import is_datasets_available, logging
 from .utils.deprecation import deprecate_kwarg
+from .utils.import_utils import requires
 
 
 if is_datasets_available():
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torch",))
 class Seq2SeqTrainer(Trainer):
     @deprecate_kwarg("tokenizer", new_name="processing_class", version="5.0.0", raise_if_both_names=True)
     def __init__(
@@ -390,3 +392,6 @@ class Seq2SeqTrainer(Trainer):
         )
         padded_tensor[:, : tensor.shape[-1]] = tensor
         return padded_tensor
+
+
+__all__ = ["Seq2SeqTrainer"]

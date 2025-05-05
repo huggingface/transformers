@@ -12,18 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from typing import List, Optional, Tuple
 
-from ..utils import is_accelerate_available, is_torch_available, logging
+import torch
+import torch.nn as nn
+import triton
+import triton.language as tl
+from torch.nn import functional as F
 
+from .. import requires
+from ..utils import is_accelerate_available, logging
 
-if is_torch_available():
-    import torch
-    import torch.nn as nn
-    import triton
-    import triton.language as tl
-    from torch.nn import functional as F
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
@@ -34,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 # Copied from https://huggingface.co/deepseek-ai/DeepSeek-V3/blob/main/inference/kernel.py
 @triton.jit
-def act_quant_kernel(x_ptr, y_ptr, s_ptr, BLOCK_SIZE: tl.constexpr):
+def act_quant_kernel(x_ptr, y_ptr, s_ptr, BLOCK_SIZE: "tl.constexpr"):
     pid = tl.program_id(axis=0)
     offs = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     x = tl.load(x_ptr + offs).to(tl.float32)
@@ -291,6 +290,7 @@ def w8a8_block_fp8_matmul_compile(
     return output.to(output_dtype)
 
 
+@requires(backends=("torch", "triton"))
 class FP8Linear(nn.Linear):
     dtype = torch.float8_e4m3fn
 
@@ -397,6 +397,7 @@ def _replace_with_fp8_linear(
     return model, has_been_replaced
 
 
+@requires(backends=("torch", "triton"))
 def replace_with_fp8_linear(
     model,
     modules_to_not_convert=None,
@@ -422,3 +423,6 @@ def replace_with_fp8_linear(
         )
 
     return model
+
+
+__all__ = ["FP8Linear", "replace_with_fp8_linear"]

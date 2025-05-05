@@ -60,7 +60,8 @@ from huggingface_hub.utils import (
 )
 from requests.exceptions import HTTPError
 
-from . import __version__, logging
+from .. import __version__
+from . import logging
 from .generic import working_or_temp_dir
 from .import_utils import (
     ENV_VARS_TRUE_VALUES,
@@ -1186,3 +1187,36 @@ class PushInProgress:
             # Cancel the job if it wasn't started yet and remove cancelled/done jobs from the list
             if not (job.cancel() or job.done())
         ]
+
+
+__all__ = [
+    "CHAT_TEMPLATE_DIR",
+    "CHAT_TEMPLATE_FILE",
+    "CLOUDFRONT_DISTRIB_PREFIX",
+    "HF_MODULES_CACHE",
+    "HUGGINGFACE_CO_PREFIX",
+    "HUGGINGFACE_CO_RESOLVE_ENDPOINT",
+    "LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE",
+    "PYTORCH_PRETRAINED_BERT_CACHE",
+    "PYTORCH_TRANSFORMERS_CACHE",
+    "S3_BUCKET_PREFIX",
+    "TRANSFORMERS_CACHE",
+    "TRANSFORMERS_DYNAMIC_MODULE_NAME",
+    "EntryNotFoundError",
+    "PushInProgress",
+    "PushToHubMixin",
+    "RepositoryNotFoundError",
+    "RevisionNotFoundError",
+    "cached_file",
+    "default_cache_path",
+    "define_sagemaker_information",
+    "download_url",
+    "extract_commit_hash",
+    "has_file",
+    "http_user_agent",
+    "is_offline_mode",
+    "is_remote_url",
+    "list_repo_templates",
+    "send_example_telemetry",
+    "try_to_load_from_cache",
+]

@@ -35,6 +35,7 @@ INIT_SERVICE_KWARGS = [
 
 
 @requires(backends=("vision",))
+@requires(backends=("vision",))
 class BaseImageProcessor(ImageProcessingMixin):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -308,3 +309,6 @@ def get_patch_output_size(image, target_resolution, input_data_format):
         new_width = min(math.ceil(original_width * scale_h), target_width)
 
     return new_height, new_width
+
+
+__all__ = ["BaseImageProcessor"]

@@ -433,3 +433,6 @@ def _compile_jinja_template(chat_template):
     jinja_env.globals["raise_exception"] = raise_exception
     jinja_env.globals["strftime_now"] = strftime_now
     return jinja_env.from_string(chat_template)
+
+
+__all__ = ["DocstringParsingException", "TypeHintParsingException", "get_json_schema"]

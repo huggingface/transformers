@@ -844,3 +844,12 @@ class SquadResult:
             self.start_top_index = start_top_index
             self.end_top_index = end_top_index
             self.cls_logits = cls_logits
+
+
+__all__ = [
+    "SquadExample",
+    "SquadFeatures",
+    "SquadV1Processor",
+    "SquadV2Processor",
+    "squad_convert_examples_to_features",
+]

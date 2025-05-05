@@ -907,3 +907,6 @@ def extract_hyperparameters_from_trainer(trainer):
         hyperparameters["label_smoothing_factor"] = trainer.args.label_smoothing_factor
 
     return hyperparameters
+
+
+__all__ = ["ModelCard"]

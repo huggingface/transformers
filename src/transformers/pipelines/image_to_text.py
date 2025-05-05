@@ -220,3 +220,6 @@ class ImageToTextPipeline(Pipeline):
             }
             records.append(record)
         return records
+
+
+__all__ = ["ImageToTextPipeline"]
