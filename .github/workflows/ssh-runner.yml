@@ -35,7 +35,7 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ github.event.inputs.num_gpus }}" == "single" && "${{ github.event.inputs.runner_type }}" == "t4" ]]; then
-            echo "RUNNER=aws-g4dn-2xlarge-cache" >> $GITHUB_ENV
+            echo "RUNNER=aws-g4dn-4xlarge-cache" >> $GITHUB_ENV
           elif [[ "${{ github.event.inputs.num_gpus }}" == "multi" && "${{ github.event.inputs.runner_type }}" == "t4" ]]; then
             echo "RUNNER=aws-g4dn-12xlarge-cache" >> $GITHUB_ENV
           elif [[ "${{ github.event.inputs.num_gpus }}" == "single" && "${{ github.event.inputs.runner_type }}" == "a10" ]]; then
