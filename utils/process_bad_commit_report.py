@@ -30,7 +30,7 @@ if __name__ == "__main__":
     with open("ci_results_run_models_gpu/model_job_links.json") as fp:
         model_job_links = json.load(fp)
 
-    print(model_job_links)
+    # print(model_job_links)
 
     # TODO: extend
     team_members = [
@@ -67,7 +67,9 @@ if __name__ == "__main__":
     for author, _data in new_data_full.items():
         for model, model_result in _data.items():
             for device, failed_tests in model_result.items():
-                failed_tests = [x for x in failed_tests if x["author"] == author or x["merged_by"] == author]
+                # prepare job_link and add it to each entry of new failed test information.
+                job_link = model_job_links[model][device]
+                failed_tests = [x.update({"job_link": job_link}) for x in failed_tests if x["author"] == author or x["merged_by"] == author]
                 model_result[device] = failed_tests
             _data[model] = {k: v for k, v in model_result.items() if len(v) > 0}
         new_data_full[author] = {k: v for k, v in _data.items() if len(v) > 0}
