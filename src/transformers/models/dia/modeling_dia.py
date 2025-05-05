@@ -304,7 +304,7 @@ class DiaPreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
 
     def _init_weights(self, module):
-        std = self.config.init_std
+        std = getattr(self.config, "init_std", 0.2)
         if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -444,8 +444,8 @@ class DiaMultiChannelEmbed(nn.Module):
 
     def __init__(self, config: DiaConfig):
         super().__init__()
-        self.embed = nn.Embedding(config.num_embeds * config.vocab_size, config.num_chanels)
-        offsets = torch.arange(config.num_chanels, dtype=torch.long) * config.num_embeds  # (C,)
+        self.embed = nn.Embedding(config.hidden_size * config.vocab_size, config.num_channels)
+        offsets = torch.arange(config.num_channels, dtype=torch.long) * config.hidden_size  # (C,)
         self.register_buffer("offsets", offsets, persistent=False)
 
     def forward(self, audio_codes: torch.Tensor) -> torch.Tensor:
@@ -463,16 +463,10 @@ class DiaDecoder(DiaPreTrainedModel):
         self.vocab_size = config.vocab_size
         self.embeddings = DiaMultiChannelEmbed(config)
         self.layers = nn.ModuleList(
-            [DiaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
+            [DiaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-
-        self.norm = RMSNorm(
-            config.hidden_size,
-            eps=config.norm_eps,
-            dtype=torch.float32,
-        )
-
-        self.logits_dense = nn.Linear(config.n_embd, (self.num_channels * self.vocab_size), bias=False)
+        self.norm = RMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.logits_dense = nn.Linear(config.hidden_size, (self.num_channels * self.vocab_size), bias=False)
 
     def forward(self, audio_codes: torch.Tensor, past_key_values) -> torch.Tensor:
         hidden_states = self.embeddings(audio_codes)
