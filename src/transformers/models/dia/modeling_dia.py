@@ -296,7 +296,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
         normed_states = self.pre_sa_norm(hidden_states)
 
         hidden_states, self_attn_weights = self.self_attention(
-            hidden_states=normed_states
+            hidden_states=normed_states,
             attention_mask=attention_mask, # I don't mind if this never changes
             position_embeddings=position_embeddings,
             **kwargs
