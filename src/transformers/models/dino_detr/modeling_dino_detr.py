@@ -51,6 +51,8 @@ logger = logging.get_logger(__name__)
 
 MultiScaleDeformableAttention = None
 
+_IGNORED_CLASSES = ["DinoDetrDeformableTransformer"]
+
 
 def load_cuda_kernels():
     from torch.utils.cpp_extension import load
