@@ -26,7 +26,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -45,9 +44,7 @@ from .configuration_llama import LlamaConfig
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
-
-    from ...integrations.flex_attention import make_flex_block_causal_mask
+    pass
 
 from ...integrations import use_kernel_forward_from_hub
 
@@ -282,6 +279,7 @@ class LlamaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: LlamaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+        self.layer_idx = layer_idx
 
         self.self_attn = LlamaAttention(config=config, layer_idx=layer_idx)
 
@@ -307,7 +305,7 @@ class LlamaDecoderLayer(GradientCheckpointingLayer):
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=attention_mask,
+            attention_mask=attention_mask[self.layer_idx],
             position_ids=position_ids,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
@@ -433,8 +431,15 @@ class LlamaModel(LlamaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        from ...masking_utils import sdpa_mask
-        causal_mask = sdpa_mask(attention_mask, cache_position, past_key_values, input_ids.shape[0])
+        from ...masking_utils import get_causal_mask
+
+        causal_mask = get_causal_mask(
+            self.config,
+            inputs_embeds,
+            attention_mask,
+            cache_position,
+            past_key_values,
+        )
 
         hidden_states = inputs_embeds
 

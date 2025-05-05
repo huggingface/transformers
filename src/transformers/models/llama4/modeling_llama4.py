@@ -27,7 +27,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, HybridChunkedCache
 from ...generation import GenerationMixin
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -38,9 +37,7 @@ from .configuration_llama4 import Llama4Config, Llama4TextConfig
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
-
-    from ...integrations.flex_attention import make_flex_block_causal_mask
+    pass
 
 logger = logging.get_logger(__name__)
 
@@ -576,7 +573,14 @@ class Llama4TextModel(Llama4PreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         from ...masking_utils import sdpa_mask
-        causal_mask = sdpa_mask(attention_mask, cache_position, past_key_values, input_ids.shape[0], chunk_size=getattr(self.config, "attention_chunk_size", None))
+
+        causal_mask = sdpa_mask(
+            attention_mask,
+            cache_position,
+            past_key_values,
+            input_ids.shape[0],
+            chunk_size=getattr(self.config, "attention_chunk_size", None),
+        )
 
         hidden_states = inputs_embeds
 
@@ -637,7 +641,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
             attentions=all_self_attns,
         )
         return output if return_dict else output.to_tuple()
-        
 
 
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...

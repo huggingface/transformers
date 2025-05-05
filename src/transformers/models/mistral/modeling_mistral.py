@@ -10,10 +10,9 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -31,9 +30,7 @@ from .configuration_mistral import MistralConfig
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
-
-    from ...integrations.flex_attention import make_flex_block_causal_mask
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -224,6 +221,7 @@ class MistralDecoderLayer(GradientCheckpointingLayer):
         self.mlp = MistralMLP(config)
         self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.layer_idx = layer_idx
 
     def forward(
         self,
@@ -243,7 +241,7 @@ class MistralDecoderLayer(GradientCheckpointingLayer):
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=attention_mask,
+            attention_mask=attention_mask[self.layer_idx],
             position_ids=position_ids,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
@@ -403,8 +401,15 @@ class MistralModel(MistralPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        from ...masking_utils import sdpa_mask
-        causal_mask = sdpa_mask(attention_mask, cache_position, past_key_values, input_ids.shape[0], sliding_window=getattr(self.config, "sliding_window", None))
+        from ...masking_utils import get_causal_mask
+
+        causal_mask = get_causal_mask(
+            self.config,
+            inputs_embeds,
+            attention_mask,
+            cache_position,
+            past_key_values,
+        )
 
         hidden_states = inputs_embeds
 

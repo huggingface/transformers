@@ -26,7 +26,7 @@ import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, HybridCache, StaticCache
+from ...cache_utils import Cache, HybridCache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -44,9 +44,7 @@ from .configuration_gemma2 import Gemma2Config
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
-
-    from ...integrations.flex_attention import make_flex_block_causal_mask
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -273,6 +271,7 @@ class Gemma2DecoderLayer(nn.Module):
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.sliding_window = config.sliding_window
+        self.layer_idx = layer_idx
 
     @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
@@ -287,9 +286,7 @@ class Gemma2DecoderLayer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        
-        if isinstance(attention_mask, list):
-            attention_mask = attention_mask[0] if self.is_sliding else attention_mask[1]
+        attention_mask = attention_mask[self.layer_idx]
 
         residual = hidden_states
 
@@ -464,8 +461,15 @@ class Gemma2Model(Gemma2PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        from ...masking_utils import sdpa_mask
-        causal_mask = sdpa_mask(attention_mask, cache_position, past_key_values, input_ids.shape[0], sliding_window=getattr(self.config, "sliding_window", None))
+        from ...masking_utils import get_causal_mask
+
+        causal_mask = get_causal_mask(
+            self.config,
+            inputs_embeds,
+            attention_mask,
+            cache_position,
+            past_key_values,
+        )
 
         # embed positions
         hidden_states = inputs_embeds
