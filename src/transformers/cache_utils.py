@@ -2,6 +2,7 @@ import copy
 import importlib.metadata
 import json
 import os
+import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
@@ -950,6 +951,8 @@ class HQQQuantizedCache(QuantizedCache):
 
 class SinkCache(Cache):
     """
+    Deprecated.
+
     A cache that as described in the [Attention Sinks paper](https://arxiv.org/abs/2309.17453). It allows the model to
     generate beyond the length of its context window, without losing fluency in the conversation. As it discards past
     tokens, the model will lose the ability to generate tokens that depend on the context that was discarded.
@@ -993,6 +996,13 @@ class SinkCache(Cache):
         self._cos_cache = None
         self._sin_cache = None
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
+
+        warnings.warn(
+            "`SinkCache` is deprecated and will be removed in v4.53.0. You can achieve similar functionality by "
+            "using a model with a sliding window attention mechanism, or by expanding RoPE and optionally using an "
+            "offloaded cache implementation.",
+            FutureWarning,
+        )
 
     @staticmethod
     def _rotate_half(x):
@@ -1404,7 +1414,7 @@ class SlidingWindowCache(StaticCache):
 
         slicing = torch.ones(self.max_cache_len, dtype=torch.long, device=value_states.device).cumsum(0)
         cache_position = cache_position.clamp(0, self.max_cache_len - 1)
-        to_shift = cache_position >= self.max_cache_len - 1
+        to_shift = cache_position > self.max_cache_len - 1
         indices = (slicing + to_shift[-1].int() - 1) % self.max_cache_len
 
         k_out = k_out[:, :, indices]
@@ -1673,6 +1683,7 @@ class HybridCache(Cache):
                 "config and it's not set to None."
             )
         self.max_cache_len = max_cache_len
+        self._sliding_window_max_len = min(config.sliding_window, max_cache_len)
         self.max_batch_size = max_batch_size
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         self.head_dim = (
@@ -1694,7 +1705,7 @@ class HybridCache(Cache):
         sliding_cache_shape = (
             self.max_batch_size,
             self.num_key_value_heads,
-            min(config.sliding_window, max_cache_len),
+            self._sliding_window_max_len,
             self.head_dim,
         )
         device = torch.device(device) if device is not None else None
@@ -1726,7 +1737,7 @@ class HybridCache(Cache):
 
         slicing = torch.ones(max_cache_len, dtype=torch.long, device=value_states.device).cumsum(0)
         cache_position = cache_position.clamp(0, max_cache_len - 1)
-        to_shift = cache_position >= max_cache_len - 1
+        to_shift = cache_position > max_cache_len - 1
         indices = (slicing + to_shift[-1].int() - 1) % max_cache_len
         k_out = k_out[:, :, indices]
         v_out = v_out[:, :, indices]
@@ -1873,6 +1884,7 @@ class HybridChunkedCache(Cache):
         else:
             self.sliding_window = config.sliding_window
         self.max_cache_len = max_cache_len
+        self._sliding_window_max_len = min(self.sliding_window, max_cache_len)
         self.max_batch_size = max_batch_size
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self._dtype = dtype
@@ -1894,12 +1906,7 @@ class HybridChunkedCache(Cache):
         num_key_value_heads = key_states.shape[1]
         device = key_states.device
         global_cache_shape = (self.max_batch_size, num_key_value_heads, self.max_cache_len, self.head_dim)
-        sliding_cache_shape = (
-            self.max_batch_size,
-            num_key_value_heads,
-            self.sliding_window,
-            self.head_dim,
-        )
+        sliding_cache_shape = (self.max_batch_size, num_key_value_heads, self._sliding_window_max_len, self.head_dim)
         # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
         # breaks when updating the cache.
         cache_shape = sliding_cache_shape if self.is_sliding[layer_idx] else global_cache_shape
@@ -2039,12 +2046,7 @@ class OffloadedHybridCache(HybridChunkedCache):
         device = key_states.device if self.is_sliding[layer_idx] else self.offload_device
         pin_memory = not self.is_sliding[layer_idx]
         global_cache_shape = (self.max_batch_size, num_key_value_heads, self.max_cache_len, self.head_dim)
-        sliding_cache_shape = (
-            self.max_batch_size,
-            num_key_value_heads,
-            self.sliding_window,
-            self.head_dim,
-        )
+        sliding_cache_shape = (self.max_batch_size, num_key_value_heads, self._sliding_window_max_len, self.head_dim)
         # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
         # breaks when updating the cache.
         cache_shape = sliding_cache_shape if self.is_sliding[layer_idx] else global_cache_shape
