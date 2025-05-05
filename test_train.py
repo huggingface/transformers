@@ -4,11 +4,15 @@ This script is used to test training a model using Tensor Parallelism and Data P
 Usage:
 export CUDA_VISIBLE_DEVICES=0,1,2,3
 export CUDA_VISIBLE_DEVICES=4,5,6,7
+export CUDA_VISIBLE_DEVICES=5,6,7
 TP_SIZE=2 DP_SIZE=2 torchrun --nproc_per_node=4 --rdzv_endpoint=localhost:29503 test_train.py
 CP_SIZE=2 DP_SIZE=2 torchrun --nproc_per_node=4 test_train.py
+CP_SIZE=2 TP_SIZE=2 torchrun --nproc_per_node=4 test_train.py
+
+TP_SIZE=1 CP_SIZE=4 torchrun --nproc_per_node=4 test_train.py
 TP_SIZE=1 DP_SIZE=4 torchrun --nproc_per_node=4 test_train.py
-TP_SIZE=4 DP_SIZE=1 torchrun --nproc_per_node=4 test_train.py
-TP_SIZE=1 DP_SIZE=1 torchrun --rdzv_id=4 --rdzv_backend=c10d --rdzv_endpoint=localhost:29503 test_train.py
+TP_SIZE=4 DP_SIZE=1 torchrun --nproc_per_node=4 --rdzv_endpoint=localhost:29503 test_train.py
+TP_SIZE=1 DP_SIZE=1 torchrun --nproc_per_node=1 --rdzv_endpoint=localhost:29504 test_train.py
 """
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
@@ -34,8 +38,9 @@ from torch.utils.data import default_collate
 from torch.nn.attention import sdpa_kernel, SDPBackend
 from typing import Iterable
 import math
+from contextlib import contextmanager, nullcontext
 
-ignore_sanity_checks = False
+ignore_sanity_checks = int(os.environ.get("IGNORE_SANITY", 1)) == 1
 # torch.use_deterministic_algorithms(True)
 torch.backends.cudnn.deterministic = True
 
@@ -52,11 +57,12 @@ def main():
     tp_size = int(os.environ.get("TP_SIZE", 1))
     dp_size = int(os.environ.get("DP_SIZE", 1))
     cp_size = int(os.environ.get("CP_SIZE", 1))  # Add CP size configuration
-    # sdpa_backend = SDPBackend.FLASH_ATTENTION # For CP
-    sdpa_backend = SDPBackend.MATH # For CP
-    global_batch_size = 4 # Desired global batch size
-    seq_len = 256 # Sequence length
+    sdpa_backend = SDPBackend.FLASH_ATTENTION # For CP
+    # sdpa_backend = SDPBackend.MATH # For CP
+    global_batch_size = 8 # Desired global batch size
+    seq_len = 1024 # Sequence length
     num_train_steps = 10000 # Number of training steps
+    LR = 1e-5
 
     CHECKPOINT_DIR = f"checkpoint_tp{tp_size}_dp{dp_size}_cp{cp_size}"
 
@@ -89,10 +95,14 @@ def main():
                     "model_name": "HuggingFaceTB/SmolLM2-1.7B",
                     "dataset": "roneneldan/TinyStories-1M",
                     "seq_len": seq_len,
+                    "lr": LR,
+                    "weight_decay": 0.1,
                 },
                 name=f"tp{tp_size}_dp{dp_size}_cp{cp_size}"
             )
             logger.info("Wandb initialized.")
+            # Log the current file to wandb
+            wandb.save("test_train.py")
 
     else:
         logger.info("Running in non-distributed mode. DeviceMesh not applicable.")
@@ -178,15 +188,18 @@ def main():
     raw_dataset = load_dataset("roneneldan/TinyStories", split="train[:1%]") # Use 1% for faster testing
     
     def tokenize_function(examples):
-        # Tokenize the text
-        tokenized_batch = tokenizer(examples["text"], padding="max_length", truncation=True, max_length=seq_len, return_tensors="pt")
+        # Tokenize the text without padding
+        tokenized_batch = tokenizer(examples["text"], padding=False, truncation=True, max_length=seq_len, return_tensors=None)
         # Set labels to be the same as input_ids for Causal LM
-        tokenized_batch["labels"] = tokenized_batch["input_ids"].clone()
+        tokenized_batch["labels"] = tokenized_batch["input_ids"].copy()
         return tokenized_batch
 
     tokenized_dataset = raw_dataset.map(tokenize_function, batched=True, remove_columns=["text"])
-    tokenized_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
     logger.info(f"Dataset loaded and tokenized. Size: {len(tokenized_dataset)}")
+
+    # Shuffle the dataset after tokenization
+    tokenized_dataset = tokenized_dataset.shuffle(seed=42)
+    logger.info("Dataset shuffled after tokenization")
 
     # Calculate local batch size
     if dist.is_initialized():
@@ -197,28 +210,45 @@ def main():
 
     logger.info(f"Global batch size: {global_batch_size}, DP size: {dp_size if dist.is_initialized() else 1}, Local batch size: {local_batch_size}")
 
+    # Create a custom collate function for packing sequences
+    def pack_collate_fn(batch):
+        # Sort batch by length (descending) for efficient packing
+        batch = sorted(batch, key=lambda x: len(x['input_ids']), reverse=True)
+        
+        # Initialize packed tensors
+        max_len = min(seq_len, max(len(item['input_ids']) for item in batch))
+        input_ids = torch.full((len(batch), max_len), tokenizer.pad_token_id, dtype=torch.long)
+        attention_mask = torch.zeros((len(batch), max_len), dtype=torch.long)
+        labels = torch.full((len(batch), max_len), tokenizer.pad_token_id, dtype=torch.long)
+        
+        # Fill the tensors
+        for i, item in enumerate(batch):
+            length = min(len(item['input_ids']), max_len)
+            input_ids[i, :length] = torch.tensor(item['input_ids'][:length])
+            attention_mask[i, :length] = 1
+            labels[i, :length] = torch.tensor(item['labels'][:length])
+        
+        return {
+            'input_ids': input_ids,
+            'attention_mask': attention_mask,
+            'labels': labels
+        }
+
     if dist.is_initialized():
-        sampler = DistributedSampler(tokenized_dataset, num_replicas=dp_mesh.size(), rank=dp_mesh.get_local_rank(), shuffle=True)
-        shuffle = False # Sampler handles shuffling
+        sampler = DistributedSampler(tokenized_dataset, num_replicas=dp_mesh.size(), rank=dp_mesh.get_local_rank(), shuffle=False)
     else:
         sampler = None
-        shuffle = True
-
-    # Create collator for context parallel
-    # collator = ContextParallelCollator(cp_mesh=cp_mesh if dist.is_initialized() else None)
     
     dataloader = DataLoader(
         tokenized_dataset,
         batch_size=local_batch_size,
         sampler=sampler,
-        shuffle=shuffle,
-        # collate_fn=collator,
-        # num_workers=2, # Optional: Add workers for faster data loading
-        # pin_memory=True # Optional: Pin memory if using GPU
+        shuffle=False,
+        collate_fn=pack_collate_fn,
     )
     logger.info(f"DataLoader created. Distributed: {dist.is_initialized()}")
 
-    optimizer = optim.AdamW(model.parameters(), lr=1e-5)
+    optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=0.1)
 
     # Training loop
     logger.info(f"Starting training for {num_train_steps} steps...")
@@ -242,11 +272,12 @@ def main():
             optimizer.zero_grad()
 
             with sdpa_kernel(sdpa_backend): # TODO: ideally move this to attention implementation
-                with context_parallel(
+                cp_context = nullcontext() if cp_mesh.size() == 1 else context_parallel(
                     cp_mesh, 
-                    buffers=[batch["input_ids"], batch["labels"]], 
+                    buffers=[batch["input_ids"], batch["labels"]], # TODO: need to add attention mask
                     buffer_seq_dims=[1, 1],
-                ):
+                )
+                with cp_context:
                     outputs = model(**batch) # [mbs, seq_len/cp]
                     loss = outputs.loss
                     logits = outputs.logits
@@ -316,8 +347,8 @@ def main():
 
                 # Log loss and gradnorm to wandb (only on rank 0 of dp group)
                 if not dist.is_initialized() or dist.get_rank() == 0:
-                    logger.info(f"Step: {step} | GBS: {global_batch_size} | DP: {dp_mesh.size()} | TP: {tp_mesh.size()} | CP: {cp_mesh.size()} | Loss: {current_loss} | Gradnorm: {gradnorm}")
-                    wandb.log({"train/loss": current_loss, "train/gradnorm": gradnorm, "step": step})
+                    logger.info(f"Step: {step} | GBS: {global_batch_size} | DP: {dp_mesh.size()} | TP: {tp_mesh.size()} | CP: {cp_mesh.size()} | Loss: {current_loss} | Gradnorm: {gradnorm} | lr: {LR}")
+                    wandb.log({"train/loss": current_loss, "train/gradnorm": gradnorm, "step": step, "lr": LR, "GBS": global_batch_size})
 
             step += 1 # Increment step count
 
@@ -347,7 +378,7 @@ def main():
             device_mesh=tp_mesh,
             torch_dtype=torch.bfloat16 # Use same dtype
         )
-        new_optimizer = optim.AdamW(new_model.parameters(), lr=1e-5)
+        new_optimizer = optim.AdamW(new_model.parameters(), lr=LR)
         
         # Load checkpoint into new model
         state_dict = {"app": AppState(new_model, new_optimizer)}
