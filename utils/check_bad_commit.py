@@ -166,6 +166,7 @@ if __name__ == "__main__":
     # TO delete
     with open("ci_results_run_models_gpu/model_job_links.json") as fp:
         model_job_links = json.load(fp)
+        print(model_job_links)
 
     print(f"start_commit: {args.start_commit}")
     print(f"end_commit: {args.end_commit}")
