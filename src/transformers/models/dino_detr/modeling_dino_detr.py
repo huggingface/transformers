@@ -51,8 +51,6 @@ logger = logging.get_logger(__name__)
 
 MultiScaleDeformableAttention = None
 
-_IGNORED_CLASSES = ["DinoDetrDeformableTransformer"]
-
 
 def load_cuda_kernels():
     from torch.utils.cpp_extension import load
@@ -387,7 +385,7 @@ class DinoDetrDecoderOutput(ModelOutput):
 
 
 @dataclass
-class DinoDetrDeformableTransformerOutput(ModelOutput):
+class DinoDetrEncoderDecoderOutput(ModelOutput):
     """
     Base class for outputs of the DinoDetrDecoder. This class adds two attributes to
     BaseModelOutputWithCrossAttentions, namely:
@@ -1787,7 +1785,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         )
 
 
-class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
+class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         if config.decoder_layer_noise:
@@ -2133,7 +2131,7 @@ class DinoDetrDeformableTransformer(DinoDetrPreTrainedModel):
                 ]
                 # if v is not None
             )
-        return DinoDetrDeformableTransformerOutput(
+        return DinoDetrEncoderDecoderOutput(
             hidden_states=hidden_states,
             reference_points=reference_points,
             hidden_states_encoder=hidden_states_encoder,
@@ -2223,7 +2221,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
     def __init__(self, config: DinoDetrConfig):
         super().__init__(config)
         # create deformable transformer
-        self.transformer = DinoDetrDeformableTransformer(config=config)
+        self.transformer = DinoDetrEncoderDecoder(config=config)
         self.label_enc = nn.Embedding(config.dn_labelbook_size + 1, config.d_model)
 
         # Create backbone + positional encoding
