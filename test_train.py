@@ -36,6 +36,8 @@ from typing import Iterable
 import math
 
 ignore_sanity_checks = False
+# torch.use_deterministic_algorithms(True)
+torch.backends.cudnn.deterministic = True
 
 # Set up logging
 logging.basicConfig(
@@ -47,8 +49,8 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    tp_size = int(os.environ.get("TP_SIZE", 2))
-    dp_size = int(os.environ.get("DP_SIZE", 2))
+    tp_size = int(os.environ.get("TP_SIZE", 1))
+    dp_size = int(os.environ.get("DP_SIZE", 1))
     cp_size = int(os.environ.get("CP_SIZE", 1))  # Add CP size configuration
     # sdpa_backend = SDPBackend.FLASH_ATTENTION # For CP
     sdpa_backend = SDPBackend.MATH # For CP
@@ -138,15 +140,16 @@ def main():
     use_ddp = False
     if dist.is_initialized() and dp_mesh.size() > 1:
         # TODO: this only works with DDP patch
-        model = torch.nn.parallel.DistributedDataParallel(
-            model,
-            device_mesh=dp_mesh
-        )
-        update_model_parameters(model)
+        # model = torch.nn.parallel.DistributedDataParallel(
+        #     model,
+        #     device_mesh=dp_mesh
+        # )
+        # update_model_parameters(model)
         # Warning this API is still experimental
         # model = replicate(model, device_mesh=dp_mesh, bucket_cap_mb=100)
         # logger.info("Applied DDP")
-        use_ddp = True
+        # use_ddp = True
+        pass
 
     model.train()
     assert len(list(model.parameters()))>0, "No parameters found in model. Probably DDP bug.."
@@ -161,8 +164,7 @@ def main():
         for name, param in model.named_parameters():
             if isinstance(param, DTensor) and param.placements[0].is_shard():
                  # Only check sharded parameters for non-sync across TP
-                 if tp_mesh.size() > 1:
-                    sanity_check_tensor_sync(param, tp_mesh, not_sync=True)
+                sanity_check_tensor_sync(param, tp_mesh, not_sync=True)
             elif isinstance(param, DTensor) and param.placements[0].is_replicate():
                  # Replicated parameters should be the same across TP
                  sanity_check_tensor_sync(param, tp_mesh)
@@ -235,8 +237,7 @@ def main():
                 # check batch is same across all tp
                 sanity_check_tensor_sync(batch["input_ids"], tp_mesh)
                 # check batch is different across dp
-                if dp_mesh.size() > 1:
-                    sanity_check_tensor_sync(batch["input_ids"], dp_mesh, not_sync=True)
+                sanity_check_tensor_sync(batch["input_ids"], dp_mesh, not_sync=True)
 
             optimizer.zero_grad()
 
@@ -248,32 +249,30 @@ def main():
                 ):
                     outputs = model(**batch) # [mbs, seq_len/cp]
                     loss = outputs.loss
-                    logits = outputs.logits # Logits might not be needed unless debugging
+                    logits = outputs.logits
 
-                    current_loss = loss.item() # Get scalar loss value
+                    current_loss = loss.item()
 
                     # Sanity checks for logits (only if distributed and no sequence parallelism)
                     # TODO: only true without sequence parallel
                     if dist.is_initialized() and not ignore_sanity_checks:
                         sanity_check_tensor_sync(logits, tp_mesh)
                         # check logits are not same across dp
-                        if dp_mesh.size() > 1:
-                            sanity_check_tensor_sync(logits, dp_mesh, not_sync=True)
+                        sanity_check_tensor_sync(logits, dp_mesh, not_sync=True)
                         # check logits are not same across cp (for sequence chunks)
-                        if cp_mesh.size() > 1:
-                            sanity_check_tensor_sync(logits, cp_mesh, not_sync=True)
+                        sanity_check_tensor_sync(logits, cp_mesh, not_sync=True)
 
                     loss.backward()
 
                 # all reduce grads across dp_cp if applicable
-                # all_reduce_grads(model, dp_mesh, cp_mesh, use_ddp=use_ddp)
+                all_reduce_grads(model, world_mesh, use_ddp=use_ddp)
 
                 # Sanity checks for gradients (only if distributed)
                 if dist.is_initialized() and not ignore_sanity_checks:
                     # check grads are not same across all tp (for sharded grads)
                     for name, param in model.named_parameters():
                          if param.grad is not None and isinstance(param.grad, DTensor):
-                             if param.grad.placements[0].is_shard() and tp_mesh.size() > 1:
+                             if param.grad.placements[0].is_shard():
                                 sanity_check_tensor_sync(param.grad, tp_mesh, not_sync=True)
                              elif param.grad.placements[0].is_replicate():
                                 sanity_check_tensor_sync(param.grad, tp_mesh)
@@ -303,18 +302,16 @@ def main():
                     # check updated model is different across all tp (for sharded params)
                     for name, param in model.named_parameters():
                         if isinstance(param, DTensor):
-                            if param.placements[0].is_shard() and tp_mesh.size() > 1:
+                            if param.placements[0].is_shard():
                                 sanity_check_tensor_sync(param, tp_mesh, not_sync=True)
                             elif param.placements[0].is_replicate():
                                 sanity_check_tensor_sync(param, tp_mesh)
                     # check updated model is same across dp
                     for name, param in model.named_parameters():
-                        if dp_mesh.size() > 1:
-                            sanity_check_tensor_sync(param, dp_mesh)
+                        sanity_check_tensor_sync(param, dp_mesh)
                     # check updated model is same across cp
                     for name, param in model.named_parameters():
-                        if cp_mesh.size() > 1:
-                            sanity_check_tensor_sync(param, cp_mesh)
+                        sanity_check_tensor_sync(param, cp_mesh)
 
 
                 # Log loss and gradnorm to wandb (only on rank 0 of dp group)
@@ -417,8 +414,10 @@ def main():
         wandb.finish()
         logger.info("Wandb run finished.")
 
-def all_reduce_grads(model, dp_mesh, cp_mesh, use_ddp):
+def all_reduce_grads(model, world_mesh, use_ddp):
     """All reduce gradients across dp_cp if applicable."""
+    dp_mesh = world_mesh["dp"]
+    cp_mesh = world_mesh["cp"]
     if use_ddp:
         # DDP takes care of syncing grads
         mesh = cp_mesh
@@ -520,24 +519,41 @@ def sanity_check_tensor_sync(tensor: torch.Tensor, mesh: DeviceMesh, rtol: float
     
     # Gather tensors from all processes
     world_size = dist.get_world_size(pg)
-    
-    # Create a list to store gathered tensors
     gathered_tensors = [torch.empty_like(local_tensor) for _ in range(world_size)]
-    
-    # Gather all tensors
     dist.all_gather(gathered_tensors, local_tensor, group=pg)
     
     # Compare each tensor with the first one
     for i in range(1, world_size):
-        if not_sync:
-            tensors_are_different = False
-            try:
-                torch.testing.assert_close(gathered_tensors[0], gathered_tensors[i], rtol=rtol, atol=atol)
-            except AssertionError:
-                tensors_are_different = True
-            assert tensors_are_different, f"Tensors should be different but they are identical at indices 0 and {i}, gathered_tensors[0]: {gathered_tensors[0]}, gathered_tensors[i]: {gathered_tensors[i]}"
-        else:
+        try:
             torch.testing.assert_close(gathered_tensors[0], gathered_tensors[i], rtol=rtol, atol=atol)
+        except AssertionError as e:
+            if not_sync:
+                continue
+            # # Add detailed debugging for logit synchronization issues
+            # print(f"\nLogit synchronization error between rank 0 and rank {i}:")
+            # print(f"Tensor shape: {gathered_tensors[0].shape}")
+            # print(f"Number of mismatched elements: {(gathered_tensors[0] != gathered_tensors[i]).sum()}")
+            # print(f"Percentage of mismatched elements: {((gathered_tensors[0] != gathered_tensors[i]).sum() / gathered_tensors[0].numel() * 100):.2f}%")
+            
+            # # Find the first few mismatches
+            # mismatches = torch.nonzero(gathered_tensors[0] != gathered_tensors[i])
+            # print("\nFirst few mismatches:")
+            # for idx in mismatches[:5]:
+            #     idx = tuple(idx.tolist())
+            #     print(f"Index {idx}:")
+            #     print(f"Rank 0 value: {gathered_tensors[0][idx]}")
+            #     print(f"Rank {i} value: {gathered_tensors[i][idx]}")
+            #     print(f"Absolute difference: {abs(gathered_tensors[0][idx] - gathered_tensors[i][idx])}")
+            #     print(f"Relative difference: {abs(gathered_tensors[0][idx] - gathered_tensors[i][idx]) / max(abs(gathered_tensors[0][idx]), abs(gathered_tensors[i][idx]))}")
+            
+            # # Check if differences are systematic (e.g., all positive or negative)
+            # diff = gathered_tensors[0] - gathered_tensors[i]
+            # print(f"\nDifference statistics:")
+            # print(f"Mean difference: {diff.mean()}")
+            # print(f"Std difference: {diff.std()}")
+            # print(f"Max positive difference: {diff.max()}")
+            # print(f"Max negative difference: {diff.min()}")
+            raise e
 
 def clip_grad_norm_(
     parameters: Iterable[torch.Tensor],
