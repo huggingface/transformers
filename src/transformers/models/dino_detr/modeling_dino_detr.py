@@ -748,7 +748,6 @@ class DinoDetrConvEncoder(nn.Module):
         self.intermediate_channel_sizes = (
             self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
         )
-        self.out_indices = out_indices
 
         backbone_model_type = None
         if config.backbone is not None:
@@ -790,8 +789,6 @@ class DinoDetrConvModel(nn.Module):
         super().__init__()
         self.conv_encoder = conv_encoder
         self.position_embedding = position_embedding
-        num_channels_all = conv_encoder.intermediate_channel_sizes
-        self.num_channels = num_channels_all
 
     def forward(self, pixel_values, pixel_mask):
         # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
@@ -1008,7 +1005,7 @@ class DinoDetrPositionEmbeddingSineHW(nn.Module):
         return position_embeddings
 
 
-class DinoDetrPositionEmbeddingLearned(nn.Module):
+class DinoDetrLearnedPositionEmbedding(nn.Module):
     """
     Absolute pos embedding, learned.
     """
@@ -1054,7 +1051,7 @@ def build_position_encoding(config):
             normalize=True,
         )
     elif config.position_embedding_type in ("Learned"):
-        position_embeddings = DinoDetrPositionEmbeddingLearned(N_steps)
+        position_embeddings = DinoDetrLearnedPositionEmbedding(N_steps)
     else:
         raise ValueError(f"not supported {config.position_embedding}")
 
@@ -1175,7 +1172,7 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.init_std
 
-        if isinstance(module, DinoDetrPositionEmbeddingLearned):
+        if isinstance(module, DinoDetrLearnedPositionEmbedding):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
         elif isinstance(module, DinoDetrMultiscaleDeformableAttention):
@@ -2291,10 +2288,10 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
 
         # Prepare input projection layers
         if config.num_feature_levels > 1:
-            num_backbone_outs = len(self.backbone.num_channels)
+            num_backbone_outs = len(self.backbone.conv_encoder.intermediate_channel_sizes)
             input_proj_list = []
             for _ in range(num_backbone_outs):
-                in_channels = self.backbone.num_channels[_]
+                in_channels = self.backbone.conv_encoder.intermediate_channel_sizes[_]
                 input_proj_list.append(
                     nn.Sequential(
                         nn.Conv2d(in_channels, d_model, kernel_size=1),
@@ -2320,7 +2317,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
             self.input_proj = nn.ModuleList(
                 [
                     nn.Sequential(
-                        nn.Conv2d(self.backbone.num_channels[-1], d_model, kernel_size=1),
+                        nn.Conv2d(self.backbone.conv_encoder.intermediate_channel_sizes[-1], d_model, kernel_size=1),
                         nn.GroupNorm(32, d_model),
                     )
                 ]
