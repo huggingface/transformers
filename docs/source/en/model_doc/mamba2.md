@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 
 # Mamba 2
 
-[Mamba2](https://huggingface.co/papers/2405.21060) is a selective structured state space model (SSMs) It brings many improvements to the original architecture such as parallelism, a larger head dimension and optimized state space model parameterization.
+[Mamba2](https://huggingface.co/papers/2405.21060) is the second iteration of selective structured state space model (SSMs) by Tri Dao and Albert Gu. It brings many improvements to the original architecture such as better parallelism support and more optimized support for higher dimensionalities.
 
 You can find all the original Mamba checkpoints under the [State Space Models](https://huggingface.co/state-spaces) organization.
 
