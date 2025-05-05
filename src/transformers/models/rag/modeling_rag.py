@@ -482,7 +482,7 @@ class RagModel(RagPreTrainedModel):
             Whether or not to return the `retrieved_doc_embeds`, `retrieved_doc_ids`, `context_input_ids` and
             `context_attention_mask`. See returned tensors for more detail.
         n_docs (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Example:
 
@@ -766,7 +766,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `torch.Tensor.sum`
             operation.
         n_docs (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Example:
 
@@ -1276,7 +1276,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `torch.Tensor.sum`
             operation.
         n_docs (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Example:
 

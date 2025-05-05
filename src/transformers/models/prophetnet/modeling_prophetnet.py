@@ -1091,7 +1091,7 @@ class ProphetNetDecoderLayer(nn.Module):
 class ProphetNetEncoder(ProphetNetPreTrainedModel):
     def __init__(self, config: ProphetNetConfig, word_embeddings: nn.Embedding = None):
         r"""
-        word_embeddings  (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
+        word_embeddings (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
             The word embedding parameters. This can be used to initialize [`ProphetNetEncoder`] with pre-defined word
             embeddings instead of randomly initialized word embeddings.
         """
@@ -1222,7 +1222,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 class ProphetNetDecoder(ProphetNetPreTrainedModel):
     def __init__(self, config: ProphetNetConfig, word_embeddings: Optional[nn.Embedding] = None):
         r"""
-        word_embeddings  (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
+        word_embeddings (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
             The word embedding parameters. This can be used to initialize [`ProphetNetEncoder`] with pre-defined word
             embeddings instead of randomly initialized word embeddings.
         """

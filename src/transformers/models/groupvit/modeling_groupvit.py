@@ -1346,7 +1346,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_segmentation (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Examples:
 

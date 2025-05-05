@@ -1048,13 +1048,13 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
             ignored (masked), the loss is only computed for the tokens with labels in `[0, ...,
             config.vocab_size]`
         attack_attention_mask (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         attack_token_type_ids (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         labels_attention_mask (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         labels_token_type_ids (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Example:
 

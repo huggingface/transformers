@@ -698,7 +698,7 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
             Whether to interpolate the pre-trained position encodings. This is mainly used to use the model on higher
             resolution images.
         noise (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Examples:
 
@@ -1060,7 +1060,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
             Whether to interpolate the pre-trained position encodings. This is mainly used to use the model on higher
             resolution images.
         noise (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Examples:
 

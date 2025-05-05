@@ -30,6 +30,7 @@ from libcst.metadata import MetadataWrapper, ParentNodeProvider, PositionProvide
 
 from transformers import logging
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
+from transformers.utils.args_doc import parse_docstring, set_min_indent
 
 
 logger = logging.get_logger(__name__)
@@ -280,30 +281,28 @@ def is_full_docstring(new_docstring: str) -> bool:
 
 def merge_docstrings(original_docstring, updated_docstring):
     original_level = get_docstring_indent(original_docstring)
-    if not is_full_docstring(updated_docstring):
-        # Split the docstring at the example section, assuming `"""` is used to define the docstring
-        parts = original_docstring.split("```")
-        if "```" in updated_docstring and len(parts) > 1:
-            updated_docstring = updated_docstring.lstrip('r"')
-            new_parts = updated_docstring.split("```")
-            if len(new_parts) != 3:
-                raise ValueError("There should only be one example, and it should have opening and closing '```'")
-            parts[1] = new_parts[1]
-            updated_docstring = "".join(
-                [
-                    parts[0].rstrip(" \n") + new_parts[0],
-                    f"\n{original_level * ' '}```",
-                    parts[1],
-                    "```",
-                    parts[2],
-                ]
-            )
-        elif updated_docstring not in original_docstring:
-            # add tabulation if we are at the lowest level.
-            if re.search(r"\n\s*.*\(.*\)\:\n\s*\w", updated_docstring):
-                updated_docstring = updated_docstring.replace("\n    ", "\n        ")
-            updated_docstring = original_docstring.rstrip('"') + "\n" + updated_docstring.lstrip('r"\n')
-    return updated_docstring
+
+    docstring_args_dict, original_remaining_docstring = parse_docstring(original_docstring)
+    updated_docstring_args_dict, updated_remaining_docstring = parse_docstring(updated_docstring)
+
+    # Merge the args dicts
+    docstring_args_dict.update(updated_docstring_args_dict)
+    new_docstring = ""
+    for arg in docstring_args_dict:
+        additional_info = docstring_args_dict[arg]["additional_info"] or ""
+        custom_arg_description = docstring_args_dict[arg]["description"]
+        if custom_arg_description.endswith('"""'):
+            custom_arg_description = "\n".join(custom_arg_description.split("\n")[:-1])
+        new_docstring += f"{arg} ({docstring_args_dict[arg]['type']}{additional_info}):{custom_arg_description}\n"
+
+    if not updated_remaining_docstring and original_remaining_docstring:
+        new_docstring += original_remaining_docstring
+    elif updated_remaining_docstring:
+        new_docstring += updated_remaining_docstring
+
+    new_docstring = set_min_indent(new_docstring, original_level)
+
+    return new_docstring
 
 
 class SuperTransformer(cst.CSTTransformer):

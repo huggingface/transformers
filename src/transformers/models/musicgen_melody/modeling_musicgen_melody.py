@@ -709,6 +709,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         self.embed_tokens = value
 
     @auto_docstring
+    # Ignore copy
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -912,6 +913,7 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
         return self.decoder
 
     @auto_docstring
+    # Ignore copy
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1029,6 +1031,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
         return self.model.decoder
 
     @auto_docstring
+    # Ignore copy
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

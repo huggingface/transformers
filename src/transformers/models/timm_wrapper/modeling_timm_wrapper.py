@@ -139,8 +139,6 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         do_pooling (`bool`, *optional*):
             Whether to do pooling for the last_hidden_state in `TimmWrapperModel` or not. If `None` is passed, the
             `do_pooling` value from the config is used.
-        **kwargs:
-            Additional keyword arguments passed along to the `timm` model forward.
 
         Examples:
         ```python

@@ -625,7 +625,7 @@ class ViltModel(ViltPreTrainedModel):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
         image_token_type_idx (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Examples:
 

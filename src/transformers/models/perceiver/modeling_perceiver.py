@@ -699,7 +699,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         inputs (`torch.FloatTensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
         subsampled_output_points (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Examples:
 
@@ -1860,7 +1860,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         subsampled_output_points (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Examples:
 

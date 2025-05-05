@@ -342,9 +342,9 @@ class TimesFmModel(TimesFmPreTrainedModel):
         past_values_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The padding indicator of the time series.
         past_values (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         freq (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         # Reshape into patches (using view for efficiency)
         bsize = past_values.shape[0]
@@ -670,9 +670,9 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         output_hidden_states (`bool`, *optional*):
             Whether to output the hidden states.
         past_values (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         freq (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Example:
 

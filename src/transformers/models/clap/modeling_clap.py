@@ -31,12 +31,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
 
 
@@ -1647,9 +1642,8 @@ class ClapAudioModel(ClapPreTrainedModel):
         )
 
 
-class ClapTextModel(ClapPreTrainedModel):
-    """
-
+@auto_docstring(
+    custom_intro="""
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in *Attention is
     all you need*_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
@@ -1660,12 +1654,16 @@ class ClapTextModel(ClapPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
 
     .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
-
     """
-
+)
+class ClapTextModel(ClapPreTrainedModel):
     config_class = ClapTextConfig
 
     def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
+        """
         super().__init__(config)
         self.config = config
 
@@ -1971,7 +1969,7 @@ class ClapModel(ClapPreTrainedModel):
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         is_longer (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Examples:
 

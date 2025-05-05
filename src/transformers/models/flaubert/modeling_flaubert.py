@@ -820,7 +820,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
             decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
         langs (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1043,7 +1043,7 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         langs (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1127,7 +1127,7 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         langs (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1228,7 +1228,7 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         langs (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1315,7 +1315,7 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
             decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
         langs (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1471,7 +1471,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
             Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...). 1.0 means token should be
             masked. 0.0 mean token is not masked.
         langs (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Example:
 
@@ -1580,7 +1580,7 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         langs (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]

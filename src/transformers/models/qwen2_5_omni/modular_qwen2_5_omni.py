@@ -2238,9 +2238,9 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         use_audio_in_video (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         video_second_per_grid (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Example:
 
@@ -2570,13 +2570,13 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
             The length of feature shape of each audio in LLM.
         thinker_reply_part (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         input_text_ids (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         use_audio_in_video (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         video_second_per_grid (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Example:
 

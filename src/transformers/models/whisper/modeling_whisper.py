@@ -1481,7 +1481,7 @@ class WhisperModel(WhisperPreTrainedModel):
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
         decoder_position_ids (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Example:
          ```python
@@ -1652,7 +1652,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the loss is
             only computed for the tokens with labels in `[0, ..., config.vocab_size]`. `sequence_length` should be smaller than or equal to `config.max_target_positions`.
         decoder_position_ids (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Example:
 

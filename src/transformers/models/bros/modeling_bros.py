@@ -1034,9 +1034,9 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
         initial_token_labels (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         subsequent_token_labels (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Examples:
 

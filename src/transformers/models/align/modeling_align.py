@@ -1413,7 +1413,7 @@ class AlignModel(AlignPreTrainedModel):
     ) -> Union[Tuple, AlignOutput]:
         r"""
         return_loss (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Examples:
 

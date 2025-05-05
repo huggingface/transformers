@@ -1803,7 +1803,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         future_observed_mask (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Examples:
 

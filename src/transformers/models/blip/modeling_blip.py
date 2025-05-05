@@ -1395,7 +1395,8 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
     ) -> Union[Tuple, BlipTextVisionModelOutput]:
         r"""
         use_itm_head (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
+
         Examples:
 
         ```python

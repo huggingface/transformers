@@ -1208,7 +1208,8 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
         bbox (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
+
         Example:
 
         In the example below, we prepare a question + context pair for the LayoutLM model. It will give us a prediction

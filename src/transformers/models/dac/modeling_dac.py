@@ -578,7 +578,6 @@ class DacModel(DacPreTrainedModel):
             Input audio data to encode,
         n_quantizers (int, *optional*):
             Number of quantizers to use. If None, all quantizers are used. Default is None.
-
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -608,7 +607,6 @@ class DacModel(DacPreTrainedModel):
             The codebook indices for each codebook, representing the quantized discrete
             representation of the input. This parameter should be provided if you want
             to decode directly from the audio codes (it will overwrite quantized_representation).
-
         """
 
         if quantized_representation is None and audio_codes is None:

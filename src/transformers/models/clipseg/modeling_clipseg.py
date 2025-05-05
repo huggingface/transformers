@@ -1279,9 +1279,9 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         conditional_pixel_values (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         conditional_embeddings (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Examples:
 

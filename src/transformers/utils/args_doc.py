@@ -295,8 +295,7 @@ class ModelArgs:
 
     token_type_ids = {
         "description": """
-    Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-    1]`:
+    Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
 
     - 0 corresponds to a *sentence A* token,
     - 1 corresponds to a *sentence B* token.
@@ -1114,71 +1113,6 @@ def find_sig_line(lines, line_end):
     return sig_line_end
 
 
-def fix_docstring(obj, missing_args):
-    # reload the module to make sure we have the latest version
-    # source_module = importlib.import_module(obj.__module__)
-    # importlib.reload(source_module)
-    source, line_number = inspect.getsourcelines(obj)
-    source = [line.strip("\n") for line in source]
-    sig_line_end = find_sig_line(source, 0)
-    docstring_present = '"""' in source[sig_line_end]
-    docstring_end = sig_line_end
-    args_docstring_dict = missing_args
-    remaining_docstring = ""
-    if docstring_present:
-        # find the end of the docstring:
-        if not source[sig_line_end].count('"""') >= 2:
-            docstring_end += 1
-            while '"""' not in source[docstring_end]:
-                docstring_end += 1
-
-        docstring_content = source[sig_line_end : docstring_end + 1]
-        parsed_docstring, remaining_docstring = parse_docstring("\n".join(docstring_content))
-        args_docstring_dict.update(parsed_docstring)
-    else:
-        docstring_end = sig_line_end - 1
-
-    new_docstring = ""
-    if len(args_docstring_dict) > 0 or remaining_docstring:
-        new_docstring += 'r"""\n'
-        for arg in args_docstring_dict:
-            shape = args_docstring_dict[arg]["shape"] if args_docstring_dict[arg]["shape"] else ""
-            optional_string = ", *optional*" if args_docstring_dict[arg]["optional"] else ""
-            custom_arg_description = args_docstring_dict[arg]["description"]
-            param_default = args_docstring_dict[arg].get("default", "")
-            if custom_arg_description.endswith('"""'):
-                custom_arg_description = "\n".join(custom_arg_description.split("\n")[:-1])
-            new_docstring += f"{arg} (`{args_docstring_dict[arg]['type']}`{shape}{optional_string}{param_default}):{custom_arg_description}\n"
-        close_docstring = True
-        if remaining_docstring:
-            if remaining_docstring.endswith('"""'):
-                close_docstring = False
-            pattern = r"^(?:\s*Return.*\n(?:^$(?:\n|\Z)))|^\s*Return.*(?:\n|\Z)\Z"
-
-            # Use re.sub to find all occurrences matching the pattern and replace
-            # them with an empty string ("").
-            # The re.MULTILINE flag makes '^' match the start of each line.
-            remaining_docstring = re.sub(pattern, "", remaining_docstring, flags=re.MULTILINE)
-            end_docstring = "\n" if close_docstring else ""
-            new_docstring += f"\n{set_min_indent(remaining_docstring, 0)}{end_docstring}"
-        if close_docstring:
-            new_docstring += '"""'
-        new_docstring = set_min_indent(new_docstring, 8)
-    new_docstring_lines = new_docstring.split("\n")
-
-    obj_file = obj.__code__.co_filename
-    with open(obj_file, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    # Replace content
-    lines = content.split("\n")
-    lines[line_number + sig_line_end - 1 : line_number + docstring_end] = new_docstring_lines
-
-    print(f"Fixing the docstring of {obj.__name__} in {obj_file}.")
-    with open(obj_file, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
-
-
 def _process_kwargs_parameters(
     sig, func, parent_class, model_name_lowercase, documented_kwargs, indent_level, undocumented_parameters
 ):
@@ -1318,14 +1252,6 @@ def _process_parameters_section(
     # Report undocumented parameters
     if len(undocumented_parameters) > 0:
         print("\n".join(undocumented_parameters))
-
-    # Fix missing args
-    # if missing_args:
-    #     if parent_class is not None:
-    #         obj = parent_class.__init__
-    #     else:
-    #         obj = func
-    #     # fix_docstring(obj, missing_args)
 
     return docstring
 

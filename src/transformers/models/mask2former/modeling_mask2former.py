@@ -2181,31 +2181,6 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Mask2FormerModelOutput:
-        r"""
-        ```python
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoImageProcessor, Mask2FormerModel
-
-        >>> # load image
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> # load image preprocessor and Mask2FormerModel trained on COCO instance segmentation dataset
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-small-coco-instance")
-        >>> model = Mask2FormerModel.from_pretrained("facebook/mask2former-swin-small-coco-instance")
-        >>> inputs = image_processor(image, return_tensors="pt")
-
-        >>> # forward pass
-        >>> with torch.no_grad():
-        ...     outputs = model(**inputs)
-
-        >>> # model outputs last hidden states of shape (batch_size, num_queries, hidden_size)
-        >>> print(outputs.transformer_decoder_last_hidden_state.shape)
-        torch.Size([1, 100, 256])
-        ```
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2334,7 +2309,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
         output_auxiliary_logits (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Examples:
 

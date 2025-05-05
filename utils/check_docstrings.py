@@ -1073,9 +1073,7 @@ def generate_new_docstring_for_signature(
     signature_content = [line.split("#")[0] for line in signature_content]
     signature_content = "".join(signature_content)
     signature_content = "".join(signature_content.split(")")[:-1])
-    print(signature_content)
     args_in_signature = re.findall(r"[,(]\s*(\w+)\s*(?=:|=|,|\))", signature_content)
-    print(args_in_signature)
     if "self" in args_in_signature:
         args_in_signature.remove("self")
     # Parse docstring if present
@@ -1335,4 +1333,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     check_auto_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
-    # check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
+    check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)

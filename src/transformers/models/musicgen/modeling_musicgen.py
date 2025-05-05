@@ -1960,7 +1960,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         padding_mask (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Examples:
         ```python

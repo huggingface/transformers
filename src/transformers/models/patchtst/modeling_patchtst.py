@@ -1457,7 +1457,6 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
             - 1 for values that are **observed**,
             - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
-
         Examples:
 
         ```python
@@ -1910,7 +1909,6 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             - 1 for values that are **observed**,
             - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
             Whether or not to return a `ModelOutput` instead of a plain tuple.
-
 
         Examples:
 

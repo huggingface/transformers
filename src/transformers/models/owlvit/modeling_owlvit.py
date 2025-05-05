@@ -1049,7 +1049,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         return_base_image_embeds (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Examples:
         ```python

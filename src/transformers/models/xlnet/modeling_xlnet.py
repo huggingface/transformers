@@ -1273,7 +1273,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
             You can only uses one of `input_mask` and `attention_mask`.
         use_mems (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1609,7 +1609,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
             Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100` are ignored, the loss
             is only computed for labels in `[0, ..., config.vocab_size]`
         use_mems (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Examples:
 
@@ -1786,7 +1786,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         use_mems (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1911,7 +1911,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
             where *num_choices* is the size of the second dimension of the input tensors. (see *input_ids* above)
         use_mems (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2037,7 +2037,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         use_mems (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2161,7 +2161,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
 
             You can only uses one of `input_mask` and `attention_mask`.
         use_mems (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2296,7 +2296,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...). 1.0 means token should be
             masked. 0.0 mean token is not masked.
         use_mems (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Example:
 

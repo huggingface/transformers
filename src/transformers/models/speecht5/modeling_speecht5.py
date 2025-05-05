@@ -2556,7 +2556,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             computation. Spectrograms can be obtained using [`SpeechT5Processor`]. See [`SpeechT5Processor.__call__`]
             for details.
         stop_labels (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Example:
 
@@ -2906,7 +2906,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             Float values of target mel spectrogram. Spectrograms can be obtained using [`SpeechT5Processor`]. See
             [`SpeechT5Processor.__call__`] for details.
         stop_labels (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
 
         Example:
 

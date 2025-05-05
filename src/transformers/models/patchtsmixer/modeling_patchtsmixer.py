@@ -1833,7 +1833,8 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
             For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series, it is
             greater than 1.
         target_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
-            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
+            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*):
+            Target
             values of the time series, that serve as labels for the model. The `target_values` is what the
             Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
             required for a pretraining task.

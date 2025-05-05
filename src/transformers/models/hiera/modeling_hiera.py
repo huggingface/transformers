@@ -915,7 +915,7 @@ class HieraModel(HieraPreTrainedModel):
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         noise (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1212,7 +1212,8 @@ class HieraForPreTraining(HieraPreTrainedModel):
     ) -> Union[tuple, HieraForPreTrainingOutput]:
         r"""
         noise (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
+
         Examples:
         ```python
         >>> from transformers import AutoImageProcessor, HieraForPreTraining

@@ -216,7 +216,8 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
         mask_time_indices (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
+
         Example:
 
         ```python

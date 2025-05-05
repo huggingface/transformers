@@ -249,7 +249,7 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
     ) -> Union[Tuple, UniSpeechSatBaseModelOutput]:
         r"""
         mask_time_indices (<fill_type>):
-                <fill_docstring>
+            <fill_docstring>
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
