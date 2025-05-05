@@ -21,6 +21,7 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
+from ...modeling_layers import GradientCheckpointingLayer
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
@@ -51,17 +52,12 @@ if is_torch_flex_attn_available():
 
     from ...integrations.flex_attention import make_flex_block_causal_mask
 
-if is_flash_attn_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
 
-_HIDDEN_STATES_START_POSITION = 1
-
 _CONFIG_FOR_DOC = "DiaConfig"
 _CHECKPOINT_FOR_DOC = "nari-labs/Dia-1.6B"
-
 
 
 def rotate_half(x):
@@ -176,9 +172,8 @@ class DiaSelfAttention(nn.Module): # Modular : LlamaAttentions
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, position_embeddings)
-        key_states = apply_rotary_pos_emb(key_states, cos, sin)
+        query_states = apply_rotary_pos_emb(query_states, position_embeddings)
+        key_states = apply_rotary_pos_emb(key_states, position_embeddings)
 
         if past_key_value is not None:
             key_states, value_states = past_key_value.update(
@@ -274,31 +269,18 @@ class DiaCrossAttention(nn.Module):
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
-
-
-
-class DiaEncoderLayer(nn.Module):
+class DiaEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DiaConfig, compute_dtype: torch.dtype):
         super().__init__()
         self.config = config
-        model_config = config.model
-        enc_config = config.model.encoder
-        embed_dim = enc_config.n_embd
-        self.compute_dtype = compute_dtype
-
         self.pre_sa_norm = RMSNorm(
-            embed_dim,
-            eps=model_config.normalization_layer_epsilon,
-            dtype=torch.float32,
+            embed_dim, eps=model_config.norm_eps, dtype=torch.float32,
         )
         self.self_attention = DiaSelfAttention(config)
         self.post_sa_norm = RMSNorm(
-            embed_dim,
-            eps=model_config.normalization_layer_epsilon,
-            dtype=torch.float32,
+            embed_dim, eps=config.norm_eps, dtype=torch.float32,
         )
-        self.mlp = MlpBlock(embed_dim=embed_dim, intermediate_dim=enc_config.n_hidden, compute_dtype=compute_dtype)
-
+        self.mlp = DiaMLP(config)
 
     def forward(
         self,
@@ -394,69 +376,56 @@ class DiaEncoder(DiaPreTrainedModel):
         hidden_states = self.norm(hidden_states).to(self.compute_dtype)
         return hidden_states
 
+class DiaMLP(nn.Module): # Modular GlmMLP
+    def __init__(self, config):
+        super().__init__()
 
-class DiaDecoderLayer(nn.Module):
+        self.config = config
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.activation_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+        up_states = self.gate_up_proj(hidden_states)
+
+        gate, up_states = up_states.chunk(2, dim=-1)
+        up_states = up_states * self.activation_fn(gate)
+
+        return self.down_proj(up_states)
+class DiaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DiaConfig, layer_idx: Optional[int] = None):
         super().__init__()
-        self.embed_dim = config.d_model
-
-        self.self_attention = DiaSelfAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-            is_causal=True,
-            layer_idx=layer_idx,
-            config=config,
-        )
+        self.embed_dim = config.hidden_size
+        self.self_attention = DiaSelfAttention(config)
+        self.cross_attention = DiaCrossAttention(config)
         self.pre_sa_norm = RMSNorm(
-            dec_embed_dim,
-            eps=model_config.normalization_layer_epsilon,
-            dtype=torch.float32,
+            config.hidden_size, eps=config.norm_eps, dtype=torch.float32,
         )
         self.pre_ca_norm = RMSNorm(
-            dec_embed_dim,
-            eps=model_config.normalization_layer_epsilon,
-            dtype=torch.float32,
+            config.hidden_size, eps=config.norm_eps, dtype=torch.float32,
         )
         self.pre_mlp_norm = RMSNorm(
-            dec_embed_dim,
-            eps=model_config.normalization_layer_epsilon,
-            dtype=torch.float32,
+            config.hidden_size, eps=config.norm_eps, dtype=torch.float32,
         )
-        self.cross_attention = DiaCrossAttention(
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-            layer_idx=layer_idx,
-            config=config,
-        )
-        self.mlp = MlpBlock(
-            embed_dim=dec_embed_dim,
-            intermediate_dim=dec_config.n_hidden,
-            compute_dtype=compute_dtype,
-        )
+        self.mlp = DiaMLP(config)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
-        position_ids: torch.Tensor,
+        position_embeddings: torch.Tensor,
+        cache_position: torch.LongTensor,
         attention_mask: torch.Tensor,
         past_key_values: DecoderInferenceState,
-        self_attn_cache: KVCache | None = None,
-        cross_attn_cache: KVCache | None = None,
-        prefill: bool = False,
     ) -> torch.Tensor:
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states).to(self.compute_dtype)
 
         hidden_states, self_attn_weights = self.self_attention(
             hidden_states=normed_states,
-            position_ids=position_ids,
-            attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
             past_key_values=past_key_values,
+            cache_position=cache_position,
             output_attentions=output_attentions
         )
 
@@ -473,7 +442,8 @@ class DiaDecoderLayer(nn.Module):
             hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
-                attention_mask=encoder_attention_mask,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
             )
@@ -511,27 +481,18 @@ class DiaMultiChannelEmbed(nn.Module):
         embeds = self.embed(tokens)
         return embeds.sum(dim=1, keepdim=True)
 
-class Decoder(DiaPreTrainedModel):
+class DiaDecoder(DiaPreTrainedModel):
     """Transformer Decoder Stack using DenseGeneral."""
 
-    def __init__(self, config: DiaConfig, compute_dtype: torch.dtype):
-        super().__init__()
-        self.config = config
-        model_config = config.model
-        dec_config = config.model.decoder
-        data_config = config.data
-        self.num_channels = data_config.channels
-        self.num_layers = dec_config.n_layer
-
+    def __init__(self, config: DiaDecoderConfig, compute_dtype: torch.dtype):
+        super().__init__(config)
         self.embeddings = DiaMultiChannelEmbed(config)
         self.layers = nn.ModuleList(
-            [DecoderLayer(config=config, compute_dtype=compute_dtype) for _ in range(self.num_layers)]
+            [DiaDecoderLayer(config=config, compute_dtype=compute_dtype) for _ in range(self.num_layers)]
         )
 
         self.norm = RMSNorm(
-            dec_config.n_embd,
-            eps=config.rms_norm_eps,
-            dtype=torch.float32,
+            config.hidden_size, eps=config.norm_eps, dtype=torch.float32,
         )
 
         self.logits_dense = nn.Linear(
@@ -553,11 +514,11 @@ class Decoder(DiaPreTrainedModel):
         return last_hidden_states.to(torch.float32)
 
 class DiaModel(DiaPreTrainedModel):
+
     def __init__(self, config: DiaConfig):
         super().__init__(config)
-        self.encoder = DiaEncoder(config)
-        self.decoder = DiaDecoder(config)
-        # Initialize weights and apply final processing
+        self.encoder = DiaEncoder(config.encoder_config)
+        self.decoder = DiaDecoder(config.decoder_config)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -566,18 +527,6 @@ class DiaModel(DiaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
 
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
-
-    def freeze_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the Dia encoder so that its parameters will
-        not be updated during training.
-        """
-        self.encoder._freeze_parameters()
 
     @add_start_docstrings_to_model_forward(DIA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
