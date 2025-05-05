@@ -336,6 +336,8 @@ def DFineForObjectDetectionLoss(
     denoising_meta_values=None,
     predicted_corners=None,
     initial_reference_points=None,
+    initial_scores=None,
+    initial_bboxes=None,
     **kwargs,
 ):
     criterion = DFineLoss(config)
@@ -353,6 +355,8 @@ def DFineForObjectDetectionLoss(
             dn_out_class, outputs_class = torch.split(outputs_class, denoising_meta_values["dn_num_split"], dim=2)
             dn_out_corners, out_corners = torch.split(predicted_corners, denoising_meta_values["dn_num_split"], dim=2)
             dn_out_refs, out_refs = torch.split(initial_reference_points, denoising_meta_values["dn_num_split"], dim=2)
+            dn_out_scores, out_scores = torch.split(initial_scores, denoising_meta_values["dn_num_split"], dim=1)
+            dn_out_bboxes, out_bboxes = torch.split(initial_bboxes, denoising_meta_values["dn_num_split"], dim=1)
 
             auxiliary_outputs = _set_aux_loss2(
                 outputs_class[:, :-1].transpose(0, 1),
@@ -367,6 +371,9 @@ def DFineForObjectDetectionLoss(
             outputs_loss["auxiliary_outputs"].extend(
                 _set_aux_loss([enc_topk_logits], [enc_topk_bboxes.clamp(min=0, max=1)])
             )
+            outputs_loss["auxiliary_outputs"].extend(
+                _set_aux_loss([out_scores], [out_bboxes.clamp(min=0, max=1)])
+            )
 
             dn_auxiliary_outputs = _set_aux_loss2(
                 dn_out_class.transpose(0, 1),
@@ -377,6 +384,9 @@ def DFineForObjectDetectionLoss(
                 dn_out_class[:, -1],
             )
             outputs_loss["dn_auxiliary_outputs"] = dn_auxiliary_outputs
+            outputs_loss["dn_auxiliary_outputs"].extend(
+                _set_aux_loss([dn_out_scores], [dn_out_bboxes.clamp(min=0, max=1)])
+            )
             outputs_loss["denoising_meta_values"] = denoising_meta_values
 
     loss_dict = criterion(outputs_loss, labels)

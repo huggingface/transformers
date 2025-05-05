@@ -456,6 +456,14 @@ class DFineModelOutput(ModelOutput):
             Stacked intermediate logits (logits of each layer of the decoder).
         intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
             Stacked intermediate reference points (reference points of each layer of the decoder).
+        intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+        initial_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+            Initial reference points sent through the Transformer decoder.
+        initial_scores (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
+            Initial scores (initial scores of first layer of the decoder).
+        initial_bboxes (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Initial bboxes (initial bboxes of first layer of the decoder).
         decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, num_queries, hidden_size)`. Hidden-states of the decoder at the output of each layer
@@ -502,6 +510,8 @@ class DFineModelOutput(ModelOutput):
     intermediate_reference_points: Optional[torch.FloatTensor] = None
     intermediate_predicted_corners: Optional[torch.FloatTensor] = None
     initial_reference_points: Optional[torch.FloatTensor] = None
+    initial_scores: Optional[torch.FloatTensor] = None
+    initial_bboxes: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1091,6 +1101,10 @@ class DFineDecoderOutput(ModelOutput):
             Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
         initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
             Stacked initial reference points (initial reference points of each layer of the decoder).
+        initial_scores (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
+            Initial scores (initial scores of first layer of the decoder).
+        initial_bboxes (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Initial bboxes (initial bboxes of first layer of the decoder).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
@@ -1111,6 +1125,8 @@ class DFineDecoderOutput(ModelOutput):
     intermediate_reference_points: Optional[torch.FloatTensor] = None
     intermediate_predicted_corners: Optional[torch.FloatTensor] = None
     initial_reference_points: Optional[torch.FloatTensor] = None
+    initial_scores: Optional[torch.FloatTensor] = None
+    initial_bboxes: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1265,7 +1281,9 @@ class DFineDecoder(DFinePreTrainedModel):
         intermediate_logits = ()
         intermediate_predicted_corners = ()
         initial_reference_points = ()
-
+        initial_scores = ()
+        initial_bboxes = ()
+        
         output_detach = pred_corners_undetach = 0
 
         project = weighting_function(self.max_num_bins, self.up, self.reg_scale)
@@ -1293,8 +1311,9 @@ class DFineDecoder(DFinePreTrainedModel):
 
             if i == 0:
                 # Initial bounding box predictions with inverse sigmoid refinement
-                new_reference_points = F.sigmoid(self.pre_bbox_head(output[0]) + inverse_sigmoid(ref_points_detach))
-                ref_points_initial = new_reference_points.detach()
+                initial_bboxes = F.sigmoid(self.pre_bbox_head(hidden_states) + inverse_sigmoid(ref_points_detach))
+                initial_scores = self.class_embed[0](hidden_states)
+                ref_points_initial = initial_bboxes.detach()
 
             # Refine bounding box corners using FDR, integrating previous layer's corrections
             if self.bbox_embed is not None:
@@ -1315,8 +1334,8 @@ class DFineDecoder(DFinePreTrainedModel):
                 scores = self.lqe_layers[i](scores, pred_corners)
                 intermediate_logits += (scores,)
                 intermediate_reference_points += (inter_ref_bbox,)
-                initial_reference_points += (ref_points_initial,)
                 intermediate_predicted_corners += (pred_corners,)
+                initial_reference_points += (ref_points_initial,)
 
             if output_attentions:
                 all_self_attns += (output[1],)
@@ -1328,9 +1347,9 @@ class DFineDecoder(DFinePreTrainedModel):
         intermediate = torch.stack(intermediate)
         if self.class_embed is not None and self.bbox_embed is not None:
             intermediate_logits = torch.stack(intermediate_logits, dim=1)
+            intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
             intermediate_predicted_corners = torch.stack(intermediate_predicted_corners, dim=1)
             initial_reference_points = torch.stack(initial_reference_points, dim=1)
-            intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -1346,6 +1365,8 @@ class DFineDecoder(DFinePreTrainedModel):
                     intermediate_reference_points,
                     intermediate_predicted_corners,
                     initial_reference_points,
+                    initial_scores,
+                    initial_bboxes,
                     all_hidden_states,
                     all_self_attns,
                     all_cross_attentions,
@@ -1360,6 +1381,8 @@ class DFineDecoder(DFinePreTrainedModel):
             intermediate_reference_points=intermediate_reference_points,
             intermediate_predicted_corners=intermediate_predicted_corners,
             initial_reference_points=initial_reference_points,
+            initial_scores=initial_scores,
+            initial_bboxes=initial_bboxes,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
@@ -1694,6 +1717,8 @@ class DFineModel(DFinePreTrainedModel):
             intermediate_reference_points=decoder_outputs.intermediate_reference_points,
             intermediate_predicted_corners=decoder_outputs.intermediate_predicted_corners,
             initial_reference_points=decoder_outputs.initial_reference_points,
+            initial_scores=decoder_outputs.initial_scores,
+            initial_bboxes=decoder_outputs.initial_bboxes,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -1849,6 +1874,8 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[3]
         predicted_corners = outputs.intermediate_predicted_corners if return_dict else outputs[4]
         initial_reference_points = outputs.initial_reference_points if return_dict else outputs[5]
+        initial_scores = outputs.initial_scores if return_dict else outputs[6]
+        initial_bboxes = outputs.initial_bboxes if return_dict else outputs[7]
 
         logits = outputs_class[:, -1]
         pred_boxes = outputs_coord[:, -1]
@@ -1870,6 +1897,8 @@ class DFineForObjectDetection(DFinePreTrainedModel):
                 denoising_meta_values=denoising_meta_values,
                 predicted_corners=predicted_corners,
                 initial_reference_points=initial_reference_points,
+                initial_scores=initial_scores,
+                initial_bboxes=initial_bboxes,
                 **loss_kwargs,
             )
 
