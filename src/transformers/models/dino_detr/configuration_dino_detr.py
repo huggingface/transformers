@@ -48,12 +48,12 @@ class DinoDetrConfig(PretrainedConfig):
             Whether to use pretrained weights for the backbone.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        key_aware_type (`<fill_type>`, *optional*): <fill_docstring>
-        enc_layer_dropout_prob (`<fill_type>`, *optional*): <fill_docstring>
-        dec_layer_dropout_prob (`<fill_type>`, *optional*): <fill_docstring>
-        learnable_tgt_init (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        rm_self_attn_layers (`<fill_type>`, *optional*): <fill_docstring>
-        rm_detach (`<fill_type>`, *optional*): <fill_docstring>
+        key_aware_type (`str`, *optional*): Can take values `"mean"` or `"proj_mean"` selects the way memory is added to queries
+            in forward_ca of the DinoDetrDecoderLayer.
+        enc_layer_dropout_prob (`float`, *optional*): The dropout probability for all fully connected layers in the encoder.
+        dec_layer_dropout_prob (`float`, *optional*): The dropout probability for all fully connected layers in the decoder.
+        rm_self_attn_layers (`int`, *optional*): The number of decoder layers from which to remove self attention.
+        dec_detach (`bool`, *optional*): Whether to detach the new reference points in the decoder.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         backbone (`str`, *optional*, defaults to `"resnet50"`):
@@ -62,7 +62,7 @@ class DinoDetrConfig(PretrainedConfig):
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         num_feature_levels (`int`, *optional*, defaults to 4):
             The number of input feature levels.
-        num_heads (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
+        num_heads (`int`, *optional*, defaults to 8): The number of heads in all the attention layers.
         decoder_n_points (`int`, *optional*, defaults to 4):
             The number of sampled keys in each feature level for each attention head in the decoder.
         dilation (`bool`, *optional*, defaults to `False`):
@@ -79,44 +79,43 @@ class DinoDetrConfig(PretrainedConfig):
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         encoder_ffn_dim (`int`, *optional*, defaults to 2048):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        module_seq (`<fill_type>`, *optional*, defaults to `['sa', 'ca', 'ffn']`): <fill_docstring>
-        d_ffn (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
-        activation (`<fill_type>`, *optional*, defaults to `"relu"`): <fill_docstring>
-        decoder_sa_type (`<fill_type>`, *optional*, defaults to `"sa"`): <fill_docstring>
+        module_seq (`List[str]`, *optional*, defaults to `['sa', 'ca', 'ffn']`): The sequence of modules in the decoder.
+        d_ffn (`int`, *optional*, defaults to 2048): The hidden dimensions of the fully connected layers.
+        activation (`str`, *optional*, defaults to `"relu"`): Could be `"relu"`, `"gelu"`, `"glu"`, `"prelu"`, `"selu"`.
+        decoder_sa_type (`str`, *optional*, defaults to `"sa"`): The type of decoder self attention can take values
         num_queries (`int`, *optional*, defaults to 900):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
             [`DinoDetrModel`] can detect in a single image. In case `two_stage` is set to `True`, we use
             `two_stage_num_proposals` instead.
-        two_stage_type (`<fill_type>`, *optional*, defaults to `"standard"`): <fill_docstring>
-        query_dim (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
-        use_detached_boxes_dec_out (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        dec_layer_number (`<fill_type>`, *optional*): <fill_docstring>
-        decoder_layer_noise (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        dln_xy_noise (`<fill_type>`, *optional*, defaults to 0.2): <fill_docstring>
-        dln_hw_noise (`<fill_type>`, *optional*, defaults to 0.2): <fill_docstring>
-        num_encoder_layers (`<fill_type>`, *optional*, defaults to 6): <fill_docstring>
-        num_unicoder_layers (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
-        num_decoder_layers (`<fill_type>`, *optional*, defaults to 6): <fill_docstring>
-        two_stage_keep_all_tokens (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        random_refpoints_xy (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        normalize_before (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        num_patterns (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
-        embed_init_tgt (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        two_stage_pat_embed (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
-        two_stage_add_query_num (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
-        two_stage_learn_wh (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        num_classes (`<fill_type>`, *optional*, defaults to 91): <fill_docstring>
-        dn_labelbook_size (`<fill_type>`, *optional*, defaults to 91): <fill_docstring>
-        fix_refpoints_hw (`<fill_type>`, *optional*, defaults to -1): <fill_docstring>
-        dn_number (`<fill_type>`, *optional*, defaults to 100): <fill_docstring>
-        dn_box_noise_scale (`<fill_type>`, *optional*, defaults to 0.4): <fill_docstring>
-        dn_label_noise_ratio (`<fill_type>`, *optional*, defaults to 0.5): <fill_docstring>
+        two_stage_type (`str`, *optional*, defaults to `"standard"`): The type of two-stage mechanism to use.
+        query_dim (`int`, *optional*, defaults to 4): The dimension of the object query embeddings.
+        use_detached_boxes_dec_out (`bool`, *optional*, defaults to `False`): Whether to use detached boxes in the decoder output.
+        dec_layer_number (`int`, *optional*): The number of layers in the decoder.
+        decoder_layer_noise (`bool`, *optional*, defaults to `False`): Whether to add noise to the decoder layers.
+        dln_xy_noise (`float`, *optional*, defaults to 0.2): The noise level of the DinoDetrRandomBoxPerturber along the x and y axes.
+        dln_hw_noise (`float`, *optional*, defaults to 0.2): The noise level of the DinoDetrRandomBoxPerturber along the w and h axes.
+        num_encoder_layers (`int`, *optional*, defaults to 6): Number of encoder layers.
+        num_decoder_layers (`int`, *optional*, defaults to 6): Number of decoder layers.
+        two_stage_keep_all_tokens (`bool`, *optional*, defaults to `False`): Whether to keep all tokens in the two-stage process.
+        random_refpoints_xy (`bool`, *optional*, defaults to `False`): Whether to initialize reference points randomly along the x and y axes.
+        normalize_before (`bool`, *optional*, defaults to `False`): Whether to apply layer normalization before other operations.
+        num_patterns (`int`, *optional*, defaults to 0): The number of patterns to use in the decoder.
+        embed_init_tgt (`bool`, *optional*, defaults to `True`): Whether to initialize the target embeddings.
+        two_stage_pat_embed (`int`, *optional*, defaults to 0): The number of pattern embeddings in the two-stage process.
+        two_stage_add_query_num (`int`, *optional*, defaults to 0): The number of additional queries in the two-stage process.
+        two_stage_learn_wh (`bool`, *optional*, defaults to `False`): Whether to learn the width and height in the two-stage process.
+        num_classes (`int`, *optional*, defaults to 91): The number of object classes the model can predict.
+        dn_labelbook_size (`int`, *optional*, defaults to 91): The size of the label book for denoising training.
+        fix_refpoints_hw (`int`, *optional*, defaults to -1): Whether to fix the height and width of reference points.
+        dn_number (`int`, *optional*, defaults to 100): The number of denoising queries.
+        dn_box_noise_scale (`float`, *optional*, defaults to 0.4): The scale of noise added to bounding boxes during denoising training.
+        dn_label_noise_ratio (`float`, *optional*, defaults to 0.5): The ratio of noise added to labels during denoising training.
         auxiliary_loss (`bool`, *optional*, defaults to `True`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
-        dec_pred_class_embed_share (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        dec_pred_bbox_embed_share (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        two_stage_bbox_embed_share (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        two_stage_class_embed_share (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        dec_pred_class_embed_share (`bool`, *optional*, defaults to `True`): Whether to share class embeddings across decoder layers.
+        dec_pred_bbox_embed_share (`bool`, *optional*, defaults to `True`): Whether to share bounding box embeddings across decoder layers.
+        two_stage_bbox_embed_share (`bool`, *optional*, defaults to `False`): Whether to share bounding box embeddings in the two-stage process.
+        two_stage_class_embed_share (`bool`, *optional*, defaults to `False`): Whether to share class embeddings in the two-stage process.
         class_cost (`float`, *optional*, defaults to 2.0):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (`float`, *optional*, defaults to 5.0):
@@ -127,28 +126,28 @@ class DinoDetrConfig(PretrainedConfig):
             Relative weight of the Focal loss in the panoptic segmentation loss.
         dice_loss_coefficient (`float`, *optional*, defaults to 1.0):
             Relative weight of the DICE/F-1 loss in the panoptic segmentation loss.
-        cls_loss_coefficient (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
+        cls_loss_coefficient (`float`, *optional*, defaults to 1.0): The weight of the classification loss.
         bbox_loss_coefficient (`float`, *optional*, defaults to 5.0):
             Relative weight of the L1 bounding box loss in the object detection loss.
         giou_loss_coefficient (`float`, *optional*, defaults to 2.0):
             Relative weight of the generalized IoU loss in the object detection loss.
-        interm_loss_coef (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
-        no_interm_box_loss (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        use_dn (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        use_masks (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        interm_loss_coef (`float`, *optional*, defaults to 1.0): The weight of the intermediate loss.
+        no_interm_box_loss (`bool`, *optional*, defaults to `False`): Whether to disable intermediate bounding box loss.
+        use_dn (`bool`, *optional*, defaults to `True`): Whether to use denoising training.
+        use_masks (`bool`, *optional*, defaults to `True`): Whether to use masks in the model.
         focal_alpha (`float`, *optional*, defaults to 0.25):
             Alpha parameter in the focal loss.
-        enc_layer_share (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        dec_layer_share (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        enc_layer_share (`bool`, *optional*, defaults to `False`): Whether to share encoder layers.
+        dec_layer_share (`bool`, *optional*, defaults to `False`): Whether to share decoder layers.
         backbone_config (`PretrainedConfig` or `dict`, *optional*):
             The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
             case it will default to `ResNetConfig()`.
         backbone_kwargs (`dict`, *optional*, defaults to `{'out_indices': [2, 3, 4]}`):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
             e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
-        is_encoder_decoder (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        pe_temperatureH (`<fill_type>`, *optional*, defaults to 20): <fill_docstring>
-        pe_temperatureW (`<fill_type>`, *optional*, defaults to 20): <fill_docstring>
+        is_encoder_decoder (`bool`, *optional*, defaults to `True`): Whether the model is an encoder-decoder architecture.
+        pe_temperatureH (`float`, *optional*, defaults to 20): The temperature for positional encoding along the height dimension.
+        pe_temperatureW (`float`, *optional*, defaults to 20): The temperature for positional encoding along the width dimension.
 
     Examples:
 
@@ -181,9 +180,8 @@ class DinoDetrConfig(PretrainedConfig):
         key_aware_type=None,
         enc_layer_dropout_prob=None,
         dec_layer_dropout_prob=None,
-        learnable_tgt_init=True,
         rm_self_attn_layers=None,
-        rm_detach=None,
+        dec_detach=None,
         init_std=0.02,
         backbone="resnet50",  # From here and down things are pretty clear
         num_feature_levels=4,
@@ -208,7 +206,6 @@ class DinoDetrConfig(PretrainedConfig):
         dln_xy_noise=0.2,
         dln_hw_noise=0.2,
         num_encoder_layers=6,
-        num_unicoder_layers=0,
         num_decoder_layers=6,
         two_stage_keep_all_tokens=False,
         random_refpoints_xy=False,
@@ -303,7 +300,6 @@ class DinoDetrConfig(PretrainedConfig):
                 assert 0.0 <= i <= 1.0
 
         assert decoder_sa_type in ["sa", "ca_label", "ca_content"]
-        assert learnable_tgt_init, "learnable_tgt_init should be True"
         assert two_stage_type in [
             "no",
             "standard",
@@ -317,9 +313,9 @@ class DinoDetrConfig(PretrainedConfig):
                 assert (
                     dec_layer_number[0] == num_queries * num_patterns
                 ), f"dec_layer_number[0]({dec_layer_number[0]}) != num_queries({num_queries}) * num_patterns({num_patterns})"
-        if rm_detach:
-            assert isinstance(rm_detach, list)
-            assert any(i in ["enc_ref", "enc_tgt", "dec"] for i in rm_detach)
+        if dec_detach:
+            assert isinstance(dec_detach, list)
+            assert any(i in ["enc_ref", "enc_tgt", "dec"] for i in dec_detach)
 
         if num_feature_levels <= 1:
             assert two_stage_type == "no", "two_stage_type should be no if num_feature_levels=1"
@@ -392,7 +388,6 @@ class DinoDetrConfig(PretrainedConfig):
         self.dln_hw_noise = dln_hw_noise
         self.num_feature_levels = num_feature_levels
         self.num_encoder_layers = num_encoder_layers
-        self.num_unicoder_layers = num_unicoder_layers
         self.num_decoder_layers = num_decoder_layers
         self.two_stage_keep_all_tokens = two_stage_keep_all_tokens
         self.num_queries = num_queries
@@ -403,14 +398,13 @@ class DinoDetrConfig(PretrainedConfig):
         self.d_model = d_model
         self.normalize_before = normalize_before
         self.num_patterns = num_patterns
-        self.learnable_tgt_init = learnable_tgt_init
         self.embed_init_tgt = embed_init_tgt
         self.two_stage_type = two_stage_type
         self.two_stage_pat_embed = two_stage_pat_embed
         self.two_stage_add_query_num = two_stage_add_query_num
         self.two_stage_learn_wh = two_stage_learn_wh
         self.rm_self_attn_layers = rm_self_attn_layers
-        self.rm_detach = rm_detach
+        self.dec_detach = dec_detach
 
         self.init_std = init_std
 
