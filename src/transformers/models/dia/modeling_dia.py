@@ -32,7 +32,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     logging,
 )
-from .configuration_dia import DiaConfig, DiaDecoderConfig
+from .configuration_dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -320,7 +320,7 @@ class DiaPreTrainedModel(PreTrainedModel):
 
 class DiaEncoder(DiaPreTrainedModel):
 
-    def __init__(self, config: DiaConfig):
+    def __init__(self, config: DiaEncoderConfig):
         super().__init__(config)
         self.config = config
 
@@ -363,7 +363,7 @@ class DiaMLP(nn.Module):  # Modular GlmMLP
 
 
 class DiaDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: DiaConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: DiaDecoderConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attention = DiaSelfAttention(config, layer_idx)
