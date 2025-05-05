@@ -504,11 +504,6 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Moonshine Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class MoonshinePreTrainedModel(PreTrainedModel):
     config_class = MoonshineConfig

@@ -24,16 +24,9 @@ from torch import nn
 from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    is_peft_available,
-    logging,
-)
+from ...utils import auto_docstring, is_peft_available, logging
 from ..auto import AutoModel, AutoModelForCausalLM
-from .configuration_granite_speech import (
-    GraniteSpeechConfig,
-    GraniteSpeechEncoderConfig,
-)
+from .configuration_granite_speech import GraniteSpeechConfig, GraniteSpeechEncoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -291,11 +284,6 @@ class GraniteSpeechCTCEncoder(nn.Module):
         return hidden_states
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Granite Speech Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class GraniteSpeechPreTrainedModel(PreTrainedModel):
     config_class = GraniteSpeechConfig
@@ -400,8 +388,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         input_features_mask (<fill_type>):
             <fill_docstring>
-
-        Returns:
         """
         # TODO (@alex-jw-brooks) add an example to this docstring once models are released
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

@@ -875,11 +875,6 @@ class PhimoeDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Phimoe Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class PhimoePreTrainedModel(PreTrainedModel):
     config_class = PhimoeConfig

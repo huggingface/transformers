@@ -1489,7 +1489,7 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
             self.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
 
     @auto_docstring
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with T5->UMT5, google-t5/t5-small->google/umt5-small
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with T5->UMT5, google-t5/t5-small->google/umt5-small, t5#training->umt5#training
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1502,8 +1502,8 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
     ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. UMT5 is a model with relative position embeddings so
-            you should be able to pad the inputs on both the right and the left.
+            Indices of input sequence tokens in the vocabulary. UMT5 is a model with relative position embeddings so you
+            should be able to pad the inputs on both the right and the left.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
@@ -1725,7 +1725,7 @@ class UMT5ForTokenClassification(UMT5PreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    # Copied from transformers.models.t5.modeling_t5.T5ForTokenClassification.forward with T5->UMT5
+    # Copied from transformers.models.t5.modeling_t5.T5ForTokenClassification.forward with T5->UMT5, t5->umt5
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1739,8 +1739,8 @@ class UMT5ForTokenClassification(UMT5PreTrainedModel):
     ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. UMT5 is a model with relative position embeddings so
-            you should be able to pad the inputs on both the right and the left.
+            Indices of input sequence tokens in the vocabulary. UMT5 is a model with relative position embeddings so you
+            should be able to pad the inputs on both the right and the left.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.

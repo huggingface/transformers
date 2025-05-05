@@ -732,11 +732,6 @@ class Qwen2MoeDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Qwen2MoE Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class Qwen2MoePreTrainedModel(PreTrainedModel):
     config_class = Qwen2MoeConfig
@@ -1399,7 +1394,7 @@ class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
         self.model.embed_tokens = value
 
     @can_return_tuple
-    @auto_docstring
+    @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1413,6 +1408,17 @@ class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         **kwargs,
     ) -> QuestionAnsweringModelOutput:
+        r"""
+        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        """
+
         outputs: MoeModelOutputWithPast = self.model(
             input_ids,
             attention_mask=attention_mask,

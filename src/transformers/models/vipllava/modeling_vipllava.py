@@ -191,6 +191,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         return image_features
 
     @auto_docstring
+    # Ignore copy
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

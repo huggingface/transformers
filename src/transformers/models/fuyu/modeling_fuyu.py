@@ -24,21 +24,13 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModelForCausalLM
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_fuyu import FuyuConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Fuyu Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class FuyuPreTrainedModel(PreTrainedModel):
     config_class = FuyuConfig

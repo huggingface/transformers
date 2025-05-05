@@ -34,11 +34,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    is_flash_attn_2_available,
-    logging,
-)
+from ...utils import auto_docstring, is_flash_attn_2_available, logging
 from ...utils.import_utils import is_triton_available
 from ..gemma.modeling_gemma import GemmaRotaryEmbedding, apply_rotary_pos_emb
 
@@ -760,11 +756,6 @@ class ModernBertEncoderLayer(nn.Module):
         return (hidden_states,) + attn_outputs[1:]  # add attentions if outputted
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare ModernBert Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class ModernBertPreTrainedModel(PreTrainedModel):
     config_class = ModernBertConfig

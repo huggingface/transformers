@@ -505,11 +505,6 @@ class RecurrentGemmaDecoderLayer(nn.Module):
         return hidden_states
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare RecurrentGemma Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     config_class = RecurrentGemmaConfig

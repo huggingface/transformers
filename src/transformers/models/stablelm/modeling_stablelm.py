@@ -39,12 +39,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-    is_torch_flex_attn_available,
-    logging,
-)
+from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_stablelm import StableLmConfig
 
 
@@ -616,11 +611,6 @@ class StableLmDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare StableLm Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class StableLmPreTrainedModel(PreTrainedModel):
     config_class = StableLmConfig
@@ -969,6 +959,7 @@ class StableLmForCausalLM(StableLmPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    # Ignore copy
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -995,16 +986,16 @@ class StableLmForCausalLM(StableLmPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, StableLmForCausalLM
 
-        >>> model = StableLmForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t")
-        >>> tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
+        >>> model = StableLmForCausalLM.from_pretrained("adept/persimmon-8b-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("adept/persimmon-8b-base")
 
-        >>> prompt = "The weather is always wonderful in"
+        >>> prompt = "human: Hey, what should I eat for dinner?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        'The weather is always wonderful in the summer in the city of San Diego. The city is located on the coast of the Pacific Ocean and is surrounded by'
+        'human: Hey, what should I eat for dinner?\n\ncat: 🐱\n\nhuman: 😐\n\n'
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1012,6 +1003,7 @@ class StableLmForCausalLM(StableLmPreTrainedModel, GenerationMixin):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,

@@ -33,12 +33,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from ..auto import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 
@@ -1161,8 +1156,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         query_length (`int`, *optional*):
             Length of the query, usually based on the number of query tokens.
             If no value is provided, query_length will be inferred by the query_embeds.
-
-        Returns:
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

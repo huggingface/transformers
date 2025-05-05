@@ -736,8 +736,8 @@ class Data2VecVisionEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitPreTrainedModel with Beit->Data2VecVision,beit->data2vec_vision
 @auto_docstring
+# Copied from transformers.models.beit.modeling_beit.BeitPreTrainedModel with Beit->Data2VecVision,beit->data2vec_vision
 class Data2VecVisionPreTrainedModel(PreTrainedModel):
     config_class = Data2VecVisionConfig
     base_model_prefix = "data2vec_vision"

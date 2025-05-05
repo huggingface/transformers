@@ -569,6 +569,13 @@ class SiglipPreTrainedModel(PreTrainedModel):
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->Siglip
 class SiglipEncoder(nn.Module):
+    """
+    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
+    [`SiglipEncoderLayer`].
+    Args:
+        config: SiglipConfig
+    """
+
     def __init__(self, config: SiglipConfig):
         super().__init__()
         self.config = config

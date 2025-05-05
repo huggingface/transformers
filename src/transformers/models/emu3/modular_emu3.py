@@ -25,24 +25,11 @@ import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import (
-    CausalLMOutputWithPast,
-)
+from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
-from ..chameleon.modeling_chameleon import (
-    ChameleonPreTrainedModel,
-    ChameleonVQVAEEncoderConvDownsample,
-)
-from ..llama.modeling_llama import (
-    LlamaDecoderLayer,
-    LlamaForCausalLM,
-    LlamaModel,
-)
+from ...utils import auto_docstring, can_return_tuple, logging
+from ..chameleon.modeling_chameleon import ChameleonPreTrainedModel, ChameleonVQVAEEncoderConvDownsample
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaForCausalLM, LlamaModel
 from ..siglip.modeling_siglip import SiglipAttention
 from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 
@@ -707,7 +694,6 @@ class Emu3VQVAEDecoder(nn.Module):
     [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv Taigman](https://arxiv.org/abs/2203.13131).
     """
 )
-@auto_docstring
 class Emu3VQVAE(PreTrainedModel):
     config_class = Emu3VQVAEConfig
     base_model_prefix = "emuvideovq"

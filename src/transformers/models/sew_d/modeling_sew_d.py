@@ -1400,8 +1400,10 @@ class SEWDModel(SEWDPreTrainedModel):
 class SEWDForCTC(SEWDPreTrainedModel):
     def __init__(self, config, target_lang: Optional[str] = None):
         r"""
-        target_lang (<fill_type>):
-            <fill_docstring>
+        target_lang (`str`, *optional*):
+            Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
+            adapter.<lang>.bin. Only relevant when using an instance of [`SEWDForCTC`] with adapters. Uses 'eng' by
+            default.
         """
         super().__init__(config)
 
@@ -1608,6 +1610,11 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`SEWDProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

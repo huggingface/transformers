@@ -791,11 +791,6 @@ class ZambaHybridLayer(nn.Module):
         return layer_outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Zamba Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class ZambaPreTrainedModel(PreTrainedModel):
     config_class = ZambaConfig

@@ -821,9 +821,6 @@ class OwlViTVisionTransformer(nn.Module):
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1048,8 +1045,8 @@ class OwlViTModel(OwlViTPreTrainedModel):
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
-        return_base_image_embeds (<fill_type>):
-            <fill_docstring>
+        return_base_image_embeds (`bool`, *optional*):
+            Whether or not to return the base image embeddings.
 
         Examples:
         ```python

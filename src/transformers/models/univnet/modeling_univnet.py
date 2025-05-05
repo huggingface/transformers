@@ -422,11 +422,6 @@ class UnivNetLvcBlock(nn.Module):
             layer.remove_weight_norm()
 
 
-@auto_docstring(
-    custom_intro="""
-    UnivNet GAN vocoder.
-    """
-)
 @auto_docstring
 class UnivNetModel(PreTrainedModel):
     config_class = UnivNetConfig

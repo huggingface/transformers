@@ -30,15 +30,9 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import DynamicCache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import (
-    MoeCausalLMOutputWithPast,
-    MoeModelOutputWithPast,
-)
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import (
-    LossKwargs,
-    logging,
-)
+from ...utils import LossKwargs, logging
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralForCausalLM,
@@ -54,9 +48,6 @@ from .configuration_mixtral import MixtralConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "mistralai/Mixtral-8x7B-v0.1"
-_CONFIG_FOR_DOC = "MixtralConfig"
 
 
 def load_balancing_loss_func(

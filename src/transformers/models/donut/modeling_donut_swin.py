@@ -868,8 +868,8 @@ class DonutSwinEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->DonutSwin,swin->donut
 @auto_docstring
+# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->DonutSwin,swin->donut
 class DonutSwinPreTrainedModel(PreTrainedModel):
     config_class = DonutSwinConfig
     base_model_prefix = "donut"

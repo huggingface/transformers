@@ -25,19 +25,11 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    MoeCausalLMOutputWithPast,
-    MoeModelOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import (
-    auto_docstring,
-    is_torch_flex_attn_available,
-    logging,
-)
+from ...utils import auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_granitemoe import GraniteMoeConfig
 
 
@@ -789,11 +781,6 @@ class GraniteMoeDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare GraniteMoe Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class GraniteMoePreTrainedModel(PreTrainedModel):
     config_class = GraniteMoeConfig

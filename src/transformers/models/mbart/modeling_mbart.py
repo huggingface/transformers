@@ -1624,10 +1624,8 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            MBart uses a specific language id token as the starting token for `decoder_input_ids` generation that
-            varies according to source and target language, *e.g.* 25004 for *en_XX*, and 25003 for *de_DE*. If
-            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
+            Bart uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
 
             For translation and summarization training, `decoder_input_ids` should be provided. If no
             `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
@@ -1635,6 +1633,10 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
         decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
+
+            If you want to change padding behavior, you should read [`modeling_bart._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
             1]`:
@@ -1767,10 +1769,8 @@ class MBartForQuestionAnswering(MBartPreTrainedModel):
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            MBart uses a specific language id token as the starting token for `decoder_input_ids` generation that
-            varies according to source and target language, *e.g.* 25004 for *en_XX*, and 25003 for *de_DE*. If
-            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
+            Bart uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
 
             For translation and summarization training, `decoder_input_ids` should be provided. If no
             `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
@@ -1778,6 +1778,10 @@ class MBartForQuestionAnswering(MBartPreTrainedModel):
         decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
+
+            If you want to change padding behavior, you should read [`modeling_bart._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
             1]`:

@@ -26,10 +26,7 @@ from transformers.models.llava.modeling_llava import (
 )
 
 from ...activations import ACT2FN
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_aya_vision import AyaVisionConfig
 
 
@@ -131,6 +128,7 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -152,20 +150,18 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         **lm_kwargs,
     ) -> Union[Tuple, AyaVisionCausalLMOutputWithPast]:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
+        logits_to_keep (`int` or `torch.Tensor`, *optional*):
+            If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
+            `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+            token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+            If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+            This is useful when using packed tensor format (single dimension for batch and sequence length).
 
-
-        Returns:
 
         Example:
 

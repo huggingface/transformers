@@ -452,13 +452,17 @@ class FlaubertPoolerAnswerClass(nn.Module):
         return x
 
 
-@auto_docstring(
-    custom_intro="""
-    A SQuAD head inspired by XLNet.
-    """
-)
 # Copied from transformers.models.xlm.modeling_xlm.XLMSQuADHead with XLM->Flaubert
 class FlaubertSQuADHead(nn.Module):
+    r"""
+    A SQuAD head inspired by XLNet.
+
+    Args:
+        config ([`FlaubertConfig`]):
+            The config used by the model, will be used to grab the `hidden_size` of the model and the `layer_norm_eps`
+            to use.
+    """
+
     def __init__(self, config: FlaubertConfig):
         super().__init__()
         self.start_n_top = config.start_n_top
@@ -468,6 +472,7 @@ class FlaubertSQuADHead(nn.Module):
         self.end_logits = FlaubertPoolerEndLogits(config)
         self.answer_class = FlaubertPoolerAnswerClass(config)
 
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -1113,21 +1118,29 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
+        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
         lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
-            also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
-            `[0, ..., input_ids.size(-1)]`:
+            also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
+            `[0, ..., input_ids.size(-1)]`.
         cache (`Dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary strings to `torch.FloatTensor` that contains precomputed hidden-states (key and values in the
+            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
-            decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
+            decoding.
+
+            The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        langs (<fill_type>):
-            <fill_docstring>
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1216,19 +1229,27 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
+        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
         lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
-            also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
-            `[0, ..., input_ids.size(-1)]`:
+            also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
+            `[0, ..., input_ids.size(-1)]`.
         cache (`Dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary strings to `torch.FloatTensor` that contains precomputed hidden-states (key and values in the
+            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
-            decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
+            decoding.
+
+            The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        langs (<fill_type>):
-            <fill_docstring>
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1305,17 +1326,25 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
+        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
         lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
-            also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
-            `[0, ..., input_ids.size(-1)]`:
+            also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
+            `[0, ..., input_ids.size(-1)]`.
         cache (`Dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary strings to `torch.FloatTensor` that contains precomputed hidden-states (key and values in the
+            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
-            decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
+            decoding.
+
+            The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
-        langs (<fill_type>):
-            <fill_docstring>
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1453,14 +1482,24 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, FlaubertForQuestionAnsweringOutput]:
         r"""
+        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
         lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
-            also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
-            `[0, ..., input_ids.size(-1)]`:
+            also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
+            `[0, ..., input_ids.size(-1)]`.
         cache (`Dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary strings to `torch.FloatTensor` that contains precomputed hidden-states (key and values in the
+            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
-            decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
+            decoding.
+
+            The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
         is_impossible (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels whether a question has an answer or no answer (SQuAD 2.0)
@@ -1470,8 +1509,6 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         p_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...). 1.0 means token should be
             masked. 0.0 mean token is not masked.
-        langs (<fill_type>):
-            <fill_docstring>
 
         Example:
 
@@ -1566,21 +1603,53 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MultipleChoiceModelOutput]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        langs (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
         lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
-            also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
-            `[0, ..., input_ids.size(-1)]`:
+            also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
+            `[0, ..., input_ids.size(-1)]`.
         cache (`Dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary strings to `torch.FloatTensor` that contains precomputed hidden-states (key and values in the
+            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
-            decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
+            decoding.
+
+            The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
-        langs (<fill_type>):
-            <fill_docstring>
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]

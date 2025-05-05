@@ -29,20 +29,11 @@ from ...generation import GenerationMixin
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    ModelOutput,
-)
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    auto_docstring,
-    is_torch_flex_attn_available,
-    logging,
-)
+from ...utils import auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_llama4 import Llama4Config, Llama4TextConfig
 
 
@@ -437,11 +428,6 @@ class Llama4TextDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Llama4 Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class Llama4PreTrainedModel(PreTrainedModel):
     config_class = Llama4Config

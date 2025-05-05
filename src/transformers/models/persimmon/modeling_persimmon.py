@@ -38,12 +38,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-    is_torch_flex_attn_available,
-    logging,
-)
+from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_persimmon import PersimmonConfig
 
 
@@ -364,11 +359,6 @@ class PersimmonDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Persimmon Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class PersimmonPreTrainedModel(PreTrainedModel):
     config_class = PersimmonConfig

@@ -449,11 +449,6 @@ class OPTDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare OPT Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class OPTPreTrainedModel(PreTrainedModel):
     config_class = OPTConfig

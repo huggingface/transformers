@@ -37,11 +37,7 @@ from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask,
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    is_torch_flex_attn_available,
-    logging,
-)
+from ...utils import auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig, Qwen2VLVisionConfig
 
 
@@ -882,11 +878,6 @@ class Qwen2VLDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Qwen2VL Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class Qwen2VLPreTrainedModel(PreTrainedModel):
     config_class = Qwen2VLConfig

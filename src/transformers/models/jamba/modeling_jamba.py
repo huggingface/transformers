@@ -1055,11 +1055,6 @@ class JambaMambaDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Jamba Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class JambaPreTrainedModel(PreTrainedModel):
     config_class = JambaConfig
@@ -1512,7 +1507,7 @@ class JambaForSequenceClassification(JambaPreTrainedModel):
         self.model.embed_tokens = value
 
     @can_return_tuple
-    @auto_docstring
+    @add_start_docstrings_to_model_forward(JAMBA_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

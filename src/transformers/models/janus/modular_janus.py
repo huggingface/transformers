@@ -25,18 +25,10 @@ from transformers.models.blip.image_processing_blip import BlipImageProcessor
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...generation import (
-    ClassifierFreeGuidanceLogitsProcessor,
-    GenerationMixin,
-    GenerationMode,
-    LogitsProcessorList,
-)
+from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode, LogitsProcessorList
 from ...generation.utils import GenerateDecoderOnlyOutput
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_transforms import (
-    resize,
-    to_channel_dimension_format,
-)
+from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
@@ -50,13 +42,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-    is_torch_available,
-    is_vision_available,
-    logging,
-)
+from ...utils import auto_docstring, can_return_tuple, is_torch_available, is_vision_available, logging
 from ..auto import AutoModel
 from ..blip_2.modeling_blip_2 import Blip2VisionModel
 from ..chameleon.configuration_chameleon import ChameleonVQVAEConfig
@@ -71,11 +57,7 @@ from ..chameleon.modeling_chameleon import (
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..llama.modeling_llama import eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
-from ..siglip.modeling_siglip import (
-    SiglipEncoder,
-    SiglipEncoderLayer,
-    SiglipVisionEmbeddings,
-)
+from ..siglip.modeling_siglip import SiglipEncoder, SiglipEncoderLayer, SiglipVisionEmbeddings
 
 
 if is_torch_available():
@@ -86,7 +68,6 @@ if is_torch_available():
 
 if is_vision_available():
     import PIL
-
 
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -393,11 +374,6 @@ class JanusConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Janus Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class JanusPreTrainedModel(PreTrainedModel):
     config_class = JanusConfig

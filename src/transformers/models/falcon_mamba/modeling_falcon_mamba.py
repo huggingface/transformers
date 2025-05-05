@@ -27,11 +27,7 @@ from ...activations import ACT2FN
 from ...cache_utils import MambaCache
 from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
 from .configuration_falcon_mamba import FalconMambaConfig
 
@@ -437,8 +433,8 @@ class FalconMambaBlock(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.mamba.modeling_mamba.MambaPreTrainedModel with Mamba->FalconMamba
 @auto_docstring
+# Copied from transformers.models.mamba.modeling_mamba.MambaPreTrainedModel with Mamba->FalconMamba
 class FalconMambaPreTrainedModel(PreTrainedModel):
     config_class = FalconMambaConfig
     base_model_prefix = "backbone"

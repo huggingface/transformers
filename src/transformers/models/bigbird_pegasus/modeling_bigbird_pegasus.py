@@ -2181,7 +2181,6 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
         return self.decoder
 
     @auto_docstring
-    # Copied from transformers.models.bart.modeling_bart.BartModel.forward with Bart->BigBirdPegasus
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2341,6 +2340,7 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel, Gene
             self._tie_or_clone_weights(self.lm_head, self.model.shared)
 
     @auto_docstring
+    # Ignore copy
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2497,7 +2497,6 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2629,7 +2628,6 @@ class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    # Copied from transformers.models.bart.modeling_bart.BartForQuestionAnswering.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,

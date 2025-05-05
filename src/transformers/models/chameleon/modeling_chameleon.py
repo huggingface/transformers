@@ -1002,11 +1002,6 @@ class ChameleonImageVocabularyMapping:
         return img_tokens.to(device)
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare chameleon Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class ChameleonPreTrainedModel(PreTrainedModel):
     config_class = ChameleonConfig

@@ -284,7 +284,7 @@ def merge_docstrings(original_docstring, updated_docstring):
 
     docstring_args_dict, original_remaining_docstring = parse_docstring(original_docstring)
     updated_docstring_args_dict, updated_remaining_docstring = parse_docstring(updated_docstring)
-
+    start_docstring = original_docstring.split('"""', 1)[0]
     # Merge the args dicts
     docstring_args_dict.update(updated_docstring_args_dict)
     new_docstring = ""
@@ -301,6 +301,7 @@ def merge_docstrings(original_docstring, updated_docstring):
         new_docstring += updated_remaining_docstring
 
     new_docstring = set_min_indent(new_docstring, original_level)
+    new_docstring = '"""\n' + new_docstring + '\n"""'
 
     return new_docstring
 

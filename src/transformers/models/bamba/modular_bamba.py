@@ -43,21 +43,11 @@ from transformers.models.mamba2.modeling_mamba2 import (
     segment_sum,
 )
 
-from ...modeling_attn_mask_utils import (
-    AttentionMaskConverter,
-)
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
-from ...utils.import_utils import (
-    is_causal_conv1d_available,
-    is_flash_attn_2_available,
-    is_mamba_2_ssm_available,
-)
+from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.import_utils import is_causal_conv1d_available, is_flash_attn_2_available, is_mamba_2_ssm_available
 from .configuration_bamba import BambaConfig
 
 
@@ -777,11 +767,6 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare BambaModel outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class BambaPreTrainedModel(PreTrainedModel):
     config_class = BambaConfig

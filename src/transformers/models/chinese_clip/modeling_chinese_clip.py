@@ -31,12 +31,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_chinese_clip import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
 
 
@@ -972,9 +967,6 @@ class ChineseCLIPVisionTransformer(nn.Module):
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

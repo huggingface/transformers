@@ -2089,7 +2089,7 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
         self.model_parallel = False
 
     @auto_docstring
-    # Copied from transformers.models.t5.modeling_t5.T5ForSequenceClassification.forward
+    # Copied from transformers.models.t5.modeling_t5.T5ForSequenceClassification.forward with T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2160,7 +2160,7 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
                 f"Passing input embeddings is currently not supported for {self.__class__.__name__}"
             )
 
-        # Copied from models.bart.modeling_bart.BartModel.forward different to other models, T5 automatically creates
+        # Copied from models.bart.modeling_bart.BartModel.forward different to other models, MT5 automatically creates
         # decoder_input_ids from input_ids if no decoder_input_ids are provided
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             if input_ids is None:
@@ -2276,7 +2276,7 @@ class MT5ForTokenClassification(MT5PreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
 
-            To know more on how to prepare `input_ids` for pretraining take a look a [MT5 Training](./mt5#training).
+            To know more on how to prepare `input_ids` for pretraining take a look a [MT5 Training](./t5#training).
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
@@ -2386,7 +2386,7 @@ class MT5ForQuestionAnswering(MT5PreTrainedModel):
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqQuestionAnsweringModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. MT5 is a model with relative position embeddings so you
+            Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
             should be able to pad the inputs on both the right and the left.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -2394,7 +2394,7 @@ class MT5ForQuestionAnswering(MT5PreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
 
-            To know more on how to prepare `input_ids` for pretraining take a look a [MT5 Training](./mt5#training).
+            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -2403,11 +2403,11 @@ class MT5ForQuestionAnswering(MT5PreTrainedModel):
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            MT5 uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            T5 uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
             is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
 
-            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [MT5
-            Training](./mt5#training).
+            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [T5
+            Training](./t5#training).
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.

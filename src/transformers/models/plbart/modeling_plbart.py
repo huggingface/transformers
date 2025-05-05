@@ -1330,7 +1330,7 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
+    # Ignore copy
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

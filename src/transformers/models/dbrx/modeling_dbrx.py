@@ -28,11 +28,7 @@ from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    is_torch_flex_attn_available,
-    logging,
-)
+from ...utils import auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_dbrx import DbrxConfig
 
 
@@ -803,11 +799,6 @@ class DbrxBlock(nn.Module):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare DBRX Model outputting raw hidden-states without any specific head on top.
-    """
-)
 @auto_docstring
 class DbrxPreTrainedModel(PreTrainedModel):
     config_class = DbrxConfig

@@ -2100,8 +2100,6 @@ class T5ForSequenceClassification(T5PreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
@@ -2229,8 +2227,6 @@ class T5ForTokenClassification(T5PreTrainedModel):
             To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-
-        Returns:
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2374,8 +2370,6 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-
-        Returns:
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = use_cache if use_cache is not None else self.config.use_cache
