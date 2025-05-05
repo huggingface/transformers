@@ -47,6 +47,7 @@ from ...utils import (
     is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
+    is_torchdynamo_compiling,
 )
 from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLTextConfig, Qwen2_5_VLVisionConfig
 
