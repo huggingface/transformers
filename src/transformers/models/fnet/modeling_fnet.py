@@ -44,9 +44,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import (
-    logging,
-)
+from ...utils import logging
 from .configuration_fnet import FNetConfig
 
 
@@ -449,8 +447,8 @@ class FNetModel(FNetPreTrainedModel):
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
-        add_pooling_layer (<fill_type>):
-            <fill_docstring>
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
         """
         super().__init__(config)
         self.config = config

@@ -476,8 +476,8 @@ class DeiTPreTrainedModel(PreTrainedModel):
 class DeiTModel(DeiTPreTrainedModel):
     def __init__(self, config: DeiTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False) -> None:
         r"""
-        add_pooling_layer (<fill_type>):
-            <fill_docstring>
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
         use_mask_token (<fill_type>):
             <fill_docstring>
         """

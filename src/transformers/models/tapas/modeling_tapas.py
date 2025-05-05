@@ -28,16 +28,8 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import (
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_tapas import TapasConfig
 
 
@@ -744,8 +736,8 @@ class TapasModel(TapasPreTrainedModel):
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
-        add_pooling_layer (<fill_type>):
-            <fill_docstring>
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
         """
         super().__init__(config)
         self.config = config

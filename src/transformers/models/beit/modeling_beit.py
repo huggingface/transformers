@@ -36,11 +36,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import auto_docstring, logging, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_beit import BeitConfig
 
@@ -779,8 +775,8 @@ class BeitPreTrainedModel(PreTrainedModel):
 class BeitModel(BeitPreTrainedModel):
     def __init__(self, config: BeitConfig, add_pooling_layer: bool = True) -> None:
         r"""
-        add_pooling_layer (<fill_type>):
-            <fill_docstring>
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
         """
         super().__init__(config)
         self.config = config

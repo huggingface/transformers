@@ -34,10 +34,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_mpnet import MPNetConfig
 
 
@@ -418,8 +415,8 @@ class MPNetPooler(nn.Module):
 class MPNetModel(MPNetPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         r"""
-        add_pooling_layer (<fill_type>):
-            <fill_docstring>
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
         """
         super().__init__(config)
         self.config = config

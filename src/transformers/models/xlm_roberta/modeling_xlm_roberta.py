@@ -710,8 +710,8 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
-        add_pooling_layer (<fill_type>):
-            <fill_docstring>
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
         """
         super().__init__(config)
         self.config = config

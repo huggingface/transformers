@@ -928,21 +928,14 @@ class SwinPreTrainedModel(PreTrainedModel):
             module.relative_position_bias_table.data.zero_()
 
 
-@auto_docstring(
-    custom_intro="""
-    add_pooling_layer (`bool`, *optional*, defaults to `True`):
-                Whether or not to apply pooling layer.
-        use_mask_token (`bool`, *optional*, defaults to `False`):
-                Whether or not to create and apply mask tokens in the embedding layer.
-    """
-)
+@auto_docstring
 class SwinModel(SwinPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
         r"""
-        add_pooling_layer (<fill_type>):
-            <fill_docstring>
-        use_mask_token (<fill_type>):
-            <fill_docstring>
+        add_pooling_layer (`bool`, *optional*, defaults to `True`):
+            Whether or not to apply pooling layer.
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+            Whether or not to create and apply mask tokens in the embedding layer.
         """
         super().__init__(config)
         self.config = config

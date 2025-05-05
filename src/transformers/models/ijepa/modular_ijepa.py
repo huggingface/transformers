@@ -123,8 +123,8 @@ class IJepaPreTrainedModel(PreTrainedModel):
 class IJepaModel(IJepaPreTrainedModel, ViTModel):
     def __init__(self, config: IJepaConfig, add_pooling_layer: bool = False, use_mask_token: bool = False):
         r"""
-        add_pooling_layer (<fill_type>):
-            <fill_docstring>
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
         use_mask_token (<fill_type>):
             <fill_docstring>
         """

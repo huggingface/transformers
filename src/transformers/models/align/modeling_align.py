@@ -1059,8 +1059,8 @@ class AlignTextModel(AlignPreTrainedModel):
 
     def __init__(self, config: AlignTextConfig, add_pooling_layer: bool = True):
         r"""
-        add_pooling_layer (<fill_type>):
-            <fill_docstring>
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
         """
         super().__init__(config)
         self.config = config

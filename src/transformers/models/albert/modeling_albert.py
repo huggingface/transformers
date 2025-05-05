@@ -41,11 +41,7 @@ from ...pytorch_utils import (
     is_torch_greater_or_equal_than_2_2,
     prune_linear_layer,
 )
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_albert import AlbertConfig
 
 
@@ -614,8 +610,8 @@ class AlbertModel(AlbertPreTrainedModel):
 
     def __init__(self, config: AlbertConfig, add_pooling_layer: bool = True):
         r"""
-        add_pooling_layer (<fill_type>):
-            <fill_docstring>
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
         """
         super().__init__(config)
 

@@ -1289,6 +1289,9 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
             hard_failures.append(name)
             continue
         if old_doc != new_doc:
+            print("name", name)
+            print("old_doc", old_doc)
+            print("new_doc", new_doc)
             if overwrite:
                 fix_docstring(obj, old_doc, new_doc)
             else:

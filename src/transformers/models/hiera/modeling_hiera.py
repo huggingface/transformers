@@ -862,21 +862,14 @@ class HieraPooler(nn.Module):
         return pooled_output
 
 
-@auto_docstring(
-    custom_intro="""
-    add_pooling_layer (`bool`, *optional*, defaults to `True`):
-                Whether or not to apply pooling layer.
-        is_mae (`bool`, *optional*, defaults to `False`):
-                Whether or not to run the model on MAE mode.
-    """
-)
+@auto_docstring
 class HieraModel(HieraPreTrainedModel):
     def __init__(self, config: HieraConfig, add_pooling_layer: bool = True, is_mae: bool = False):
         r"""
-        add_pooling_layer (<fill_type>):
-            <fill_docstring>
-        is_mae (<fill_type>):
-            <fill_docstring>
+        add_pooling_layer (`bool`, *optional*, defaults to `True`):
+            Whether or not to apply pooling layer.
+        is_mae (`bool`, *optional*, defaults to `False`):
+            Whether or not to run the model on MAE mode.
         """
         super().__init__(config)
         self.num_features = int(config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1))

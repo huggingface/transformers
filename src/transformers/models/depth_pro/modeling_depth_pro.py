@@ -23,12 +23,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from ..auto import AutoModel
 from .configuration_depth_pro import DepthProConfig
 
@@ -1034,8 +1029,8 @@ class DepthProDepthEstimationHead(nn.Module):
 class DepthProForDepthEstimation(DepthProPreTrainedModel):
     def __init__(self, config, use_fov_model=None):
         r"""
-        use_fov_model (<fill_type>):
-            <fill_docstring>
+        use_fov_model (bool, *optional*):
+            Whether to use the field of view model.
         """
         super().__init__(config)
         self.config = config

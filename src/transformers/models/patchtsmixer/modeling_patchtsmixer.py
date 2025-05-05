@@ -1249,8 +1249,8 @@ class PatchTSMixerModelOutput(ModelOutput):
 class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig, mask_input: bool = False):
         r"""
-        mask_input (<fill_type>):
-            <fill_docstring>
+        mask_input (bool, *optional*, defaults to `False`):
+            Whether to mask the input using the [`PatchTSMixerMasking`] module.
         """
         super().__init__(config)
 
