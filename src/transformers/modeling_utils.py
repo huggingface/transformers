@@ -5989,8 +5989,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
             unused_memory = torch.cuda.memory_reserved(index) - torch.cuda.memory_allocated(index)
             byte_count = max(0, byte_count - unused_memory)
         # Allocate memory
-        if byte_count > 0:
-            _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)
+        _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)
 
 
 def get_disk_only_shard_files(device_map, weight_map):
