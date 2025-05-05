@@ -131,31 +131,28 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def _eager_bidir_attention(
+# Copied from transformers.models.smolvlm.modeling_smolvlm.eager_attention_forward
+def eager_attention_forward(
     module: nn.Module,
-    q: torch.Tensor,
-    k: torch.Tensor,
-    v: torch.Tensor,
-    attn_mask: Optional[torch.Tensor],
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
     scaling: float,
-    dropout: float,
+    dropout: float = 0.0,
     **kwargs,
 ):
-    """
-    plain-PyTorch attention.
-    Accepts the same signature used by ALL_ATTENTION_FUNCTIONS.
-    """
-    # (B, H, L, D) @ (B, H, D, L) ➜ (B, H, L, L)
-    scores = torch.matmul(q, k.transpose(-2, -1)) * scaling
-    if attn_mask is not None:
-        scores = scores + attn_mask
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
 
-    attn = torch.softmax(scores, dim=-1, dtype=torch.float32).to(q.dtype)
-    attn = nn.functional.dropout(attn, p=dropout, training=module.training)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
-    # (B, H, L, L) @ (B, H, L, D) ➜ (B, H, L, D)
-    out = torch.matmul(attn, v).transpose(1, 2).contiguous()  # (B, L, H, D)
-    return out, attn
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 class PixtralAttention(nn.Module):
@@ -204,24 +201,23 @@ class PixtralAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=0)
 
-        impl = getattr(self.config, "_attn_implementation", "eager")
-
-        if impl == "sdpa" and output_attentions:
-            logger.warning_once(
-                "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            impl = "eager"
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         # Since we use packing, if Flash-Attn 2 is selected we rely on position_ids
-        if impl == "flash_attention_2":
+        if self.config._attn_implementation == "flash_attention_2":
             position_ids = position_ids.to(hidden_states.device, non_blocking=True)
             attention_mask = None
             flash_kwargs["position_ids"] = position_ids
 
-        attn_fn: Callable = _eager_bidir_attention if impl == "eager" else ALL_ATTENTION_FUNCTIONS[impl]
-
-        attn_output, attn_weights = attn_fn(
+        attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
@@ -530,7 +526,6 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         """
         if image_sizes is None:
             batch_size, _, height, width = pixel_values.shape
-            # on crée une liste de tuples (H, W) répétée batch_size fois
             image_sizes = [(height, width)] * batch_size
 
         # pass images through initial convolution independently
