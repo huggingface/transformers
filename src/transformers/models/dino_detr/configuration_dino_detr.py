@@ -34,99 +34,121 @@ class DinoDetrConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        d_model (`int`, *optional*, defaults to 256):
+            Dimension of the layers.
+        disable_custom_kernels (`bool`, *optional*, defaults to `False`):
+            Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
+            kernels are not supported by PyTorch ONNX export.
         use_timm_backbone (`bool`, *optional*, defaults to `True`):
             Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
             API.
-        backbone_config (`PretrainedConfig` or `dict`, *optional*):
-            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
-            case it will default to `ResNetConfig()`.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        num_queries (`int`, *optional*, defaults to 300):
-            Number of object queries, i.e. detection slots. This is the maximal number of objects
-            [`DinoDetrModel`] can detect in a single image. In case `two_stage` is set to `True`, we use
-            `two_stage_num_proposals` instead.
-        d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers.
-        encoder_layers (`int`, *optional*, defaults to 6):
-            Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 6):
-            Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
+        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
+            Whether to use pretrained weights for the backbone.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
+        key_aware_type (`<fill_type>`, *optional*): <fill_docstring>
+        enc_layer_dropout_prob (`<fill_type>`, *optional*): <fill_docstring>
+        dec_layer_dropout_prob (`<fill_type>`, *optional*): <fill_docstring>
+        learnable_tgt_init (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        rm_self_attn_layers (`<fill_type>`, *optional*): <fill_docstring>
+        rm_detach (`<fill_type>`, *optional*): <fill_docstring>
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        init_xavier_std (`float`, *optional*, defaults to 1):
-            The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
-        auxiliary_loss (`bool`, *optional*, defaults to `False`):
-            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
-        position_embedding_type (`str`, *optional*, defaults to `"sine"`):
-            Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
         backbone (`str`, *optional*, defaults to `"resnet50"`):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
-            Whether to use pretrained weights for the backbone.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
+        num_feature_levels (`int`, *optional*, defaults to 4):
+            The number of input feature levels.
+        num_heads (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
+        decoder_n_points (`int`, *optional*, defaults to 4):
+            The number of sampled keys in each feature level for each attention head in the decoder.
         dilation (`bool`, *optional*, defaults to `False`):
             Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
             `use_timm_backbone` = `True`.
-        class_cost (`float`, *optional*, defaults to 1):
-            Relative weight of the classification error in the Hungarian matching cost.
-        bbox_cost (`float`, *optional*, defaults to 5):
-            Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
-        giou_cost (`float`, *optional*, defaults to 2):
-            Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
-        mask_loss_coefficient (`float`, *optional*, defaults to 1):
-            Relative weight of the Focal loss in the panoptic segmentation loss.
-        dice_loss_coefficient (`float`, *optional*, defaults to 1):
-            Relative weight of the DICE/F-1 loss in the panoptic segmentation loss.
-        bbox_loss_coefficient (`float`, *optional*, defaults to 5):
-            Relative weight of the L1 bounding box loss in the object detection loss.
-        giou_loss_coefficient (`float`, *optional*, defaults to 2):
-            Relative weight of the generalized IoU loss in the object detection loss.
-        eos_coefficient (`float`, *optional*, defaults to 0.1):
-            Relative classification weight of the 'no-object' class in the object detection loss.
-        num_feature_levels (`int`, *optional*, defaults to 4):
-            The number of input feature levels.
+        position_embedding_type (`str`, *optional*, defaults to `"SineHW"`):
+            Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
         encoder_n_points (`int`, *optional*, defaults to 4):
             The number of sampled keys in each feature level for each attention head in the encoder.
-        decoder_n_points (`int`, *optional*, defaults to 4):
-            The number of sampled keys in each feature level for each attention head in the decoder.
-        two_stage (`bool`, *optional*, defaults to `False`):
-            Whether to apply a two-stage deformable DETR, where the region proposals are also generated by a variant of
-            Dino DETR, which are further fed into the decoder for iterative bounding box refinement.
-        two_stage_num_proposals (`int`, *optional*, defaults to 300):
-            The number of region proposals to be generated, in case `two_stage` is set to `True`.
-        with_box_refine (`bool`, *optional*, defaults to `False`):
-            Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
-            based on the predictions from the previous layer.
+        dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        encoder_ffn_dim (`int`, *optional*, defaults to 2048):
+            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+        module_seq (`<fill_type>`, *optional*, defaults to `['sa', 'ca', 'ffn']`): <fill_docstring>
+        d_ffn (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
+        activation (`<fill_type>`, *optional*, defaults to `"relu"`): <fill_docstring>
+        decoder_sa_type (`<fill_type>`, *optional*, defaults to `"sa"`): <fill_docstring>
+        num_queries (`int`, *optional*, defaults to 900):
+            Number of object queries, i.e. detection slots. This is the maximal number of objects
+            [`DinoDetrModel`] can detect in a single image. In case `two_stage` is set to `True`, we use
+            `two_stage_num_proposals` instead.
+        two_stage_type (`<fill_type>`, *optional*, defaults to `"standard"`): <fill_docstring>
+        query_dim (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
+        use_detached_boxes_dec_out (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        dec_layer_number (`<fill_type>`, *optional*): <fill_docstring>
+        decoder_layer_noise (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        dln_xy_noise (`<fill_type>`, *optional*, defaults to 0.2): <fill_docstring>
+        dln_hw_noise (`<fill_type>`, *optional*, defaults to 0.2): <fill_docstring>
+        num_encoder_layers (`<fill_type>`, *optional*, defaults to 6): <fill_docstring>
+        num_unicoder_layers (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        num_decoder_layers (`<fill_type>`, *optional*, defaults to 6): <fill_docstring>
+        two_stage_keep_all_tokens (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        random_refpoints_xy (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        normalize_before (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        num_patterns (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        embed_init_tgt (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        two_stage_pat_embed (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        two_stage_add_query_num (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        two_stage_learn_wh (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        num_classes (`<fill_type>`, *optional*, defaults to 91): <fill_docstring>
+        dn_labelbook_size (`<fill_type>`, *optional*, defaults to 91): <fill_docstring>
+        fix_refpoints_hw (`<fill_type>`, *optional*, defaults to -1): <fill_docstring>
+        dn_number (`<fill_type>`, *optional*, defaults to 100): <fill_docstring>
+        dn_box_noise_scale (`<fill_type>`, *optional*, defaults to 0.4): <fill_docstring>
+        dn_label_noise_ratio (`<fill_type>`, *optional*, defaults to 0.5): <fill_docstring>
+        auxiliary_loss (`bool`, *optional*, defaults to `True`):
+            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
+        dec_pred_class_embed_share (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        dec_pred_bbox_embed_share (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        two_stage_bbox_embed_share (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        two_stage_class_embed_share (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        class_cost (`float`, *optional*, defaults to 2.0):
+            Relative weight of the classification error in the Hungarian matching cost.
+        bbox_cost (`float`, *optional*, defaults to 5.0):
+            Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
+        giou_cost (`float`, *optional*, defaults to 2.0):
+            Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
+        mask_loss_coefficient (`float`, *optional*, defaults to 1.0):
+            Relative weight of the Focal loss in the panoptic segmentation loss.
+        dice_loss_coefficient (`float`, *optional*, defaults to 1.0):
+            Relative weight of the DICE/F-1 loss in the panoptic segmentation loss.
+        cls_loss_coefficient (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
+        bbox_loss_coefficient (`float`, *optional*, defaults to 5.0):
+            Relative weight of the L1 bounding box loss in the object detection loss.
+        giou_loss_coefficient (`float`, *optional*, defaults to 2.0):
+            Relative weight of the generalized IoU loss in the object detection loss.
+        interm_loss_coef (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
+        no_interm_box_loss (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        use_dn (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        use_masks (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         focal_alpha (`float`, *optional*, defaults to 0.25):
             Alpha parameter in the focal loss.
-        disable_custom_kernels (`bool`, *optional*, defaults to `False`):
-            Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
-            kernels are not supported by PyTorch ONNX export.
+        enc_layer_share (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        dec_layer_share (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        backbone_config (`PretrainedConfig` or `dict`, *optional*):
+            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
+            case it will default to `ResNetConfig()`.
+        backbone_kwargs (`dict`, *optional*, defaults to `{'out_indices': [2, 3, 4]}`):
+            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
+            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
+        is_encoder_decoder (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        pe_temperatureH (`<fill_type>`, *optional*, defaults to 20): <fill_docstring>
+        pe_temperatureW (`<fill_type>`, *optional*, defaults to 20): <fill_docstring>
 
     Examples:
 
@@ -145,8 +167,7 @@ class DinoDetrConfig(PretrainedConfig):
 
     model_type = "deformable_detr"
     attribute_map = {
-        "hidden_size": "d_model",
-        "num_attention_heads": "encoder_attention_heads",
+        "encoder_attention_heads": "num_heads",
     }
 
     def __init__(
@@ -440,12 +461,8 @@ class DinoDetrConfig(PretrainedConfig):
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
+    def encoder_attention_heads(self) -> int:
+        return self.num_heads
 
 
 __all__ = ["DinoDetrConfig"]

@@ -28,7 +28,6 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
-from torch.nn.init import constant_, xavier_uniform_
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
@@ -115,11 +114,7 @@ class MultiScaleDeformableAttentionFunction(Function):
             context.im2col_step,
         )
         context.save_for_backward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
+            value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights
         )
         return output
 
@@ -224,12 +219,12 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
         self.im2col_step = 64
 
         self.d_model = config.d_model
-        self.num_feature_levels = config.num_feature_levels
-        self.num_heads = num_heads
+        self.n_levels = config.num_feature_levels
+        self.n_heads = num_heads
         self.n_points = n_points
 
-        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.num_feature_levels * n_points * 2)
-        self.attention_weights = nn.Linear(config.d_model, num_heads * self.num_feature_levels * n_points)
+        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.n_levels * n_points * 2)
+        self.attention_weights = nn.Linear(config.d_model, num_heads * self.n_levels * n_points)
         self.value_proj = nn.Linear(config.d_model, config.d_model)
         self.output_proj = nn.Linear(config.d_model, config.d_model)
 
@@ -249,7 +244,7 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
-        output_attentions: Optional[bool] = None,
+        output_attentions: bool = False,
     ):
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
@@ -267,29 +262,17 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
         if attention_mask is not None:
             # we invert the attention_mask
             value = value.masked_fill(~attention_mask[..., None], float(0))
-        value = value.view(batch_size, sequence_length, self.num_heads, self.d_model // self.num_heads)
+        value = value.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
         sampling_offsets = self.sampling_offsets(hidden_states).view(
-            batch_size,
-            num_queries,
-            self.num_heads,
-            self.num_feature_levels,
-            self.n_points,
-            2,
+            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points, 2
         )
         attention_weights = self.attention_weights(hidden_states).view(
-            batch_size,
-            num_queries,
-            self.num_heads,
-            self.num_feature_levels * self.n_points,
+            batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
         )
         attention_weights = F.softmax(attention_weights, -1).view(
-            batch_size,
-            num_queries,
-            self.num_heads,
-            self.num_feature_levels,
-            self.n_points,
+            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
         )
-        # batch_size, num_queries, num_heads, num_feature_levels, n_points, 2
+        # batch_size, num_queries, n_heads, n_levels, n_points, 2
         num_coordinates = reference_points.shape[-1]
         if num_coordinates == 2:
             offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
@@ -329,26 +312,6 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
         output = self.output_proj(output)
 
         return output, attention_weights
-
-    def _reset_parameters(self):
-        constant_(self.sampling_offsets.weight.data, 0.0)
-        thetas = torch.arange(self.num_heads, dtype=torch.float32) * (2.0 * math.pi / self.num_heads)
-        grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-        grid_init = (
-            (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-            .view(self.num_heads, 1, 1, 2)
-            .repeat(1, self.num_feature_levels, self.n_points, 1)
-        )
-        for i in range(self.n_points):
-            grid_init[:, :, i, :] *= i + 1
-        with torch.no_grad():
-            self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-        constant_(self.attention_weights.weight.data, 0.0)
-        constant_(self.attention_weights.bias.data, 0.0)
-        xavier_uniform_(self.value_proj.weight.data)
-        constant_(self.value_proj.bias.data, 0.0)
-        xavier_uniform_(self.output_proj.weight.data)
-        constant_(self.output_proj.bias.data, 0.0)
 
 
 @dataclass
@@ -646,30 +609,19 @@ class DinoDetrFrozenBatchNorm2d(nn.Module):
         self.register_buffer("running_var", torch.ones(n))
 
     def _load_from_state_dict(
-        self,
-        state_dict,
-        prefix,
-        local_metadata,
-        strict,
-        missing_keys,
-        unexpected_keys,
-        error_msgs,
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
     ):
         num_batches_tracked_key = prefix + "num_batches_tracked"
         if num_batches_tracked_key in state_dict:
             del state_dict[num_batches_tracked_key]
 
         super()._load_from_state_dict(
-            state_dict,
-            prefix,
-            local_metadata,
-            strict,
-            missing_keys,
-            unexpected_keys,
-            error_msgs,
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         )
 
     def forward(self, x):
+        # move reshapes to the beginning
+        # to make it user-friendly
         weight = self.weight.reshape(1, -1, 1, 1)
         bias = self.bias.reshape(1, -1, 1, 1)
         running_var = self.running_var.reshape(1, -1, 1, 1)
@@ -719,17 +671,17 @@ class DinoDetrConvEncoder(nn.Module):
 
         self.config = config
 
-        kwargs = getattr(config, "backbone_kwargs", {})
-        kwargs = {} if kwargs is None else kwargs.copy()
-        out_indices = kwargs.pop("out_indices", [2, 3, 4])
-        num_channels = kwargs.pop("in_chans", config.num_channels)
-        if config.dilation:
-            kwargs["output_stride"] = kwargs.get("output_stride", 16)
         # For backwards compatibility we have to use the timm library directly instead of the AutoBackbone API
         if config.use_timm_backbone:
             # We default to values which were previously hard-coded. This enables configurability from the config
             # using backbone arguments, while keeping the default behavior the same.
             requires_backends(self, ["timm"])
+            kwargs = getattr(config, "backbone_kwargs", {})
+            kwargs = {} if kwargs is None else kwargs.copy()
+            out_indices = kwargs.pop("out_indices", (2, 3, 4) if config.num_feature_levels > 1 else (4,))
+            num_channels = kwargs.pop("in_chans", config.num_channels)
+            if config.dilation:
+                kwargs["output_stride"] = kwargs.get("output_stride", 16)
             backbone = create_model(
                 config.backbone,
                 pretrained=config.use_pretrained_backbone,
@@ -1158,16 +1110,11 @@ def gen_encoder_output_proposals(
     return output_memory, output_proposals
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrPreTrainedModel with DeformableDetr->DinoDetr
 class DinoDetrPreTrainedModel(PreTrainedModel):
     config_class = DinoDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    _no_split_modules = [
-        r"DinoDetrConvEncoder",
-        r"DinoDetrEncoderLayer",
-        r"DinoDetrDecoderLayer",
-    ]
+    _no_split_modules = [r"DinoDetrConvEncoder", r"DinoDetrEncoderLayer", r"DinoDetrDecoderLayer"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1178,14 +1125,14 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
         elif isinstance(module, DinoDetrMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
-            thetas = torch.arange(module.num_heads, dtype=torch.int64).to(default_dtype) * (
-                2.0 * math.pi / module.num_heads
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
+                2.0 * math.pi / module.n_heads
             )
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
                 (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-                .view(module.num_heads, 1, 1, 2)
-                .repeat(1, module.num_feature_levels, module.n_points, 1)
+                .view(module.n_heads, 1, 1, 2)
+                .repeat(1, module.n_levels, module.n_points, 1)
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
@@ -1220,9 +1167,7 @@ class DinoDetrEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = DinoDetrMultiscaleDeformableAttention(
-            config,
-            num_heads=config.num_heads,
-            n_points=config.encoder_n_points,
+            config, num_heads=config.encoder_attention_heads, n_points=config.encoder_n_points
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -1241,7 +1186,7 @@ class DinoDetrEncoderLayer(nn.Module):
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
-        output_attentions: Optional[bool] = None,
+        output_attentions: bool = False,
     ):
         """
         Args:
@@ -1263,7 +1208,7 @@ class DinoDetrEncoderLayer(nn.Module):
         """
         residual = hidden_states
 
-        # Apply Multi-scale Dino Attention Module on the multi-scale feature maps.
+        # Apply Multi-scale Deformable Attention Module on the multi-scale feature maps.
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -1486,10 +1431,10 @@ class DinoDetrMLPPredictionHead(nn.Module):
 
     """
 
-    def __init__(self, input_dim, d_model, output_dim, num_layers):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
         super().__init__()
         self.num_layers = num_layers
-        h = [d_model] * (num_layers - 1)
+        h = [hidden_dim] * (num_layers - 1)
         self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
 
     def forward(self, x):
