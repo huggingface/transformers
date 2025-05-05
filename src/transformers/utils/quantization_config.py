@@ -1403,12 +1403,12 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         """
         quantization_config = {}
         if self.quantization_config is not None:
-            quantization_config = self.quantization_config.dict()
+            quantization_config = self.quantization_config.model_dump()
         else:
             quantization_config["quant_method"] = QuantizationMethod.COMPRESSED_TENSORS
 
         if self.sparsity_config is not None:
-            quantization_config["sparsity_config"] = self.sparsity_config.dict()
+            quantization_config["sparsity_config"] = self.sparsity_config.model_dump()
         else:
             quantization_config["sparsity_config"] = {}
 
