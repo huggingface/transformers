@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import PILImageResampling, ChannelDimension
+from transformers.image_utils import ChannelDimension, PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -290,11 +290,15 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Test odd-width
             image_shape = (400, 601)
             encoded_images = image_processing._pad_for_patching(image_input, image_shape, input_data_format)
-            encoded_image_shape = encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
+            encoded_image_shape = (
+                encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
+            )
             self.assertEqual(encoded_image_shape, image_shape)
 
             # Test odd-height
             image_shape = (503, 400)
             encoded_images = image_processing._pad_for_patching(image_input, image_shape, input_data_format)
-            encoded_image_shape = encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
+            encoded_image_shape = (
+                encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
+            )
             self.assertEqual(encoded_image_shape, image_shape)

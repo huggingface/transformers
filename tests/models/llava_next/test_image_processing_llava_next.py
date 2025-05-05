@@ -253,11 +253,15 @@ class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Test odd-width
             image_shape = (400, 601)
             encoded_images = image_processing._pad_for_patching(image_input, image_shape, input_data_format)
-            encoded_image_shape = encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
+            encoded_image_shape = (
+                encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
+            )
             self.assertEqual(encoded_image_shape, image_shape)
 
             # Test odd-height
             image_shape = (503, 400)
             encoded_images = image_processing._pad_for_patching(image_input, image_shape, input_data_format)
-            encoded_image_shape = encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
+            encoded_image_shape = (
+                encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
+            )
             self.assertEqual(encoded_image_shape, image_shape)
