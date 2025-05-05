@@ -1283,7 +1283,7 @@ class DFineDecoder(DFinePreTrainedModel):
         initial_reference_points = ()
         initial_scores = ()
         initial_bboxes = ()
-        
+
         output_detach = pred_corners_undetach = 0
 
         project = weighting_function(self.max_num_bins, self.up, self.reg_scale)

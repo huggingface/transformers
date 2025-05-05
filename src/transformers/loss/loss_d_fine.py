@@ -371,9 +371,7 @@ def DFineForObjectDetectionLoss(
             outputs_loss["auxiliary_outputs"].extend(
                 _set_aux_loss([enc_topk_logits], [enc_topk_bboxes.clamp(min=0, max=1)])
             )
-            outputs_loss["auxiliary_outputs"].extend(
-                _set_aux_loss([out_scores], [out_bboxes.clamp(min=0, max=1)])
-            )
+            outputs_loss["auxiliary_outputs"].extend(_set_aux_loss([out_scores], [out_bboxes.clamp(min=0, max=1)]))
 
             dn_auxiliary_outputs = _set_aux_loss2(
                 dn_out_class.transpose(0, 1),
