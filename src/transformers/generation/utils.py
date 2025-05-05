@@ -37,7 +37,6 @@ from ..cache_utils import (
     OffloadedCache,
     OffloadedHybridCache,
     QuantizedCacheConfig,
-    StaticCache,
 )
 from ..configuration_utils import PretrainedConfig
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
@@ -235,7 +234,7 @@ class GenerateBeamDecoderOnlyOutput(ModelOutput):
         logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
             Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
-            each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
+            each generated token), with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
         beam_indices (`torch.LongTensor`, *optional*, returned when `output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
             `(batch_size*num_return_sequences, sequence_length)`.
@@ -279,7 +278,7 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
         logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
             Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
-            each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
+            each generated token), with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
         beam_indices (`torch.LongTensor`, *optional*, returned when `output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
             `(batch_size*num_return_sequences, sequence_length)`.
@@ -553,8 +552,14 @@ class GenerationMixin:
                     model_input = model_input.clone(memory_format=torch.contiguous_format)
                 model_inputs[model_input_name] = model_input
 
-        # 6. Create 4D attention mask is we are using a `StaticCache` (important for performant compiled forward pass)
-        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
+        # 6. Create 4D attention mask is we are using a compilable cache (important for performant compiled forward
+        # pass)
+        if (
+            isinstance(past_key_values, Cache)
+            and past_key_values.is_compileable
+            and attention_mask is not None
+            and attention_mask.ndim == 2
+        ):
             if model_inputs["inputs_embeds"] is not None:
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
             else:
@@ -963,7 +968,7 @@ class GenerationMixin:
                 atm_translator = AssistantVocabTranslatorCache.get_translator(
                     target_tokenizer,
                     assistant_tokenizer,
-                    self.config.vocab_size,
+                    self.config.get_text_config().vocab_size,
                     assistant_model=assistant_model,
                     assistant_prune_lm_head=True,  # prune LM head of assistant model
                 )
@@ -1229,7 +1234,9 @@ class GenerationMixin:
         # Watermarking should be after all logits processing is finished (see #34630)
         if generation_config.watermarking_config is not None:
             processors.append(
-                generation_config.watermarking_config.construct_processor(self.config.vocab_size, device)
+                generation_config.watermarking_config.construct_processor(
+                    self.config.get_text_config().vocab_size, device
+                )
             )
 
         # `LogitNormalization` should always be the last logit processor, when present
@@ -1407,7 +1414,7 @@ class GenerationMixin:
 
         # 3. Optionally normalize the logits (across the vocab dimension)
         if normalize_logits:
-            scores = scores.reshape(-1, self.config.vocab_size, scores.shape[-1])
+            scores = scores.reshape(-1, self.config.get_text_config().vocab_size, scores.shape[-1])
             scores = torch.nn.functional.log_softmax(scores, dim=1)
             scores = scores.reshape(-1, scores.shape[-1])
 
@@ -1421,7 +1428,7 @@ class GenerationMixin:
         beam_indices[beam_indices_mask] = 0
 
         # 6. multiply beam_indices with vocab size to gather correctly from scores
-        beam_sequence_indices = beam_indices * self.config.vocab_size
+        beam_sequence_indices = beam_indices * self.config.get_text_config().vocab_size
 
         # 7. Define which indices contributed to scores
         cut_idx = sequences.shape[-1] - max_beam_length
