@@ -206,7 +206,7 @@ class PixtralAttention(nn.Module):
 
         impl = getattr(self.config, "_attn_implementation", "eager")
 
-        if impl == "sdpa" and self.output_attentions:
+        if impl == "sdpa" and output_attentions:
             logger.warning_once(
                 "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                 'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
