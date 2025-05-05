@@ -1,29 +1,26 @@
 from transformers.models.llava_next.image_processing_llava_next_fast import LlavaNextImageProcessorFast
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     PILImageResampling,
 )
-from ...utils import add_start_docstrings, logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
-@add_start_docstrings(
-    "Constructs a fast ConvNeXT image processor. Based on [`SiglipImageProcessor`] with incorporation of processing each video frame.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        image_grid_pinpoints (`List[List[int]]`, *optional*):
+@auto_docstring(
+    custom_intro="""
+    image_grid_pinpoints (`List[List[int]]`, *optional*):
             A list of possible resolutions to use for processing high resolution images. The best resolution is selected
             based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
             method. Not used for processing videos.
         do_pad (`bool`, *optional*):
             Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
             number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-    """,
+    """
 )
 class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
     resample = PILImageResampling.BICUBIC
