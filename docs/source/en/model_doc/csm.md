@@ -82,7 +82,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
 
 # prepare the inputs
-ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
 # ensure the audio is 24kHz
 ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 conversation = []
@@ -127,7 +127,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
 
 # prepare the inputs 
-ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
 # ensure the audio is 24kHz
 ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 # here a batch with two prompts
@@ -221,7 +221,7 @@ class TimerContext:
         print(f"{self.name} time: {elapsed_time:.4f} seconds")
 
 # prepare the inputs 
-ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
 
 conversation = [
     {
@@ -253,7 +253,7 @@ padded_inputs_1 = processor.apply_chat_template(
 ).to(device)
 
 print("\n" + "="*50)
-print("First generation - compiling asnd recording CUDA graphs...")
+print("First generation - compiling and recording CUDA graphs...")
 with TimerContext("First generation"):
     _ = model.generate(**padded_inputs_1, **gen_kwargs)
 print("="*50)
@@ -316,7 +316,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
 model.eval()
 
-ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
 # ensure the audio is 24kHz
 ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 conversation = []
