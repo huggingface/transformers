@@ -71,7 +71,7 @@ class CsmProcessor(ProcessorMixin):
         from transformers import CsmProcessor
         from datasets import load_dataset
 
-        ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+        ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
         audio = ds[0]["audio"]["array"]
 
         processor = CsmProcessor.from_pretrained("eustlb/csm-1b")

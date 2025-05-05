@@ -415,7 +415,7 @@ class CsmGenerationMixin(GenerationMixin):
 
         >>> processor = AutoProcessor.from_pretrained(model_id)
 
-        >>> ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+        >>> ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
         >>> # ensure the audio is 24kHz
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 

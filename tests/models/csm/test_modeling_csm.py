@@ -424,7 +424,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def _load_conversation(self):
-        ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+        ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
         ds = ds.filter(lambda x: x["conversation_id"] == 0)
         ds = ds.sort("turn_id")
         return ds[0]
@@ -439,7 +439,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         prompt = "<|begin_of_text|>[0]What are you working on?<|end_of_text|><|AUDIO|><|audio_eos|><|begin_of_text|>[1]I'm figuring out my budget.<|end_of_text|>"
 
-        ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+        ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
         audio = ds[0]["audio"]["array"]
         inputs = processor(text=prompt, audio=audio, return_tensors="pt").to(torch_device)
 
@@ -543,7 +543,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
         """
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
 
-        ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+        ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
         conversation = []
 
         # context
@@ -603,7 +603,7 @@ class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
         """
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
 
-        ds = load_dataset("eustlb/dailytalk-dummy", split="train")
+        ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
         conversation = [
             [
                 {
