@@ -24,8 +24,6 @@
   - local: in_translation
     title: Partager un modèle
   - local: in_translation
-    title: Agents
-  - local: in_translation
     title: Génération avec LLMs
   title: Tutoriels
 - sections:

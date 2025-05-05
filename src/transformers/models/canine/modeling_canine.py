@@ -85,8 +85,8 @@ class CanineModelOutputWithPooling(ModelOutput):
             attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1056,7 +1056,7 @@ class CanineModel(CaninePreTrainedModel):
 
         return molecule_attention_mask
 
-    def _repeat_molecules(self, molecules: torch.Tensor, char_seq_length: torch.Tensor) -> torch.Tensor:
+    def _repeat_molecules(self, molecules: torch.Tensor, char_seq_length: int) -> torch.Tensor:
         """Repeats molecules to make them the same length as the char sequence."""
 
         rate = self.config.downsampling_rate
@@ -1070,7 +1070,7 @@ class CanineModel(CaninePreTrainedModel):
         # n elements (n < `downsampling_rate`), i.e. the remainder of floor
         # division. We do this by repeating the last molecule a few extra times.
         last_molecule = molecules[:, -1:, :]
-        remainder_length = torch.fmod(torch.tensor(char_seq_length), torch.tensor(rate)).item()
+        remainder_length = char_seq_length % rate
         remainder_repeated = torch.repeat_interleave(
             last_molecule,
             # +1 molecule to compensate for truncation.

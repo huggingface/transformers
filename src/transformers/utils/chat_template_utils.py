@@ -19,7 +19,7 @@ import types
 from contextlib import contextmanager
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_args, get_origin, get_type_hints
+from typing import Any, Callable, Optional, Union, get_args, get_origin, get_type_hints
 
 from packaging import version
 
@@ -71,7 +71,7 @@ class DocstringParsingException(Exception):
     pass
 
 
-def _get_json_schema_type(param_type: str) -> Dict[str, str]:
+def _get_json_schema_type(param_type: str) -> dict[str, str]:
     type_mapping = {
         int: {"type": "integer"},
         float: {"type": "number"},
@@ -87,7 +87,7 @@ def _get_json_schema_type(param_type: str) -> Dict[str, str]:
     return type_mapping.get(param_type, {"type": "object"})
 
 
-def _parse_type_hint(hint: str) -> Dict:
+def _parse_type_hint(hint: str) -> dict:
     origin = get_origin(hint)
     args = get_args(hint)
 
@@ -152,7 +152,7 @@ def _parse_type_hint(hint: str) -> Dict:
     raise TypeHintParsingException("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
 
 
-def _convert_type_hints_to_json_schema(func: Callable) -> Dict:
+def _convert_type_hints_to_json_schema(func: Callable) -> dict:
     type_hints = get_type_hints(func)
     signature = inspect.signature(func)
     required = []
@@ -173,7 +173,7 @@ def _convert_type_hints_to_json_schema(func: Callable) -> Dict:
     return schema
 
 
-def parse_google_format_docstring(docstring: str) -> Tuple[Optional[str], Optional[Dict], Optional[str]]:
+def parse_google_format_docstring(docstring: str) -> tuple[Optional[str], Optional[dict], Optional[str]]:
     """
     Parses a Google-style docstring to extract the function description,
     argument descriptions, and return description.
@@ -206,7 +206,7 @@ def parse_google_format_docstring(docstring: str) -> Tuple[Optional[str], Option
     return description, args_dict, returns
 
 
-def get_json_schema(func: Callable) -> Dict:
+def get_json_schema(func: Callable) -> dict:
     """
     This function generates a JSON schema for a given function, based on its docstring and type hints. This is
     mostly used for passing lists of tools to a chat template. The JSON schema contains the name and description of
@@ -398,7 +398,7 @@ def _compile_jinja_template(chat_template):
             return self._rendered_blocks or self._generation_indices
 
         @contextmanager
-        def activate_tracker(self, rendered_blocks: List[int], generation_indices: List[int]):
+        def activate_tracker(self, rendered_blocks: list[int], generation_indices: list[int]):
             try:
                 if self.is_active():
                     raise ValueError("AssistantTracker should not be reused before closed")

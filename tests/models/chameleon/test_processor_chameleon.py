@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,11 +33,44 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ChameleonProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = ChameleonImageProcessor()
         tokenizer = LlamaTokenizer(vocab_file=SAMPLE_VOCAB)
         tokenizer.pad_token_id = 0
         tokenizer.sep_token_id = 1
-        processor = self.processor_class(image_processor=image_processor, tokenizer=tokenizer)
-        processor.save_pretrained(self.tmpdirname)
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        processor = cls.processor_class(image_processor=image_processor, tokenizer=tokenizer, image_seq_length=2)
+        processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.image_token
+
+    def test_special_mm_token_truncation(self):
+        """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
+
+        processor = self.get_processor()
+
+        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        image_input = self.prepare_image_inputs(batch_size=2)
+
+        _ = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            truncation=None,
+            padding=True,
+        )
+
+        with self.assertRaises(ValueError):
+            _ = processor(
+                text=input_str,
+                images=image_input,
+                return_tensors="pt",
+                truncation=True,
+                padding=True,
+                max_length=20,
+            )
+
+    @staticmethod
+    def prepare_processor_dict():
+        return {"image_seq_length": 2}  # fmt: skip

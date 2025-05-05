@@ -37,23 +37,29 @@ from ...modeling_outputs import (
     ModelOutput,
     Seq2SeqLMOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto.modeling_auto import AutoModel
 from .configuration_moshi import MoshiConfig, MoshiDepthConfig
 
 
 if is_flash_attn_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
+
 
 logger = logging.get_logger(__name__)
 
@@ -100,7 +106,7 @@ class MoshiConditionalGenerationGenerateOutput(ModelOutput):
     """
 
     audio_sequences: Optional[torch.Tensor] = None
-    sequences: torch.LongTensor = None
+    sequences: Optional[torch.LongTensor] = None
     sequences_scores: Optional[torch.FloatTensor] = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
     logits: Optional[Tuple[torch.FloatTensor]] = None
@@ -143,8 +149,8 @@ class MoshiCausalLMOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -193,13 +199,13 @@ class MoshiConditionalGenerationOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     depth_loss: Optional[torch.FloatTensor] = None
-    audio_logits: torch.FloatTensor = None
+    audio_logits: Optional[torch.FloatTensor] = None
     depth_past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     depth_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     depth_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -220,10 +226,10 @@ class MoshiUnconditionalInput(ModelOutput):
             1]`: 1 for tokens that are **not masked**, 0 for tokens that are **masked**.
     """
 
-    input_ids: torch.LongTensor = None
-    user_audio_codes: torch.Tensor = None
-    moshi_audio_codes: torch.Tensor = None
-    attention_mask: torch.LongTensor = None
+    input_ids: Optional[torch.LongTensor] = None
+    user_audio_codes: Optional[torch.Tensor] = None
+    moshi_audio_codes: Optional[torch.Tensor] = None
+    attention_mask: Optional[torch.LongTensor] = None
 
 
 # Copied from transformers.models.gemma.modeling_gemma.GemmaRMSNorm with Gemma->Moshi
@@ -325,45 +331,18 @@ class MoshiRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
-    def _dynamic_frequency_update(self, position_ids, device):
-        """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
-        """
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
-
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
-            # This .to() is needed if the model has been moved to a device after being initialized (because
-            # the buffer is automatically moved, but not the original copy)
-            self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
-
     @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-
-        # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
 
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -876,22 +855,19 @@ class MoshiPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
+
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
-            if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, MoshiFlexibleLinear):
+            module.weight.data.normal_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, MoshiRMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 MOSHI_START_DOCSTRING = r"""
@@ -1089,9 +1065,9 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        last_hidden_state: torch.LongTensor = None,
+        last_hidden_state: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1291,7 +1267,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
     # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask with Phi3->Moshi
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
@@ -1309,6 +1285,10 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -1332,7 +1312,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             ):
                 return None
 
-        dtype, device = input_tensor.dtype, input_tensor.device
+        dtype = input_tensor.dtype
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         # SlidingWindowCache or StaticCache
@@ -1352,7 +1332,6 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             sequence_length=sequence_length,
             target_length=target_length,
             dtype=dtype,
-            device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
             config=self.config,
@@ -1362,7 +1341,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1379,7 +1358,6 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         config: MoshiDepthConfig,
@@ -1398,8 +1376,6 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
                 The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -1415,15 +1391,17 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
             )
-            diagonal_attend_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            if config.sliding_window is not None:
+            diagonal_attend_mask = torch.arange(target_length, device=cache_position.device) > cache_position.reshape(
+                -1, 1
+            )
+            if config.get_text_config().sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
-                    sliding_attend_mask = torch.arange(target_length, device=device) <= (
-                        cache_position.reshape(-1, 1) - config.sliding_window
+                    sliding_attend_mask = torch.arange(target_length, device=cache_position.device) <= (
+                        cache_position.reshape(-1, 1) - config.get_text_config().sliding_window
                     )
                     diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask
@@ -1482,7 +1460,7 @@ class MoshiModel(MoshiPreTrainedModel):
     @add_start_docstrings_to_model_forward(MOSHI_DECODER_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
@@ -1605,7 +1583,7 @@ class MoshiModel(MoshiPreTrainedModel):
     # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask with Phi3->Moshi
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
@@ -1623,6 +1601,10 @@ class MoshiModel(MoshiPreTrainedModel):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -1646,7 +1628,7 @@ class MoshiModel(MoshiPreTrainedModel):
             ):
                 return None
 
-        dtype, device = input_tensor.dtype, input_tensor.device
+        dtype = input_tensor.dtype
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         # SlidingWindowCache or StaticCache
@@ -1666,7 +1648,6 @@ class MoshiModel(MoshiPreTrainedModel):
             sequence_length=sequence_length,
             target_length=target_length,
             dtype=dtype,
-            device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
             config=self.config,
@@ -1676,7 +1657,7 @@ class MoshiModel(MoshiPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1693,7 +1674,6 @@ class MoshiModel(MoshiPreTrainedModel):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         config: MoshiConfig,
@@ -1712,8 +1692,6 @@ class MoshiModel(MoshiPreTrainedModel):
                 The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -1729,15 +1707,17 @@ class MoshiModel(MoshiPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
             )
-            diagonal_attend_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            if config.sliding_window is not None:
+            diagonal_attend_mask = torch.arange(target_length, device=cache_position.device) > cache_position.reshape(
+                -1, 1
+            )
+            if config.get_text_config().sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
-                    sliding_attend_mask = torch.arange(target_length, device=device) <= (
-                        cache_position.reshape(-1, 1) - config.sliding_window
+                    sliding_attend_mask = torch.arange(target_length, device=cache_position.device) <= (
+                        cache_position.reshape(-1, 1) - config.get_text_config().sliding_window
                     )
                     diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask
@@ -1792,12 +1772,11 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(MOSHI_DECODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MoshiCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
@@ -1952,7 +1931,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         user_audio_codes: Optional[torch.Tensor] = None,
         moshi_input_values: Optional[torch.FloatTensor] = None,
         moshi_audio_codes: Optional[torch.Tensor] = None,
-        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         text_labels: Optional[torch.LongTensor] = None,
         audio_labels: Optional[torch.LongTensor] = None,

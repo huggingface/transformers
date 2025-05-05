@@ -28,6 +28,8 @@ COMMON_ENV_VARIABLES = {
     "TRANSFORMERS_IS_CI": True,
     "PYTEST_TIMEOUT": 120,
     "RUN_PIPELINE_TESTS": False,
+    # will be adjust in `CircleCIJob.to_dict`.
+    "RUN_FLAKY": True,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "vvv": None, "rsfE":None}
@@ -126,6 +128,8 @@ class CircleCIJob:
 
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
+        # Do not run tests decorated by @is_flaky on pull requests
+        env['RUN_FLAKY'] = os.environ.get("CIRCLE_PULL_REQUEST", "") == ""
         env.update(self.additional_env)
 
         job = {
@@ -171,6 +175,7 @@ class CircleCIJob:
                     "command": f"TESTS=$(circleci tests split  --split-by=timings {self.job_name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"awk '{{printf \"%s \", $0}}' {self.job_name}_test_list.txt > splitted_tests.txt"
                     }
             },
+            {"run": {"name": "fetch hub objects before pytest", "command": "python3 utils/fetch_hub_objects_for_ci.py"}},
             {"run": {
                 "name": "Run tests",
                 "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}

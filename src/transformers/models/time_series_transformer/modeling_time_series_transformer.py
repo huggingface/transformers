@@ -180,7 +180,7 @@ class TimeSeriesNOPScaler(nn.Module):
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
 
     def forward(
-        self, data: torch.Tensor, observed_indicator: torch.Tensor = None
+        self, data: torch.Tensor, observed_indicator: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Parameters:

@@ -87,8 +87,8 @@ class MusicgenUnconditionalInput(ModelOutput):
     """
 
     encoder_outputs: Tuple[torch.FloatTensor] = None
-    attention_mask: torch.LongTensor = None
-    guidance_scale: float = None
+    attention_mask: Optional[torch.LongTensor] = None
+    guidance_scale: Optional[float] = None
 
 
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
@@ -966,7 +966,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
     @add_start_docstrings_to_model_forward(MUSICGEN_DECODER_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1162,7 +1162,7 @@ class MusicgenModel(MusicgenPreTrainedModel):
     @add_start_docstrings_to_model_forward(MUSICGEN_DECODER_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1250,7 +1250,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1601,7 +1601,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
         # 7. determine generation mode
         generation_mode = generation_config.get_generation_mode()
 
-        # 8. prepare batched CFG externally (to enable coexistance with the unbatched CFG)
+        # 8. prepare batched CFG externally (to enable coexistence with the unbatched CFG)
         if generation_config.guidance_scale is not None and generation_config.guidance_scale > 1:
             logits_processor.append(ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale))
             generation_config.guidance_scale = None
@@ -2018,7 +2018,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
         encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
-        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -2439,7 +2439,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
         return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     def _get_decoder_start_token_id(
-        self, decoder_start_token_id: Union[int, List[int]] = None, bos_token_id: Optional[int] = None
+        self, decoder_start_token_id: Optional[Union[int, List[int]]] = None, bos_token_id: Optional[int] = None
     ) -> int:
         decoder_start_token_id = (
             decoder_start_token_id
@@ -2617,7 +2617,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
         # 7. determine generation mode
         generation_mode = generation_config.get_generation_mode()
 
-        # 8. prepare batched CFG externally (to enable coexistance with the unbatched CFG)
+        # 8. prepare batched CFG externally (to enable coexistence with the unbatched CFG)
         if generation_config.guidance_scale is not None and generation_config.guidance_scale > 1:
             logits_processor.append(ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale))
             generation_config.guidance_scale = None

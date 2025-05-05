@@ -280,7 +280,7 @@ def _flash_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
     value_states: torch.Tensor,
-    attention_mask: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
     query_length: int,
     is_causal: bool,
     dropout: float = 0.0,
@@ -289,7 +289,7 @@ def _flash_attention_forward(
     sliding_window: Optional[int] = None,
     use_top_left_mask: bool = False,
     softcap: Optional[float] = None,
-    deterministic: bool = None,
+    deterministic: Optional[bool] = None,
     cu_seq_lens_q: Optional[torch.LongTensor] = None,
     cu_seq_lens_k: Optional[torch.LongTensor] = None,
     max_length_q: Optional[int] = None,
@@ -308,7 +308,7 @@ def _flash_attention_forward(
             Input key states to be passed to Flash Attention API
         value_states (`torch.Tensor`):
             Input value states to be passed to Flash Attention API
-        attention_mask (`torch.Tensor`):
+        attention_mask (`torch.Tensor`, *optional*):
             The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
             position of padding tokens and 1 for the position of non-padding tokens.
         dropout (`float`):

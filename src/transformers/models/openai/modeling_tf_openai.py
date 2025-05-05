@@ -429,8 +429,8 @@ class TFOpenAIGPTDoubleHeadsModelOutput(ModelOutput):
             heads.
     """
 
-    logits: tf.Tensor = None
-    mc_logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
+    mc_logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 

@@ -132,7 +132,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         image_grid_pinpoints (`List` *optional*, defaults to `[[672, 336], [336, 672], [672, 672], [336, 1008], [1008, 336]]`):
             A list of possible resolutions to use for processing high resolution images. The best resolution is selected
             based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
-            method. Not used for processinf videos.
+            method. Not used for processing videos.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -162,8 +162,8 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
-        image_grid_pinpoints: List = None,
+        size: Optional[Dict[str, int]] = None,
+        image_grid_pinpoints: Optional[List] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -453,15 +453,15 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
     def _preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
+        do_convert_rgb: Optional[bool] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Image.Image:
@@ -528,17 +528,17 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        image_grid_pinpoints: List = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
+        image_grid_pinpoints: Optional[List] = None,
         resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: Optional[bool] = None,
-        do_convert_rgb: bool = None,
+        do_convert_rgb: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -647,7 +647,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
         for image in images:
             # convert image into a list of patches
-            # we intentially use the same data format as the input data format
+            # we intentionally use the same data format as the input data format
             size_tuple = (
                 (size["height"], size["width"])
                 if "height" in size and "width" in size

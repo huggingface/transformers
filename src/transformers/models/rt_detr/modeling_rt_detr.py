@@ -123,6 +123,10 @@ class RTDetrDecoderOutput(ModelOutput):
             Stacked intermediate logits (logits of each layer of the decoder).
         intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
             Stacked intermediate reference points (reference points of each layer of the decoder).
+        intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+        initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Stacked initial reference points (initial reference points of each layer of the decoder).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
@@ -137,10 +141,12 @@ class RTDetrDecoderOutput(ModelOutput):
             used to compute the weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_logits: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_logits: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -200,17 +206,19 @@ class RTDetrModelOutput(ModelOutput):
             Extra dictionary for the denoising related values
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_logits: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_logits: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    init_reference_points: torch.FloatTensor = None
+    init_reference_points: Optional[torch.FloatTensor] = None
     enc_topk_logits: Optional[torch.FloatTensor] = None
     enc_topk_bboxes: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
@@ -249,6 +257,10 @@ class RTDetrObjectDetectionOutput(ModelOutput):
             Stacked intermediate logits (logits of each layer of the decoder).
         intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
             Stacked intermediate reference points (reference points of each layer of the decoder).
+        intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+        initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Stacked initial reference points (initial reference points of each layer of the decoder).
         decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, num_queries, hidden_size)`. Hidden-states of the decoder at the output of each layer
@@ -289,13 +301,15 @@ class RTDetrObjectDetectionOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
-    logits: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
     auxiliary_outputs: Optional[List[Dict]] = None
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_logits: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_logits: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -586,7 +600,7 @@ class RTDetrEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         **kwargs,
     ):
@@ -1039,9 +1053,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
     _no_split_modules = [r"RTDetrHybridEncoder", r"RTDetrDecoderLayer"]
 
     def _init_weights(self, module):
-        """Initalize the weights"""
-
-        """initialize linear layer bias value according to a given probability value."""
+        """Initialize the weights"""
         if isinstance(module, (RTDetrForObjectDetection, RTDetrDecoder)):
             if module.class_embed is not None:
                 for layer in module.class_embed:
@@ -1055,7 +1067,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
                     nn.init.constant_(layer.layers[-1].weight, 0)
                     nn.init.constant_(layer.layers[-1].bias, 0)
 
-        if isinstance(module, RTDetrMultiscaleDeformableAttention):
+        elif isinstance(module, RTDetrMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
@@ -1078,16 +1090,20 @@ class RTDetrPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.output_proj.weight.data)
             nn.init.constant_(module.output_proj.bias.data, 0.0)
 
-        if isinstance(module, RTDetrModel):
+        elif isinstance(module, RTDetrModel):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
             nn.init.xavier_uniform_(module.enc_score_head.weight)
             nn.init.constant_(module.enc_score_head.bias, bias)
 
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
+
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             nn.init.xavier_uniform_(module.weight_embedding.weight)
@@ -1466,8 +1482,8 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
 
             # hack implementation for iterative bounding box refinement
             if self.bbox_embed is not None:
-                tmp = self.bbox_embed[idx](hidden_states)
-                new_reference_points = F.sigmoid(tmp + inverse_sigmoid(reference_points))
+                predicted_corners = self.bbox_embed[idx](hidden_states)
+                new_reference_points = F.sigmoid(predicted_corners + inverse_sigmoid(reference_points))
                 reference_points = new_reference_points.detach()
 
             intermediate += (hidden_states,)
@@ -1863,6 +1879,8 @@ class RTDetrModel(RTDetrPreTrainedModel):
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_logits=decoder_outputs.intermediate_logits,
             intermediate_reference_points=decoder_outputs.intermediate_reference_points,
+            intermediate_predicted_corners=decoder_outputs.intermediate_predicted_corners,
+            initial_reference_points=decoder_outputs.initial_reference_points,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -2018,6 +2036,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
 
         outputs_class = outputs.intermediate_logits if return_dict else outputs[2]
         outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[3]
+        predicted_corners = outputs.intermediate_predicted_corners if return_dict else outputs[4]
+        initial_reference_points = outputs.initial_reference_points if return_dict else outputs[5]
 
         logits = outputs_class[:, -1]
         pred_boxes = outputs_coord[:, -1]
@@ -2037,6 +2057,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
                 enc_topk_logits=enc_topk_logits,
                 enc_topk_bboxes=enc_topk_bboxes,
                 denoising_meta_values=denoising_meta_values,
+                predicted_corners=predicted_corners,
+                initial_reference_points=initial_reference_points,
                 **loss_kwargs,
             )
 
@@ -2057,6 +2079,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             intermediate_hidden_states=outputs.intermediate_hidden_states,
             intermediate_logits=outputs.intermediate_logits,
             intermediate_reference_points=outputs.intermediate_reference_points,
+            intermediate_predicted_corners=outputs.intermediate_predicted_corners,
+            initial_reference_points=outputs.initial_reference_points,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,

@@ -132,9 +132,9 @@ class GroundingDinoDecoderOutput(ModelOutput):
             weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
@@ -166,8 +166,8 @@ class GroundingDinoEncoderOutput(ModelOutput):
             multi-scale deformable attention heads.
     """
 
-    last_hidden_state_vision: torch.FloatTensor = None
-    last_hidden_state_text: torch.FloatTensor = None
+    last_hidden_state_vision: Optional[torch.FloatTensor] = None
+    last_hidden_state_text: Optional[torch.FloatTensor] = None
     vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
@@ -225,10 +225,10 @@ class GroundingDinoModelOutput(ModelOutput):
             Coordinates of top `config.num_queries` scoring bounding boxes in the first stage.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    init_reference_points: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    init_reference_points: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     encoder_last_hidden_state_vision: Optional[torch.FloatTensor] = None
@@ -262,7 +262,7 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
             possible padding). You can use [`~GroundingDinoProcessor.post_process_grounded_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`List[Dict]`, *optional*):
-            Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+            Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
             `pred_boxes`) for each decoder layer.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
@@ -314,8 +314,8 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
-    logits: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
     auxiliary_outputs: Optional[List[Dict]] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     init_reference_points: Optional[torch.FloatTensor] = None
@@ -1012,7 +1012,7 @@ class GroundingDinoDeformableLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
@@ -1850,7 +1850,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
 
             # In original implementation they apply layer norm before outputting intermediate hidden states
             # Though that's not through between layers so the layers use as input the output of the previous layer
-            # withtout layer norm
+            # without layer norm
             if output_hidden_states:
                 all_hidden_states += (self.layer_norm(hidden_states),)
 
@@ -2098,9 +2098,9 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         _, height, width = mask.shape
         valid_height = torch.sum(mask[:, :, 0], 1)
         valid_width = torch.sum(mask[:, 0, :], 1)
-        valid_ratio_heigth = valid_height.float() / height
+        valid_ratio_height = valid_height.float() / height
         valid_ratio_width = valid_width.float() / width
-        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
+        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
     def generate_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
@@ -2136,8 +2136,8 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
 
             scale = torch.cat([valid_width.unsqueeze(-1), valid_height.unsqueeze(-1)], 1).view(batch_size, 1, 1, 2)
             grid = (grid.unsqueeze(0).expand(batch_size, -1, -1, -1) + 0.5) / scale
-            width_heigth = torch.ones_like(grid) * 0.05 * (2.0**level)
-            proposal = torch.cat((grid, width_heigth), -1).view(batch_size, -1, 4)
+            width_height = torch.ones_like(grid) * 0.05 * (2.0**level)
+            proposal = torch.cat((grid, width_height), -1).view(batch_size, -1, 4)
             proposals.append(proposal)
             current_position += height * width
 
@@ -2547,14 +2547,14 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         input_ids: torch.LongTensor,
-        token_type_ids: torch.LongTensor = None,
-        attention_mask: torch.LongTensor = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         pixel_mask: Optional[torch.BoolTensor] = None,
         encoder_outputs: Optional[Union[GroundingDinoEncoderOutput, Tuple]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]] = None,
+        labels: Optional[List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]]] = None,
     ):
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):

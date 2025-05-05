@@ -29,7 +29,7 @@ from ...image_processing_utils_fast import (
     Unpack,
     convert_to_rgb,
 )
-from ...image_utils import ImageInput, make_list_of_images, valid_images
+from ...image_utils import ImageInput, make_flat_list_of_images, valid_images
 from ...utils import TensorType, logging
 
 
@@ -175,7 +175,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "

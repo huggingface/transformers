@@ -39,10 +39,16 @@ from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLVisionConfig
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_torch_flex_attn_available,
+    logging,
+    replace_return_docstrings,
+)
+from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLTextConfig, Qwen2_5_VLVisionConfig
 
 
 if is_flash_attn_available():
@@ -51,6 +57,11 @@ if is_flash_attn_available():
 
 if is_flash_attn_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -379,7 +390,7 @@ class Qwen2_5_VLPreTrainedModel(PreTrainedModel):
     _supports_static_cache = False  # TODO (joao): fix. torch.compile failing probably due to `cache_positions`
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
+        std = self.config.get_text_config().initializer_range
         if isinstance(module, (nn.Linear, nn.Conv3d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -388,6 +399,8 @@ class Qwen2_5_VLPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Qwen2RMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
@@ -553,7 +566,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
 
 
 class Qwen2_5_VLRotaryEmbedding(nn.Module):
-    def __init__(self, config: Qwen2_5_VLConfig, device=None):
+    def __init__(self, config: Qwen2_5_VLTextConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
@@ -570,45 +583,20 @@ class Qwen2_5_VLRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
-    def _dynamic_frequency_update(self, position_ids, device):
-        """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
-        """
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len, **self.rope_kwargs
-            )
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
-
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
-
     @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-
-        # Core RoPE block. In contrast to other models, Qwen2_5_VL has different position ids for the grids
+        # In contrast to other models, Qwen2_5_VL has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
-
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -692,7 +680,7 @@ class Qwen2_5_VLAttention(nn.Module):
     and "Generating Long Sequences with Sparse Transformers".
     """
 
-    def __init__(self, config: Qwen2_5_VLConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: Qwen2_5_VLTextConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -893,7 +881,7 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -986,7 +974,7 @@ class Qwen2_5_VLSdpaAttention(Qwen2_5_VLAttention):
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, self.hidden_size)
+        attn_output = attn_output.view(bsz, q_len, -1)
 
         attn_output = self.o_proj(attn_output)
 
@@ -1001,7 +989,7 @@ QWEN2_5_VL_ATTENTION_CLASSES = {
 
 
 class Qwen2_5_VLDecoderLayer(nn.Module):
-    def __init__(self, config: Qwen2_5_VLConfig, layer_idx: int):
+    def __init__(self, config: Qwen2_5_VLTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -1089,7 +1077,9 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
     Qwen2_5_VL_START_DOCSTRING,
 )
 class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
-    def __init__(self, config: Qwen2_5_VLConfig):
+    config_class = Qwen2_5_VLTextConfig
+
+    def __init__(self, config: Qwen2_5_VLTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -1114,7 +1104,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -1231,7 +1221,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
 
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
@@ -1249,6 +1239,10 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -1272,7 +1266,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             ):
                 return None
 
-        dtype, device = input_tensor.dtype, input_tensor.device
+        dtype = input_tensor.dtype
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         # SlidingWindowCache or StaticCache
@@ -1292,7 +1286,6 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             sequence_length=sequence_length,
             target_length=target_length,
             dtype=dtype,
-            device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
             config=self.config,
@@ -1302,7 +1295,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1318,7 +1311,6 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         config: Qwen2_5_VLConfig,
@@ -1337,8 +1329,6 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -1354,15 +1344,17 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
             )
-            diagonal_attend_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            if config.sliding_window is not None:
+            diagonal_attend_mask = torch.arange(target_length, device=cache_position.device) > cache_position.reshape(
+                -1, 1
+            )
+            if config.get_text_config().sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
-                    sliding_attend_mask = torch.arange(target_length, device=device) <= (
-                        cache_position.reshape(-1, 1) - config.sliding_window
+                    sliding_attend_mask = torch.arange(target_length, device=cache_position.device) <= (
+                        cache_position.reshape(-1, 1) - config.get_text_config().sliding_window
                     )
                     diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask
@@ -1414,7 +1406,7 @@ class Qwen2_5_VLCausalLMOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1505,9 +1497,11 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
     def __init__(self, config):
         super().__init__(config)
         self.visual = Qwen2_5_VisionTransformerPretrainedModel._from_config(config.vision_config)
-        self.model = Qwen2_5_VLModel(config)
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        text_config = config.get_text_config()
+        self.model = Qwen2_5_VLModel._from_config(text_config)
+        self.vocab_size = text_config.vocab_size
+        self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
         self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing
@@ -1667,6 +1661,11 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
                     range_tensor = torch.arange(llm_grid_t).view(-1, 1)
                     expanded_range = range_tensor.expand(-1, llm_grid_h * llm_grid_w)
 
+                    ## normalize type, send to device.
+                    second_per_grid_t = torch.as_tensor(
+                        second_per_grid_t, dtype=range_tensor.dtype, device=range_tensor.device
+                    )
+
                     time_tensor = expanded_range * second_per_grid_t * self.config.vision_config.tokens_per_second
 
                     time_tensor_long = time_tensor.long()
@@ -1712,7 +1711,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
     @replace_return_docstrings(output_type=Qwen2_5_VLCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,

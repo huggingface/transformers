@@ -118,7 +118,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
         with torch.no_grad():
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + num_tokens_to_generate,
@@ -144,7 +144,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + num_tokens_to_generate,
@@ -187,7 +187,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             # TODO use  decode_one_token(model, input_id.clone(), cache_position) for verification
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + num_tokens_to_generate + 10,
@@ -254,7 +254,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + 128,
@@ -271,7 +271,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + 128,
@@ -287,13 +287,13 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + 128,
             )
 
-            # 3nd call
+            # 3rd call
             start = perf_counter()
             output = model.generate(**inputs, past_key_values=past_key_values)
             end = perf_counter()
@@ -303,7 +303,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 
             past_key_values = StaticCache(
                 model.config,
-                batch_size=batch_size,
+                max_batch_size=batch_size,
                 device=device,
                 dtype=torch.float16,
                 max_cache_len=seq_length + 128,

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -86,6 +85,7 @@ class Phi4MultimodalModelTester:
             intermediate_size=48,
             depthwise_seperable_out_channel=128,
             nemo_conv_channels=128,
+            initializer_range=1e-5,
         ),
         vision_config=Phi4MultimodalVisionConfig(
             num_hidden_layers=2,
@@ -93,6 +93,7 @@ class Phi4MultimodalModelTester:
             intermediate_size=64,
             num_attention_heads=8,
             crop_size=16,
+            initializer_range=1e-5,
         ),
     ):
         self.parent = parent
@@ -190,19 +191,6 @@ class Phi4MultimodalModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_model(self, config, input_ids, attention_mask):
-        model = Phi4MultimodalForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                return_dict=True,
-            )["logits"]
-        self.parent.assertEqual(logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -225,10 +213,6 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 
     @unittest.skip(reason="Right padding not supported")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip(reason="This one tries to use right padding as well")
-    def test_eager_matches_fa2_generate(self):
         pass
 
     @unittest.skip(reason="Depending on input modalities, some params may not have gradients")

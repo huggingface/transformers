@@ -69,7 +69,7 @@ class SamVisionEncoderOutput(ModelOutput):
     """
 
     image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -103,8 +103,8 @@ class SamImageSegmentationOutput(ModelOutput):
             heads.
     """
 
-    iou_scores: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
+    iou_scores: Optional[torch.FloatTensor] = None
+    pred_masks: Optional[torch.FloatTensor] = None
     vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     vision_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     mask_decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -223,7 +223,9 @@ class SamAttention(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Tensor = None) -> Tensor:
+    def forward(
+        self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Optional[Tensor] = None
+    ) -> Tensor:
         # Input projections
         query = self.q_proj(query)
         key = self.k_proj(key)
@@ -262,7 +264,9 @@ class SamSdpaAttention(SamAttention):
     def __init__(self, config, downsample_rate=None):
         super().__init__(config, downsample_rate)
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Tensor = None) -> Tensor:
+    def forward(
+        self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Optional[Tensor] = None
+    ) -> Tensor:
         # Input projections
         query = self.q_proj(query)
         key = self.k_proj(key)
@@ -514,8 +518,8 @@ class SamMaskDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         output_attentions: Optional[bool] = None,
-        attention_similarity: torch.Tensor = None,
-        target_embedding: torch.Tensor = None,
+        attention_similarity: Optional[torch.Tensor] = None,
+        target_embedding: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Predict masks given image and prompt embeddings.
@@ -686,8 +690,8 @@ class SamPromptEncoder(nn.Module):
         # torch.where and expanding the labels tensor is required by the ONNX export
         point_embedding = torch.where(labels[..., None] == -1, self.not_a_point_embed.weight, point_embedding)
 
-        # This is required for the ONNX export. The dtype, device need to be explicitely
-        # specificed as otherwise torch.onnx.export interprets as double
+        # This is required for the ONNX export. The dtype, device need to be explicitly
+        # specified as otherwise torch.onnx.export interprets as double
         point_embedding = torch.where(
             labels[..., None] != -10,
             point_embedding,
@@ -1246,7 +1250,7 @@ SAM_INPUTS_DOCSTRING = r"""
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
             much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
             that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
-            size, the number of boxes per image and the coordinates of the top left and botton right point of the box.
+            size, the number of boxes per image and the coordinates of the top left and bottom right point of the box.
             In the order (`x1`, `y1`, `x2`, `y2`):
 
             - `x1`: the x coordinate of the top left point of the input box

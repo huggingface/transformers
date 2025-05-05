@@ -36,7 +36,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..chameleon.modeling_chameleon import (
     ChameleonPreTrainedModel,
     ChameleonVQVAEEncoderConvDownsample,
@@ -394,7 +393,11 @@ class Emu3VQVAEResnetBlock(nn.Module):
 
 
 class Emu3VQVAEAttentionBlock(SiglipAttention):
-    pass
+    def __init__(self, config: Emu3VQVAEConfig):
+        super().__init__(config)
+
+        # for compatibility with the attention interface
+        self.num_key_value_groups = 1
 
 
 class Emu3VQVAEGroupNorm(nn.GroupNorm):
@@ -432,7 +435,7 @@ class Emu3VQVAEMiddleBlock(nn.Module):
             quant_channels=quant_channels,
         )
 
-    def forward(self, hidden_states: torch.FloatTensor, quant_states: torch.FloatTensor = None):
+    def forward(self, hidden_states: torch.FloatTensor, quant_states: Optional[torch.FloatTensor] = None):
         hidden_states = self.block_1(hidden_states, quant_states)
         residual = hidden_states
         hidden_states = self.attn_norm(hidden_states, quant_states)
@@ -730,6 +733,9 @@ class Emu3VQVAE(PreTrainedModel):
     config_class = Emu3VQVAEConfig
     base_model_prefix = "emuvideovq"
     main_input_name = "pixel_values"
+    _supports_sdpa = True
+    _supports_flash_attn_2 = True
+    _supports_flex_attn = True
     _no_split_modules = [
         "Emu3VQVAETemporalResnetBlock",
         "Emu3VQVAEAttentionBlock",
@@ -740,6 +746,10 @@ class Emu3VQVAE(PreTrainedModel):
     def _init_weights(self, module):
         if isinstance(module, (nn.Conv2d, nn.Conv3d)):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            if module.bias is not None:
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
+                bound = 1 / math.sqrt(fan_in)
+                nn.init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, nn.Linear):
             nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
             if module.bias is not None:
@@ -747,8 +757,12 @@ class Emu3VQVAE(PreTrainedModel):
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
                 nn.init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, (nn.BatchNorm2d, nn.BatchNorm3d, nn.GroupNorm)):
-            nn.init.constant_(module.weight, 1)
-            nn.init.constant_(module.bias, 0)
+            nn.init.constant_(module.weight, 1.0)
+            nn.init.constant_(module.bias, 0.0)
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_()
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
     def __init__(self, config: Emu3VQVAEConfig):
         super().__init__(config)
@@ -887,9 +901,7 @@ class Emu3PreTrainedModel(ChameleonPreTrainedModel, Emu3VQVAE):
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
-        if isinstance(module, Emu3VQVAE):
-            module.apply(module._init_weights)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -897,6 +909,8 @@ class Emu3PreTrainedModel(ChameleonPreTrainedModel, Emu3VQVAE):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Emu3RMSNorm):  # noqa: F821
+            module.weight.data.fill_(1.0)
 
 
 EMU3_TEXT_INPUTS_DOCSTRING = r"""
@@ -1070,7 +1084,6 @@ class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
         self.model = Emu3TextModel(config)
 
     @can_return_tuple
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(EMU3_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="Emu3TextConfig")
     def forward(**super_kwargs):
@@ -1110,7 +1123,7 @@ class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
 
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["text_model.lm_head.weight"]
-    _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compileable
+    _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compilable
 
     def __init__(self, config):
         super().__init__(config)
@@ -1168,9 +1181,9 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        image_sizes: torch.Tensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        image_sizes: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,

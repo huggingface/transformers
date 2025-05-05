@@ -45,6 +45,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     cached_file,
+    check_torch_load_is_safe,
     is_peft_available,
     is_safetensors_available,
     logging,
@@ -62,6 +63,7 @@ if is_safetensors_available():
 
 if is_flash_attn_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
+
 
 logger = logging.get_logger(__name__)
 
@@ -126,9 +128,9 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    projected_states: torch.FloatTensor = None
-    projected_quantized_states: torch.FloatTensor = None
-    codevector_perplexity: torch.FloatTensor = None
+    projected_states: Optional[torch.FloatTensor] = None
+    projected_quantized_states: Optional[torch.FloatTensor] = None
+    codevector_perplexity: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     contrastive_loss: Optional[torch.FloatTensor] = None
@@ -1588,6 +1590,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                     cache_dir=cache_dir,
                 )
 
+                check_torch_load_is_safe()
                 state_dict = torch.load(
                     weight_path,
                     map_location="cpu",
@@ -1597,6 +1600,9 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                 # to the original exception.
+                raise
+
+            except ValueError:
                 raise
 
             except Exception:
@@ -1629,11 +1635,11 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         state_dict = {k: v.to(adapter_weights[k]) for k, v in state_dict.items()}
         self.load_state_dict(state_dict, strict=False)
 
-        # set target language corectly
+        # set target language correctly
         self.target_lang = target_lang
 
 
-WAV_2_VEC_2_START_DOCSTRING = r"""
+WAV2VEC2_START_DOCSTRING = r"""
     Wav2Vec2 was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech
     Representations](https://arxiv.org/abs/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael
     Auli.
@@ -1652,7 +1658,7 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
 """
 
 
-WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
+WAV2VEC2_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
@@ -1692,7 +1698,7 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare Wav2Vec2 Model transformer outputting raw hidden-states without any specific head on top.",
-    WAV_2_VEC_2_START_DOCSTRING,
+    WAV2VEC2_START_DOCSTRING,
 )
 class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config):
@@ -1780,7 +1786,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         return hidden_states
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV2VEC2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Wav2Vec2BaseModelOutput,
@@ -1841,7 +1847,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         )
 
 
-@add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top.""", WAV_2_VEC_2_START_DOCSTRING)
+@add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top.""", WAV2VEC2_START_DOCSTRING)
 class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
@@ -1902,7 +1908,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         logits = logits / temperature
         return logits
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV2VEC2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Wav2Vec2ForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1992,7 +1998,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         extract_features = self.dropout_features(outputs[1])
 
         if attention_mask is not None:
-            # compute reduced attention_mask correponding to feature vectors
+            # compute reduced attention_mask corresponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(
                 extract_features.shape[1], attention_mask, add_adapter=False
             )
@@ -2065,7 +2071,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         )
 
 
-@add_start_docstrings("""Wav2Vec2 Model with a `language modeling` head on top.""", WAV_2_VEC_2_START_DOCSTRING)
+@add_start_docstrings("""Wav2Vec2 Model with a `language modeling` head on top.""", WAV2VEC2_START_DOCSTRING)
 class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2081,7 +2087,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV2VEC2_INPUTS_DOCSTRING)
     def forward(
         self,
         input_values: torch.FloatTensor,
@@ -2113,7 +2119,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
 
 @add_start_docstrings(
     """Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    WAV_2_VEC_2_START_DOCSTRING,
+    WAV2VEC2_START_DOCSTRING,
     """
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -2193,7 +2199,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         for param in self.wav2vec2.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV2VEC2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
@@ -2277,7 +2283,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
     Wav2Vec2 Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
     SUPERB Keyword Spotting.
     """,
-    WAV_2_VEC_2_START_DOCSTRING,
+    WAV2VEC2_START_DOCSTRING,
 )
 class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
@@ -2324,7 +2330,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         for param in self.wav2vec2.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV2VEC2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
@@ -2400,7 +2406,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
     """
     Wav2Vec2 Model with a frame classification head on top for tasks like Speaker Diarization.
     """,
-    WAV_2_VEC_2_START_DOCSTRING,
+    WAV2VEC2_START_DOCSTRING,
 )
 class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
@@ -2446,7 +2452,7 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         for param in self.wav2vec2.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV2VEC2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_FRAME_CLASS_CHECKPOINT,
         output_type=TokenClassifierOutput,
@@ -2546,6 +2552,7 @@ class TDNNLayer(nn.Module):
         if is_peft_available():
             from peft.tuners.lora import LoraLayer
 
+        if is_peft_available():
             if isinstance(self.kernel, LoraLayer):
                 warnings.warn(
                     "Detected LoRA on TDNNLayer. LoRA weights won't be applied due to optimization. "
@@ -2566,7 +2573,7 @@ class TDNNLayer(nn.Module):
     """
     Wav2Vec2 Model with an XVector feature extraction head on top for tasks like Speaker Verification.
     """,
-    WAV_2_VEC_2_START_DOCSTRING,
+    WAV2VEC2_START_DOCSTRING,
 )
 class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
@@ -2630,7 +2637,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
 
         return input_lengths
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV2VEC2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_XVECTOR_CHECKPOINT,
         output_type=XVectorOutput,

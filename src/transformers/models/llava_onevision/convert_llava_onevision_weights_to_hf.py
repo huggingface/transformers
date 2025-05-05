@@ -69,7 +69,7 @@ def load_original_state_dict(model_id):
                 for key in f.keys():
                     original_state_dict[key] = f.get_tensor(key)
 
-    # tied wieghts so lm.head is not saved. Let's clone to load state dict
+    # tied weights so lm.head is not saved. Let's clone to load state dict
     if "lm_head.weight" not in original_state_dict:
         original_state_dict["lm_head.weight"] = original_state_dict["model.embed_tokens.weight"].clone()
 
@@ -212,7 +212,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     filepath = hf_hub_download(
         repo_id="RaushanTurganbay/test-image", filename="llava_onevision_pixel_values.pt", repo_type="dataset"
     )
-    original_pixel_values = torch.load(filepath, map_location="cpu")
+    original_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)
     assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
 
     image_sizes = torch.tensor([[899, 1024]])

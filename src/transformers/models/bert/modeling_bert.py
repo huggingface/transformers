@@ -880,8 +880,8 @@ class BertForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_logits: torch.FloatTensor = None
-    seq_relationship_logits: torch.FloatTensor = None
+    prediction_logits: Optional[torch.FloatTensor] = None
+    seq_relationship_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1512,8 +1512,8 @@ class BertForMaskedLM(BertPreTrainedModel):
     @classmethod
     def can_generate(cls) -> bool:
         """
-        Legacy correction: BertForMaskedLM can't call `generate()` from GenerationMixin.
-        Remove after v4.50, when we stop making `PreTrainedModel` inherit from `GenerationMixin`.
+        Legacy correction: BertForMaskedLM can't call `generate()` from `GenerationMixin`, even though it has a
+        `prepare_inputs_for_generation` method.
         """
         return False
 

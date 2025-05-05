@@ -658,7 +658,7 @@ class MarianEncoder(MarianPreTrainedModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -824,7 +824,7 @@ class MarianDecoder(MarianPreTrainedModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1124,7 +1124,7 @@ class MarianModel(MarianPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.Tensor] = None,
@@ -1257,7 +1257,7 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
             self._resize_final_logits_bias(new_num_tokens)
         return new_embeddings
 
-    # NOTE: `_resize_token_embeddings` was rewriten in the base class, *args exists to absorb the extra arg
+    # NOTE: `_resize_token_embeddings` was rewritten in the base class, *args exists to absorb the extra arg
     def _resize_token_embeddings(self, new_num_tokens: int, pad_to_multiple_of=None, *args) -> nn.Embedding:
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens, pad_to_multiple_of)
@@ -1360,7 +1360,7 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
     @add_end_docstrings(MARIAN_GENERATION_EXAMPLE)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.Tensor] = None,
@@ -1504,7 +1504,7 @@ class MarianForCausalLM(MarianPreTrainedModel, GenerationMixin):
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,

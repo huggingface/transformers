@@ -57,7 +57,7 @@ def load_cuda_kernels():
 
     global MultiScaleDeformableAttention
 
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deta"
+    root = Path(__file__).resolve().parent.parent.parent.parent / "kernels" / "deta"
     src_files = [
         root / filename
         for filename in [
@@ -67,7 +67,7 @@ def load_cuda_kernels():
         ]
     ]
 
-    load(
+    MultiScaleDeformableAttention = load(
         "MultiScaleDeformableAttention",
         src_files,
         with_cuda=True,
@@ -178,9 +178,9 @@ class DetaDecoderOutput(ModelOutput):
             used to compute the weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -232,10 +232,10 @@ class DetaModelOutput(ModelOutput):
             Logits of proposal bounding boxes coordinates in the gen_encoder_output_proposals.
     """
 
-    init_reference_points: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
+    init_reference_points: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -267,7 +267,7 @@ class DetaObjectDetectionOutput(ModelOutput):
             possible padding). You can use [`~DetaProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
-            Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+            Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
             `pred_boxes`) for each decoder layer.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
@@ -312,8 +312,8 @@ class DetaObjectDetectionOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
-    logits: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
     auxiliary_outputs: Optional[List[Dict]] = None
     init_reference_points: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -843,7 +843,7 @@ class DetaEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         reference_points=None,
         spatial_shapes=None,
         level_start_index=None,
@@ -1570,8 +1570,8 @@ class DetaModel(DetaPreTrainedModel):
 
             scale = torch.cat([valid_width.unsqueeze(-1), valid_height.unsqueeze(-1)], 1).view(batch_size, 1, 1, 2)
             grid = (grid.unsqueeze(0).expand(batch_size, -1, -1, -1) + 0.5) / scale
-            width_heigth = torch.ones_like(grid) * 0.05 * (2.0**level)
-            proposal = torch.cat((grid, width_heigth), -1).view(batch_size, -1, 4)
+            width_height = torch.ones_like(grid) * 0.05 * (2.0**level)
+            proposal = torch.cat((grid, width_height), -1).view(batch_size, -1, 4)
             proposals.append(proposal)
             _cur += height * width
             level_ids.append(grid.new_ones(height * width, dtype=torch.long) * level)
@@ -2293,7 +2293,7 @@ class DetaLoss(nn.Module):
         else:
             indices = self.matcher(outputs_without_aux, targets)
 
-        # Compute the average number of target boxes accross all nodes, for normalization purposes
+        # Compute the average number of target boxes across all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         # Check that we have initialized the distributed state
@@ -2822,3 +2822,6 @@ class DetaStage1Assigner(nn.Module):
 
     def postprocess_indices(self, pr_inds, gt_inds, iou):
         return sample_topk_per_gt(pr_inds, gt_inds, iou, self.k)
+
+
+__all__ = ["DetaForObjectDetection", "DetaModel", "DetaPreTrainedModel"]

@@ -141,7 +141,7 @@ class TableTransformerObjectDetectionOutput(ModelOutput):
             possible padding). You can use [`~TableTransformerImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
-            Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+            Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
             `pred_boxes`) for each decoder layer.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -172,8 +172,8 @@ class TableTransformerObjectDetectionOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
-    logits: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
     auxiliary_outputs: Optional[List[Dict]] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -572,7 +572,7 @@ class TableTransformerEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        object_queries: torch.Tensor = None,
+        object_queries: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
         """
@@ -1223,8 +1223,8 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
         flattened_mask = mask.flatten(1)
 
         # Fourth, sent flattened_features + flattened_mask + object queries through encoder
-        # flattened_features is a Tensor of shape (batch_size, heigth*width, hidden_size)
-        # flattened_mask is a Tensor of shape (batch_size, heigth*width)
+        # flattened_features is a Tensor of shape (batch_size, height*width, hidden_size)
+        # flattened_mask is a Tensor of shape (batch_size, height*width)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 inputs_embeds=flattened_features,

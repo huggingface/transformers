@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
@@ -16,7 +15,6 @@
 # limitations under the License.
 
 from functools import lru_cache
-from typing import FrozenSet
 
 from huggingface_hub import get_full_repo_name  # for backward compatibility
 from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
@@ -73,10 +71,13 @@ from .generic import (
     working_or_temp_dir,
 )
 from .hub import (
+    CHAT_TEMPLATE_DIR,
+    CHAT_TEMPLATE_FILE,
     CLOUDFRONT_DISTRIB_PREFIX,
     HF_MODULES_CACHE,
     HUGGINGFACE_CO_PREFIX,
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
     PYTORCH_PRETRAINED_BERT_CACHE,
     PYTORCH_TRANSFORMERS_CACHE,
     S3_BUCKET_PREFIX,
@@ -96,6 +97,7 @@ from .hub import (
     http_user_agent,
     is_offline_mode,
     is_remote_url,
+    list_repo_templates,
     send_example_telemetry,
     try_to_load_from_cache,
 )
@@ -113,6 +115,7 @@ from .import_utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     ccl_version,
+    check_torch_load_is_safe,
     direct_transformers_import,
     get_torch_version,
     is_accelerate_available,
@@ -121,6 +124,7 @@ from .import_utils import (
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
+    is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
     is_bitsandbytes_multi_backend_available,
@@ -158,6 +162,7 @@ from .import_utils import (
     is_jumanpp_available,
     is_kenlm_available,
     is_keras_nlp_available,
+    is_kernels_available,
     is_levenshtein_available,
     is_librosa_available,
     is_liger_kernel_available,
@@ -207,6 +212,7 @@ from .import_utils import (
     is_tiktoken_available,
     is_timm_available,
     is_tokenizers_available,
+    is_torch_accelerator_available,
     is_torch_available,
     is_torch_bf16_available,
     is_torch_bf16_available_on_device,
@@ -236,6 +242,7 @@ from .import_utils import (
     is_torchdistx_available,
     is_torchdynamo_available,
     is_torchdynamo_compiling,
+    is_torchdynamo_exporting,
     is_torchvision_available,
     is_torchvision_v2_available,
     is_training_run_on_sagemaker,
@@ -268,9 +275,9 @@ CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
 IMAGE_PROCESSOR_NAME = FEATURE_EXTRACTOR_NAME
 PROCESSOR_NAME = "processor_config.json"
-CHAT_TEMPLATE_NAME = "chat_template.json"
 GENERATION_CONFIG_NAME = "generation_config.json"
 MODEL_CARD_NAME = "modelcard.json"
+
 
 SENTENCEPIECE_UNDERLINE = "▁"
 SPIECE_UNDERLINE = SENTENCEPIECE_UNDERLINE  # Kept for backward compatibility
@@ -299,8 +306,8 @@ def check_min_version(min_version):
         )
 
 
-@lru_cache()
-def get_available_devices() -> FrozenSet[str]:
+@lru_cache
+def get_available_devices() -> frozenset[str]:
     """
     Returns a frozenset of devices available for the current PyTorch installation.
     """
