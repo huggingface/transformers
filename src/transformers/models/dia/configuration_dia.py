@@ -35,6 +35,7 @@ class DiaEncoderConfig(PretrainedConfig):
         intermediate_size=4096,
         num_attention_heads=16,
         head_dim=128,
+        norm_eps=1e-5,
         **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers
@@ -42,7 +43,7 @@ class DiaEncoderConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_attention_heads = num_attention_heads
         self.head_dim = head_dim
-
+        self.norm_eps = norm_eps
         super().__init__(**kwargs)
 
 class DiaDecoderConfig(PretrainedConfig):
@@ -58,6 +59,7 @@ class DiaDecoderConfig(PretrainedConfig):
         head_dim=128,
         cross_query_heads=16,
         cross_head_dim=128,
+        norm_eps=1e-5,
         **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers
@@ -68,7 +70,7 @@ class DiaDecoderConfig(PretrainedConfig):
         self.head_dim = head_dim
         self.cross_query_heads = cross_query_heads
         self.cross_head_dim = cross_head_dim
-
+        self.norm_eps = norm_eps
         super().__init__(**kwargs)
 
 
@@ -83,7 +85,7 @@ class DiaConfig(PretrainedConfig):
         src_vocab_size=128,
         tgt_vocab_size=1028,
         dropout=0.0,
-        normalization_layer_epsilon=1e-5,
+        norm_eps=1e-5,
         weight_dtype="float32",
         rope_min_timescale=1,
         rope_max_timescale=10_000,
@@ -95,7 +97,7 @@ class DiaConfig(PretrainedConfig):
         self.src_vocab_size = src_vocab_size
         self.tgt_vocab_size = tgt_vocab_size
         self.dropout = dropout
-        self.normalization_layer_epsilon = normalization_layer_epsilon
+        self.norm_eps = norm_eps
         self.weight_dtype = weight_dtype
         self.rope_min_timescale = rope_min_timescale
         self.rope_max_timescale = rope_max_timescale
