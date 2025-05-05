@@ -41,7 +41,7 @@ from typing import Iterable
 import math
 from contextlib import contextmanager, nullcontext
 
-ignore_sanity_checks = int(os.environ.get("IGNORE_SANITY", 1)) == 1
+ignore_sanity_checks = int(os.environ.get("IGNORE_SANITY", 0)) == 1
 # torch.use_deterministic_algorithms(True)
 torch.backends.cudnn.deterministic = True
 
@@ -53,9 +53,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from torch.distributed.tensor.experimental._attention import set_rotate_method
+# from torch.distributed.tensor.experimental._attention import set_rotate_method
 
-set_rotate_method("alltoall")  # rotate shards using all-to-all
+# set_rotate_method("alltoall")  # rotate shards using all-to-all
 
 def main():
     tp_size = int(os.environ.get("TP_SIZE", 1))
@@ -67,6 +67,8 @@ def main():
     seq_len = 1024 # Sequence length
     num_train_steps = 10000 # Number of training steps
     LR = 1e-5
+    model_name = "HuggingFaceTB/SmolLM2-1.7B"
+    # model_name = "unsloth/Llama-3.2-1B"
 
     CHECKPOINT_DIR = f"checkpoint_tp{tp_size}_dp{dp_size}_cp{cp_size}"
 
@@ -85,6 +87,7 @@ def main():
         tp_mesh = world_mesh["tp"]
         dp_mesh = world_mesh["dp"]
         cp_mesh = world_mesh["cp"]
+        world_mesh["dp", "cp"]._flatten(mesh_dim_name="dp_cp")
         logger.info(f"Created DeviceMesh: {world_mesh}")
         logger.info(f"Distributed setup - Rank: {rank}, World size: {world_size}, Local rank: {local_rank}, DP: {dp_mesh.get_local_rank()}, TP: {tp_mesh.get_local_rank()}, CP: {cp_mesh.get_local_rank()}")
 
@@ -96,13 +99,13 @@ def main():
                     "dp_size": dp_size,
                     "cp_size": cp_size,
                     "global_batch_size": global_batch_size,
-                    "model_name": "HuggingFaceTB/SmolLM2-1.7B",
+                    "model_name": model_name,
                     "dataset": "roneneldan/TinyStories-1M",
                     "seq_len": seq_len,
                     "lr": LR,
                     "weight_decay": 0.1,
                 },
-                name=f"tp{tp_size}_dp{dp_size}_cp{cp_size}"
+                name=f"llama_tp{tp_size}_dp{dp_size}_cp{cp_size}" if model_name == "unsloth/Llama-3.2-1B" else f"tp{tp_size}_dp{dp_size}_cp{cp_size}"
             )
             logger.info(f"ignore_sanity_checks is set to: {ignore_sanity_checks}")
             logger.info("Wandb initialized.")
@@ -121,16 +124,15 @@ def main():
                 "tp_size": 1,
                 "dp_size": 1,
                 "global_batch_size": global_batch_size,
-                "model_name": "HuggingFaceTB/SmolLM2-1.7B",
+                "model_name": model_name,
                 "dataset": "roneneldan/TinyStories-1M",
                 "seq_len": seq_len,
             },
-            name="tp1_dp1_nondist"
+            name="llama_tp1_dp1_nondist" if model_name == "unsloth/Llama-3.2-1B" else "tp1_dp1_nondist"
         )
         logger.info("Wandb initialized for non-distributed run.")
 
     # Load model and tokenizer
-    model_name = "HuggingFaceTB/SmolLM2-1.7B"
     logger.info(f"Loading model and tokenizer from {model_name}")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
@@ -303,6 +305,8 @@ def main():
             position_ids = torch.arange(0, seq_len, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
             batch["position_ids"] = position_ids
+            from torch.distributed.tensor.experimental._attention import _cp_options
+            _cp_options.enable_load_balance = False
 
             with sdpa_kernel(sdpa_backend): # TODO: ideally move this to attention implementation
                 cp_context = nullcontext() if cp_mesh.size() == 1 else context_parallel(
@@ -318,14 +322,7 @@ def main():
                     logits = outputs.logits
 
                     # Compute loss with shifted labels
-                    loss = model.loss_function(
-                        logits=logits,
-                        labels=None,
-                        shift_labels=labels,
-                        vocab_size=model.config.vocab_size
-                    )
-
-                    current_loss = loss.item()
+                    loss = model.loss_function(logits=logits, labels=None, shift_labels=labels, vocab_size=model.config.vocab_size)
 
                     # Sanity checks for logits
                     if dist.is_initialized() and not ignore_sanity_checks:
@@ -384,6 +381,10 @@ def main():
                     for name, param in model.named_parameters():
                         sanity_check_tensor_sync(param, cp_mesh)
 
+                # allreduce loss across cp_dp before logging
+                if dist.is_initialized() and (cp_mesh.size() > 1 or dp_mesh.size() > 1):
+                    dist.all_reduce(loss, group=world_mesh["dp_cp"].get_group(), op=dist.ReduceOp.AVG)
+                current_loss = loss.item()
 
                 # Log loss and gradnorm to wandb (only on rank 0 of dp group)
                 if not dist.is_initialized() or dist.get_rank() == 0:
