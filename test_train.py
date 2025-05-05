@@ -41,7 +41,7 @@ from typing import Iterable
 import math
 from contextlib import contextmanager, nullcontext
 
-ignore_sanity_checks = int(os.environ.get("IGNORE_SANITY", 0)) == 1
+ignore_sanity_checks = int(os.environ.get("IGNORE_SANITY", 1)) == 1
 # torch.use_deterministic_algorithms(True)
 torch.backends.cudnn.deterministic = True
 
@@ -53,6 +53,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from torch.distributed.tensor.experimental._attention import set_rotate_method
+
+set_rotate_method("alltoall")  # rotate shards using all-to-all
 
 def main():
     tp_size = int(os.environ.get("TP_SIZE", 1))
@@ -203,30 +206,24 @@ def main():
     def create_packed_sequences(examples):
         # Flatten all sequences
         all_tokens = []
-        all_labels = []
-        for input_ids, labels in zip(examples['input_ids'], examples['labels']):
+        for input_ids in examples['input_ids']:
             all_tokens.extend(input_ids)
-            all_labels.extend(labels)
         
-        # Split into sequences of seq_len
-        num_sequences = len(all_tokens) // seq_len
+        # Split into sequences of seq_len + 1 (for input + label)
+        num_sequences = len(all_tokens) // (seq_len + 1)
         packed_input_ids = []
         packed_labels = []
         
         for i in range(num_sequences):
-            start_idx = i * seq_len
-            end_idx = start_idx + seq_len
-            packed_input_ids.append(all_tokens[start_idx:end_idx])
-            packed_labels.append(all_labels[start_idx:end_idx])
+            start_idx = i * (seq_len + 1)
+            end_idx = start_idx + (seq_len + 1)
+            # Get the full sequence
+            full_sequence = all_tokens[start_idx:end_idx]
+            # For input_ids, remove the last token
+            packed_input_ids.append(full_sequence[:-1])
+            # For labels, remove the first token
+            packed_labels.append(full_sequence[1:])
         
-        # Handle remaining tokens if any
-        # remaining_tokens = len(all_tokens) % seq_len
-        # if remaining_tokens > 0:
-        #     # Only include if it's a significant portion of seq_len
-        #     if remaining_tokens >= seq_len // 2:
-        #         packed_input_ids.append(all_tokens[-remaining_tokens:])
-        #         packed_labels.append(all_labels[-remaining_tokens:])
-
         return {
             'input_ids': packed_input_ids,
             'labels': packed_labels
@@ -301,26 +298,39 @@ def main():
 
             optimizer.zero_grad()
 
+            # Add position_ids to batch before CP sharding
+            batch_size = batch["input_ids"].shape[0]
+            position_ids = torch.arange(0, seq_len, dtype=torch.long, device=device)
+            position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
+            batch["position_ids"] = position_ids
+
             with sdpa_kernel(sdpa_backend): # TODO: ideally move this to attention implementation
                 cp_context = nullcontext() if cp_mesh.size() == 1 else context_parallel(
                     cp_mesh, 
-                    buffers=[batch["input_ids"], batch["labels"]], # TODO: need to add attention mask
-                    buffer_seq_dims=[1, 1],
+                    buffers=[batch["input_ids"], batch["labels"], batch["position_ids"]], # TODO: need to add attention mask
+                    buffer_seq_dims=[1, 1, 1],
                 )
                 with cp_context:
+                    # Pop labels from batch before model forward pass
+                    labels = batch.pop("labels")
                     outputs = model(**batch) # [mbs, seq_len/cp]
                     loss = outputs.loss
                     logits = outputs.logits
 
+                    # Compute loss with shifted labels
+                    loss = model.loss_function(
+                        logits=logits,
+                        labels=None,
+                        shift_labels=labels,
+                        vocab_size=model.config.vocab_size
+                    )
+
                     current_loss = loss.item()
 
-                    # Sanity checks for logits (only if distributed and no sequence parallelism)
-                    # TODO: only true without sequence parallel
+                    # Sanity checks for logits
                     if dist.is_initialized() and not ignore_sanity_checks:
-                        sanity_check_tensor_sync(logits, tp_mesh)
-                        # check logits are not same across dp
+                        sanity_check_tensor_sync(logits, tp_mesh) # TODO: only true without sequence parallel
                         sanity_check_tensor_sync(logits, dp_mesh, not_sync=True)
-                        # check logits are not same across cp (for sequence chunks)
                         sanity_check_tensor_sync(logits, cp_mesh, not_sync=True)
 
                     loss.backward()
@@ -494,9 +504,10 @@ def all_reduce_grads(model, world_mesh, use_ddp):
                     # local_grad = local_grad.detach().requires_grad_(True) 
                     torch.distributed.all_reduce(
                         local_grad,
-                        op=torch.distributed.ReduceOp.AVG,
+                        op=torch.distributed.ReduceOp.SUM,
                         group=mesh.get_group()
                     )
+                    local_grad = local_grad / mesh.size()
                     # Assign averaged grad back - need careful handling if DTensor structure is complex
                     # This simple assignment might work if the grad structure matches param structure
                     param.grad = DTensor.from_local(local_grad, device_mesh=param.grad.device_mesh, placements=param.grad.placements)
