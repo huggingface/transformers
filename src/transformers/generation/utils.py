@@ -1429,9 +1429,7 @@ class GenerationMixin:
         beam_sequence_indices = beam_indices * self.config.vocab_size
 
         # 7. Define which indices contributed to scores
-        cut_idx = (
-            sequences.shape[-1] - max_beam_length
-        )  # TODO: @eustlb, should it be changed to sequences.shape[1] - max_beam_length?
+        cut_idx = sequences.shape[-1] - max_beam_length
         indices = sequences[:, cut_idx:] + beam_sequence_indices
 
         # 8. Compute scores
