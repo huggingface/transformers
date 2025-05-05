@@ -24,7 +24,23 @@ from transformers import (
 from transformers.utils.import_utils import _is_package_available
 
 
-# TODO if I do some checkpoint renaming
+def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
+    """
+    Converts a Dia model in OpenAI format to Hugging Face format.
+    Args:
+        checkpoint_path (`str`):
+            Path to the downloaded checkpoints.
+        pytorch_dump_folder_path (`str`):
+            Path to the output PyTorch model.
+    """
+    tokenizer = DiaTokenizerFast.from_pretrained(checkpoint_path)
+    model = AutoModelForCausalLM.from_pretrained(checkpoint_path, torch_dtype=torch.float16)
+
+    # Save the model
+    model.save_pretrained(pytorch_dump_folder_path)
+    tokenizer.save_pretrained(pytorch_dump_folder_path)
+
+    return model
 
 
 if __name__ == "__main__":
@@ -40,7 +56,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    model, is_multilingual, num_languages = convert_openai_dia_to_tfms(
+    model = convert_dia_model_to_hf(
         args.checkpoint_path, args.pytorch_dump_folder_path
     )
 
@@ -53,16 +69,11 @@ if __name__ == "__main__":
         except Exception as e:
             print(e)
         else:
-            tokenizer = convert_tiktoken_to_hf(is_multilingual, num_languages)
             feature_extractor = DiaFeatureExtractor(
                 feature_size=model.config.num_mel_bins,
                 # the rest of default parameters are the same as hardcoded in openai/dia
             )
             processor = DiaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
             processor.save_pretrained(args.pytorch_dump_folder_path)
-
-            # save fast tokenizer as well
-            fast_tokenizer = DiaTokenizerFast.from_pretrained(args.pytorch_dump_folder_path)
-            fast_tokenizer.save_pretrained(args.pytorch_dump_folder_path, legacy_format=False)
 
     model.save_pretrained(args.pytorch_dump_folder_path)
