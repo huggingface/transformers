@@ -550,40 +550,13 @@ class Decoder(DiaPreTrainedModel):
 
         return logits_Bx1xCxV.to(torch.float32)
 
-    def forward(self, tgt_ids_BxTxC: torch.Tensor, state: DecoderInferenceState) -> torch.Tensor:
-        """
-        Forward pass for the Decoder stack, managing KV caches.
-
-        Args:
-            tgt_ids_BxTxC: Target token IDs (B, T, C).
-            encoder_out: Output from the encoder (B, S, E).
-            tgt_positions: Positions for target sequence (B, T).
-            src_positions: Positions for source sequence (B, S).
-            self_attn_mask: Mask for self-attention.
-            cross_attn_mask: Mask for cross-attention.
-            past_key_values: List containing the self-attention KV cache for each layer
-                             from the previous decoding step. `len(past_key_values)` should
-                             equal `num_layers`.
-            precomputed_cross_attn_kv: A single tuple containing the pre-computed K/V cache
-                                      derived from `encoder_out`. This is passed identically
-                                      to all layers.
-
-        Returns:
-            A tuple containing:
-            - logits: The final output logits (B, T, C * V), cast to float32.
-            - present_key_values: A list containing the updated self-attention KV cache
-                                 for each layer for the *current* decoding step.
-        """
+    def forward(self, audio_codes: torch.Tensor, past_key_values) -> torch.Tensor:
         hidden_states = self.embeddings(audio_codes)  # (B, 1, C)
-
         for i, layer in enumerate(self.layers):
-            self_cache = state.self_attn_cache[i]
-            cross_cache = state.cross_attn_cache[i]
             hidden_states = layer(
                 hidden_states,  # (2, 1, D)
                 state,
-                self_attn_cache=self_cache,
-                cross_attn_cache=cross_cache,
+                past_key_values
             )
 
         hidden_states = self.norm(hidden_states)
