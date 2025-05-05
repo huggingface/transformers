@@ -77,9 +77,9 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
     - basic_normalize
     - normalize
 
-## DiaFeatureExtractor
+## DiaAudioProcessor
 
-[[autodoc]] DiaFeatureExtractor
+[[autodoc]] DiaAudioProcessor
     - __call__
 
 ## DiaProcessor

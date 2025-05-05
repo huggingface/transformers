@@ -25,7 +25,7 @@ from .test_feature_extraction_dia import floats_list
 
 
 if is_speech_available():
-    from transformers import DiaFeatureExtractor, DiaProcessor
+    from transformers import DiaAudioProcessor, DiaProcessor
 
 
 TRANSCRIBE = 50358
@@ -44,7 +44,7 @@ class DiaProcessorTest(unittest.TestCase):
         return DiaTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return DiaFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+        return DiaAudioProcessor.from_pretrained(self.checkpoint, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -62,7 +62,7 @@ class DiaProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, DiaTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, DiaFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, DiaAudioProcessor)
 
     def test_save_load_pretrained_additional_features(self):
         processor = DiaProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
@@ -79,7 +79,7 @@ class DiaProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, DiaTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, DiaFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, DiaAudioProcessor)
 
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()

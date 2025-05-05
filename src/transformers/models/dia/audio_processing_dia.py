@@ -207,7 +207,7 @@ class FeatureExtractionArgs:
     device: Optional[str] = ("cpu",)
 
 
-class DiaFeatureExtractor(SequenceFeatureExtractor):
+class DiaAudioProcessor(SequenceFeatureExtractor):
     r"""
     Constructs a Dia feature extractor.
 
@@ -275,6 +275,7 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
     def __call__(
         self,
         files_or_raw_audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        max_length,
         **kwargs: Unpack[FeatureExtractionArgs],
     ) -> BatchFeature:
         is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
@@ -298,10 +299,7 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
         batched_speech = BatchFeature({"input_features": raw_speech})
 
         padded_inputs = self.pad(
-            batched_speech,
-            padding=padding,
-            max_length=max_length if max_length else self.n_samples,
-            **kwargs
+            batched_speech, padding=padding, max_length=max_length if max_length else self.n_samples, **kwargs
         )
 
         return_tensors = kwargs.get("return_tensors", None)
@@ -310,4 +308,4 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
         return padded_inputs
 
 
-__all__ = ["DiaFeatureExtractor"]
+__all__ = ["DiaAudioProcessor"]

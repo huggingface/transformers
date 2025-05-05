@@ -16,11 +16,9 @@
 
 import argparse
 
-from transformers import (
-    DiaFeatureExtractor,
-    DiaProcessor,
-    DiaTokenizerFast,
-)
+import torch
+
+from transformers import AutoModel, DiaAudioProcessor, DiaProcessor, DiaTokenizer
 from transformers.utils.import_utils import _is_package_available
 
 
@@ -33,8 +31,8 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
         pytorch_dump_folder_path (`str`):
             Path to the output PyTorch model.
     """
-    tokenizer = DiaTokenizerFast.from_pretrained(checkpoint_path)
-    model = AutoModelForCausalLM.from_pretrained(checkpoint_path, torch_dtype=torch.float16)
+    tokenizer = DiaTokenizer.from_pretrained(checkpoint_path)
+    model = AutoModel.from_pretrained(checkpoint_path, torch_dtype=torch.float16)
 
     # Save the model
     model.save_pretrained(pytorch_dump_folder_path)
@@ -67,10 +65,11 @@ if __name__ == "__main__":
         except Exception as e:
             print(e)
         else:
-            feature_extractor = DiaFeatureExtractor(
+            feature_extractor = DiaAudioProcessor(
                 feature_size=model.config.num_mel_bins,
                 # the rest of default parameters are the same as hardcoded in openai/dia
             )
+            tokenizer = DiaTokenizer()
             processor = DiaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
             processor.save_pretrained(args.pytorch_dump_folder_path)
 

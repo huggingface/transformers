@@ -13,13 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
+
 import numpy as np
 import torch
 
 from ...generation import GenerationMixin
 from ...utils import logging
 
-import time
+
 logger = logging.get_logger(__name__)
 
 

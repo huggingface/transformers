@@ -20,8 +20,9 @@ import typing
 
 import torch
 
-from ...processing_utils import ProcessorMixin
 from ...modeling_utils import AutoModel
+from ...processing_utils import ProcessorMixin
+
 
 def build_delay_indices(
     B: int, T: int, C: int, delay_pattern: typing.List[int]
@@ -192,12 +193,12 @@ class DiaProcessor(ProcessorMixin):
     Constructs a Dia processor which wraps a Dia feature extractor and a Dia tokenizer into a single
     processor.
 
-    [`DiaProcessor`] offers all the functionalities of [`DiaFeatureExtractor`] and [`DiaTokenizer`]. See
+    [`DiaProcessor`] offers all the functionalities of [`DiaAudioProcessor`] and [`DiaTokenizer`]. See
     the [`~DiaProcessor.__call__`] and [`~DiaProcessor.decode`] for more information.
 
     Args:
-        feature_extractor (`DiaFeatureExtractor`):
-            An instance of [`DiaFeatureExtractor`]. The feature extractor is a required input.
+        feature_extractor (`DiaAudioProcessor`):
+            An instance of [`DiaAudioProcessor`]. The feature extractor is a required input.
         tokenizer (`DiaTokenizer`):
             An instance of [`DiaTokenizer`]. The tokenizer is a required input.
     """
@@ -252,7 +253,7 @@ class DiaProcessor(ProcessorMixin):
 
     def __call__(self, *args, **kwargs):
         """
-        Forwards the `audio` argument to DiaFeatureExtractor's [`~DiaFeatureExtractor.__call__`] and the `text`
+        Forwards the `audio` argument to DiaAudioProcessor's [`~DiaAudioProcessor.__call__`] and the `text`
         argument to [`~DiaTokenizer.__call__`]. Please refer to the docstring of the above two methods for more
         information.
         """

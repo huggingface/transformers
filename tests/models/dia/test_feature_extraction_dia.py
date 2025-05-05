@@ -22,7 +22,7 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
-from transformers import DiaFeatureExtractor
+from transformers import DiaAudioProcessor
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torch_gpu
 from transformers.utils.import_utils import is_torch_available
 
@@ -106,7 +106,7 @@ class DiaFeatureExtractionTester:
 
 
 class DiaFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = DiaFeatureExtractor
+    feature_extraction_class = DiaAudioProcessor
 
     def setUp(self):
         self.feat_extract_tester = DiaFeatureExtractionTester(self)
@@ -269,7 +269,7 @@ class DiaFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         # fmt: on
 
         input_speech = self._load_datasamples(1)
-        feature_extractor = DiaFeatureExtractor()
+        feature_extractor = DiaAudioProcessor()
         input_features = feature_extractor(input_speech, return_tensors="pt").input_features
 
         self.assertEqual(input_features.shape, (1, 80, 3000))
@@ -289,7 +289,7 @@ class DiaFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         # fmt: on
 
         input_speech = self._load_datasamples(1)
-        feature_extractor = DiaFeatureExtractor()
+        feature_extractor = DiaAudioProcessor()
         input_features = feature_extractor(input_speech, return_tensors="np").input_features
         self.assertEqual(input_features.shape, (1, 80, 3000))
         self.assertTrue(np.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
@@ -333,7 +333,7 @@ class DiaFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
 
         with torch.device("cuda"):
             input_speech = self._load_datasamples(3)
-            feature_extractor = DiaFeatureExtractor()
+            feature_extractor = DiaAudioProcessor()
             input_features = feature_extractor(input_speech, return_tensors="pt").input_features
         self.assertEqual(input_features.shape, (3, 80, 3000))
         torch.testing.assert_close(input_features[:, 0, :30], EXPECTED_INPUT_FEATURES, rtol=1e-4, atol=1e-4)

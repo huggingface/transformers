@@ -92,10 +92,11 @@ class DiaConfig(PretrainedConfig):
         rope_min_timescale=1,
         rope_max_timescale=10_000,
         is_encoder_decoder=True,
+        pad_token_id=0,
         **kwargs,
     ):
-        self.encoder_config = encoder
-        self.decoder_config = decoder
+        self.encoder_config = encoder_config
+        self.decoder_config = decoder_config
         self.src_vocab_size = src_vocab_size
         self.tgt_vocab_size = tgt_vocab_size
         self.dropout = dropout
@@ -105,10 +106,7 @@ class DiaConfig(PretrainedConfig):
         self.rope_max_timescale = rope_max_timescale
         super().__init__(
             pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
 
