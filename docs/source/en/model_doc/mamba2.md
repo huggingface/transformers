@@ -21,9 +21,9 @@ rendered properly in your Markdown viewer.
 
 # Mamba 2
 
-[Mamba2](https://huggingface.co/papers/2405.21060) is the second iteration of selective structured state space model (SSMs) by Tri Dao and Albert Gu. It brings many improvements to the original architecture such as better parallelism support and more optimized support for higher dimensionalities.
+[Mamba2](https://huggingface.co/papers/2405.21060) is the second iteration of selective structured state space model (SSMs) by Tri Dao and Albert Gu. It brings many improvements to the original architecture such as better parallelism support and more optimized support for higher dimensionalities. It is recommended to use the mistralai/Mamba-Codestral-7B-v0.1 model since it has the most stable performance.
 
-You can find all the original Mamba checkpoints under the [State Space Models](https://huggingface.co/state-spaces) organization.
+You can find the [mistralai/Mamba-Codestral-7B-v0.1](https://huggingface.co/mistralai/Mamba-Codestral-7B-v0.1) model in the [][mistral](https://huggingface.co/mistralai) organization and the original Mamba2 checkpoints under the [State Space Models](https://huggingface.co/state-spaces) organization.
 
 > [!TIP]
 > Click on the Mamba models in the right sidebar for more examples of how to apply Mamba to different language tasks.
@@ -39,7 +39,7 @@ from transformers import pipeline
 
 pipeline = pipeline(
     task="text-generation",
-    model="state-spaces/mamba2-130m",
+    model="mistralai/Mamba-Codestral-7B-v0.1",
     torch_dtype=torch.float16,
     device=0
 )
@@ -53,8 +53,8 @@ pipeline("Plants create energy through a process known as")
 import torch  
 from transformers import AutoModelForCausalLM, AutoTokenizer  
 
-tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba2-130m")
-model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba2-130m", torch_dtype=torch.float16, device_map="auto")  
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", torch_dtype=torch.float16, device_map="auto")  
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")  
 
 output = model.generate(**input_ids)  
@@ -65,7 +65,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True)
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model state-spaces/mamba2-130m --device 0
+echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model mistralai/Mamba-Codestral-7B-v0.1 --device 0
 ```
 
 </hfoption>
