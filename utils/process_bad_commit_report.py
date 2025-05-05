@@ -27,6 +27,11 @@ if __name__ == "__main__":
     with open("new_model_failures_with_bad_commit.json") as fp:
         data = json.load(fp)
 
+    with open("ci_results_run_models_gpu/model_job_links.json") as fp:
+        model_job_links = json.load(fp)
+
+    print(model_job_links)
+
     # TODO: extend
     team_members = [
         "ydshieh",
