@@ -206,6 +206,13 @@ class PixtralAttention(nn.Module):
 
         impl = getattr(self.config, "_attn_implementation", "eager")
 
+        if impl == "sdpa" and self.output_attentions:
+            logger.warning_once(
+                "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            impl = "eager"
+
         # Since we use packing, if Flash-Attn 2 is selected we rely on position_ids
         if impl == "flash_attention_2":
             position_ids = position_ids.to(hidden_states.device, non_blocking=True)
@@ -509,7 +516,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
+        image_sizes: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -521,6 +528,11 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             pixel_values: tensor of token features for
                 all tokens of all images of shape (N_toks, D)
         """
+        if image_sizes is None:
+            batch_size, _, height, width = pixel_values.shape
+            # on crée une liste de tuples (H, W) répétée batch_size fois
+            image_sizes = [(height, width)] * batch_size
+
         # pass images through initial convolution independently
         patch_embeds = self.patch_conv(pixel_values)
         patch_embeds_list = [
