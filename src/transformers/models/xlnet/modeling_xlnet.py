@@ -19,15 +19,15 @@ PyTorch XLNet model.
 
 import warnings
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN
+from ...activations import ACT2FN, get_activation
 from ...generation import GenerationMixin
-from ...modeling_utils import PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits, PreTrainedModel, SequenceSummary
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     ModelOutput,
@@ -527,6 +527,281 @@ class XLNetLayer(nn.Module):
     def ff_chunk(self, output_x):
         output_x = self.ff(output_x)
         return output_x
+
+
+# Copied from transformers.models.xlm.modeling_xlm.XLMPoolerStartLogits with XLM->XLNet
+class XLNetPoolerStartLogits(nn.Module):
+    """
+    Compute SQuAD start logits from sequence hidden states.
+
+    Args:
+        config ([`XLNetConfig`]):
+            The config used by the model, will be used to grab the `hidden_size` of the model.
+    """
+
+    def __init__(self, config: XLNetConfig):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, 1)
+
+    def forward(
+        self, hidden_states: torch.FloatTensor, p_mask: Optional[torch.FloatTensor] = None
+    ) -> torch.FloatTensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+                The final hidden states of the model.
+            p_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
+                Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
+                should be masked.
+
+        Returns:
+            `torch.FloatTensor`: The start logits for SQuAD.
+        """
+        x = self.dense(hidden_states).squeeze(-1)
+
+        if p_mask is not None:
+            if p_mask.dtype == torch.float16:
+                x = x * (1 - p_mask) - 65500 * p_mask
+            else:
+                x = x * (1 - p_mask) - 1e30 * p_mask
+
+        return x
+
+
+# Copied from transformers.models.xlm.modeling_xlm.XLMPoolerEndLogits with XLM->XLNet
+class XLNetPoolerEndLogits(nn.Module):
+    """
+    Compute SQuAD end logits from sequence hidden states.
+
+    Args:
+        config ([`XLNetConfig`]):
+            The config used by the model, will be used to grab the `hidden_size` of the model and the `layer_norm_eps`
+            to use.
+    """
+
+    def __init__(self, config: XLNetConfig):
+        super().__init__()
+        self.dense_0 = nn.Linear(config.hidden_size * 2, config.hidden_size)
+        self.activation = nn.Tanh()
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dense_1 = nn.Linear(config.hidden_size, 1)
+
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        start_states: Optional[torch.FloatTensor] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        p_mask: Optional[torch.FloatTensor] = None,
+    ) -> torch.FloatTensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+                The final hidden states of the model.
+            start_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
+                The hidden states of the first tokens for the labeled span.
+            start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                The position of the first token for the labeled span.
+            p_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
+                Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
+                should be masked.
+
+        <Tip>
+
+        One of `start_states` or `start_positions` should be not `None`. If both are set, `start_positions` overrides
+        `start_states`.
+
+        </Tip>
+
+        Returns:
+            `torch.FloatTensor`: The end logits for SQuAD.
+        """
+        assert start_states is not None or start_positions is not None, (
+            "One of start_states, start_positions should be not None"
+        )
+        if start_positions is not None:
+            slen, hsz = hidden_states.shape[-2:]
+            start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
+            start_states = hidden_states.gather(-2, start_positions)  # shape (bsz, 1, hsz)
+            start_states = start_states.expand(-1, slen, -1)  # shape (bsz, slen, hsz)
+
+        x = self.dense_0(torch.cat([hidden_states, start_states], dim=-1))
+        x = self.activation(x)
+        x = self.LayerNorm(x)
+        x = self.dense_1(x).squeeze(-1)
+
+        if p_mask is not None:
+            if p_mask.dtype == torch.float16:
+                x = x * (1 - p_mask) - 65500 * p_mask
+            else:
+                x = x * (1 - p_mask) - 1e30 * p_mask
+
+        return x
+
+
+# Copied from transformers.models.xlm.modeling_xlm.XLMPoolerAnswerClass with XLM->XLNet
+class XLNetPoolerAnswerClass(nn.Module):
+    """
+    Compute SQuAD 2.0 answer class from classification and start tokens hidden states.
+
+    Args:
+        config ([`XLNetConfig`]):
+            The config used by the model, will be used to grab the `hidden_size` of the model.
+    """
+
+    def __init__(self, config: XLNetConfig):
+        super().__init__()
+        self.dense_0 = nn.Linear(config.hidden_size * 2, config.hidden_size)
+        self.activation = nn.Tanh()
+        self.dense_1 = nn.Linear(config.hidden_size, 1, bias=False)
+
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        start_states: Optional[torch.FloatTensor] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        cls_index: Optional[torch.LongTensor] = None,
+    ) -> torch.FloatTensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+                The final hidden states of the model.
+            start_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
+                The hidden states of the first tokens for the labeled span.
+            start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                The position of the first token for the labeled span.
+            cls_index (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Position of the CLS token for each sentence in the batch. If `None`, takes the last token.
+
+        <Tip>
+
+        One of `start_states` or `start_positions` should be not `None`. If both are set, `start_positions` overrides
+        `start_states`.
+
+        </Tip>
+
+        Returns:
+            `torch.FloatTensor`: The SQuAD 2.0 answer class.
+        """
+        # No dependency on end_feature so that we can obtain one single `cls_logits` for each sample.
+        hsz = hidden_states.shape[-1]
+        assert start_states is not None or start_positions is not None, (
+            "One of start_states, start_positions should be not None"
+        )
+        if start_positions is not None:
+            start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
+            start_states = hidden_states.gather(-2, start_positions).squeeze(-2)  # shape (bsz, hsz)
+
+        if cls_index is not None:
+            cls_index = cls_index[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
+            cls_token_state = hidden_states.gather(-2, cls_index).squeeze(-2)  # shape (bsz, hsz)
+        else:
+            cls_token_state = hidden_states[:, -1, :]  # shape (bsz, hsz)
+
+        x = self.dense_0(torch.cat([start_states, cls_token_state], dim=-1))
+        x = self.activation(x)
+        x = self.dense_1(x).squeeze(-1)
+
+        return x
+
+
+# Copied from transformers.models.xlm.modeling_xlm.XLMSequenceSummary with XLM->XLNet
+class XLNetSequenceSummary(nn.Module):
+    r"""
+    Compute a single vector summary of a sequence hidden states.
+
+    Args:
+        config ([`XLNetConfig`]):
+            The config used by the model. Relevant arguments in the config class of the model are (refer to the actual
+            config class of your model for the default values it uses):
+
+            - **summary_type** (`str`) -- The method to use to make this summary. Accepted values are:
+
+                - `"last"` -- Take the last token hidden state (like XLNet)
+                - `"first"` -- Take the first token hidden state (like Bert)
+                - `"mean"` -- Take the mean of all tokens hidden states
+                - `"cls_index"` -- Supply a Tensor of classification token position (GPT/GPT-2)
+                - `"attn"` -- Not implemented now, use multi-head attention
+
+            - **summary_use_proj** (`bool`) -- Add a projection after the vector extraction.
+            - **summary_proj_to_labels** (`bool`) -- If `True`, the projection outputs to `config.num_labels` classes
+              (otherwise to `config.hidden_size`).
+            - **summary_activation** (`Optional[str]`) -- Set to `"tanh"` to add a tanh activation to the output,
+              another string or `None` will add no activation.
+            - **summary_first_dropout** (`float`) -- Optional dropout probability before the projection and activation.
+            - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and activation.
+    """
+
+    def __init__(self, config: XLNetConfig):
+        super().__init__()
+
+        self.summary_type = getattr(config, "summary_type", "last")
+        if self.summary_type == "attn":
+            # We should use a standard multi-head attention module with absolute positional embedding for that.
+            # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
+            # We can probably just use the multi-head attention module of PyTorch >=1.1.0
+            raise NotImplementedError
+
+        self.summary = nn.Identity()
+        if hasattr(config, "summary_use_proj") and config.summary_use_proj:
+            if hasattr(config, "summary_proj_to_labels") and config.summary_proj_to_labels and config.num_labels > 0:
+                num_classes = config.num_labels
+            else:
+                num_classes = config.hidden_size
+            self.summary = nn.Linear(config.hidden_size, num_classes)
+
+        activation_string = getattr(config, "summary_activation", None)
+        self.activation: Callable = get_activation(activation_string) if activation_string else nn.Identity()
+
+        self.first_dropout = nn.Identity()
+        if hasattr(config, "summary_first_dropout") and config.summary_first_dropout > 0:
+            self.first_dropout = nn.Dropout(config.summary_first_dropout)
+
+        self.last_dropout = nn.Identity()
+        if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
+            self.last_dropout = nn.Dropout(config.summary_last_dropout)
+
+    def forward(
+        self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None
+    ) -> torch.FloatTensor:
+        """
+        Compute a single vector summary of a sequence hidden states.
+
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_len, hidden_size]`):
+                The hidden states of the last layer.
+            cls_index (`torch.LongTensor` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
+                Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
+
+        Returns:
+            `torch.FloatTensor`: The summary of the sequence hidden states.
+        """
+        if self.summary_type == "last":
+            output = hidden_states[:, -1]
+        elif self.summary_type == "first":
+            output = hidden_states[:, 0]
+        elif self.summary_type == "mean":
+            output = hidden_states.mean(dim=1)
+        elif self.summary_type == "cls_index":
+            if cls_index is None:
+                cls_index = torch.full_like(
+                    hidden_states[..., :1, :],
+                    hidden_states.shape[-2] - 1,
+                    dtype=torch.long,
+                )
+            else:
+                cls_index = cls_index.unsqueeze(-1).unsqueeze(-1)
+                cls_index = cls_index.expand((-1,) * (cls_index.dim() - 1) + (hidden_states.size(-1),))
+            # shape of cls_index: (bsz, XX, 1, hidden_size) where XX are optional leading dim of hidden_states
+            output = hidden_states.gather(-2, cls_index).squeeze(-2)  # shape (bsz, XX, hidden_size)
+        elif self.summary_type == "attn":
+            raise NotImplementedError
+
+        output = self.first_dropout(output)
+        output = self.summary(output)
+        output = self.activation(output)
+        output = self.last_dropout(output)
+
+        return output
 
 
 class XLNetPreTrainedModel(PreTrainedModel):
@@ -1502,7 +1777,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         self.config = config
 
         self.transformer = XLNetModel(config)
-        self.sequence_summary = SequenceSummary(config)
+        self.sequence_summary = XLNetSequenceSummary(config)
         self.logits_proj = nn.Linear(config.d_model, config.num_labels)
 
         # Initialize weights and apply final processing
@@ -1696,7 +1971,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         super().__init__(config)
 
         self.transformer = XLNetModel(config)
-        self.sequence_summary = SequenceSummary(config)
+        self.sequence_summary = XLNetSequenceSummary(config)
         self.logits_proj = nn.Linear(config.d_model, 1)
 
         # Initialize weights and apply final processing
@@ -1911,9 +2186,9 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         self.end_n_top = config.end_n_top
 
         self.transformer = XLNetModel(config)
-        self.start_logits = PoolerStartLogits(config)
-        self.end_logits = PoolerEndLogits(config)
-        self.answer_class = PoolerAnswerClass(config)
+        self.start_logits = XLNetPoolerStartLogits(config)
+        self.end_logits = XLNetPoolerEndLogits(config)
+        self.answer_class = XLNetPoolerAnswerClass(config)
 
         # Initialize weights and apply final processing
         self.post_init()

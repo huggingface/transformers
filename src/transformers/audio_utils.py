@@ -37,15 +37,15 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
 
     Args:
         audio (`str` or `np.ndarray`):
-            The audio to be laoded to the numpy array format.
+            The audio to be loaded to the numpy array format.
         sampling_rate (`int`, *optional*, defaults to 16000):
-            The samlping rate to be used when loading the audio. It should be same as the
+            The sampling rate to be used when loading the audio. It should be same as the
             sampling rate the model you will be using further was trained with.
         timeout (`float`, *optional*):
             The timeout value in seconds for the URL request.
 
     Returns:
-        `np.ndarray`: A numpy artay representing the audio.
+        `np.ndarray`: A numpy array representing the audio.
     """
     requires_backends(load_audio, ["librosa"])
 
@@ -1146,9 +1146,9 @@ def stft(frames: np.array, windowing_function: np.array, fft_window_size: Option
             tutorial]https://download.ni.com/evaluation/pxi/Understanding%20FFTs%20and%20Windowing.pdf
         fft_window_size (`int`, *optional*):
             Size of the window om which the Fourier transform is applied. This controls the frequency resolution of the
-            spectrogram. 400 means that the fourrier transform is computed on windows of 400 samples. The number of
+            spectrogram. 400 means that the fourier transform is computed on windows of 400 samples. The number of
             frequency bins (`nb_frequency_bins`) used to divide the window into equal strips is equal to
-            `(1+fft_window_size)//2`. An increase of the fft_window_size slows the calculus time proportionnally.
+            `(1+fft_window_size)//2`. An increase of the fft_window_size slows the calculus time proportionally.
 
     Example:
 
