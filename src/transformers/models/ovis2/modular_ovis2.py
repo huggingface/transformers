@@ -5,12 +5,10 @@ import torch
 from torch import nn
 
 from transformers.models.llama.modeling_llama import LlamaMLP, LlamaRMSNorm
-from transformers.models.llava_next.modeling_llava_next import (
-    LlavaNextCausalLMOutputWithPast,
-    LlavaNextPreTrainedModel,
-)
+from transformers.models.llava_next.modeling_llava_next import LlavaNextCausalLMOutputWithPast
 from transformers.models.siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipEncoderLayer
 
+from ...modeling_utils import PreTrainedModel
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput
 from ...utils import add_start_docstrings_to_model_forward, logging
@@ -253,7 +251,7 @@ class Ovis2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
     pass
 
 
-class Ovis2PreTrainedModel(LlavaNextPreTrainedModel):
+class Ovis2PreTrainedModel(PreTrainedModel):
     config_class = Ovis2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -264,6 +262,27 @@ class Ovis2PreTrainedModel(LlavaNextPreTrainedModel):
     _supports_sdpa = True
     _supports_static_cache = True
 
+    def _init_weights(self, module):
+         # important: this ported version of LlavaNext isn't meant for training from scratch - only
+         # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
+         # https://github.com/haotian-liu/LLaVA/tree/main/llava_next should serve for that purpose
+         std = (
+             self.config.initializer_range
+             if hasattr(self.config, "initializer_range")
+             else self.config.text_config.initializer_range
+         )
+ 
+         if hasattr(module, "class_embedding"):
+             module.class_embedding.data.normal_(mean=0.0, std=std)
+ 
+         if isinstance(module, (nn.Linear, nn.Conv2d)):
+             module.weight.data.normal_(mean=0.0, std=std)
+             if module.bias is not None:
+                 module.bias.data.zero_()
+         elif isinstance(module, nn.Embedding):
+             module.weight.data.normal_(mean=0.0, std=std)
+             if module.padding_idx is not None:
+                 module.weight.data[module.padding_idx].zero_()
 
 OVIS2_INPUTS_DOCSTRING = r"""
     Args:

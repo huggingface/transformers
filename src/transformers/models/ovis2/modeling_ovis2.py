@@ -8,30 +8,21 @@ import math
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...image_processing_utils import select_best_resolution
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    logging,
-)
+from ...utils import add_start_docstrings_to_model_forward, can_return_tuple, logging
 from ..auto import AutoModelForCausalLM
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "Ovis2Config"
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -530,150 +521,38 @@ class Ovis2CausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-class Ovis2MultiModalProjector(nn.Module):
-    def __init__(self, config: Ovis2Config):
-        super().__init__()
-        # We have hidden_size * the number of vision feature layers
-        num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
-        self.linear_1 = nn.Linear(
-            config.vision_config.hidden_size * num_feature_layers,
-            config.text_config.hidden_size,
-            bias=config.multimodal_projector_bias,
+class Ovis2PreTrainedModel(PreTrainedModel):
+    config_class = Ovis2Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Ovis2VisionAttention"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_cache_class = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_static_cache = True
+
+    def _init_weights(self, module):
+        # important: this ported version of LlavaNext isn't meant for training from scratch - only
+        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
+        # https://github.com/haotian-liu/LLaVA/tree/main/llava_next should serve for that purpose
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
         )
-        self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(
-            config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
-        )
 
-    def forward(self, image_features):
-        hidden_states = self.linear_1(image_features)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
+        if hasattr(module, "class_embedding"):
+            module.class_embedding.data.normal_(mean=0.0, std=std)
 
-
-OVIS2_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Ovis2Config`] or [`Ovis2VisionConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
-    """
-    Calculate the shape of the image patch grid after the preprocessing for images of any resolution.
-
-    Args:
-        image_size (`tuple`):
-            The size of the input image in the format (width, height).
-        grid_pinpoints (`List`):
-            A list containing possible resolutions. Each item in the list should be a tuple or list
-            of the form `(height, width)`.
-        patch_size (`int`):
-            The size of each image patch.
-
-    Returns:
-        tuple: The shape of the image patch grid in the format (width, height).
-    """
-    if not isinstance(grid_pinpoints, list):
-        raise TypeError("grid_pinpoints should be a list of tuples or lists")
-
-    # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
-    if not isinstance(image_size, (list, tuple)):
-        if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise TypeError(
-                f"image_size invalid type: {type(image_size)} not valid, should be either list, tuple, np.ndarray or tensor"
-            )
-        image_size = image_size.tolist()
-
-    height, width = select_best_resolution(image_size, grid_pinpoints)
-    return height // patch_size, width // patch_size
-
-
-def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
-    """
-    Calculate the number of patches after the preprocessing for images of any resolution.
-
-    Args:
-        image_size (`torch.LongTensor` or `np.ndarray` or `Tuple[int, int]`):
-            The size of the input image in the format (height, width). ?
-        grid_pinpoints (`List`):
-            A list containing possible resolutions. Each item in the list should be a tuple or list
-            of the form `(height, width)`.
-        patch_size (`int`):
-            The size of each image patch.
-
-    Returns:
-        int: the number of patches
-    """
-    if not isinstance(grid_pinpoints, list):
-        raise TypeError("grid_pinpoints should be a list of tuples or lists")
-
-    # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
-    if not isinstance(image_size, (list, tuple)):
-        if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise TypeError(f"image_size invalid type {type(image_size)} with value {image_size}")
-        image_size = image_size.tolist()
-
-    best_resolution = select_best_resolution(image_size, grid_pinpoints)
-    height, width = best_resolution
-    num_patches = 0
-    # consider change to ceil(height/patch_size)*ceil(width/patch_size) + 1
-    for i in range(0, height, patch_size):
-        for j in range(0, width, patch_size):
-            num_patches += 1
-    # add the base patch
-    num_patches += 1
-    return num_patches
-
-
-def unpad_image(tensor, original_size):
-    """
-    Unpads a PyTorch tensor of a padded and resized image.
-
-    Args:
-        tensor (`torch.Tensor`):
-            The image tensor, assumed to be of shape (num_channels, height, width).
-        original_size (`tuple`):
-            The original size of the image (height, width).
-
-    Returns:
-        `torch.Tensor`: The unpadded image tensor.
-    """
-    if not isinstance(original_size, (list, tuple)):
-        if not isinstance(original_size, (torch.Tensor, np.ndarray)):
-            raise TypeError(
-                f"image_size invalid type: {type(original_size)} not valid, should be either list, tuple, np.ndarray or tensor"
-            )
-        original_size = original_size.tolist()
-    original_height, original_width = original_size
-    current_height, current_width = tensor.shape[1:]
-
-    original_aspect_ratio = original_width / original_height
-    current_aspect_ratio = current_width / current_height
-
-    if original_aspect_ratio > current_aspect_ratio:
-        scale_factor = current_width / original_width
-        new_height = int(round(original_height * scale_factor, 7))
-        padding = (current_height - new_height) // 2
-        unpadded_tensor = tensor[:, padding : current_height - padding, :]
-    else:
-        scale_factor = current_height / original_height
-        new_width = int(round(original_width * scale_factor, 7))
-        padding = (current_width - new_width) // 2
-        unpadded_tensor = tensor[:, :, padding : current_width - padding]
-
-    return unpadded_tensor
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 OVIS2_INPUTS_DOCSTRING = r"""
@@ -744,34 +623,6 @@ OVIS2_INPUTS_DOCSTRING = r"""
             this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
             the complete sequence length.
 """
-
-
-@add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    OVIS2_START_DOCSTRING,
-)
-class Ovis2PreTrainedModel(PreTrainedModel):
-    config_class = Ovis2Config
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Ovis2VisionAttention"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-
-    def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, Ovis2ForConditionalGeneration):
-            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
-            module.image_newline.data.normal_(mean=0.0, std=embed_std)
 
 
 class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
