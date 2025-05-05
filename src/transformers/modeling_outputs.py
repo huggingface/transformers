@@ -18,8 +18,8 @@ from typing import Optional, Tuple
 
 import torch
 
-from .utils import ModelOutput
 from .cache_utils import Cache
+from .utils import ModelOutput
 
 
 @dataclass
