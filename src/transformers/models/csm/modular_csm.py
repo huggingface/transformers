@@ -919,10 +919,8 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
             # add place holder in position 0 that will be replaced by the backbone_last_hidden_state
             depth_decoder_input_ids = nn.functional.pad(depth_decoder_input_ids, (1, 0), value=0)
 
-            backbone_last_hidden_states_mask = train_mask.roll(-1, dims=1)
-            backbone_last_hidden_states_mask[:, -1] = False
-            backbone_last_hidden_states = backbone_hidden_states[backbone_last_hidden_states_mask]
-
+            train_idxs = train_mask.nonzero(as_tuple=True)
+            backbone_last_hidden_states = backbone_hidden_states[train_idxs[0], train_idxs[1] - 1, :]
             depth_decoder_labels = labels[train_mask]
 
             depth_decoder_outputs = self.depth_decoder(
