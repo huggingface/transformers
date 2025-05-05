@@ -44,7 +44,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_dia import DiaConfig
-from .generation_dia import DiaGenerationMixin
 
 
 if is_torch_flex_attn_available():
@@ -76,141 +75,6 @@ def sinusoids(length: int, channels: int, max_timescale: float = 10000) -> torch
     return torch.cat([scaled_time.sin(), scaled_time.cos()], dim=1)
 
 
-# Copied from transformers.models.bart.modeling_bart.shift_tokens_right
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
-    """
-    Shift input ids one token to the right.
-    """
-    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
-    shifted_input_ids[:, 0] = decoder_start_token_id
-
-    if pad_token_id is None:
-        raise ValueError("self.model.config.pad_token_id has to be defined.")
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-    return shifted_input_ids
-
-
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
-def _compute_mask_indices(
-    shape: Tuple[int, int],
-    mask_prob: float,
-    mask_length: int,
-    attention_mask: Optional[torch.LongTensor] = None,
-    min_masks: int = 0,
-) -> np.ndarray:
-    """
-    Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
-    CPU as part of the preprocessing during training.
-
-    Args:
-        shape: The shape for which to compute masks. This should be of a tuple of size 2 where
-               the first element is the batch size and the second element is the length of the axis to span.
-        mask_prob:  The percentage of the whole axis (between 0 and 1) which will be masked. The number of
-                    independently generated mask spans of length `mask_length` is computed by
-                    `mask_prob*shape[1]/mask_length`. Note that due to overlaps, `mask_prob` is an upper bound and the
-                    actual percentage will be smaller.
-        mask_length: size of the mask
-        min_masks: minimum number of masked spans
-        attention_mask: A (right-padded) attention mask which independently shortens the feature axis of
-                        each batch dimension.
-    """
-    batch_size, sequence_length = shape
-
-    if mask_length < 1:
-        raise ValueError("`mask_length` has to be bigger than 0.")
-
-    if mask_length > sequence_length:
-        raise ValueError(
-            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length}"
-            f" and `sequence_length`: {sequence_length}`"
-        )
-
-    # epsilon is used for probabilistic rounding
-    epsilon = np.random.rand(1).item()
-
-    def compute_num_masked_span(input_length):
-        """Given input length, compute how many spans should be masked"""
-        num_masked_span = int(mask_prob * input_length / mask_length + epsilon)
-        num_masked_span = max(num_masked_span, min_masks)
-
-        # make sure num masked span <= sequence_length
-        if num_masked_span * mask_length > sequence_length:
-            num_masked_span = sequence_length // mask_length
-
-        # make sure num_masked span is also <= input_length - (mask_length - 1)
-        if input_length - (mask_length - 1) < num_masked_span:
-            num_masked_span = max(input_length - (mask_length - 1), 0)
-
-        return num_masked_span
-
-    # compute number of masked spans in batch
-    input_lengths = (
-        attention_mask.detach().sum(-1).tolist()
-        if attention_mask is not None
-        else [sequence_length for _ in range(batch_size)]
-    )
-
-    # SpecAugment mask to fill
-    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=bool)
-    spec_aug_mask_idxs = []
-
-    max_num_masked_span = compute_num_masked_span(sequence_length)
-
-    if max_num_masked_span == 0:
-        return spec_aug_mask
-
-    for input_length in input_lengths:
-        # compute num of masked spans for this input
-        num_masked_span = compute_num_masked_span(input_length)
-
-        # get random indices to mask
-        spec_aug_mask_idx = np.random.choice(
-            np.arange(input_length - (mask_length - 1)), num_masked_span, replace=False
-        )
-
-        # pick first sampled index that will serve as a dummy index to pad vector
-        # to ensure same dimension for all batches due to probabilistic rounding
-        # Picking first sample just pads those vectors twice.
-        if len(spec_aug_mask_idx) == 0:
-            # this case can only happen if `input_length` is strictly smaller then
-            # `sequence_length` in which case the last token has to be a padding
-            # token which we can use as a dummy mask id
-            dummy_mask_idx = sequence_length - 1
-        else:
-            dummy_mask_idx = spec_aug_mask_idx[0]
-
-        spec_aug_mask_idx = np.concatenate(
-            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
-        )
-        spec_aug_mask_idxs.append(spec_aug_mask_idx)
-
-    spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
-
-    # expand masked indices to masked spans
-    spec_aug_mask_idxs = np.broadcast_to(
-        spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length)
-    )
-    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
-
-    # add offset to the starting indexes so that indexes now create a span
-    offsets = np.arange(mask_length)[None, None, :]
-    offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
-        batch_size, max_num_masked_span * mask_length
-    )
-    spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
-
-    # ensure that we cannot have indices larger than sequence_length
-    if spec_aug_mask_idxs.max() > sequence_length - 1:
-        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
-
-    # scatter indices to mask
-    np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
-
-    return spec_aug_mask
 
 
 class DiaPositionalEmbedding(nn.Embedding):
@@ -222,6 +86,178 @@ class DiaPositionalEmbedding(nn.Embedding):
             return self.weight[past_key_values_length : past_key_values_length + input_ids.shape[1]]
         else:
             return self.weight[position_ids]
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class DiaSelfAttention(nn.Module): # Modular : LlamaAttentions
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: LlamaConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.num_heads = self.config.num_attention_heads
+        self.num_key_value_heads = self.config.num_key_value_heads
+        self.dropout = config.dropout
+        self.hidden_size = config.hidden_size
+        self.head_dim = config.hidden_size // self.num_heads
+        self.layer_idx = layer_idx
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_position=cache_position
+            )
+
+        attention_interface: Callable = eager_attention_forward
+
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+class DiaCrossAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(
+        self,
+        config: Optional[MllamaTextConfig] = None,
+        layer_idx: Optional[int] = None,
+    ):
+        super().__init__()
+        self.config = config
+        self.num_heads = self.config.num_attention_heads
+        self.num_key_value_heads = self.config.num_key_value_heads
+        self.dropout = config.dropout
+        self.hidden_size = config.hidden_size
+        self.head_dim = config.hidden_size // self.num_heads
+        self.layer_idx = layer_idx
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cross_attention_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        if cross_attention_states is not None:
+            key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+            cos, sin = position_embeddings
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+            if past_key_value is not None:
+                key_states, value_states = past_key_value.update(
+                    key_states, value_states, self.layer_idx, cache_position=cache_position
+                )
+        elif cache_position[0] != 0: # not prefill, make it compile compatible
+            key_states, value_states = (
+                past_key_value.key_cache[self.layer_idx], past_key_value.value_cache[self.layer_idx],
+            )
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
 
 
 
@@ -240,17 +276,7 @@ class DiaEncoderLayer(nn.Module):
             eps=model_config.normalization_layer_epsilon,
             dtype=torch.float32,
         )
-        self.self_attention = Attention(
-            config,
-            q_embed_dim=embed_dim,
-            kv_embed_dim=embed_dim,
-            num_query_heads=enc_config.n_head,
-            num_kv_heads=enc_config.n_head,
-            head_dim=enc_config.head_dim,
-            compute_dtype=compute_dtype,
-            is_cross_attn=False,
-            out_embed_dim=embed_dim,
-        )
+        self.self_attention = DiaSelfAttention(config)
         self.post_sa_norm = RMSNorm(
             embed_dim,
             eps=model_config.normalization_layer_epsilon,
@@ -264,25 +290,21 @@ class DiaEncoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         past_key_values: EncoderInferenceState,
     ) -> torch.Tensor:
-        residual = x
-        x_norm = self.pre_sa_norm(x).to(self.compute_dtype)
+        residual = hidden_states
+        x_norm = self.pre_sa_norm(hidden_states).to(self.compute_dtype)
 
         sa_out = self.self_attention(
-            Xq=x_norm,
-            Xkv=x_norm,
-            q_positions=state.positions,
-            kv_positions=state.positions,
-            attn_mask=state.attn_mask,
+            hidden_states=normed_states
+            position_ids=position_ids,
+            attn_mask=state.attn_mask, # I don't mind if this never changes
         )
-        x = residual + sa_out
+        hidden_states = residual + sa_out
 
-        residual = x
-        x_norm = self.post_sa_norm(x).to(self.compute_dtype)
+        residual = hidden_states
+        x_norm = self.post_sa_norm(hidden_states).to(self.compute_dtype)
         mlp_out = self.mlp(x_norm)
-        x = residual + mlp_out
-
-        return x
-
+        hidden_states = residual + mlp_out
+        return hidden_states
 
 class DiaPreTrainedModel(PreTrainedModel):
     config_class = DiaConfig
@@ -343,13 +365,13 @@ class DiaEncoder(DiaPreTrainedModel):
         x_ids: torch.Tensor,
         state: EncoderInferenceState,
     ) -> torch.Tensor:
-        x = self.embedding(x_ids)
+        hidden_states = self.embedding(x_ids)
 
         for layer in self.layers:
-            x = layer(x, state)
+            hidden_states = layer(hidden_states, state)
 
-        x = self.norm(x).to(self.compute_dtype)
-        return x
+        hidden_states = self.norm(hidden_states).to(self.compute_dtype)
+        return hidden_states
 
 
 class DiaDecoderLayer(nn.Module):
@@ -357,7 +379,7 @@ class DiaDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attention = DIA_ATTENTION_CLASSES[config._attn_implementation](
+        self.self_attention = DiaSelfAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -381,7 +403,7 @@ class DiaDecoderLayer(nn.Module):
             eps=model_config.normalization_layer_epsilon,
             dtype=torch.float32,
         )
-        self.cross_attention = DIA_ATTENTION_CLASSES[config._attn_implementation](
+        self.cross_attention = DiaCrossAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -397,46 +419,51 @@ class DiaDecoderLayer(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,
-        state: DecoderInferenceState,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        position_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        past_key_values: DecoderInferenceState,
         self_attn_cache: KVCache | None = None,
         cross_attn_cache: KVCache | None = None,
         prefill: bool = False,
     ) -> torch.Tensor:
-        residual = x
-        x_norm = self.pre_sa_norm(x).to(self.compute_dtype)
+        residual = hidden_states
+        normed_states = self.pre_sa_norm(hidden_states).to(self.compute_dtype)
 
-        sa_out = self.self_attention(
-            Xq=x_norm,  # (2, 1, D)
-            Xkv=x_norm,  # (2, 1, D)
-            q_positions=state.dec_positions,  # (2, 1)
-            kv_positions=state.dec_positions,  # (2, 1)
-            attn_mask=None,
-            cache=self_attn_cache,
-            prefill=prefill,
-            is_causal=prefill,
+        hidden_states, self_attn_weights = self.self_attention(
+            hidden_states=normed_states,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            output_attentions=output_attentions
         )
 
-        x = residual + sa_out
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
 
-        residual = x
-        x_norm = self.pre_ca_norm(x).to(self.compute_dtype)
-        ca_out = self.cross_attention(
-            Xq=x_norm,
-            Xkv=state.enc_out,
-            q_positions=state.dec_positions,
-            kv_positions=state.enc_positions,
-            attn_mask=state.dec_cross_attn_mask,
-            cache=cross_attn_cache,
-        )
-        x = residual + ca_out
+        residual = hidden_states
 
-        residual = x
-        x_norm = self.pre_mlp_norm(x).to(self.compute_dtype)
+        # Cross-Attention Block
+        cross_attn_weights = None
+        if encoder_hidden_states is not None:
+            residual = hidden_states
+            hidden_states =self.pre_ca_norm(hidden_states).to(self.compute_dtype)
+            hidden_states, cross_attn_weights = self.encoder_attn(
+                hidden_states=hidden_states,
+                key_value_states=encoder_hidden_states,
+                attention_mask=encoder_attention_mask,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+            )
+            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+            hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        x_norm = self.pre_mlp_norm(hidden_states).to(self.compute_dtype)
         mlp_out = self.mlp(x_norm)
-        x = residual + mlp_out
-
-        return x
+        hidden_states = residual + mlp_out
+        return hidden_states
 
 
 class DiaMultiChannelEmbed(nn.Module):
@@ -482,73 +509,13 @@ class Decoder(DiaPreTrainedModel):
 
         self.norm = RMSNorm(
             dec_config.n_embd,
-            eps=model_config.normalization_layer_epsilon,
+            eps=config.rms_norm_eps,
             dtype=torch.float32,
         )
 
-        self.logits_dense = DenseGeneral(
-            in_shapes=(dec_config.n_embd,),
-            out_features=(self.num_channels, model_config.tgt_vocab_size),
-            axis=(-1,),
-            weight_dtype=compute_dtype,
+        self.logits_dense = nn.Linear(
+            config.n_embd,(self.num_channels * model_config.tgt_vocab_size)
         )
-
-    def precompute_cross_attn_cache(
-        self,
-        enc_out: torch.Tensor,  # (B, S, E)
-        enc_positions: torch.Tensor,  # (B, S)
-    ) -> list[KVCache]:
-        """
-        Computes the Key and Value tensors for cross-attention for each layer from the encoder output.
-        """
-        per_layer_kv_cache: list[KVCache] = []
-
-        for layer in self.layers:
-            cross_attn_module = layer.cross_attention
-            k_proj = cross_attn_module.k_proj(enc_out)
-            v_proj = cross_attn_module.v_proj(enc_out)
-
-            k_proj = cross_attn_module.rotary_emb(k_proj, position=enc_positions)
-            k = k_proj.transpose(1, 2)
-            v = v_proj.transpose(1, 2)
-
-            per_layer_kv_cache.append(KVCache.from_kv(k, v))
-
-        return per_layer_kv_cache
-
-    def decode_step(
-        self,
-        tgt_ids_Bx1xC: torch.Tensor,  # [B, 1, C]
-        state: DecoderInferenceState,
-    ) -> torch.Tensor:
-        """
-        Performs a single decoding step, managing KV caches layer by layer.
-
-        Returns:
-            A tuple containing:
-            - logits_Bx1xCV: The final output logits for the current step (B, 1, C*V), cast to float32.
-        """
-
-        x = None
-        for i in range(self.num_channels):
-            channel_tokens = tgt_ids_Bx1xC[..., i]
-            channel_embed = self.embeddings[i](channel_tokens)
-            x = channel_embed if x is None else x + channel_embed
-
-        for i, layer in enumerate(self.layers):
-            self_cache = state.self_attn_cache[i]
-            cross_cache = state.cross_attn_cache[i]
-            x = layer(
-                x,  # (2, 1, D)
-                state,
-                self_attn_cache=self_cache,
-                cross_attn_cache=cross_cache,
-            )
-
-        x = self.norm(x)
-        logits_Bx1xCxV = self.logits_dense(x)
-
-        return logits_Bx1xCxV.to(torch.float32)
 
     def forward(self, audio_codes: torch.Tensor, past_key_values) -> torch.Tensor:
         hidden_states = self.embeddings(audio_codes)  # (B, 1, C)
@@ -560,11 +527,9 @@ class Decoder(DiaPreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        last_hidden_states = self.logits_dense(hidden_states)
+        last_hidden_states = self.logits_dense(hidden_states).view(-1, self.num_channels, self.config.tgt_vocab_size)
 
         return last_hidden_states.to(torch.float32)
-
-
 
 class DiaModel(DiaPreTrainedModel):
     def __init__(self, config: DiaConfig):
@@ -593,49 +558,6 @@ class DiaModel(DiaPreTrainedModel):
         """
         self.encoder._freeze_parameters()
 
-    def _mask_input_features(
-        self,
-        input_features: torch.FloatTensor,
-        attention_mask: Optional[torch.LongTensor] = None,
-    ):
-        """
-        Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
-        """
-
-        # `config.apply_spec_augment` can set masking to False
-        if not getattr(self.config, "apply_spec_augment", True):
-            return input_features
-
-        # generate indices & apply SpecAugment along time axis
-        batch_size, hidden_size, sequence_length = input_features.size()
-
-        if self.config.mask_time_prob > 0 and self.training:
-            # generate indices & apply SpecAugment along time axis
-            mask_time_indices = _compute_mask_indices(
-                (batch_size, sequence_length),
-                mask_prob=self.config.mask_time_prob,
-                mask_length=self.config.mask_time_length,
-                attention_mask=attention_mask,
-                min_masks=self.config.mask_time_min_masks,
-            )
-            mask_time_indices = torch.tensor(mask_time_indices, device=input_features.device, dtype=torch.bool)
-            mask_time_indices = mask_time_indices[:, None].expand(-1, hidden_size, -1)
-            input_features[mask_time_indices] = 0
-
-        if self.config.mask_feature_prob > 0 and self.training:
-            # generate indices & apply SpecAugment along feature axis
-            mask_feature_indices = _compute_mask_indices(
-                (batch_size, hidden_size),
-                mask_prob=self.config.mask_feature_prob,
-                mask_length=self.config.mask_feature_length,
-                min_masks=self.config.mask_feature_min_masks,
-            )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=input_features.device, dtype=torch.bool)
-            input_features[mask_feature_indices] = 0
-
-        return input_features
-
     @add_start_docstrings_to_model_forward(DIA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -644,9 +566,6 @@ class DiaModel(DiaPreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Union[EncoderDecoderCache, Tuple[torch.FloatTensor]]] = None,
         decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
@@ -684,21 +603,11 @@ class DiaModel(DiaPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None:
-            input_features = self._mask_input_features(input_features, attention_mask=attention_mask)
-
             encoder_outputs = self.encoder(
                 input_features,
-                head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
-            )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
@@ -717,9 +626,6 @@ class DiaModel(DiaPreTrainedModel):
             return_dict=return_dict,
             cache_position=cache_position,
         )
-
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
