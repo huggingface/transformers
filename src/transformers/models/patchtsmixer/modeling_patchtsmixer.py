@@ -1184,7 +1184,6 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
             For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series,
             it is greater than 1.
 
-
         Returns:
             `torch.FloatTensor` of shape `(batch_size, n_vars, num_patches, d_model)`
         """
@@ -1242,12 +1241,16 @@ class PatchTSMixerModelOutput(ModelOutput):
     scale: Optional[torch.FloatTensor] = None
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The PatchTSMixer Model for time-series forecasting.
+    """
+)
 class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig, mask_input: bool = False):
         r"""
-        mask_input (`bool`, defaults to `False`):
-            <fill_description>
+        mask_input (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
 
@@ -1280,11 +1283,6 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> PatchTSMixerModelOutput:
         r"""
-        observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
-            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
-            in `[0, 1]`:
-                - 1 for values that are **observed**,
-                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
         past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`):
             Context values of the time series. For a pretraining task, this denotes the input time series to predict
             the masked portion. For a forecasting task, this denotes the history/past time series values. Similarly,
@@ -1292,6 +1290,11 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
 
             For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series, it is
             greater than 1.
+        observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
         """
         return_dict = return_dict if return_dict is not None else self.use_return_dict
 
@@ -1395,11 +1398,6 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> PatchTSMixerForPreTrainingOutput:
         r"""
-        observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
-            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
-            in `[0, 1]`:
-                - 1 for values that are **observed**,
-                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
         past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`):
             Context values of the time series. For a pretraining task, this denotes the input time series to predict
             the masked portion. For a forecasting task, this denotes the history/past time series values. Similarly,
@@ -1407,9 +1405,13 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
 
             For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series, it is
             greater than 1.
-        return_loss (`bool`, *optional*):
+        observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+        return_loss (`bool`,  *optional*):
             Whether to return the loss in the `forward` call.
-
         """
         return_dict = return_dict if return_dict is not None else self.use_return_dict
 
@@ -1613,11 +1615,11 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
         observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
             Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
             in `[0, 1]`:
-                - 1 for values that are **observed**,
-                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-        future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)`):
-            for forecasting, `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
-            values of the time series, that serve as labels for the model. The `future_values` is what the
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+        future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,:
+            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*):
+            Target values of the time series, that serve as labels for the model. The `future_values` is what the
             Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
             required for a pretraining task.
 
@@ -1625,7 +1627,7 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
             to forecast only specific channels by setting the indices in `prediction_channel_indices` parameter,
             pass the target data with all channels, as channel Filtering for both prediction and target will be
             manually applied before the loss computation.
-        return_loss (`bool`, *optional*):
+        return_loss (`bool`,  *optional*):
             Whether to return the loss in the `forward` call.
         """
         if self.loss == "mse":
@@ -1830,8 +1832,9 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
 
             For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series, it is
             greater than 1.
-        target_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)`):
-            for forecasting, `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
+        target_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
+            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*):
+            Target
             values of the time series, that serve as labels for the model. The `target_values` is what the
             Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
             required for a pretraining task.
@@ -1846,7 +1849,6 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
             For a regression task, it has a shape of `(batch_size, num_targets)`.
         return_loss (`bool`, *optional*):
             Whether to return the loss in the `forward` call.
-
         """
 
         loss = torch.nn.CrossEntropyLoss()
@@ -1969,10 +1971,6 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
     """
 
     def __init__(self, config: PatchTSMixerConfig):
-        r"""
-        target_values (`torch.Tensor`, *optional*):
-            <fill_description>
-        """
         super().__init__(config)
 
         self.model = PatchTSMixerModel(config)
@@ -2021,8 +2019,6 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> PatchTSMixerForRegressionOutput:
         r"""
-        target_values (`torch.Tensor`, *optional*):
-            <fill_description>
         past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`):
             Context values of the time series. For a pretraining task, this denotes the input time series to predict
             the masked portion. For a forecasting task, this denotes the history/past time series values. Similarly,
@@ -2030,9 +2026,9 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
 
             For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series, it is
             greater than 1.
-        future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)`):
-            for forecasting, `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
-            values of the time series, that serve as labels for the model. The `future_values` is what the
+        target_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
+            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*):
+            Target values of the time series, that serve as labels for the model. The `target_values` is what the
             Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
             required for a pretraining task.
 
@@ -2046,7 +2042,6 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             For a regression task, it has a shape of `(batch_size, num_targets)`.
         return_loss (`bool`, *optional*):
             Whether to return the loss in the `forward` call.
-
         """
 
         if self.loss == "mse":

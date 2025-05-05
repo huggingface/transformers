@@ -956,10 +956,7 @@ class JanusVQVAEDecoder(nn.Module):
     """
 )
 class JanusVQVAE(JanusPreTrainedModel):
-    """Vision Transformer-based VQ-VAE model for encoding and decoding pixel values."""
-
     config_class = JanusVQVAEConfig
-
     _no_split_modules = [
         "JanusVQVAEAttnBlock",
         "JanusVQVAEResnetBlock",
@@ -1007,21 +1004,11 @@ class JanusVQVAE(JanusPreTrainedModel):
         return pixel_values
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
-        """
-        Encodes pixel values into quantized tokens and decodes them back.
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-                The tensors corresponding to the input images.
-        Returns:
-            decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                Reconstructed pixel values after encoding and decoding the input.
-            embedding_loss (`torch.FloatTensor`): Embedding loss.
-        """
-
         batch_size = pixel_values.shape[0]
         quant, embedding_loss, indices = self.encode(pixel_values)
         decoded_pixel_values = self.decode(indices.view(batch_size, -1))
@@ -1064,7 +1051,11 @@ class JanusVQVAEHead(nn.Module):
         return hidden_states
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Janus model which consists of a siglip vision backbone, a Llama language model and a VQ model.
+    """
+)
 class JanusModel(JanusPreTrainedModel):
     def __init__(self, config: JanusConfig):
         super().__init__(config)
@@ -1114,7 +1105,7 @@ class JanusModel(JanusPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
-    ) -> JanusCausalLMOutputWithPast:
+    ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1228,7 +1219,13 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
-    ) -> JanusCausalLMOutputWithPast:
+    ):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

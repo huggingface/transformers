@@ -580,7 +580,7 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        """
+        r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
             pre-training.
@@ -725,7 +725,7 @@ class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedMod
     """
 )
 class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMixin):
-    def __init__(self, config: Dinov2WithRegistersConfig):
+    def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
@@ -750,7 +750,7 @@ class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMi
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
-        """
+        r"""
         Examples:
 
         ```python

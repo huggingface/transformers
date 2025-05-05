@@ -34,7 +34,10 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import auto_docstring, logging
+from ...utils import (
+    auto_docstring,
+    logging,
+)
 from .configuration_mpnet import MPNetConfig
 
 
@@ -414,9 +417,9 @@ class MPNetPooler(nn.Module):
 @auto_docstring
 class MPNetModel(MPNetPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state.
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -600,7 +603,12 @@ class MPNetLMHead(nn.Module):
         return x
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    MPNet Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
+    """
+)
 class MPNetForSequenceClassification(MPNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

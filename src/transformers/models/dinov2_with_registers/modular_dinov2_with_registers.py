@@ -318,7 +318,7 @@ class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
 
 
 class Dinov2WithRegistersBackbone(Dinov2Backbone):
-    def __init__(self, config: Dinov2WithRegistersConfig):
+    def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
 
@@ -343,6 +343,8 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         """
+        Examples:
+
         ```python
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch

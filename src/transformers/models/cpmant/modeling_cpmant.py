@@ -1,3 +1,17 @@
+# coding=utf-8
+# Copyright 2022 The OpenBMB Team and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """PyTorch CPMAnt"""
 
 import math
@@ -530,18 +544,6 @@ class CpmAntPreTrainedModel(PreTrainedModel):
             module.relative_attention_bias.data.normal_(mean=0.0, std=self.config.init_std)
 
 
-CPMANT_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters
-        config ([`~CpmAntConfig`]): Model configuration class with all the parameters of the
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
 @auto_docstring
 class CpmAntModel(CpmAntPreTrainedModel):
     def __init__(self, config: CpmAntConfig):
@@ -592,6 +594,15 @@ class CpmAntModel(CpmAntPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPast]:
+        r"""
+        input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`CPMAntTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -679,19 +690,22 @@ class CpmAntModel(CpmAntPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The CPMAnt Model with a language modeling head on top (linear layer with weights tied to the input embeddings).
+    """
+)
 class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: CpmAntConfig):
         super().__init__(config)
-
         self.cpmant = CpmAntModel(config)
+
         # lm_head.weight is tied to cpmant.input_embedding.weight
         self.lm_head = nn.Linear(
             config.hidden_size, config.vocab_size + config.prompt_types * config.prompt_length, bias=False
         )
-
         self.post_init()
 
     @auto_docstring
@@ -708,6 +722,16 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
+        input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`CPMAntTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss.
+
         Example:
 
         Text Generation with CpmAntForCausalLM.

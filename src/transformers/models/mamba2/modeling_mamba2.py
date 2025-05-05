@@ -931,7 +931,12 @@ class Mamba2Model(Mamba2PreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The MAMBA2 Model transformer with a language modeling head on top (linear layer with weights not tied to the input
+    embeddings).
+    """
+)
 class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = []
 

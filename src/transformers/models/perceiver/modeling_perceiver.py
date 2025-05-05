@@ -31,7 +31,12 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
-from ...utils import ModelOutput, auto_docstring, logging, torch_int
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    logging,
+    torch_int,
+)
 from .configuration_perceiver import PerceiverConfig
 
 
@@ -621,7 +626,19 @@ class PerceiverPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Perceiver: a scalable, fully attentional architecture.
+
+    <Tip>
+
+        Note that it's possible to fine-tune Perceiver on higher resolution images than the ones it has been trained on, by
+        setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
+        position embeddings to the higher resolution.
+
+    </Tip>
+    """
+)
 class PerceiverModel(PerceiverPreTrainedModel):
     def __init__(
         self,
@@ -631,12 +648,12 @@ class PerceiverModel(PerceiverPreTrainedModel):
         output_postprocessor: PostprocessorType = None,
     ):
         r"""
-        decoder (`<fill_type>`):
-            <fill_description>
-        input_preprocessor (`Callable[..., Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]`, *optional*):
-            <fill_description>
-        output_postprocessor (`Callable[..., Any]`):
-            <fill_description>
+        decoder (<fill_type>):
+            <fill_docstring>
+        input_preprocessor (<fill_type>):
+            <fill_docstring>
+        output_postprocessor (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -679,11 +696,10 @@ class PerceiverModel(PerceiverPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PerceiverModelOutput]:
         r"""
-        subsampled_output_points (`Dict[str, torch.Tensor]`, *optional*):
-            <fill_description>
         inputs (`torch.FloatTensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
-
+        subsampled_output_points (<fill_type>):
+            <fill_docstring>
 
         Examples:
 
@@ -873,7 +889,11 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Example use of Perceiver for masked language modeling.
+    """
+)
 class PerceiverForMaskedLM(PerceiverPreTrainedModel):
     def __init__(self, config: PerceiverConfig):
         super().__init__(config)
@@ -1007,7 +1027,11 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Example use of Perceiver for text classification.
+    """
+)
 class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1120,7 +1144,7 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Example use of Perceiver for image classification, for tasks such as ImageNet.
+        Example use of Perceiver for image classification, for tasks such as ImageNet.
 
     This model uses learned position embeddings. In other words, this model is not given any privileged information about
     the structure of images. As shown in the paper, this model can achieve a top-1 accuracy of 72.7 on ImageNet.
@@ -1129,7 +1153,7 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
     (with `prep_type="conv1x1"`) to preprocess the input images, and
     [`~models.perceiver.modeling_perceiver.PerceiverClassificationDecoder`] to decode the latent representation of
     [`PerceiverModel`] into classification logits.
-"""
+    """
 )
 class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
     def __init__(self, config):
@@ -1263,7 +1287,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Example use of Perceiver for image classification, for tasks such as ImageNet.
+        Example use of Perceiver for image classification, for tasks such as ImageNet.
 
     This model uses fixed 2D Fourier position embeddings. As shown in the paper, this model can achieve a top-1 accuracy of
     79.0 on ImageNet, and 84.5 when pre-trained on a large-scale dataset (i.e. JFT).
@@ -1404,7 +1428,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Example use of Perceiver for image classification, for tasks such as ImageNet.
+        Example use of Perceiver for image classification, for tasks such as ImageNet.
 
     This model uses a 2D conv+maxpool preprocessing network. As shown in the paper, this model can achieve a top-1 accuracy
     of 82.1 on ImageNet.
@@ -1546,7 +1570,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Example use of Perceiver for optical flow, for tasks such as Sintel and KITTI. [`PerceiverForOpticalFlow`] uses
+        Example use of Perceiver for optical flow, for tasks such as Sintel and KITTI. [`PerceiverForOpticalFlow`] uses
     [`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`] (with *prep_type="patches"*) to preprocess the
     input images, and [`~models.perceiver.modeling_perceiver.PerceiverOpticalFlowDecoder`] to decode the latent
     representation of [`PerceiverModel`].
@@ -1702,10 +1726,6 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
 )
 class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
     def __init__(self, config: PerceiverConfig):
-        r"""
-        subsampled_output_points (`Dict[str, torch.Tensor]`, *optional*):
-            <fill_description>
-        """
         super().__init__(config)
 
         n_audio_samples = config.num_frames * config.audio_samples_per_frame
@@ -1833,15 +1853,14 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PerceiverClassifierOutput]:
         r"""
-        subsampled_output_points (`Dict[str, torch.Tensor]`, *optional*):
-            <fill_description>
         inputs (`torch.FloatTensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
+        subsampled_output_points (<fill_type>):
+            <fill_docstring>
 
         Examples:
 

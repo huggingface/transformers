@@ -423,11 +423,6 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         *args,
         **kwargs,
     ) -> Union[Tuple, BaseModelOutput]:
-        r"""
-        Returns:
-            pixel_values: tensor of token features for
-                all tokens of all images of shape (N_toks, D)
-        """
         # pass images through initial convolution independently
         patch_embeds = self.patch_conv(pixel_values)
         patch_embeds_list = [

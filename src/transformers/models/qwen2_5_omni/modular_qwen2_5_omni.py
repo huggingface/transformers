@@ -1722,15 +1722,13 @@ class SinusoidsPositionEmbedding(nn.Module):
         return self.positional_embedding[:seqlen, :]
 
 
-class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
-    """
+@auto_docstring(
+    custom_intro="""
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     [`Qwen2_5OmniAudioEncoderLayer`].
-
-    Args:
-        config: Qwen2_5OmniAudioEncoderConfig
     """
-
+)
+class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
     config_class = Qwen2_5OmniAudioEncoderConfig
     main_input_name = "input_features"
     _no_split_modules = ["Qwen2_5OmniAudioEncoderLayer"]
@@ -1782,10 +1780,10 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
             `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
             and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-
-            feature_lens: [B], torch.LongTensor , mel length
-
-            aftercnn_lens : [B], torch.LongTensor , mel length after cnn
+        feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
+            mel length
+        aftercnn_lens (`torch.LongTensor` of shape `(batch_size,)`):
+            mel length after cnn
         """
         chunk_num = torch.ceil(feature_lens / (self.n_window * 2)).long()
 
@@ -2216,7 +2214,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
             tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-        pixel_values_videos (`torch.FloatTensor`, *optional*):
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size), *optional*):
             The tensors corresponding to the input videos. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([]`NewTaskModelProcessor`] uses
             [`SiglipImageProcessor`] for processing videos).
@@ -2237,6 +2235,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        use_audio_in_video (<fill_type>):
+            <fill_docstring>
+        video_second_per_grid (<fill_type>):
+            <fill_docstring>
 
         Example:
 
@@ -2565,6 +2567,14 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
             The temporal, height and width of feature shape of each video in LLM.
         audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
             The length of feature shape of each audio in LLM.
+        thinker_reply_part (<fill_type>):
+            <fill_docstring>
+        input_text_ids (<fill_type>):
+            <fill_docstring>
+        use_audio_in_video (<fill_type>):
+            <fill_docstring>
+        video_second_per_grid (<fill_type>):
+            <fill_docstring>
 
         Example:
 
@@ -4040,7 +4050,6 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
 
         return model
 
-    @auto_docstring
     @torch.no_grad()
     # TODO: raushan, defaults should be saved in generation config
     def generate(

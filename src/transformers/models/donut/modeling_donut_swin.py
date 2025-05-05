@@ -27,14 +27,9 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
-from ...utils import (
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_donut_swin import DonutSwinConfig
 
 
@@ -904,12 +899,12 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DonutSwinModel(DonutSwinPreTrainedModel):
-    def __init__(self, config: DonutSwinConfig, add_pooling_layer=True, use_mask_token=False):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state.
-        use_mask_token (`bool`, *optional*, defaults to `False`):
-            Whether to use a mask token.
+    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
+        use_mask_token (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -1016,7 +1011,7 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
 )
 # Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with Swin->DonutSwin,swin->donut
 class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
-    def __init__(self, config: DonutSwinConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels

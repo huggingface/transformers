@@ -25,13 +25,7 @@ from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    can_return_tuple,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging, torch_int
 from .configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 
 
@@ -449,12 +443,8 @@ class CLIPEncoderLayer(nn.Module):
         return outputs
 
 
+@auto_docstring
 class CLIPPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = CLIPConfig
     base_model_prefix = "clip"
     supports_gradient_checkpointing = True
@@ -639,10 +629,6 @@ class CLIPTextTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutputWithPooling:
-        r"""
-        Returns:
-
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -708,7 +694,11 @@ class CLIPTextTransformer(nn.Module):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The text model from CLIP without any head or projection on top.
+    """
+)
 class CLIPTextModel(CLIPPreTrainedModel):
     config_class = CLIPTextConfig
 
@@ -810,7 +800,11 @@ class CLIPVisionTransformer(nn.Module):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The vision model from CLIP without any head or projection on top.
+    """
+)
 class CLIPVisionModel(CLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
@@ -835,7 +829,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> BaseModelOutputWithPooling:
         r"""
-        Examples:
+        Example:
 
         ```python
         >>> from PIL import Image

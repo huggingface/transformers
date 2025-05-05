@@ -20,9 +20,13 @@ from typing import Optional, Tuple, Union
 import torch
 from torch import Tensor, nn
 
-from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    logging,
+)
 from ..bert.modeling_bert import BertModel
 from .configuration_dpr import DPRConfig
 
@@ -124,6 +128,7 @@ class DPRReaderOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
+@auto_docstring
 class DPRPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
@@ -540,7 +545,7 @@ class DPRReader(DPRPretrainedReader):
             and 2) the passages titles and 3) the passages texts To match pretraining, DPR `input_ids` sequence should
             be formatted with [CLS] and [SEP] with the format:
 
-                `[CLS] <question token ids> [SEP] <titles ids> [SEP] <texts ids>`
+            `[CLS] <question token ids> [SEP] <titles ids> [SEP] <texts ids>`
 
             DPR is a model with absolute position embeddings so it's usually advised to pad the inputs on the right
             rather than the left.
@@ -548,6 +553,10 @@ class DPRReader(DPRPretrainedReader):
             Indices can be obtained using [`DPRReaderTokenizer`]. See this class documentation for more details.
 
             [What are input IDs?](../glossary#input-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(n_passages, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
 
         Examples:
 

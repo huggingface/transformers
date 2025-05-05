@@ -177,34 +177,6 @@ class HubertPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-HUBERT_CUSTOM_ARGS_DOCSTRING = r"""
-    input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-        Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-        into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-        soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-        conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
-    attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-        Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-        1]`:
-
-        - 1 for tokens that are **not masked**,
-        - 0 for tokens that are **masked**.
-
-        [What are attention masks?](../glossary#attention-mask)
-
-        <Tip warning={true}>
-
-        `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-        True`. For all models whose processor has `config.return_attention_mask == False`, such as
-        [hubert-base](https://huggingface.co/facebook/hubert-base-ls960), `attention_mask` should **not** be passed
-        to avoid degraded performance when doing batched inference. For such models `input_values` should simply be
-        padded with 0 and passed without `attention_mask`. Be aware that these models also yield slightly different
-        results depending on whether `input_values` is padded or not.
-
-        </Tip>
-"""
-
-
 @auto_docstring
 class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
     def __init__(self, config: HubertConfig):
@@ -232,7 +204,7 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Hubert")
 
-    @auto_docstring(custom_args=HUBERT_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -242,7 +214,10 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-        """
+        r"""
+        mask_time_indices (<fill_type>):
+            <fill_docstring>
+
         Example:
 
         ```python
@@ -303,12 +278,14 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
 
 
 @auto_docstring(
-    custom_intro="""Hubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC)."""
+    custom_intro="""
+    Hubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
+    """
 )
 class HubertForCTC(Wav2Vec2ForCTC):
     pass
 
-    @auto_docstring(custom_args=HUBERT_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         super().forward(**super_kwargs)
 
@@ -322,7 +299,7 @@ class HubertForCTC(Wav2Vec2ForCTC):
 class HubertForSequenceClassification(Wav2Vec2ForSequenceClassification):
     pass
 
-    @auto_docstring(custom_args=HUBERT_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         super().forward(**super_kwargs)
 

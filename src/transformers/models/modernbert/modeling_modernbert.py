@@ -39,11 +39,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    is_flash_attn_2_available,
-    logging,
-)
+from ...utils import auto_docstring, is_flash_attn_2_available, logging
 from ...utils.import_utils import is_triton_available
 from .configuration_modernbert import ModernBertConfig
 
@@ -54,6 +50,7 @@ if is_flash_attn_2_available():
     from flash_attn.ops.triton.rotary import apply_rotary
 else:
     RotaryEmbedding = object
+
 
 logger = logging.get_logger(__name__)
 
@@ -961,7 +958,11 @@ class ModernBertPredictionHead(nn.Module):
         return self.norm(self.act(self.dense(hidden_states)))
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The ModernBert Model with a decoder head on top that is used for masked language modeling.
+    """
+)
 class ModernBertForMaskedLM(ModernBertPreTrainedModel):
     _tied_weights_keys = ["decoder.weight"]
 
@@ -1101,7 +1102,11 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The ModernBert Model with a sequence classification head on top that performs pooling.
+    """
+)
 class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
     def __init__(self, config: ModernBertConfig):
         super().__init__(config)
@@ -1221,7 +1226,11 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The ModernBert Model with a token classification head on top, e.g. for Named Entity Recognition (NER) tasks.
+    """
+)
 class ModernBertForTokenClassification(ModernBertPreTrainedModel):
     def __init__(self, config: ModernBertConfig):
         super().__init__(config)

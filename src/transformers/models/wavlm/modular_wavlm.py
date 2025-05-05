@@ -7,10 +7,7 @@ import torch.nn.functional as F
 
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_outputs import (
-    BaseModelOutput,
-    Wav2Vec2BaseModelOutput,
-)
+from ...modeling_outputs import BaseModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ..wav2vec2.modeling_wav2vec2 import (
@@ -523,7 +520,6 @@ class WavLMGumbelVectorQuantizer(nn.Module):
         return codevectors, perplexity
 
 
-@auto_docstring
 class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
     config_class = WavLMConfig
     base_model_prefix = "wavlm"
@@ -575,47 +571,23 @@ class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
         raise AttributeError("Not needed for WavLM")
 
 
-WAVLM_CUSTOM_ARGS_DOCSTRING = r"""
-    input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-        Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-        into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-        soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-        conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
-    attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-        Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-        1]`:
-
-        - 1 for tokens that are **not masked**,
-        - 0 for tokens that are **masked**.
-
-        [What are attention masks?](../glossary#attention-mask)
-
-        <Tip warning={true}>
-
-        `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-        True`. For all models whose processor has `config.return_attention_mask == False`, `attention_mask` should
-        **not** be passed to avoid degraded performance when doing batched inference. For such models
-        `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware that these
-        models also yield slightly different results depending on whether `input_values` is padded or not.
-
-        </Tip>
-"""
-
 WavLMBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
 @auto_docstring
 class WavLMModel(Wav2Vec2Model):
-    @auto_docstring(custom_args=WAVLM_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         return super().forward(**super_kwargs)
 
 
 @auto_docstring(
-    custom_intro="""WavLM Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC)."""
+    custom_intro="""
+    WavLM Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
+    """
 )
 class WavLMForCTC(Wav2Vec2ForCTC):
-    @auto_docstring(custom_args=WAVLM_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         super().forward(**super_kwargs)
 
@@ -627,18 +599,14 @@ class WavLMForCTC(Wav2Vec2ForCTC):
     """
 )
 class WavLMForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    @auto_docstring(custom_args=WAVLM_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         super().forward(**super_kwargs)
 
 
-@auto_docstring(
-    custom_intro="""
-    WavLM Model with a frame classification head on top for tasks like Speaker Diarization.
-    """
-)
+@auto_docstring
 class WavLMForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
-    @auto_docstring(custom_args=WAVLM_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         super().forward(**super_kwargs)
 
@@ -651,7 +619,7 @@ class WavLMForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
 class WavLMForXVector(Wav2Vec2ForXVector):
     pass
 
-    @auto_docstring(custom_args=WAVLM_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         super().forward(**super_kwargs)
 

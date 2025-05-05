@@ -8,16 +8,9 @@ from torch import nn
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_outputs import (
-    BaseModelOutput,
-    Wav2Vec2BaseModelOutput,
-)
+from ...modeling_outputs import BaseModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Adapter,
     Wav2Vec2AdapterLayer,
@@ -39,34 +32,6 @@ from .configuration_wav2vec2_conformer import Wav2Vec2ConformerConfig
 logger = logging.get_logger(__name__)
 
 _HIDDEN_STATES_START_POSITION = 2
-
-WAV2VEC2_CONFORMER_CUSTOM_ARGS_DOCSTRING = r"""
-    input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-        Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-        into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-        soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-        conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
-    attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-        Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-        1]`:
-
-        - 1 for tokens that are **not masked**,
-        - 0 for tokens that are **masked**.
-
-        [What are attention masks?](../glossary#attention-mask)
-
-        <Tip warning={true}>
-
-        `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-        True`. For all models whose processor has `config.return_attention_mask == False`, such as
-        [wav2vec2-conformer-rel-pos-large](https://huggingface.co/facebook/wav2vec2-conformer-rel-pos-large),
-        `attention_mask` should **not** be passed to avoid degraded performance when doing batched inference. For
-        such models `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware
-        that these models also yield slightly different results depending on whether `input_values` is padded or
-        not.
-
-        </Tip>
-"""
 
 
 @dataclass
@@ -689,6 +654,9 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
+WAV2VEC2_CONFORMER_START_DOCSTRING = None  # will be automatically redefined
+
+
 Wav2Vec2ConformerBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
@@ -714,12 +682,16 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel, Wav2Vec2Model):
     def freeze_feature_extractor(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
 
-    @auto_docstring(custom_args=WAV2VEC2_CONFORMER_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         return super().forward(**super_kwargs)
 
 
-@auto_docstring(custom_intro="""Wav2Vec2Conformer Model with a quantizer and `VQ` head on top.""")
+@auto_docstring(
+    custom_intro="""
+    Wav2Vec2Conformer Model with a quantizer and `VQ` head on top.
+    """
+)
 class Wav2Vec2ConformerForPreTraining(Wav2Vec2ForPreTraining):
     def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
@@ -727,16 +699,22 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ForPreTraining):
     def freeze_feature_extractor(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
 
-    @auto_docstring(custom_args=WAV2VEC2_CONFORMER_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs) -> Union[Tuple, Wav2Vec2ConformerForPreTrainingOutput]:
         return super().forward(**super_kwargs)
 
 
 @auto_docstring(
-    custom_intro="""Wav2Vec2Conformer Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC)."""
+    custom_intro="""
+    Wav2Vec2Conformer Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
+    """
 )
 class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
-    def __init__(self, config: Wav2Vec2ConformerConfig, target_lang: Optional[str] = None):
+    def __init__(self, config, target_lang: Optional[str] = None):
+        r"""
+        target_lang (<fill_type>):
+            <fill_docstring>
+        """
         super().__init__(config)
 
     def tie_weights(self):
@@ -748,7 +726,7 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
     def freeze_base_model(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
 
-    @auto_docstring(custom_args=WAV2VEC2_CONFORMER_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         return super().forward(**super_kwargs)
 
@@ -760,30 +738,26 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
     """
 )
 class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    def __init__(self, config: Wav2Vec2ConformerConfig):
+    def __init__(self, config):
         super().__init__(config)
 
     def freeze_feature_extractor(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
 
-    @auto_docstring(custom_args=WAV2VEC2_CONFORMER_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         return super().forward(**super_kwargs)
 
 
-@auto_docstring(
-    custom_intro="""
-    Wav2Vec2Conformer Model with a frame classification head on top for tasks like Speaker Diarization.
-    """
-)
+@auto_docstring
 class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
-    def __init__(self, config: Wav2Vec2ConformerConfig):
+    def __init__(self, config):
         super().__init__(config)
 
     def freeze_feature_extractor(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
 
-    @auto_docstring(custom_args=WAV2VEC2_CONFORMER_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         return super().forward(**super_kwargs)
 
@@ -794,13 +768,13 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ForAudioFrameClassifi
     """
 )
 class Wav2Vec2ConformerForXVector(Wav2Vec2ForXVector):
-    def __init__(self, config: Wav2Vec2ConformerConfig):
+    def __init__(self, config):
         super().__init__(config)
 
     def freeze_feature_extractor(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
 
-    @auto_docstring(custom_args=WAV2VEC2_CONFORMER_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         return super().forward(**super_kwargs)
 

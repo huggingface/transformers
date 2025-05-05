@@ -475,11 +475,11 @@ class DeiTPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class DeiTModel(DeiTPreTrainedModel):
     def __init__(self, config: DeiTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False) -> None:
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state.
-        use_mask_token (`bool`, *optional*, defaults to `False`):
-            Whether to use the mask token.
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
+        use_mask_token (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -699,7 +699,12 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    DeiT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
+    the [CLS] token) e.g. for ImageNet.
+    """
+)
 class DeiTForImageClassification(DeiTPreTrainedModel):
     def __init__(self, config: DeiTConfig) -> None:
         super().__init__(config)

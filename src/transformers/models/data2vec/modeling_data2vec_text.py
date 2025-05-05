@@ -43,6 +43,9 @@ from .configuration_data2vec_text import Data2VecTextConfig
 logger = logging.get_logger(__name__)
 
 
+_HIDDEN_STATES_START_POSITION = 2
+
+
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Data2VecText
 class Data2VecTextForTextEmbeddings(nn.Module):
     """
@@ -594,8 +597,10 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
                 module.weight.data.fill_(1.0)
 
 
-@auto_docstring(
-    custom_intro="""
+@auto_docstring
+class Data2VecTextModel(Data2VecTextPreTrainedModel):
+    """
+
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in *Attention is
     all you need*_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
@@ -606,13 +611,13 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
 
     .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
+
     """
-)
-class Data2VecTextModel(Data2VecTextPreTrainedModel):
-    def __init__(self, config: Data2VecTextConfig, add_pooling_layer=True):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state..
+
+    def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -640,6 +645,7 @@ class Data2VecTextModel(Data2VecTextPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -751,11 +757,15 @@ class Data2VecTextModel(Data2VecTextPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Data2VecText Model with a `language modeling` head on top for CLM fine-tuning.
+    """
+)
 class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
-    def __init__(self, config: Data2VecTextConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -797,6 +807,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+
         Example:
 
         ```python
@@ -871,7 +882,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
 class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
-    def __init__(self, config: Data2VecTextConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         if config.is_decoder:
@@ -983,9 +994,14 @@ class Data2VecTextLMHead(nn.Module):
             self.bias = self.decoder.bias
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Data2VecText Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """
+)
 class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
-    def __init__(self, config: Data2VecTextConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1071,7 +1087,7 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
 
 @auto_docstring
 class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
-    def __init__(self, config: Data2VecTextConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.data2vec_text = Data2VecTextModel(config)
@@ -1096,10 +1112,34 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MultipleChoiceModelOutput]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
+        position_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1152,7 +1192,7 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
 
 @auto_docstring
 class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
-    def __init__(self, config: Data2VecTextConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1247,9 +1287,8 @@ class Data2VecTextClassificationHead(nn.Module):
 
 @auto_docstring
 class Data2VecTextForQuestionAnswering(Data2VecTextPreTrainedModel):
-    def __init__(self, config: Data2VecTextConfig):
+    def __init__(self, config):
         super().__init__(config)
-        self.config = config
         self.num_labels = config.num_labels
 
         self.data2vec_text = Data2VecTextModel(config, add_pooling_layer=False)

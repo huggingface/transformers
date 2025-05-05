@@ -150,7 +150,11 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
         return outputs
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The bare GraniteMoeShared Model outputting raw hidden-states without any specific head on top.
+    """
+)
 class GraniteMoeSharedPreTrainedModel(GraniteMoePreTrainedModel):
     config_class = GraniteMoeSharedConfig
     _no_split_modules = ["GraniteMoeSharedDecoderLayer"]
@@ -165,7 +169,6 @@ class GraniteMoeSharedModel(GraniteMoeModel):
         )
 
 
-@auto_docstring
 class GraniteMoeSharedForCausalLM(GraniteMoeForCausalLM):
     _tied_weights_keys = ["lm_head.weight"]
 

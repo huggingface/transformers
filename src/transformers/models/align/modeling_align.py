@@ -31,11 +31,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_align import AlignConfig, AlignTextConfig, AlignVisionConfig
 
 
@@ -1027,12 +1023,8 @@ class AlignTextPooler(nn.Module):
         return pooled_output
 
 
+@auto_docstring
 class AlignPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = AlignConfig
     base_model_prefix = "align"
     supports_gradient_checkpointing = True
@@ -1056,15 +1048,19 @@ class AlignPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The text model from ALIGN without any head or projection on top.
+    """
+)
 class AlignTextModel(AlignPreTrainedModel):
     config_class = AlignTextConfig
     _no_split_modules = ["AlignTextEmbeddings"]
 
     def __init__(self, config: AlignTextConfig, add_pooling_layer: bool = True):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state.
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -1097,7 +1093,7 @@ class AlignTextModel(AlignPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
-        Example:
+        Examples:
 
         ```python
         >>> from transformers import AutoTokenizer, AlignTextModel
@@ -1181,7 +1177,11 @@ class AlignTextModel(AlignPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The vision model from ALIGN without any head or projection on top.
+    """
+)
 class AlignVisionModel(AlignPreTrainedModel):
     config_class = AlignVisionConfig
     main_input_name = "pixel_values"
@@ -1215,7 +1215,7 @@ class AlignVisionModel(AlignPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
         r"""
-        Example:
+        Examples:
 
         ```python
         >>> from PIL import Image
@@ -1312,6 +1312,10 @@ class AlignModel(AlignPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
+        Returns:
+            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
+            applying the projection layer to the pooled output of [`AlignTextModel`].
+
         Examples:
 
         ```python
@@ -1355,6 +1359,10 @@ class AlignModel(AlignPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
+        Returns:
+            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
+            applying the projection layer to the pooled output of [`AlignVisionModel`].
+
         Examples:
 
         ```python
@@ -1404,9 +1412,8 @@ class AlignModel(AlignPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, AlignOutput]:
         r"""
-        Args:
-            return_loss (`bool`, *optional*):
-                Whether or not to return the contrastive loss.
+        return_loss (<fill_type>):
+            <fill_docstring>
 
         Examples:
 

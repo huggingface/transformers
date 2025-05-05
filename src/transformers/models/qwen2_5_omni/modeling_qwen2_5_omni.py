@@ -806,30 +806,13 @@ class SinusoidsPositionEmbedding(nn.Module):
         return self.positional_embedding[:seqlen, :]
 
 
-QWEN_OMNI_AUDIO_INPUTS = r"""
-        Args:
-            input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
-                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-
-            feature_lens: [B], torch.LongTensor , mel length
-
-            aftercnn_lens : [B], torch.LongTensor , mel length after cnn
-        """
-
-
-class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
-    """
+@auto_docstring(
+    custom_intro="""
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     [`Qwen2_5OmniAudioEncoderLayer`].
-
-    Args:
-        config: Qwen2_5OmniAudioEncoderConfig
     """
-
+)
+class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
     config_class = Qwen2_5OmniAudioEncoderConfig
     main_input_name = "input_features"
     _no_split_modules = ["Qwen2_5OmniAudioEncoderLayer"]
@@ -875,37 +858,17 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         aftercnn_lens=None,
     ):
         r"""
-        input_features (`<fill_type>`):
-            <fill_description>
-        feature_lens (`<fill_type>`):
-            <fill_description>
-        aftercnn_lens (`<fill_type>`):
-            <fill_description>
-
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoImageProcessor, AutoBackbone
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
-        >>> model = AutoBackbone.from_pretrained(
-        ...     "OpenGVLab/pvt_v2_b0", out_features=["stage1", "stage2", "stage3", "stage4"]
-        ... )
-
-        >>> inputs = processor(image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> feature_maps = outputs.feature_maps
-        >>> list(feature_maps[-1].shape)
-        [1, 256, 7, 7]
-        ```"""
+        input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
+            Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
+            `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+            and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+        feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
+            mel length
+        aftercnn_lens (`torch.LongTensor` of shape `(batch_size,)`):
+            mel length after cnn
+        """
         chunk_num = torch.ceil(feature_lens / (self.n_window * 2)).long()
 
         chunk_lengths = torch.tensor(
@@ -1915,6 +1878,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2187,19 +2151,17 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
         return causal_mask
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Qwen2.5OmniThinker model which consists of a audio backbone and a language model.
+    """
+)
 class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
     config_class = Qwen2_5OmniThinkerConfig
     base_model_prefix = "thinker"
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
 
     def __init__(self, config: Qwen2_5OmniThinkerConfig):
-        r"""
-        use_audio_in_video (`bool`, *optional*):
-            <fill_description>
-        video_second_per_grid (`torch.LongTensor`, *optional*):
-            <fill_description>
-        """
         super().__init__(config)
         self.audio_tower = Qwen2_5OmniAudioEncoder._from_config(
             config.audio_config, attn_implementation=config._attn_implementation
@@ -2251,17 +2213,13 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         video_second_per_grid: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, Qwen2_5OmniThinkerCausalLMOutputWithPast]:
         r"""
-        use_audio_in_video (`bool`, *optional*):
-            <fill_description>
-        video_second_per_grid (`torch.LongTensor`, *optional*):
-            <fill_description>
         input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, feature_sequence_length)`):
             Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
             loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
             the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
             tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-        pixel_values_videos (`torch.FloatTensor`, *optional*):
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size), *optional*):
             The tensors corresponding to the input videos. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([]`NewTaskModelProcessor`] uses
             [`SiglipImageProcessor`] for processing videos).
@@ -2282,7 +2240,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
+        use_audio_in_video (<fill_type>):
+            <fill_docstring>
+        video_second_per_grid (<fill_type>):
+            <fill_docstring>
 
         Example:
 
@@ -2564,6 +2525,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2841,16 +2803,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
     base_model_prefix = "talker"
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
-        r"""
-        thinker_reply_part (`torch.FloatTensor`, *optional*):
-            <fill_description>
-        input_text_ids (`torch.LongTensor`, *optional*):
-            <fill_description>
-        use_audio_in_video (`bool`, *optional*):
-            <fill_description>
-        video_second_per_grid (`torch.LongTensor`, *optional*):
-            <fill_description>
-        """
         super().__init__(config)
 
         self.thinker_to_talker_proj = nn.Linear(config.embedding_size, config.hidden_size)
@@ -2874,16 +2826,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         self.post_init()
 
     def get_input_embeddings(self):
-        r"""
-        thinker_reply_part (`torch.FloatTensor`, *optional*):
-            <fill_description>
-        input_text_ids (`torch.LongTensor`, *optional*):
-            <fill_description>
-        use_audio_in_video (`bool`, *optional*):
-            <fill_description>
-        video_second_per_grid (`torch.LongTensor`, *optional*):
-            <fill_description>
-        """
         return self.model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
@@ -2920,6 +2862,14 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
             The temporal, height and width of feature shape of each video in LLM.
         audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
             The length of feature shape of each audio in LLM.
+        thinker_reply_part (<fill_type>):
+            <fill_docstring>
+        input_text_ids (<fill_type>):
+            <fill_docstring>
+        use_audio_in_video (<fill_type>):
+            <fill_docstring>
+        video_second_per_grid (<fill_type>):
+            <fill_docstring>
 
         Example:
 
@@ -3947,7 +3897,11 @@ class AMPBlock(torch.nn.Module):
         return hidden_states
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The full Qwen2.5Omni Token2WavBigVGAN model. Which take mel spectrogram as input and predict waveform.
+    """
+)
 class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
     config_class = Qwen2_5OmniBigVGANConfig
 
@@ -4078,7 +4032,11 @@ class RungeKutta4ODESolver:
         return solution
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The full Qwen2.5Omni Token2WavDiT model. Which take speech tokens as input and predict mel spectrogram.
+    """
+)
 class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
     config_class = Qwen2_5OmniDiTConfig
     _no_split_modules = ["DiTDecoderLayer"]
@@ -4229,7 +4187,11 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         return generated_mel_spectrogram
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The full Qwen2.5Omni Token2Wav model. Consists a DiT model take speech tokens as input and predict mel spectrogram and a BigVGAN vocoder take mel spectrogram as input and predict waveform.
+    """
+)
 class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
     config_class = Qwen2_5OmniToken2WavConfig
     base_model_prefix = "model"
@@ -4287,7 +4249,17 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
 ############################
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The full Qwen2.5Omni model, a multimodal model composed of 3 sub-models:
+    - [`Qwen2_5OmniThinkerForConditionalGeneration`]:
+    a causal auto-regressive transformer takes text, audio, image, video as input and predict text tokens.
+    - [`Qwen2_5OmniTalkerForConditionalGeneration`]:
+    a causal auto-regressive transformer takes thinker hidden states and response as input and predict speech tokens.
+    - [`Qwen2_5OmniToken2WavModel`]:
+    a DiT model take speech tokens as input and predict mel spectrogram and a BigVGAN vocoder take mel spectrogram as input and predict waveform.
+    """
+)
 class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, GenerationMixin):
     config_class = Qwen2_5OmniConfig
     _no_split_modules = [

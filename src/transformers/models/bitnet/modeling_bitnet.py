@@ -247,7 +247,6 @@ class BitNetDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = BitNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = BitNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -606,7 +605,7 @@ class BitNetForCausalLM(BitNetPreTrainedModel, GenerationMixin):
     _tp_plan = None
     _pp_plan = None
 
-    def __init__(self, config: BitNetConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.model = BitNetModel(config)
         self.vocab_size = config.vocab_size
@@ -633,7 +632,6 @@ class BitNetForCausalLM(BitNetPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -651,11 +649,10 @@ class BitNetForCausalLM(BitNetPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> CausalLMOutputWithPast:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, transformers.,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, transformers., config.vocab_size]`.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, transformers.,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, transformers., config.vocab_size]`.
 
         Example:
 

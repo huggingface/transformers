@@ -645,8 +645,8 @@ class MobileViTPreTrainedModel(PreTrainedModel):
 class MobileViTModel(MobileViTPreTrainedModel):
     def __init__(self, config: MobileViTConfig, expand_output: bool = True):
         r"""
-        expand_output (`bool`, defaults to `True`):
-            <fill_description>
+        expand_output (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -726,7 +726,12 @@ class MobileViTModel(MobileViTPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    MobileViT model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    ImageNet.
+    """
+)
 class MobileViTForImageClassification(MobileViTPreTrainedModel):
     def __init__(self, config: MobileViTConfig) -> None:
         super().__init__(config)
@@ -910,7 +915,11 @@ class MobileViTDeepLabV3(nn.Module):
         return features
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    MobileViT model with a semantic segmentation head on top, e.g. for Pascal VOC.
+    """
+)
 class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
     def __init__(self, config: MobileViTConfig) -> None:
         super().__init__(config)

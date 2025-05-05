@@ -34,7 +34,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
-from ...utils import auto_docstring, logging, torch_float
+from ...utils import (
+    auto_docstring,
+    logging,
+    torch_float,
+)
 from .configuration_imagegpt import ImageGPTConfig
 
 

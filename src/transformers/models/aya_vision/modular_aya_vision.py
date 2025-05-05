@@ -26,16 +26,11 @@ from transformers.models.llava.modeling_llava import (
 )
 
 from ...activations import ACT2FN
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_aya_vision import AyaVisionConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "AyaVisionConfig"
 
 
 class AyaVisionMultiModalProjector(nn.Module):
@@ -88,7 +83,11 @@ class AyaVisionMultiModalProjector(nn.Module):
         return image_features
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The bare Aya Vision Model outputting raw hidden-states without any specific head on top.
+    """
+)
 class AyaVisionPreTrainedModel(LlavaPreTrainedModel):
     _supports_quantized_cache = False
     _supports_static_cache = False
@@ -113,7 +112,11 @@ class AyaVisionCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The AyaVision model which consists of a vision backbone and a language model.
+    """
+)
 class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
     def tie_weights(self):
         return self.language_model.tie_weights()
@@ -125,6 +128,7 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -146,6 +150,11 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         **lm_kwargs,
     ) -> Union[Tuple, AyaVisionCausalLMOutputWithPast]:
         r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
         Example:
 
         ```python

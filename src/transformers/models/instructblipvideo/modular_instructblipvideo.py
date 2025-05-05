@@ -209,25 +209,6 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         use_cache: Optional[bool] = None,
     ) -> Union[Tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         r"""
-        Args:
-            qformer_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Indices of input sequence tokens in the vocabulary of the Q-Former. Input tokens can optionally be provided
-                to serve as text prompt, which the Q-Former model will encode.
-
-                Indices can be obtained using [`InstructBlipProcessor`]. See [`InstructBlipProcessor.__call__`] for
-                details.
-
-                [What are input IDs?](../glossary#input-ids)
-            qformer_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-
-        Example:
-
         ```python
         >>> from transformers import InstructBlipVideoProcessor, InstructBlipVideoForConditionalGeneration
         >>> import torch

@@ -27,11 +27,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_focalnet import FocalNetConfig
 
@@ -637,12 +633,12 @@ class FocalNetPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class FocalNetModel(FocalNetPreTrainedModel):
-    def __init__(self, config: FocalNetConfig, add_pooling_layer=True, use_mask_token=False):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state.
-        use_mask_token (`bool`, *optional*, defaults to `False`):
-            Whether to use a mask token.
+    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
+        use_mask_token (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -726,7 +722,7 @@ class FocalNetModel(FocalNetPreTrainedModel):
     """
 )
 class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
-    def __init__(self, config: FocalNetConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.focalnet = FocalNetModel(config, add_pooling_layer=False, use_mask_token=True)
@@ -823,10 +819,15 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    FocalNet Model with an image classification head on top (a linear layer on top of the pooled output) e.g. for
+    ImageNet.
+    """
+)
 class FocalNetForImageClassification(FocalNetPreTrainedModel):
     # Copied from transformers.models.swin.modeling_swin.SwinForImageClassification.__init__ with Swin->FocalNet, swin->focalnet
-    def __init__(self, config: FocalNetConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels

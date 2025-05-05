@@ -84,7 +84,11 @@ class AyaVisionMultiModalProjector(nn.Module):
         return image_features
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The bare Aya Vision Model outputting raw hidden-states without any specific head on top.
+    """
+)
 class AyaVisionPreTrainedModel(PreTrainedModel):
     config_class = AyaVisionConfig
     base_model_prefix = "model"
@@ -153,7 +157,11 @@ class AyaVisionCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The AyaVision model which consists of a vision backbone and a language model.
+    """
+)
 class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixin):
     def __init__(self, config: AyaVisionConfig):
         super().__init__(config)
@@ -256,9 +264,12 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
         **lm_kwargs,
     ) -> Union[Tuple, AyaVisionCausalLMOutputWithPast]:
         r"""
-        Example:
-        Example:
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
+        Example:
 
         ```python
         >>> from transformers import AutoProcessor, AyaVisionForConditionalGeneration

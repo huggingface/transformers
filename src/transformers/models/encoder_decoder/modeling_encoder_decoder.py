@@ -36,6 +36,8 @@ from .configuration_encoder_decoder import EncoderDecoderConfig
 
 
 logger = logging.get_logger(__name__)
+
+
 DEPRECATION_WARNING = (
     "Version v4.12.0 introduces a better way to train encoder-decoder models by computing the loss inside the"
     " encoder-decoder framework rather than in the decoder itself. You may observe training discrepancies if"
@@ -62,29 +64,15 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     return shifted_input_ids
 
 
-@auto_docstring(
-    custom_intro="""
-    This class can be used to initialize a sequence-to-sequence model with any pretrained autoencoding model as the
-    encoder and any pretrained autoregressive model as the decoder. The encoder is loaded via
-    [`~AutoModel.from_pretrained`] function and the decoder is loaded via [`~AutoModelForCausalLM.from_pretrained`]
-    function. Cross-attention layers are automatically added to the decoder and should be fine-tuned on a downstream
-    generative task, like summarization.
-
-    The effectiveness of initializing sequence-to-sequence models with pretrained checkpoints for sequence generation
-    tasks was shown in [Leveraging Pre-trained Checkpoints for Sequence Generation
-    Tasks](https://arxiv.org/abs/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn. Michael Matena, Yanqi
-    Zhou, Wei Li, Peter J. Liu.
-
-    After such an Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other models
-    (see the examples for more information).
-
+@auto_docstring
+class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
+    r"""
     [`EncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture with one
     of the base model classes of the library as encoder and another one as decoder when created with the
     :meth*~transformers.AutoModel.from_pretrained* class method for the encoder and
     :meth*~transformers.AutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
-)
-class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
+
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"
@@ -99,11 +87,11 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         encoder: Optional[PreTrainedModel] = None,
         decoder: Optional[PreTrainedModel] = None,
     ):
-        """
-        encoder (`PreTrainedModel`, *optional*):
-            An encoder model.
-        decoder (`PreTrainedModel`, *optional*):
-            A decoder model.
+        r"""
+        encoder (<fill_type>):
+            <fill_docstring>
+        decoder (<fill_type>):
+            <fill_docstring>
         """
         if config is None and (encoder is None or decoder is None):
             raise ValueError("Either a configuration or an encoder and a decoder has to be provided.")
@@ -476,6 +464,31 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> Union[Tuple, Seq2SeqLMOutput]:
         r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`PreTrainedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+
+            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
+
+            For training, `decoder_input_ids` are automatically created by the model by shifting the `labels` to the
+            right, replacing -100 by the `pad_token_id` and prepending them with the `decoder_start_token_id`.
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
+            representation. This is useful if you want more control over how to convert `decoder_input_ids` indices
+            into associated vectors than the model's internal embedding lookup matrix.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss for the decoder. Indices should be in `[-100, 0,
+            ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+
         Examples:
 
         ```python

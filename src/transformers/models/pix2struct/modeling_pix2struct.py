@@ -1020,7 +1020,11 @@ class Pix2StructTextBlock(nn.Module):
         return outputs
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The standalone text decoder of Pix2Struct
+    """
+)
 class Pix2StructTextModel(Pix2StructPreTrainedModel):
     config_class = Pix2StructTextConfig
     _no_split_modules = ["Pix2StructTextBlock"]
@@ -1120,7 +1124,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
             To know more on how to prepare `input_ids` for pretraining take a look a [Pix2StructText
             Training](./t5#training).
-        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)`, *optional*):
+        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
             `[0, 1]`:
 
@@ -1467,7 +1471,11 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         return causal_mask
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    A conditional generation model with a language modeling head. Can be used for sequence generation tasks.
+    """
+)
 class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMixin):
     config_class = Pix2StructConfig
     main_input_name = "flattened_patches"
@@ -1542,6 +1550,23 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
 
             To know more on how to prepare `decoder_input_ids` for pretraining take a look at [Pix2StructText
             Training](./t5#training).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
+            `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss for the decoder.
 
         Example:
 

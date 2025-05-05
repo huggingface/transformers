@@ -25,27 +25,14 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
-from ...generation import (
-    GenerationConfig,
-    GenerationMixin,
-)
+from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    ModelOutput,
-    Seq2SeqLMOutput,
-)
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput, Seq2SeqLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import (
-    auto_docstring,
-    is_torch_flex_attn_available,
-    is_torchdynamo_compiling,
-    logging,
-)
+from ...utils import auto_docstring, is_torch_flex_attn_available, is_torchdynamo_compiling, logging
 from ..auto.modeling_auto import AutoModel
 from .configuration_moshi import MoshiConfig, MoshiDepthConfig
 
@@ -1256,13 +1243,6 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class MoshiModel(MoshiPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MoshiDecoderLayer`]
-
-    Args:
-        config: MoshiConfig
-    """
-
     def __init__(self, config: MoshiConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1567,12 +1547,16 @@ class MoshiModel(MoshiPreTrainedModel):
         return causal_mask
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Moshi decoder model with a text language modelling head on top. Only usable for text.
+    """
+)
 class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
 
     # Copied from transformers.models.gemma.modeling_gemma.GemmaForCausalLM.__init__ with Gemma->Moshi
-    def __init__(self, config: MoshiConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.model = MoshiModel(config)
         self.vocab_size = config.vocab_size
@@ -1703,7 +1687,11 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The original Moshi model with an audio encoder, a Moshi depth decoder and a Moshi decoder, for speech-to-speech.
+    """
+)
 class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["decoder.model.embed_tokens.weight", "decoder.lm_head.weight"]
     config_class = MoshiConfig
@@ -1755,17 +1743,22 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> Union[Tuple, Seq2SeqLMOutput]:
         r"""
-        user_input_values (`torch.Tensor`, *optional*):
+        user_input_values (`torch.Tensor `of shape `(batch_size, 1, audio_sequence_length), *optional*):
             The audio waveforms used as audio user prompt for the generation.
-        user_audio_codes (`torch.Tensor`, *optional*):
+        user_audio_codes (`torch.Tensor `of shape `(batch_size, num_codebooks, sequence_length), *optional*):
             The audio codes used as audio user prompt for the generation. Has priority over `user_input_values` and represents the audio "tokens" of `user_input_values` once passed through the audio encoder.
-        moshi_input_values (`torch.Tensor`, *optional*):
+        moshi_input_values (`torch.Tensor `of shape `(batch_size, 1, audio_sequence_length), *optional*):
             The audio waveforms used as audio Moshi prompt for the generation.
-        moshi_audio_codes (`torch.Tensor`, *optional*):
+        moshi_audio_codes (`torch.Tensor `of shape `(batch_size, num_codebooks, sequence_length), *optional*):
             The audio codes used as audio Moshi prompt for the generation. Has priority over `moshi_input_values` and represents the audio "tokens" of `moshi_input_values` once passed through the audio encoder.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `inputs_embeds` have to be
+            input (see `past_key_values`). This is useful if you want more control over how to convert
+            `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+
+            If `input_ids` and `inputs_embeds` are both unset, `inputs_embeds` takes the value
+            of `inputs_embeds`.
         text_labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for text language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`

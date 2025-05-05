@@ -1086,12 +1086,12 @@ class ProphetNetDecoderLayer(nn.Module):
 @auto_docstring(
     custom_intro="""
     The standalone encoder part of the ProphetNetModel.
-    """,
+    """
 )
 class ProphetNetEncoder(ProphetNetPreTrainedModel):
     def __init__(self, config: ProphetNetConfig, word_embeddings: nn.Embedding = None):
-        """
-        word_embeddings  (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
+        r"""
+        word_embeddings (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
             The word embedding parameters. This can be used to initialize [`ProphetNetEncoder`] with pre-defined word
             embeddings instead of randomly initialized word embeddings.
         """
@@ -1129,7 +1129,6 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
-
         Example:
 
         ```python
@@ -1215,18 +1214,17 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         )
 
 
-@auto_docstring
-class ProphetNetDecoder(ProphetNetPreTrainedModel):
-    r"""
-    word_embeddings  (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
-        The word embedding parameters. This can be used to initialize [`ProphetNetEncoder`] with pre-defined word
-        embeddings instead of randomly initialized word embeddings.
+@auto_docstring(
+    custom_intro="""
+    The standalone decoder part of the ProphetNetModel.
     """
-
+)
+class ProphetNetDecoder(ProphetNetPreTrainedModel):
     def __init__(self, config: ProphetNetConfig, word_embeddings: Optional[nn.Embedding] = None):
         r"""
-        word_embeddings (`torch.nn.modules.sparse.Embedding`, *optional*):
-            <fill_description>
+        word_embeddings (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
+            The word embedding parameters. This can be used to initialize [`ProphetNetEncoder`] with pre-defined word
+            embeddings instead of randomly initialized word embeddings.
         """
         super().__init__(config)
 
@@ -1633,6 +1631,14 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             ProphetNet uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If
             `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
 
         Example:
 
@@ -1702,7 +1708,11 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The ProphetNet Model with a language modeling head. Can be used for sequence generation tasks.
+    """
+)
 class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight", "lm_head.weight"]
 
@@ -1765,6 +1775,11 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
             config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for
@@ -1897,7 +1912,11 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
         return self.prophetnet.decoder
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The standalone decoder part of the ProphetNetModel with a lm head on top. The model can be used for causal
+    """
+)
 class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = [
         "prophetnet.word_embeddings.weight",

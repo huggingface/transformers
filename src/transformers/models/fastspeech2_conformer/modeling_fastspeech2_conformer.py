@@ -34,29 +34,6 @@ from .configuration_fastspeech2_conformer import (
 logger = logging.get_logger(__name__)
 
 
-FASTSPEECH2_CONFORMER_CUSTOM_ARGS_DOCSTRING = r"""
-    input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-        Input sequence of text vectors.
-    attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*, defaults to `None`):
-        Mask to avoid performing convolution and attention on padding token indices. Mask values selected in
-        `[0, 1]`: 0 for tokens that are **masked**, 1 for tokens that are **not masked**.
-    spectrogram_labels (`torch.FloatTensor` of shape `(batch_size, max_spectrogram_length, num_mel_bins)`, *optional*, defaults to `None`):
-        Batch of padded target features.
-    duration_labels (`torch.LongTensor` of shape `(batch_size, sequence_length + 1)`, *optional*, defaults to `None`):
-        Batch of padded durations.
-    pitch_labels (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*, defaults to `None`):
-        Batch of padded token-averaged pitch.
-    energy_labels (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*, defaults to `None`):
-        Batch of padded token-averaged energy.
-    speaker_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*, defaults to `None`):
-        Speaker ids used to condition features of speech output by the model.
-    lang_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*, defaults to `None`):
-        Language ids used to condition features of speech output by the model.
-    speaker_embedding (`torch.FloatTensor` of shape `(batch_size, embedding_dim)`, *optional*, defaults to `None`):
-        Embedding containing conditioning signals for the features of the speech.
-    """
-
-
 @dataclass
 class FastSpeech2ConformerModelOutput(ModelOutput):
     """
@@ -1061,6 +1038,11 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
+    FastSpeech2Conformer Model.
+    """
+)
+class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
+    """
     FastSpeech 2 module.
 
     This is a module of FastSpeech 2 described in 'FastSpeech 2: Fast and High-Quality End-to-End Text to Speech'
@@ -1068,8 +1050,7 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
     FastPitch: Parallel Text-to-speech with Pitch Prediction. The encoder and decoder are Conformers instead of regular
     Transformers.
     """
-)
-class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
+
     def __init__(self, config: FastSpeech2ConformerConfig):
         super().__init__(config)
         self.config = config
@@ -1137,7 +1118,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
 
         self.post_init()
 
-    @auto_docstring(custom_args=FASTSPEECH2_CONFORMER_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -1153,7 +1134,24 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Union[Tuple, FastSpeech2ConformerModelOutput]:
-        """
+        r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Input sequence of text vectors.
+        spectrogram_labels (`torch.FloatTensor` of shape `(batch_size, max_spectrogram_length, num_mel_bins)`, *optional*, defaults to `None`):
+            Batch of padded target features.
+        duration_labels (`torch.LongTensor` of shape `(batch_size, sequence_length + 1)`, *optional*, defaults to `None`):
+            Batch of padded durations.
+        pitch_labels (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*, defaults to `None`):
+            Batch of padded token-averaged pitch.
+        energy_labels (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*, defaults to `None`):
+            Batch of padded token-averaged energy.
+        speaker_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*, defaults to `None`):
+            Speaker ids used to condition features of speech output by the model.
+        lang_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*, defaults to `None`):
+            Language ids used to condition features of speech output by the model.
+        speaker_embedding (`torch.FloatTensor` of shape `(batch_size, embedding_dim)`, *optional*, defaults to `None`):
+            Embedding containing conditioning signals for the features of the speech.
+
         Example:
 
         ```python
@@ -1375,7 +1373,12 @@ class HifiGanResidualBlock(nn.Module):
         return hidden_states
 
 
-@auto_docstring(custom_intro="""HiFi-GAN vocoder.""")
+@auto_docstring(
+    custom_intro="""
+    HiFi-GAN vocoder.
+    """
+)
+# Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan with SpeechT5->FastSpeech2Conformer
 class FastSpeech2ConformerHifiGan(PreTrainedModel):
     config_class = FastSpeech2ConformerHifiGanConfig
     main_input_name = "spectrogram"
@@ -1445,15 +1448,12 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
             layer.remove_weight_norm()
         nn.utils.remove_weight_norm(self.conv_post)
 
-    @auto_docstring(
-        custom_intro="""
+    def forward(self, spectrogram: torch.FloatTensor) -> torch.FloatTensor:
+        r"""
         Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch
         of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a single, un-batched speech
         waveform.
-        """
-    )
-    def forward(self, spectrogram: torch.FloatTensor) -> torch.FloatTensor:
-        r"""
+
         Args:
             spectrogram (`torch.FloatTensor`):
                 Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
@@ -1512,7 +1512,7 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
 
         self.config = config
 
-    @auto_docstring(custom_args=FASTSPEECH2_CONFORMER_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -1528,7 +1528,24 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Union[Tuple, FastSpeech2ConformerModelOutput]:
-        """
+        r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Input sequence of text vectors.
+        spectrogram_labels (`torch.FloatTensor` of shape `(batch_size, max_spectrogram_length, num_mel_bins)`, *optional*, defaults to `None`):
+            Batch of padded target features.
+        duration_labels (`torch.LongTensor` of shape `(batch_size, sequence_length + 1)`, *optional*, defaults to `None`):
+            Batch of padded durations.
+        pitch_labels (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*, defaults to `None`):
+            Batch of padded token-averaged pitch.
+        energy_labels (`torch.FloatTensor` of shape `(batch_size, sequence_length + 1, 1)`, *optional*, defaults to `None`):
+            Batch of padded token-averaged energy.
+        speaker_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*, defaults to `None`):
+            Speaker ids used to condition features of speech output by the model.
+        lang_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*, defaults to `None`):
+            Language ids used to condition features of speech output by the model.
+        speaker_embedding (`torch.FloatTensor` of shape `(batch_size, embedding_dim)`, *optional*, defaults to `None`):
+            Embedding containing conditioning signals for the features of the speech.
+
         Example:
 
         ```python

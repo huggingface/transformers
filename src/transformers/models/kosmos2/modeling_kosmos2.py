@@ -32,7 +32,12 @@ from ...modeling_outputs import (
     CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging, torch_int
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    logging,
+    torch_int,
+)
 from .configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2VisionConfig
 
 
@@ -1354,15 +1359,6 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
             1]`:
@@ -1374,13 +1370,8 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor` of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-
+        image_embeds (<fill_type>):
+            <fill_docstring>
         """
         return self.model(
             input_ids=input_ids,
@@ -1453,17 +1444,6 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
-        image_embeds (`torch.Tensor`, *optional*):
-            <fill_description>
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-            image_embeds: (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
             1]`:
@@ -1475,16 +1455,12 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor` of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-
+            ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        image_embeds (<fill_type>):
+            <fill_docstring>
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1657,10 +1633,6 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         return self.text_model.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        r"""
-        image_embeds (`torch.Tensor`, *optional*):
-            <fill_description>
-        """
         self.text_model.model.embed_tokens = value
 
     @auto_docstring
@@ -1682,23 +1654,14 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Kosmos2ModelOutput]:
         r"""
-        image_embeds (`torch.Tensor`, *optional*):
-            <fill_description>
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
             1]`:
 
             - 1 for places where to put the image features,
             - 0 for places that are not for image features (i.e. for text tokens).
-        past_key_values (`tuple(tuple(torch.FloatTensor` of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            image_embeds: (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
-
+        image_embeds (<fill_type>):
+            <fill_docstring>
 
         Examples:
 
@@ -1814,17 +1777,9 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         self.text_model.model.embed_tokens = value
 
     def get_output_embeddings(self) -> nn.Module:
-        r"""
-        image_embeds (`torch.Tensor`, *optional*):
-            <fill_description>
-        """
         return self.text_model.get_output_embeddings()
 
     def set_output_embeddings(self, new_embeddings):
-        r"""
-        image_embeds (`torch.Tensor`, *optional*):
-            <fill_description>
-        """
         self.text_model.set_output_embeddings(new_embeddings)
 
     @auto_docstring
@@ -1846,26 +1801,18 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Kosmos2ForConditionalGenerationModelOutput]:
         r"""
-        image_embeds (`torch.Tensor`, *optional*):
-            <fill_description>
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
             1]`:
 
             - 1 for places where to put the image features,
             - 0 for places that are not for image features (i.e. for text tokens).
-        past_key_values (`tuple(tuple(torch.FloatTensor` of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            image_embeds: (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-
+            ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        image_embeds (<fill_type>):
+            <fill_docstring>
 
         Examples:
 

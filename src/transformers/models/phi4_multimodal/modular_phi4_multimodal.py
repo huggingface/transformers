@@ -533,7 +533,6 @@ class Phi4MultimodalVisionEncoder(SiglipEncoder):
         )
 
 
-@auto_docstring
 class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
     config_class = Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
@@ -1530,7 +1529,7 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
             the Processor).
         audio_embed_sizes (`torch.Tensor`, *optional*):
             Size of the audio inputs.
-        audio_attention_mask (`torch.Tensor`, *optional*):
+        audio_attention_mask (`torch.Tensor, *optional*):
             Attention mask for the audio inputs.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1624,7 +1623,7 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
 class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config: Phi4MultimodalConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.model = Phi4MultimodalModel(config)
         self.vocab_size = config.vocab_size
@@ -1669,7 +1668,7 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM, nn.Module):
             the Processor).
         audio_embed_sizes (`torch.Tensor`, *optional*):
             Size of the audio inputs.
-        audio_attention_mask (`torch.Tensor`, *optional*):
+        audio_attention_mask (`torch.Tensor, *optional*):
             Attention mask for the audio inputs.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

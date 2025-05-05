@@ -31,12 +31,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
 
 
@@ -1556,12 +1551,8 @@ class ClapTextPooler(nn.Module):
         return pooled_output
 
 
+@auto_docstring
 class ClapPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = ClapConfig
     base_model_prefix = "clap"
     supports_gradient_checkpointing = False
@@ -1589,7 +1580,6 @@ class ClapPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
 
-@auto_docstring
 class ClapAudioModel(ClapPreTrainedModel):
     config_class = ClapAudioConfig
     main_input_name = "input_features"
@@ -1669,10 +1659,10 @@ class ClapAudioModel(ClapPreTrainedModel):
 class ClapTextModel(ClapPreTrainedModel):
     config_class = ClapTextConfig
 
-    def __init__(self, config: ClapTextConfig, add_pooling_layer=True):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state.
+    def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -1957,11 +1947,10 @@ class ClapModel(ClapPreTrainedModel):
         input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Input audio features. This should be returned by the [`ClapFeatureExtractor`] class that you can also
             retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
-        is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
-            Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
-            the features.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
+        is_longer (<fill_type>):
+            <fill_docstring>
 
         Examples:
 
@@ -2044,11 +2033,7 @@ class ClapModel(ClapPreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    CLAP Text Model with a projection layer on top (a linear layer on top of the pooled output).
-    """
-)
+@auto_docstring
 class ClapTextModelWithProjection(ClapPreTrainedModel):
     config_class = ClapTextConfig
 
@@ -2116,11 +2101,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    CLAP Audio Model with a projection layer on top (a linear layer on top of the pooled output).
-    """
-)
+@auto_docstring
 class ClapAudioModelWithProjection(ClapPreTrainedModel):
     config_class = ClapAudioConfig
     main_input_name = "input_features"

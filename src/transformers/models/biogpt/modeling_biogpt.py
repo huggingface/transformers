@@ -439,12 +439,8 @@ class BioGptDecoderLayer(nn.Module):
         return outputs
 
 
+@auto_docstring
 class BioGptPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = BioGptConfig
     base_model_prefix = "biogpt"
     supports_gradient_checkpointing = True
@@ -640,11 +636,15 @@ class BioGptModel(BioGptPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    BioGPT Model with a `language modeling` head on top for CLM fine-tuning.
+    """
+)
 class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["output_projection.weight"]
 
-    def __init__(self, config: BioGptConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.biogpt = BioGptModel(config)
@@ -731,7 +731,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class BioGptForTokenClassification(BioGptPreTrainedModel):
-    def __init__(self, config: BioGptConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 

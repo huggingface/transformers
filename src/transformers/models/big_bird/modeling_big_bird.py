@@ -38,15 +38,12 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_big_bird import BigBirdConfig
 
 
 logger = logging.get_logger(__name__)
+
 
 _TRIVIA_QA_MAPPING = {
     "big_bird_attention": "attention/self",
@@ -1736,12 +1733,8 @@ class BigBirdPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+@auto_docstring
 class BigBirdPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = BigBirdConfig
     load_tf_weights = load_tf_weights_in_big_bird
     base_model_prefix = "bert"
@@ -1835,8 +1828,10 @@ class BigBirdForQuestionAnsweringModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-@auto_docstring(
-    custom_intro="""
+@auto_docstring
+class BigBirdModel(BigBirdPreTrainedModel):
+    """
+
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in [Attention is
     all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
@@ -1846,12 +1841,11 @@ class BigBirdForQuestionAnsweringModelOutput(ModelOutput):
     to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
-)
-class BigBirdModel(BigBirdPreTrainedModel):
-    def __init__(self, config: BigBirdConfig, add_pooling_layer=True):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state.
+
+    def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.attention_type = self.config.attention_type
@@ -2155,11 +2149,10 @@ class BigBirdModel(BigBirdPreTrainedModel):
         return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
 
 
-@auto_docstring
 class BigBirdForPreTraining(BigBirdPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
-    def __init__(self, config: BigBirdConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.bert = BigBirdModel(config, add_pooling_layer=True)
@@ -2191,6 +2184,10 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[BigBirdForPreTrainingOutput, Tuple[torch.FloatTensor]]:
         r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         next_sentence_label (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the next sequence prediction (classification) loss. If specified, nsp loss will be
             added to masked_lm loss. Input should be a sequence pair (see `input_ids` docstring) Indices should be in
@@ -2257,7 +2254,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
 class BigBirdForMaskedLM(BigBirdPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
-    def __init__(self, config: BigBirdConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         if config.is_decoder:
@@ -2296,6 +2293,11 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[MaskedLMOutput, Tuple[torch.FloatTensor]]:
         r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
         Example:
 
         ```python
@@ -2388,11 +2390,15 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    BigBird Model with a `language modeling` head on top for CLM fine-tuning.
+    """
+)
 class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
-    def __init__(self, config: BigBirdConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -2430,7 +2436,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[CausalLMOutputWithCrossAttentions, Tuple[torch.FloatTensor]]:
-        """
+        r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
@@ -2514,9 +2520,14 @@ class BigBirdClassificationHead(nn.Module):
         return x
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    BigBird Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """
+)
 class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
-    def __init__(self, config: BigBirdConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -2545,6 +2556,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
         Example:
 
         ```python
@@ -2634,7 +2646,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
 
 @auto_docstring
 class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
-    def __init__(self, config: BigBirdConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.bert = BigBirdModel(config)
@@ -2659,6 +2671,30 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[MultipleChoiceModelOutput, Tuple[torch.FloatTensor]]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
+            model's internal embedding lookup matrix.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
@@ -2714,7 +2750,7 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
 
 @auto_docstring
 class BigBirdForTokenClassification(BigBirdPreTrainedModel):
-    def __init__(self, config: BigBirdConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -2802,10 +2838,10 @@ class BigBirdForQuestionAnsweringHead(nn.Module):
 
 @auto_docstring
 class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
-    def __init__(self, config: BigBirdConfig, add_pooling_layer=False):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `False`):
-            Whether to add a pooling layer on top of the last layer hidden state.
+    def __init__(self, config, add_pooling_layer=False):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
 
@@ -2836,9 +2872,8 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[BigBirdForQuestionAnsweringModelOutput, Tuple[torch.FloatTensor]]:
         r"""
-        question_lengths (`torch.LongTensor`, *optional*):
-            Length of the question in the input sequence. This is used to mask out the question tokens from the
-            attention logits.
+        question_lengths (<fill_type>):
+            <fill_docstring>
 
         Example:
 

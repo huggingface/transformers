@@ -1277,6 +1277,9 @@ class PegasusXModel(PegasusXPreTrainedModel):
             PEGASUS-X uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If
             `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
 
         Example:
 
@@ -1348,7 +1351,11 @@ class PegasusXModel(PegasusXPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The PEGASUS-X for conditional generation (e.g. summarization).
+    """
+)
 class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
@@ -1425,31 +1432,13 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin)
             PEGASUS-X uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If
             `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Example Summarization:
-
-        ```python
-        >>> from transformers import AutoTokenizer, PegasusXForConditionalGeneration
-
-        >>> model = PegasusXForConditionalGeneration.from_pretrained("google/pegasus-x-base")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/pegasus-x-large")
-
-        >>> ARTICLE_TO_SUMMARIZE = (
-        ...     "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
-        ...     "amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were "
-        ...     "scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."
-        ... )
-        >>> inputs = tokenizer(ARTICLE_TO_SUMMARIZE, max_length=1024, return_tensors="pt")
-
-        >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs["input_ids"])
-        >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "California's largest electricity provider has turned off power to hundreds of thousands of customers."
-        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1521,7 +1510,7 @@ class PegasusXDecoderWrapper(PegasusXPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config: PegasusXConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.decoder = PegasusXDecoder(config)
 

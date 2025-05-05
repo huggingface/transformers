@@ -535,7 +535,12 @@ class LevitModel(LevitPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Levit Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    ImageNet.
+    """
+)
 class LevitForImageClassification(LevitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -612,8 +617,8 @@ class LevitForImageClassification(LevitPreTrainedModel):
     custom_intro="""
     LeViT Model transformer with image classification heads on top (a linear layer on top of the final hidden state and
     a linear layer on top of the final hidden state of the distillation token) e.g. for ImageNet. .. warning::
-    This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet
-    supported.
+           This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet
+           supported.
     """
 )
 class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):

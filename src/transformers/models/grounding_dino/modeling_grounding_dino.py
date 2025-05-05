@@ -24,7 +24,11 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...file_utils import ModelOutput, is_timm_available, requires_backends
+from ...file_utils import (
+    ModelOutput,
+    is_timm_available,
+    requires_backends,
+)
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
@@ -1921,7 +1925,12 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     return attention_mask, position_ids.to(torch.long)
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The bare Grounding DINO Model (consisting of a backbone and encoder-decoder Transformer) outputting raw
+    hidden-states without any specific head on top.
+    """
+)
 class GroundingDinoModel(GroundingDinoPreTrainedModel):
     def __init__(self, config: GroundingDinoConfig):
         super().__init__(config)
@@ -2084,6 +2093,17 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         return_dict=None,
     ):
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`BertTokenizer.__call__`] for details.
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`: 0 corresponds to a `sentence A` token, 1 corresponds to a `sentence B` token
+
+            [What are token type IDs?](../glossary#token-type-ids)
+
         Examples:
 
         ```python
@@ -2468,6 +2488,16 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         labels: Optional[List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]]] = None,
     ):
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`BertTokenizer.__call__`] for details.
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`: 0 corresponds to a `sentence A` token, 1 corresponds to a `sentence B` token
+
+            [What are token type IDs?](../glossary#token-type-ids)
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch

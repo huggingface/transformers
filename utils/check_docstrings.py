@@ -1073,7 +1073,7 @@ def generate_new_docstring_for_signature(
     signature_content = [line.split("#")[0] for line in signature_content]
     signature_content = "".join(signature_content)
     signature_content = "".join(signature_content.split(")")[:-1])
-    args_in_signature = re.findall(r"(?:[,(]\s*)(\w+)\s*(?::\s*[^=)]+)?(?:\s*=\s*[^,)]+)?", signature_content)
+    args_in_signature = re.findall(r"[,(]\s*(\w+)\s*(?=:|=|,|\))", signature_content)
     if "self" in args_in_signature:
         args_in_signature.remove("self")
     # Parse docstring if present
@@ -1096,7 +1096,7 @@ def generate_new_docstring_for_signature(
                 "type": "<fill_type>",
                 "optional": False,
                 "shape": None,
-                "description": f"\n{arg_indent}<fill_docstring>",
+                "description": f"\n{arg_indent}    <fill_docstring>",
                 "default": None,
                 "additional_info": None,
             }
@@ -1219,7 +1219,6 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
     This function orchestrates the process by finding relevant files, scanning for decorators,
     generating new docstrings, and updating files as needed.
     """
-    print(PATH_TO_TRANSFORMERS)
     # 1. Find all model files to check
     matching_files = find_matching_model_files()
     # 2. Find files that contain the @auto_docstring decorator
@@ -1333,4 +1332,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     check_auto_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
-    # check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
+    check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)

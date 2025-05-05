@@ -727,7 +727,7 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.deberta.modeling_deberta.DebertaModel with Deberta->DebertaV2
 class DebertaV2Model(DebertaV2PreTrainedModel):
-    def __init__(self, config: DebertaV2Config):
+    def __init__(self, config):
         super().__init__(config)
 
         self.embeddings = DebertaV2Embeddings(config)
@@ -927,7 +927,7 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = r"mask_predictions.*"
 
-    def __init__(self, config: DebertaV2Config):
+    def __init__(self, config):
         super().__init__(config)
         self.legacy = config.legacy
         self.deberta = DebertaV2Model(config)
@@ -954,6 +954,7 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
             self.lm_predictions.lm_head.bias = new_embeddings.bias
 
     @auto_docstring
+    # Copied from transformers.models.deberta.modeling_deberta.DebertaForMaskedLM.forward with Deberta->DebertaV2
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1032,9 +1033,14 @@ class ContextPooler(nn.Module):
         return self.config.hidden_size
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    DeBERTa Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """
+)
 class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
-    def __init__(self, config: DebertaV2Config):
+    def __init__(self, config):
         super().__init__(config)
 
         num_labels = getattr(config, "num_labels", 2)
@@ -1143,7 +1149,7 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.deberta.modeling_deberta.DebertaForTokenClassification with Deberta->DebertaV2
 class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
-    def __init__(self, config: DebertaV2Config):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1205,7 +1211,7 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
 
 @auto_docstring
 class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
-    def __init__(self, config: DebertaV2Config):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1282,7 +1288,7 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
 
 @auto_docstring
 class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
-    def __init__(self, config: DebertaV2Config):
+    def __init__(self, config):
         super().__init__(config)
 
         num_labels = getattr(config, "num_labels", 2)

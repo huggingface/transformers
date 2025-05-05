@@ -28,12 +28,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_swin import SwinConfig
 
@@ -933,14 +928,21 @@ class SwinPreTrainedModel(PreTrainedModel):
             module.relative_position_bias_table.data.zero_()
 
 
-@auto_docstring
-class SwinModel(SwinPreTrainedModel):
-    def __init__(self, config: SwinConfig, add_pooling_layer=True, use_mask_token=False):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
+@auto_docstring(
+    custom_intro="""
+    add_pooling_layer (`bool`, *optional*, defaults to `True`):
                 Whether or not to apply pooling layer.
         use_mask_token (`bool`, *optional*, defaults to `False`):
                 Whether or not to create and apply mask tokens in the embedding layer.
+    """
+)
+class SwinModel(SwinPreTrainedModel):
+    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
+        use_mask_token (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -1046,7 +1048,7 @@ class SwinModel(SwinPreTrainedModel):
     """
 )
 class SwinForMaskedImageModeling(SwinPreTrainedModel):
-    def __init__(self, config: SwinConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.swin = SwinModel(config, add_pooling_layer=False, use_mask_token=True)
@@ -1062,7 +1064,7 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring()
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1163,7 +1165,7 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
     """
 )
 class SwinForImageClassification(SwinPreTrainedModel):
-    def __init__(self, config: SwinConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -1252,7 +1254,6 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -1261,6 +1262,8 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         """
+        Returns:
+
         Examples:
 
         ```python

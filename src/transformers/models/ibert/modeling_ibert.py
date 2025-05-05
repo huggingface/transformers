@@ -37,7 +37,10 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import auto_docstring, logging
+from ...utils import (
+    auto_docstring,
+    logging,
+)
 from .configuration_ibert import IBertConfig
 from .quant_modules import IntGELU, IntLayerNorm, IntSoftmax, QuantAct, QuantEmbedding, QuantLinear
 
@@ -664,8 +667,8 @@ class IBertModel(IBertPreTrainedModel):
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
-        add_pooling_layer (`<fill_type>`, defaults to `True`):
-            <fill_description>
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -806,6 +809,12 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[MaskedLMOutput, Tuple[torch.FloatTensor]]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.ibert(
@@ -870,7 +879,12 @@ class IBertLMHead(nn.Module):
             self.bias = self.decoder.bias
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    I-BERT Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
+    """
+)
 class IBertForSequenceClassification(IBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -994,13 +1008,6 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See

@@ -215,6 +215,11 @@ class LlavaOnevisionMultiModalProjector(nn.Module):
         return hidden_states
 
 
+@auto_docstring(
+    custom_intro="""
+    The bare LLaVA-Onevision Model outputting raw hidden-states without any specific head on top.
+    """
+)
 @auto_docstring
 class LlavaOnevisionPreTrainedModel(PreTrainedModel):
     config_class = LlavaOnevisionConfig
@@ -241,7 +246,11 @@ class LlavaOnevisionPreTrainedModel(PreTrainedModel):
             module.image_newline.data.normal_(mean=0.0, std=embed_std)
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The LLaVA-Onevision model which consists of a vision backbone and a language model.
+    """
+)
 class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, GenerationMixin):
     def __init__(self, config: LlavaOnevisionConfig):
         super().__init__(config)
@@ -493,22 +502,25 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         **lm_kwargs,
     ) -> Union[Tuple, LlavaOnevisionCausalLMOutputWithPast]:
         r"""
-        pixel_values_videos (`torch.FloatTensor`):
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, frames, num_channels, image_size, image_size)):
             The tensors corresponding to the input videos. Pixel values can be obtained using
             [`LlavaNextVideoProcessor`]. See [`LlavaNextVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
             [`LlavaNextVideoProcessor`] for processing videos.
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
-        vision_feature_select_strategy (`str`, *optional*):
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
             If `"full"`, the full vision features are used.
-        vision_aspect_ratio (`str`, *optional*):
+        vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Returns:
+            [`~LlavaOnevisionCausalLMOutputWithPast`] (if `return_dict=True`) or a `tuple`.
 
         Example:
 

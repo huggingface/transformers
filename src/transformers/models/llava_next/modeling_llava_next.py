@@ -231,7 +231,11 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
             module.image_newline.data.normal_(mean=0.0, std=embed_std)
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The LLAVA-NeXT model which consists of a vision backbone and a language model.
+    """
+)
 class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixin):
     def __init__(self, config: LlavaNextConfig):
         super().__init__(config)
@@ -435,7 +439,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         **lm_kwargs,
     ) -> Union[Tuple, LlavaNextCausalLMOutputWithPast]:
         r"""
-        vision_feature_select_strategy (`str`, *optional*):
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
             If `"full"`, the full vision features are used.

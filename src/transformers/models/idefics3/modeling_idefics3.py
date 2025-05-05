@@ -524,7 +524,11 @@ class Idefics3PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-@auto_docstring(custom_intro="The Idefics3 Vision Transformer Model outputting raw image embedding.")
+@auto_docstring(
+    custom_intro="""
+    The Idefics3 Vision Transformer Model outputting raw image embedding.
+    """
+)
 class Idefics3VisionTransformer(Idefics3PreTrainedModel):
     config_class = Idefics3VisionConfig
     _supports_sdpa = True
@@ -607,7 +611,11 @@ class Idefics3VisionTransformer(Idefics3PreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Idefics3 model consisting of a SIGLIP vision encoder and Llama3 language decoder
+    """
+)
 class Idefics3Model(Idefics3PreTrainedModel):
     def __init__(self, config: Idefics3Config):
         super().__init__(config)
@@ -692,17 +700,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
         new_inputs_embeds[special_image_token_mask] = reshaped_image_hidden_states
         return new_inputs_embeds
 
-    @auto_docstring(
-        custom_intro="""
-        Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
-        the model have image padding -> (batch_size, max_num_images, 3, max_heights, max_widths) where
-        max_num_images is the maximum number of images among the batch_size samples in the batch.
-        Padding images are not needed beyond padding the pixel_values at the entrance of the model.
-        For efficiency, we only pass through the vision_model's forward the real images by
-        discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
-        image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
-        """
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -835,7 +833,11 @@ class Idefics3Model(Idefics3PreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Idefics3 Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top.
+    """
+)
 class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 

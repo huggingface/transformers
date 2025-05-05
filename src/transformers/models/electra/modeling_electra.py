@@ -38,7 +38,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    logging,
+)
 from .configuration_electra import ElectraConfig
 
 
@@ -702,17 +706,9 @@ class ElectraForPreTrainingOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Electra Model transformer outputting raw hidden-states without any specific head on top. Identical to
-    the BERT model except that it uses an additional linear layer between the embedding layer and the encoder if the
-    hidden size and embedding size are different.
-
-    Both the generator and discriminator checkpoints may be loaded into this model.
-    """
-)
+@auto_docstring
 class ElectraModel(ElectraPreTrainedModel):
-    def __init__(self, config: ElectraConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.embeddings = ElectraEmbeddings(config)
 
@@ -952,9 +948,14 @@ class ElectraSequenceSummary(nn.Module):
         return output
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    ELECTRA Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """
+)
 class ElectraForSequenceClassification(ElectraPreTrainedModel):
-    def __init__(self, config: ElectraConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1044,7 +1045,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
     """
 )
 class ElectraForPreTraining(ElectraPreTrainedModel):
-    def __init__(self, config: ElectraConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.electra = ElectraModel(config)
@@ -1148,7 +1149,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
 class ElectraForMaskedLM(ElectraPreTrainedModel):
     _tied_weights_keys = ["generator_lm_head.weight"]
 
-    def __init__(self, config: ElectraConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.electra = ElectraModel(config)
@@ -1228,7 +1229,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
     """
 )
 class ElectraForTokenClassification(ElectraPreTrainedModel):
-    def __init__(self, config: ElectraConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1299,7 +1300,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
     config_class = ElectraConfig
     base_model_prefix = "electra"
 
-    def __init__(self, config: ElectraConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1379,7 +1380,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
 
 @auto_docstring
 class ElectraForMultipleChoice(ElectraPreTrainedModel):
-    def __init__(self, config: ElectraConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.electra = ElectraModel(config)
@@ -1404,6 +1405,30 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], MultipleChoiceModelOutput]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
@@ -1457,11 +1482,15 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    ELECTRA Model with a `language modeling` head on top for CLM fine-tuning.
+    """
+)
 class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["generator_lm_head.weight"]
 
-    def __init__(self, config: ElectraConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -1479,7 +1508,7 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.generator_lm_head = new_embeddings
 
-    @auto_docstring()
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,

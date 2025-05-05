@@ -8,10 +8,7 @@ import torch.nn as nn
 
 from ...modeling_outputs import ModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Encoder,
     Wav2Vec2EncoderStableLayerNorm,
@@ -27,9 +24,6 @@ from .configuration_unispeech import UniSpeechConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-_HIDDEN_STATES_START_POSITION = 2
 
 
 @dataclass
@@ -206,33 +200,6 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-UNISPEECH_CUSTOM_ARGS_DOCSTRING = r"""
-    input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-        Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-        into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-        soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-        conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
-    attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-        Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-        1]`:
-
-        - 1 for tokens that are **not masked**,
-        - 0 for tokens that are **masked**.
-
-        [What are attention masks?](../glossary#attention-mask)
-
-        <Tip warning={true}>
-
-        `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-        True`. For all models whose processor has `config.return_attention_mask == False`, `attention_mask` should
-        **not** be passed to avoid degraded performance when doing batched inference. For such models
-        `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware that these
-        models also yield slightly different results depending on whether `input_values` is padded or not.
-
-        </Tip>
-"""
-
-
 UniSpeechBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
@@ -261,7 +228,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for UniSpeech")
 
-    @auto_docstring(custom_args=UNISPEECH_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -271,6 +238,10 @@ class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, UniSpeechBaseModelOutput]:
+        r"""
+        mask_time_indices (<fill_type>):
+            <fill_docstring>
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -310,7 +281,11 @@ class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
         )
 
 
-@auto_docstring(custom_intro="""UniSpeech Model with a vector-quantization module and ctc loss for pre-training.""")
+@auto_docstring(
+    custom_intro="""
+    UniSpeech Model with a vector-quantization module and ctc loss for pre-training.
+    """
+)
 class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
     def __init__(self, config: UniSpeechConfig):
         super().__init__(config)
@@ -372,7 +347,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         logits = logits / temperature
         return logits
 
-    @auto_docstring(custom_args=UNISPEECH_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -445,10 +420,12 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
 
 
 @auto_docstring(
-    custom_intro="""UniSpeech Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC)."""
+    custom_intro="""
+    UniSpeech Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
+    """
 )
 class UniSpeechForCTC(Wav2Vec2ForCTC):
-    @auto_docstring(custom_args=UNISPEECH_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         super().forward(**super_kwargs)
 
@@ -460,7 +437,7 @@ class UniSpeechForCTC(Wav2Vec2ForCTC):
     """
 )
 class UniSpeechForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    @auto_docstring(custom_args=UNISPEECH_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         super().forward(**super_kwargs)
 

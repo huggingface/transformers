@@ -50,6 +50,7 @@ from .configuration_fsmt import FSMTConfig
 
 logger = logging.get_logger(__name__)
 
+
 # See all FSMT models at https://huggingface.co/models?filter=fsmt
 
 # Porting notes:
@@ -213,6 +214,7 @@ def _prepare_fsmt_decoder_inputs(
     return decoder_input_ids, decoder_padding_mask, causal_mask
 
 
+@auto_docstring
 class PretrainedFSMTModel(PreTrainedModel):
     config_class = FSMTConfig
     base_model_prefix = "model"
@@ -952,6 +954,27 @@ class FSMTModel(PretrainedFSMTModel):
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
+        r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
+
+            FSMT uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        """
         if decoder_input_ids is None:
             use_cache = False
 
@@ -1039,7 +1062,11 @@ class FSMTModel(PretrainedFSMTModel):
         self.decoder.embed_tokens = value
 
 
-@auto_docstring(custom_intro="The FSMT Model with a language modeling head. Can be used for summarization.")
+@auto_docstring(
+    custom_intro="""
+    The FSMT Model with a language modeling head. Can be used for summarization.
+    """
+)
 class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
     base_model_prefix = "model"
     _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
@@ -1073,11 +1100,45 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
         r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
+
+            FSMT uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
+        Example Translation:
+
+        ```python
+        >>> from transformers import AutoTokenizer, FSMTForConditionalGeneration
+
+        >>> mname = "facebook/wmt19-ru-en"
+        >>> model = FSMTForConditionalGeneration.from_pretrained(mname)
+        >>> tokenizer = AutoTokenizer.from_pretrained(mname)
+
+        >>> src_text = "Машинное обучение - это здорово, не так ли?"
+        >>> input_ids = tokenizer(src_text, return_tensors="pt").input_ids
+        >>> outputs = model.generate(input_ids, num_beams=5, num_return_sequences=3)
+        >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
+        "Machine learning is great, isn't it?"
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

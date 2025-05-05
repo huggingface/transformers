@@ -862,14 +862,21 @@ class HieraPooler(nn.Module):
         return pooled_output
 
 
-@auto_docstring
-class HieraModel(HieraPreTrainedModel):
-    def __init__(self, config: HieraConfig, add_pooling_layer: bool = True, is_mae: bool = False):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
+@auto_docstring(
+    custom_intro="""
+    add_pooling_layer (`bool`, *optional*, defaults to `True`):
                 Whether or not to apply pooling layer.
         is_mae (`bool`, *optional*, defaults to `False`):
                 Whether or not to run the model on MAE mode.
+    """
+)
+class HieraModel(HieraPreTrainedModel):
+    def __init__(self, config: HieraConfig, add_pooling_layer: bool = True, is_mae: bool = False):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
+        is_mae (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.num_features = int(config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1))
@@ -907,9 +914,8 @@ class HieraModel(HieraPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-        noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*):
-            Mainly used for testing purposes to control randomness and maintain the reproducibility
-            when is_mae is set to True.
+        noise (<fill_type>):
+            <fill_docstring>
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1205,9 +1211,8 @@ class HieraForPreTraining(HieraPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, HieraForPreTrainingOutput]:
         r"""
-        noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*):
-            Mainly used for testing purposes to control randomness and maintain the reproducibility
-            when is_mae is set to True.
+        noise (<fill_type>):
+            <fill_docstring>
 
         Examples:
         ```python
@@ -1416,7 +1421,6 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -1425,6 +1429,8 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         """
+        Returns:
+
         Examples:
 
         ```python

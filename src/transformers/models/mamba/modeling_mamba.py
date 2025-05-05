@@ -480,26 +480,9 @@ class MambaCausalLMOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-MAMBA_CUSTOM_ARGS_DOCSTRING = r"""
-    input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-        Indices of input sequence tokens in the vocabulary.
-
-        If `cache_params.seqlen_offset>0`, only `input_ids` that do not have their past calculated should be passed as
-        `input_ids`.
-
-        Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-        [`PreTrainedTokenizer.__call__`] for details.
-
-        [What are input IDs?](../glossary#input-ids)
-    cache_params (`MambaCache`, *optional*):
-        If passed along, the model uses the previous state in all the blocks (which will give the output for the
-        `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
-"""
-
-
 @auto_docstring
 class MambaModel(MambaPreTrainedModel):
-    def __init__(self, config: MambaConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -523,7 +506,7 @@ class MambaModel(MambaPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings = new_embeddings
 
-    @auto_docstring(custom_args=MAMBA_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -535,6 +518,13 @@ class MambaModel(MambaPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, MambaOutput]:
+        r"""
+        cache_params (`MambaCache`, *optional*):
+            If passed along, the model uses the previous state in all the blocks (which will give the output for the
+            `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
+        use_cache (`bool`, *optional*):
+            If set to `True`, the `cache_params` is returned and can be used to quickly generate the next logits.
+        """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -601,11 +591,16 @@ class MambaModel(MambaPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The MAMBA Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    embeddings).
+    """
+)
 class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config: MambaConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.backbone = MambaModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -691,7 +686,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         )
         return model_inputs
 
-    @auto_docstring(custom_args=MAMBA_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -706,10 +701,15 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         **kwargs,  # for now we need this for generation
     ) -> Union[Tuple, MambaCausalLMOutput]:
         r"""
+        cache_params (`MambaCache`, *optional*):
+            If passed along, the model uses the previous state in all the blocks (which will give the output for the
+            `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+        use_cache (`bool`, *optional*):
+            If set to `True`, the `cache_params` is returned and can be used to quickly generate the next logits.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

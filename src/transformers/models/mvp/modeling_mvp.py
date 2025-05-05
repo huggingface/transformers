@@ -43,10 +43,6 @@ from .configuration_mvp import MvpConfig
 logger = logging.get_logger(__name__)
 
 
-# Base model docstring
-_EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
-
-
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
@@ -515,101 +511,6 @@ class MvpPreTrainedModel(PreTrainedModel):
             "input_ids": input_ids,
         }
         return dummy_inputs
-
-
-MVP_CONDITIONAL_GENERATION_EXAMPLE = r"""
-    Example of summarization:
-
-    Fine-tuning a model
-    ```python
-    >>> import torch
-    >>> from transformers import AutoTokenizer, MvpForConditionalGeneration
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
-    >>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp")
-
-    >>> inputs = tokenizer(
-    ...     "Summarize: You may want to stick it to your boss and leave your job, but don't do it if these are your reasons.",
-    ...     return_tensors="pt",
-    ... )
-    >>> labels = tokenizer("Bad Reasons To Quit Your Job", return_tensors="pt")["input_ids"]
-
-    >>> loss = model(**inputs, labels=labels).loss
-    >>> loss.backward()
-    ```
-
-    Inference after the model fine-tuned
-    ```python
-    >>> with torch.no_grad():
-    ...     generated_ids = model.generate(**inputs)
-
-    >>> generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-    ```
-"""
-
-MVP_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
-    Example of single-label classification:
-
-    Fine-tuning a model on `num_labels` classes
-    ```python
-    >>> import torch
-    >>> from transformers import AutoTokenizer, MvpForSequenceClassification
-
-    >>> num_labels = 2  # for example, this is a binary classification task
-    >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
-    >>> model = MvpForSequenceClassification.from_pretrained("RUCAIBox/mvp", num_labels=num_labels)
-
-    >>> inputs = tokenizer("Classify: Hello, my dog is cute", return_tensors="pt")
-    >>> labels = torch.tensor(1)  # the real label for inputs
-
-    >>> loss = model(**inputs, labels=labels).loss
-    >>> loss.backward()
-    ```
-
-    Inference after the model fine-tuned
-    ```python
-    >>> with torch.no_grad():
-    ...     logits = model(**inputs).logits
-
-    >>> predicted_class_id = logits.argmax()
-    ```
-"""
-
-MVP_QUESTION_ANSWERING_SAMPLE = r"""
-    Example:
-
-    Fine-tuning a model for extrative question answering, and our model also supports generative question answering
-    using `BartForConditionalGeneration`
-    ```python
-    >>> import torch
-    >>> from transformers import AutoTokenizer, MvpForQuestionAnswering
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
-    >>> model = MvpForQuestionAnswering.from_pretrained("RUCAIBox/mvp")
-
-    >>> inputs = tokenizer(
-    ...     "Answer the following question: Who was Jim Henson? [SEP] Jim Henson was a nice puppet",
-    ...     return_tensors="pt",
-    ... )
-    >>> target_start_index = torch.tensor([18])
-    >>> target_end_index = torch.tensor([19])
-
-    >>> loss = model(**inputs, start_positions=target_start_index, end_positions=target_end_index).loss
-    >>> loss.backward()
-    ```
-
-    Inference after the model fine-tuned
-    ```python
-    >>> with torch.no_grad():
-    ...     outputs = model(**inputs)
-
-    >>> answer_start_index = outputs.start_logits.argmax()
-    >>> answer_end_index = outputs.end_logits.argmax()
-
-    >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
-    >>> predict_answer = tokenizer.decode(predict_answer_tokens)
-    ```
-"""
 
 
 class MvpEncoder(MvpPreTrainedModel):
@@ -1171,6 +1072,12 @@ class MvpModel(MvpPreTrainedModel):
             If you want to change padding behavior, you should read [`modeling_mvp._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
             information on the default strategy.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         """
         # different to other models, Mvp automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
@@ -1242,7 +1149,11 @@ class MvpModel(MvpPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The MVP Model with a language modeling head. Can be used for various text generation tasks.
+    """
+)
 class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
@@ -1329,10 +1240,44 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
             If you want to change padding behavior, you should read [`modeling_mvp._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
             information on the default strategy.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example of summarization:
+
+        Fine-tuning a model
+        ```python
+        >>> import torch
+        >>> from transformers import AutoTokenizer, MvpForConditionalGeneration
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
+        >>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp")
+
+        >>> inputs = tokenizer(
+        ...     "Summarize: You may want to stick it to your boss and leave your job, but don't do it if these are your reasons.",
+        ...     return_tensors="pt",
+        ... )
+        >>> labels = tokenizer("Bad Reasons To Quit Your Job", return_tensors="pt")["input_ids"]
+
+        >>> loss = model(**inputs, labels=labels).loss
+        >>> loss.backward()
+        ```
+
+        Inference after the model fine-tuned
+        ```python
+        >>> with torch.no_grad():
+        ...     generated_ids = model.generate(**inputs)
+
+        >>> generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1400,7 +1345,12 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
         return reordered_past
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Mvp model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
+    tasks.
+    """
+)
 class MvpForSequenceClassification(MvpPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1462,9 +1412,41 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
             If you want to change padding behavior, you should read [`modeling_mvp._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
             information on the default strategy.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Example of single-label classification:
+
+        Fine-tuning a model on `num_labels` classes
+        ```python
+        >>> import torch
+        >>> from transformers import AutoTokenizer, MvpForSequenceClassification
+
+        >>> num_labels = 2  # for example, this is a binary classification task
+        >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
+        >>> model = MvpForSequenceClassification.from_pretrained("RUCAIBox/mvp", num_labels=num_labels)
+
+        >>> inputs = tokenizer("Classify: Hello, my dog is cute", return_tensors="pt")
+        >>> labels = torch.tensor(1)  # the real label for inputs
+
+        >>> loss = model(**inputs, labels=labels).loss
+        >>> loss.backward()
+        ```
+
+        Inference after the model fine-tuned
+        ```python
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> predicted_class_id = logits.argmax()
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
@@ -1603,6 +1585,46 @@ class MvpForQuestionAnswering(MvpPreTrainedModel):
             If you want to change padding behavior, you should read [`modeling_mvp._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
             information on the default strategy.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        Example:
+
+        Fine-tuning a model for extrative question answering, and our model also supports generative question answering
+        using `BartForConditionalGeneration`
+        ```python
+        >>> import torch
+        >>> from transformers import AutoTokenizer, MvpForQuestionAnswering
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
+        >>> model = MvpForQuestionAnswering.from_pretrained("RUCAIBox/mvp")
+
+        >>> inputs = tokenizer(
+        ...     "Answer the following question: Who was Jim Henson? [SEP] Jim Henson was a nice puppet",
+        ...     return_tensors="pt",
+        ... )
+        >>> target_start_index = torch.tensor([18])
+        >>> target_end_index = torch.tensor([19])
+
+        >>> loss = model(**inputs, start_positions=target_start_index, end_positions=target_end_index).loss
+        >>> loss.backward()
+        ```
+
+        Inference after the model fine-tuned
+        ```python
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> answer_start_index = outputs.start_logits.argmax()
+        >>> answer_end_index = outputs.end_logits.argmax()
+
+        >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
+        >>> predict_answer = tokenizer.decode(predict_answer_tokens)
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if start_positions is not None and end_positions is not None:
@@ -1677,7 +1699,7 @@ class MvpDecoderWrapper(MvpPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config: MvpConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.decoder = MvpDecoder(config)
 

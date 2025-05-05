@@ -30,7 +30,11 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    logging,
+)
 from .configuration_openai import OpenAIGPTConfig
 
 
@@ -618,7 +622,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
 
 @auto_docstring(
     custom_intro="""
-    OpenAI GPT Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
+        OpenAI GPT Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
     RocStories/SWAG tasks. The two heads are two linear layers. The language modeling head has its weights tied to the
     input embeddings, the classification head takes as input the input of a specified classification token index in the
     input sequence).
@@ -661,18 +665,16 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], OpenAIGPTDoubleHeadsModelOutput]:
         r"""
-        mc_labels (`torch.LongTensor`, *optional*):
-            <fill_description>
-        mc_token_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`, *optional*):
+        mc_token_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`, *optional*, default to index of the last token of the input):
             Index of the classification token in each input sequence. Selected in the range `[0, input_ids.size(-1) -
             1]`.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-1, 0, ..., config.vocab_size]` All labels set to `-100` are
-        ignored (`masked` of shape `(batch_size)`, *optional*):
+            ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+        mc_labels (`torch.LongTensor` of shape `(batch_size)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
             where *num_choices* is the size of the second dimension of the input tensors. (see *input_ids* above)
-
 
         Examples:
 

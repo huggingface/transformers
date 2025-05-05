@@ -34,11 +34,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import auto_docstring, logging, torch_int
 from .configuration_data2vec_vision import Data2VecVisionConfig
 
 
@@ -740,13 +736,9 @@ class Data2VecVisionEncoder(nn.Module):
         )
 
 
+@auto_docstring
 # Copied from transformers.models.beit.modeling_beit.BeitPreTrainedModel with Beit->Data2VecVision,beit->data2vec_vision
 class Data2VecVisionPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = Data2VecVisionConfig
     base_model_prefix = "data2vec_vision"
     main_input_name = "pixel_values"
@@ -788,9 +780,9 @@ class Data2VecVisionPreTrainedModel(PreTrainedModel):
 # Copied from transformers.models.beit.modeling_beit.BeitModel with BEIT->DATA2VEC_VISION,Beit->Data2VecVision,True->False
 class Data2VecVisionModel(Data2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False) -> None:
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `False`):
-            Whether to add a pooling layer on top of the last layer hidden state..
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -893,7 +885,12 @@ class Data2VecVisionPooler(nn.Module):
         return pooled_output
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Data2VecVision Model transformer with an image classification head on top (a linear layer on top of the average of
+    the final hidden states of the patch tokens) e.g. for ImageNet.
+    """
+)
 # Copied from transformers.models.beit.modeling_beit.BeitForImageClassification with BEIT->DATA2VEC_VISION,Beit->Data2VecVision,beit->data2vec_vision
 class Data2VecVisionForImageClassification(Data2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig) -> None:

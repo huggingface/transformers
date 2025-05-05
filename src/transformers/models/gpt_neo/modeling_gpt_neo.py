@@ -37,7 +37,11 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import (
+    auto_docstring,
+    is_torch_flex_attn_available,
+    logging,
+)
 from .configuration_gpt_neo import GPTNeoConfig
 
 
@@ -804,7 +808,12 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         return causal_mask
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The GPT Neo Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    embeddings).
+    """
+)
 class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 

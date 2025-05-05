@@ -28,11 +28,7 @@ from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    is_torch_flex_attn_available,
-    logging,
-)
+from ...utils import auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_dbrx import DbrxConfig
 
 
@@ -838,6 +834,14 @@ class DbrxPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DbrxModel(DbrxPreTrainedModel):
+    """Transformer decoder consisting of *config.num_hidden_layers*. Each layer is a [`DbrxBlock`] layer.
+
+    Args:
+        config ([`DbrxConfig`]): Model configuration class with all parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+    """
+
     def __init__(self, config: DbrxConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1123,7 +1127,11 @@ class DbrxModel(DbrxPreTrainedModel):
         return causal_mask
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The DBRX Model transformer for causal language modeling.
+    """
+)
 class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
     def __init__(self, config: DbrxConfig):
         super().__init__(config)
@@ -1174,6 +1182,11 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
         Example:
 
         ```python
@@ -1198,7 +1211,6 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)

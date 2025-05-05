@@ -122,6 +122,12 @@ class IJepaPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class IJepaModel(IJepaPreTrainedModel, ViTModel):
     def __init__(self, config: IJepaConfig, add_pooling_layer: bool = False, use_mask_token: bool = False):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
+        use_mask_token (<fill_type>):
+            <fill_docstring>
+        """
         super().__init__(config)
         self.config = config
         self.embeddings = IJepaEmbeddings(config, use_mask_token=use_mask_token)

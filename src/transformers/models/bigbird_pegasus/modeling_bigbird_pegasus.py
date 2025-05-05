@@ -36,14 +36,13 @@ from ...modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_bigbird_pegasus import BigBirdPegasusConfig
 
 
 logger = logging.get_logger(__name__)
+
+_EXPECTED_OUTPUT_SHAPE = [1, 7, 1024]
 
 
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
@@ -1556,6 +1555,7 @@ class BigBirdPegasusClassificationHead(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class BigBirdPegasusPreTrainedModel(PreTrainedModel):
     config_class = BigBirdPegasusConfig
     base_model_prefix = "model"
@@ -2181,7 +2181,6 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
         return self.decoder
 
     @auto_docstring
-    # Copied from transformers.models.bart.modeling_bart.BartModel.forward with Bart->BigBirdPegasus
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2202,19 +2201,20 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
     ) -> Union[Tuple, Seq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary.
+            Provide for translation and summarization training. By default, the model will create this tensor by
+            shifting the `input_ids` to the right, following the paper.
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
 
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            If you want to change padding behavior, you should read
+            [`modeling_bigbird_pegasus._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in
+            [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+        decoder_head_mask (`torch.Tensor` of shape `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
 
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-
-            BigBirdPegasus uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
-            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
-
-            For translation and summarization training, `decoder_input_ids` should be provided. If no
-            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
-            for denoising pre-training following the paper.
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         """
         # different to other models, BigBirdPegasus automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
@@ -2286,7 +2286,11 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The BigBirdPegasus Model with a language modeling head. Can be used for summarization.
+    """
+)
 # Copied from transformers.models.bart.modeling_bart.BartForConditionalGeneration with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
 class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
@@ -2336,6 +2340,7 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel, Gene
             self._tie_or_clone_weights(self.lm_head, self.model.shared)
 
     @auto_docstring
+    # Ignore copy
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2357,23 +2362,48 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel, Gene
     ) -> Union[Tuple, Seq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary.
+            Provide for translation and summarization training. By default, the model will create this tensor by
+            shifting the `input_ids` to the right, following the paper.
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
 
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            If you want to change padding behavior, you should read
+            [`modeling_bigbird_pegasus._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in
+            [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+        decoder_head_mask (`torch.Tensor` of shape `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
 
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-
-            BigBirdPegasus uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
-            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
-
-            For translation and summarization training, `decoder_input_ids` should be provided. If no
-            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
-            for denoising pre-training following the paper.
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example summarization:
+
+        ```python
+        >>> from transformers import AutoTokenizer, BigBirdPegasusForConditionalGeneration
+
+        >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained("google/bigbird-pegasus-large-arxiv")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
+
+        >>> ARTICLE_TO_SUMMARIZE = (
+        ...     "The dominant sequence transduction models are based on complex recurrent or convolutional neural "
+        ...     "networks in an encoder-decoder configuration. The best performing models also connect the encoder "
+        ...     "and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, "
+        ...     "based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. "
+        ...     "Experiments on two machine translation tasks show these models to be superior in quality "
+        ...     "while being more parallelizable and requiring significantly less time to train."
+        ... )
+        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=4096, return_tensors="pt", truncation=True)
+
+        >>> # Generate Summary
+        >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=15)
+        >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        'dominant sequence models are based on recurrent or convolutional neural networks .'
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2444,7 +2474,12 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel, Gene
         return reordered_past
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    BigBirdPegasus model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g.
+    for GLUE tasks.
+    """
+)
 class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -2462,7 +2497,6 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2483,19 +2517,20 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
     ) -> Union[Tuple, Seq2SeqSequenceClassifierOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary.
+            Provide for translation and summarization training. By default, the model will create this tensor by
+            shifting the `input_ids` to the right, following the paper.
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
 
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            If you want to change padding behavior, you should read
+            [`modeling_bigbird_pegasus._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in
+            [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+        decoder_head_mask (`torch.Tensor` of shape `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
 
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-
-            Bart uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
-            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
-
-            For translation and summarization training, `decoder_input_ids` should be provided. If no
-            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
-            for denoising pre-training following the paper.
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
@@ -2580,7 +2615,7 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
 class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
-    def __init__(self, config: BigBirdPegasusConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         config.num_labels = 2
@@ -2593,7 +2628,6 @@ class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    # Copied from transformers.models.bart.modeling_bart.BartForQuestionAnswering.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -2615,19 +2649,20 @@ class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
     ) -> Union[Tuple, Seq2SeqQuestionAnsweringModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary.
+            Provide for translation and summarization training. By default, the model will create this tensor by
+            shifting the `input_ids` to the right, following the paper.
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
 
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            If you want to change padding behavior, you should read
+            [`modeling_bigbird_pegasus._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in
+            [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+        decoder_head_mask (`torch.Tensor` of shape `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
 
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-
-            Bart uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
-            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
-
-            For translation and summarization training, `decoder_input_ids` should be provided. If no
-            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
-            for denoising pre-training following the paper.
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if start_positions is not None and end_positions is not None:
@@ -2702,7 +2737,7 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config: BigBirdPegasusConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.decoder = BigBirdPegasusDecoder(config)
 
@@ -2710,11 +2745,10 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-@auto_docstring
 class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config: BigBirdPegasusConfig):
+    def __init__(self, config):
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
@@ -2762,6 +2796,15 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 

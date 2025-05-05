@@ -1035,12 +1035,12 @@ class IdeficsModel(IdeficsPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, IdeficsBaseModelOutputWithPast]:
         r"""
-        image_encoder_embeddings (`torch.Tensor`, *optional*):
-            The embeddings from the image encoder.
-        perceiver_embeddings (`torch.Tensor` of shape, *optional*):
-            The embeddings from the perceiver resampler.
-        image_attention_mask (`torch.Tensor`, *optional*):
-            The attention mask for the images.
+        image_encoder_embeddings (<fill_type>):
+            <fill_docstring>
+        perceiver_embeddings (<fill_type>):
+            <fill_docstring>
+        image_attention_mask (<fill_type>):
+            <fill_docstring>
         """
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
@@ -1497,12 +1497,16 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, IdeficsCausalLMOutputWithPast]:
         r"""
-        image_encoder_embeddings (`torch.Tensor`, *optional*):
-            The embeddings from the image encoder.
-        perceiver_embeddings (`torch.Tensor` of shape, *optional*):
-            The embeddings from the perceiver resampler.
-        image_attention_mask (`torch.Tensor`, *optional*):
-            The attention mask for the images.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        image_encoder_embeddings (<fill_type>):
+            <fill_docstring>
+        perceiver_embeddings (<fill_type>):
+            <fill_docstring>
+        image_attention_mask (<fill_type>):
+            <fill_docstring>
 
         Example:
 

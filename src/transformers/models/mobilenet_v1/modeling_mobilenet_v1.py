@@ -251,8 +251,8 @@ class MobileNetV1PreTrainedModel(PreTrainedModel):
 class MobileNetV1Model(MobileNetV1PreTrainedModel):
     def __init__(self, config: MobileNetV1Config, add_pooling_layer: bool = True):
         r"""
-        add_pooling_layer (`bool`, defaults to `True`):
-            <fill_description>
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -348,7 +348,12 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    MobileNetV1 model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    ImageNet.
+    """
+)
 class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
     def __init__(self, config: MobileNetV1Config) -> None:
         super().__init__(config)

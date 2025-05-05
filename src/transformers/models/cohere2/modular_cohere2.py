@@ -41,9 +41,6 @@ from ..cohere.modeling_cohere import (
 from ..gemma2.modeling_gemma2 import Gemma2Model
 
 
-COHERE2_INPUTS_DOCSTRING = None  # Will be picked up by modular
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -450,7 +447,6 @@ class Cohere2Model(Gemma2Model):
         self.rotary_emb = Cohere2RotaryEmbedding(config=config)
 
     @can_return_tuple
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
     @auto_docstring
     def forward(
         self,

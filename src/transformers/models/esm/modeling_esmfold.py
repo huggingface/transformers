@@ -31,7 +31,6 @@ from ...utils import (
     is_scipy_available,
     logging,
 )
-from .configuration_esm import EsmConfig
 from .modeling_esm import EsmModel, EsmPreTrainedModel
 from .openfold_utils import (
     OFProtein,
@@ -1967,6 +1966,10 @@ class EsmFoldingTrunk(nn.Module):
         return bins
 
 
+# TODO Add information to the docstring about any methods that convert to PDB format, or otherwise prepare
+#      the outputs for downstream use.
+
+
 @auto_docstring(
     custom_intro="""
     ESMForProteinFolding is the HuggingFace port of the original ESMFold model. It consists of an ESM-2 "stem" followed
@@ -1978,7 +1981,7 @@ class EsmFoldingTrunk(nn.Module):
 class EsmForProteinFolding(EsmPreTrainedModel):
     _no_split_modules = ["EsmFoldStructureModule", "EsmFoldTriangularSelfAttentionBlock"]
 
-    def __init__(self, config: EsmConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.config = config
@@ -2049,12 +2052,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         num_recycles: Optional[int] = None,
     ) -> EsmForProteinFoldingOutput:
         r"""
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        masking_pattern (`torch.LongTensor` of shape `({0})`, *optional*):
+        masking_pattern (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Locations of tokens to mask during training as a form of regularization. Mask values selected in `[0, 1]`.
         num_recycles (`int`, *optional*, defaults to `None`):
             Number of times to recycle the input sequence. If `None`, defaults to `config.num_recycles`. "Recycling"
@@ -2075,6 +2073,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> folded_positions = outputs.positions
         ```
+
         """
         cfg = self.config.esmfold_config
 

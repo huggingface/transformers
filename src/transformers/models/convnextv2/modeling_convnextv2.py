@@ -294,14 +294,10 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare ConvNextV2 model outputting raw features without any specific head on top.
-    """
-)
+@auto_docstring
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextModel with CONVNEXT->CONVNEXTV2, ConvNext->ConvNextV2
 class ConvNextV2Model(ConvNextV2PreTrainedModel):
-    def __init__(self, config: ConvNextV2Config):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
 
@@ -352,10 +348,15 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    ConvNextV2 Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    ImageNet.
+    """
+)
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextForImageClassification with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2,convnext->convnextv2
 class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
-    def __init__(self, config: ConvNextV2Config):
+    def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -431,7 +432,7 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
 )
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextBackbone with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2,facebook/convnext-tiny-224->facebook/convnextv2-tiny-1k-224
 class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
-    def __init__(self, config: ConvNextV2Config):
+    def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
 
@@ -455,7 +456,7 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
-        """
+        r"""
         Examples:
 
         ```python

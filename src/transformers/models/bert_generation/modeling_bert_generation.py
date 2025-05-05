@@ -577,12 +577,8 @@ class BertGenerationEmbeddings(nn.Module):
         return embeddings
 
 
+@auto_docstring
 class BertGenerationPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = BertGenerationConfig
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
@@ -609,6 +605,10 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
 @auto_docstring(
     custom_intro="""
     The bare BertGeneration model transformer outputting raw hidden-states without any specific head on top.
+    """
+)
+class BertGenerationEncoder(BertGenerationPreTrainedModel):
+    """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in [Attention is
@@ -623,9 +623,8 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
     to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
-)
-class BertGenerationEncoder(BertGenerationPreTrainedModel):
-    def __init__(self, config: BertGenerationConfig):
+
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
 
@@ -771,11 +770,15 @@ class BertGenerationOnlyLMHead(nn.Module):
             self.bias = self.decoder.bias
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    BertGeneration Model with a `language modeling` head on top for CLM fine-tuning.
+    """
+)
 class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
-    def __init__(self, config: BertGenerationConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         if not config.is_decoder:

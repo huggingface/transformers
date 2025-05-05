@@ -25,21 +25,12 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    is_torchdynamo_compiling,
-    logging,
-)
+from ...utils import auto_docstring, is_torchdynamo_compiling, logging
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava import LlavaConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "LlavaConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "llava-hf/llava-1.5-7b-hf"
 
 
 @dataclass
@@ -129,7 +120,11 @@ class LlavaPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The LLAVA model which consists of a vision backbone and a language model.
+    """
+)
 class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
     def __init__(self, config: LlavaConfig):
         super().__init__(config)
@@ -232,6 +227,11 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         **lm_kwargs,
     ) -> Union[Tuple, LlavaCausalLMOutputWithPast]:
         r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
         Example:
 
         ```python

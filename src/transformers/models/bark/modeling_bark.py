@@ -61,10 +61,6 @@ if is_flash_attn_available():
 logger = logging.get_logger(__name__)
 
 
-_CHECKPOINT_FOR_DOC = "suno/bark-small"
-_CONFIG_FOR_DOC = "BarkConfig"
-
-
 class BarkSelfAttention(nn.Module):
     # adapted from GPTNeoSelfAttention and Bark code
     # BarkSelfAttention can have two attention type, i.e full attention or causal attention
@@ -417,7 +413,7 @@ class BarkPreTrainedModel(PreTrainedModel):
 class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config_class = BarkSubModelConfig
 
-    def __init__(self, config: BarkSubModelConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
 
@@ -677,7 +673,12 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Bark semantic (or text) model. It shares the same architecture as the coarse model.
+    It is a GPT-2 like autoregressive model with a language modeling head on top.
+    """
+)
 class BarkSemanticModel(BarkCausalModel):
     base_model_prefix = "semantic"
     config_class = BarkSemanticConfig
@@ -782,7 +783,13 @@ class BarkSemanticModel(BarkCausalModel):
         return semantic_output
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Bark coarse acoustics model.
+    It shares the same architecture as the semantic (or text) model. It is a GPT-2 like autoregressive model with a
+    language modeling head on top.
+    """
+)
 class BarkCoarseModel(BarkCausalModel):
     base_model_prefix = "coarse_acoustics"
     config_class = BarkCoarseConfig
@@ -998,13 +1005,18 @@ class BarkCoarseModel(BarkCausalModel):
         return coarse_output
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Bark fine acoustics model. It is a non-causal GPT-like model with `config.n_codes_total` embedding layers and
+    language modeling heads, one for each codebook.
+    """
+)
 class BarkFineModel(BarkPreTrainedModel):
     base_model_prefix = "fine_acoustics"
     config_class = BarkFineConfig
     main_input_name = "codebook_idx"
 
-    def __init__(self, config: BarkFineConfig):
+    def __init__(self, config):
         # non-causal gpt-like model with one embedding layer and one lm_head for each codebook of Encodec
         super().__init__(config)
         self.config = config
@@ -1157,7 +1169,7 @@ class BarkFineModel(BarkPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        codebook_idx: int,
+        codebook_idx: int,  # an additional idx corresponding to the id of the codebook that will be predicted
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1170,14 +1182,15 @@ class BarkFineModel(BarkPreTrainedModel):
     ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
         r"""
         codebook_idx (`int`):
-            The index of the codebook to predict.
+            Index of the codebook that will be predicted.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            NOT IMPLEMENTED YET.
         input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            Here, due to `Bark` particularities, if `past_key_values` is used, `input_embeds` will be ignored and you
-            have to use `input_ids`. If `past_key_values` is not used and `use_cache` is set to `True`, `input_embeds`
-            is used in priority instead of `input_ids`.
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. If
+            `past_key_values` is used, optionally only the last `input_embeds` have to be input (see
+            `past_key_values`). This is useful if you want more control over how to convert `input_ids` indices into
+            associated vectors than the model's internal embedding lookup matrix.
         """
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1433,7 +1446,7 @@ class BarkFineModel(BarkPreTrainedModel):
 class BarkModel(BarkPreTrainedModel):
     config_class = BarkConfig
 
-    def __init__(self, config: BarkConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.semantic = BarkSemanticModel(config.semantic_config)

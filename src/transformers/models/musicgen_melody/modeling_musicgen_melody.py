@@ -743,6 +743,17 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
             `input_ids`.
 
             </Tip>
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states representing the concatenation of the text encoder output and the processed audio encoder output.
+            Used as a conditional signal and will thus be concatenated to the projected `decoder_input_ids`.
+        encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
+            Mask to avoid performing attention on conditional hidden states. Mask values
+            selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -981,7 +992,11 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Musicgen Melody decoder model with a language modelling head on top.
+    """
+)
 # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForCausalLM with MUSICGEN->MUSICGEN_MELODY,Musicgen->MusicgenMelody,MusicGen->Musicgen Melody
 class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
     def __init__(self, config: MusicgenMelodyDecoderConfig):
@@ -1051,6 +1066,17 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
             `input_ids`.
 
             </Tip>
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states representing the concatenation of the text encoder output and the processed audio encoder output.
+            Used as a conditional signal and will thus be concatenated to the projected `decoder_input_ids`.
+        encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
+            Mask to avoid performing attention on conditional hidden states. Mask values
+            selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
@@ -1463,8 +1489,9 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
 
 @auto_docstring(
     custom_intro="""
-    The composite Musicgen Melody model with a text and audio conditional models, a MusicgenMelody decoder and an audio encoder,
-    for music generation tasks with one or both of text and audio prompts.
+    text_encoder (`Optional[PreTrainedModel]`, *optional*): Text encoder.
+        audio_encoder (`Optional[PreTrainedModel]`, *optional*): Audio code decoder.
+        decoder (`Optional[MusicgenMelodyForCausalLM]`, *optional*): MusicGen Melody decoder used to generate audio codes.
     """
 )
 class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
@@ -1481,10 +1508,13 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         audio_encoder: Optional[PreTrainedModel] = None,
         decoder: Optional[MusicgenMelodyForCausalLM] = None,
     ):
-        """
-        text_encoder (`Optional[PreTrainedModel]`, *optional*): Text encoder.
-        audio_encoder (`Optional[PreTrainedModel]`, *optional*): Audio code decoder.
-        decoder (`Optional[MusicgenMelodyForCausalLM]`, *optional*): MusicGen Melody decoder used to generate audio codes.
+        r"""
+        text_encoder (<fill_type>):
+            <fill_docstring>
+        audio_encoder (<fill_type>):
+            <fill_docstring>
+        decoder (<fill_type>):
+            <fill_docstring>
         """
         if config is None and None in (text_encoder, audio_encoder, decoder):
             raise ValueError(
@@ -1825,6 +1855,16 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             `decoder_input_ids`.
 
             </Tip>
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            Sequence of conditional hidden-states representing the concatenation of the projected text encoder output and the projected audio encoder output.
+            Used as a conditional signal and will thus be concatenated to the projected `decoder_input_ids`.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks)`, *optional*):
+            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
+            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
+            are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
 
         Examples:
         ```python

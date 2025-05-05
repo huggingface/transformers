@@ -41,7 +41,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    logging,
+)
 from .configuration_megatron_bert import MegatronBertConfig
 
 
@@ -761,8 +765,8 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
-        add_pooling_layer (`<fill_type>`, defaults to `True`):
-            <fill_description>
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -895,14 +899,19 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    MegatronBert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a
+    `next sentence prediction (classification)` head.
+    """
+)
 class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder"]
 
     def __init__(self, config, add_binary_head=True):
         r"""
-        add_binary_head (`<fill_type>`, defaults to `True`):
-            <fill_description>
+        add_binary_head (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
 
@@ -998,7 +1007,11 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    MegatronBert Model with a `language modeling` head on top for CLM fine-tuning.
+    """
+)
 class MegatronBertForCausalLM(MegatronBertPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["cls.predictions.decoder"]
 
@@ -1044,6 +1057,7 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel, GenerationMixin):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
+            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
 
         Example:
 
@@ -1312,7 +1326,12 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    MegatronBert Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """
+)
 class MegatronBertForSequenceClassification(MegatronBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

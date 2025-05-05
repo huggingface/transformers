@@ -24,13 +24,15 @@ from transformers import AutoModelForImageTextToText
 
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-)
+from ...utils import ModelOutput, auto_docstring
 from .configuration_colpali import ColPaliConfig
 
 
+@auto_docstring(
+    custom_intro="""
+    The bare ColPali model outputting raw hidden-states without any specific head on top.
+    """
+)
 @auto_docstring
 class ColPaliPreTrainedModel(PreTrainedModel):
     config_class = ColPaliConfig
@@ -97,7 +99,7 @@ class ColPaliForRetrievalOutput(ModelOutput):
 @auto_docstring(
     custom_intro="""
     In our proposed ColPali approach, we leverage VLMs to construct efficient multi-vector embeddings directly
-    from document images ("screenshots") for document retrieval. We train the model to maximize the similarity
+    from document images (“screenshots”) for document retrieval. We train the model to maximize the similarity
     between these document embeddings and the corresponding query embeddings, using the late interaction method
     introduced in ColBERT.
 

@@ -573,8 +573,8 @@ class MobileViTV2Encoder(nn.Module):
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTPreTrainedModel with MobileViT->MobileViTV2,mobilevit->mobilevitv2
 @auto_docstring
+# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTPreTrainedModel with MobileViT->MobileViTV2,mobilevit->mobilevitv2
 class MobileViTV2PreTrainedModel(PreTrainedModel):
     config_class = MobileViTV2Config
     base_model_prefix = "mobilevitv2"
@@ -598,9 +598,9 @@ class MobileViTV2PreTrainedModel(PreTrainedModel):
 @auto_docstring
 class MobileViTV2Model(MobileViTV2PreTrainedModel):
     def __init__(self, config: MobileViTV2Config, expand_output: bool = True):
-        """
-        expand_output (`bool`, *optional*, defaults to `True`):
-            Whether to expand the output to the original image size.
+        r"""
+        expand_output (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -677,7 +677,12 @@ class MobileViTV2Model(MobileViTV2PreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    MobileViTV2 model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    ImageNet.
+    """
+)
 class MobileViTV2ForImageClassification(MobileViTV2PreTrainedModel):
     def __init__(self, config: MobileViTV2Config) -> None:
         super().__init__(config)
@@ -866,7 +871,11 @@ class MobileViTV2DeepLabV3(nn.Module):
         return features
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    MobileViTV2 model with a semantic segmentation head on top, e.g. for Pascal VOC.
+    """
+)
 class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
     def __init__(self, config: MobileViTV2Config) -> None:
         super().__init__(config)

@@ -1183,7 +1183,11 @@ class MllamaPreTrainedModel(PreTrainedModel):
         return causal_mask
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Mllama Vision Model which consists of two vision encoders.
+    """
+)
 class MllamaVisionModel(MllamaPreTrainedModel):
     config_class = MllamaVisionConfig
     base_model_prefix = "vision_model"
@@ -1248,11 +1252,23 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:
         r"""
-        aspect_ratio_ids (`torch.Tensor`):
-            <fill_description>
-        aspect_ratio_mask (`torch.Tensor`):
-            <fill_description>
+        aspect_ratio_ids (`torch.Tensor` of shape `(batch_size, max_num_images)`, *optional*):
+            Aspect ratio ids used to select the appropriate precomputed tile embeddings based on the aspect ratio of each input image.
+            These ids correspond to indices in the model's list of supported aspect ratios, offset by 1.
 
+            For example, if the model supports aspect ratios [[1, 1], [1, 2], [2, 1]]:
+            - An image with aspect ratio [1, 1] would have ID 1
+            - An image with aspect ratio [1, 2] would have ID 2
+            - An image with aspect ratio [2, 1] would have ID 3
+
+            The id 0 is reserved for padding (i.e., no image).
+
+            If an image has aspect ratio [1, 2], that means it was split into 2 tiles horizontally, and its `aspect_ratio_id` would be 2.
+        aspect_ratio_mask (`torch.Tensor` of shape `(batch_size, max_num_images, max_num_tiles)`, *optional*):
+            Mask to avoid performing attention on padding tiles. Mask values selected in `[0, 1]`:
+
+            - 1 for tiles that are **not masked**,
+            - 0 for tiles that are **masked**.
 
         Example:
 
@@ -1398,7 +1414,11 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Mllama Text Model which consists of transformer with self and cross attention layers.
+    """
+)
 class MllamaTextModel(MllamaPreTrainedModel):
     config_class = MllamaTextConfig
     base_model_prefix = "language_model.model"
@@ -1424,10 +1444,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        r"""
-        full_text_row_masked_out_mask (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
-            <fill_description>
-        """
         return self.embed_tokens
 
     def set_input_embeddings(self, value):
@@ -1451,8 +1467,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         r"""
-        full_text_row_masked_out_mask (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
-            <fill_description>
         cross_attention_states (`torch.FloatTensor`, *optional*):
             Output of the vision model, used for cross-attention. This tensor contains the processed image features that
             the language model will attend to.
@@ -1463,7 +1477,8 @@ class MllamaTextModel(MllamaPreTrainedModel):
             For each text token (in seq_length):
             - 1 indicates the token **should attend** to the corresponding image tile
             - 0 indicates the token **should not attend** to the corresponding image tile
-
+        full_text_row_masked_out_mask (<fill_type>):
+            <fill_docstring>
 
         Example:
 
@@ -1598,7 +1613,11 @@ class MllamaTextModel(MllamaPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Mllama Text Model with a language modeling head on top.
+    """
+)
 class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     config_class = MllamaTextConfig
     _supports_static_cache = True  # only the LLM without cross attn can do compile
@@ -1624,20 +1643,12 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
         return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        r"""
-        full_text_row_masked_out_mask (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
-            <fill_description>
-        """
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
 
     def get_decoder(self):
-        r"""
-        full_text_row_masked_out_mask (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
-            <fill_description>
-        """
         return self.model
 
     @auto_docstring
@@ -1675,6 +1686,8 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        full_text_row_masked_out_mask (<fill_type>):
+            <fill_docstring>
 
         Example:
 
@@ -1739,7 +1752,11 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Mllama model which consists of a vision encoder and a language model.
+    """
+)
 class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
 

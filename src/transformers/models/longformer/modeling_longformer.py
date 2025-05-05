@@ -26,7 +26,11 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN, gelu
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    logging,
+)
 from .configuration_longformer import LongformerConfig
 
 
@@ -1431,8 +1435,8 @@ class LongformerModel(LongformerPreTrainedModel):
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
-        add_pooling_layer (`<fill_type>`, defaults to `True`):
-            <fill_description>
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -1710,32 +1714,32 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
-        Mask filling example:
+            Mask filling example:
 
-        ```python
-        >>> from transformers import AutoTokenizer, LongformerForMaskedLM
+            ```python
+            >>> from transformers import AutoTokenizer, LongformerForMaskedLM
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
-        >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
-        ```
+            >>> tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
+            >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
+            ```
 
-        Let's try a very long input.
+            Let's try a very long input.
 
-        ```python
-        >>> TXT = (
-        ...     "My friends are <mask> but they eat too many carbs."
-        ...     + " That's why I decide not to eat with them." * 300
-        ... )
-        >>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
-        >>> logits = model(input_ids).logits
+            ```python
+            >>> TXT = (
+            ...     "My friends are <mask> but they eat too many carbs."
+            ...     + " That's why I decide not to eat with them." * 300
+            ... )
+            >>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
+            >>> logits = model(input_ids).logits
 
-        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-        >>> probs = logits[0, masked_index].softmax(dim=0)
-        >>> values, predictions = probs.topk(5)
+            >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+            >>> probs = logits[0, masked_index].softmax(dim=0)
+            >>> values, predictions = probs.topk(5)
 
-        >>> tokenizer.decode(predictions).split()
-        ['healthy', 'skinny', 'thin', 'good', 'vegetarian']
-        ```"""
+            >>> tokenizer.decode(predictions).split()
+            ['healthy', 'skinny', 'thin', 'good', 'vegetarian']
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.longformer(
@@ -1773,7 +1777,12 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Longformer Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """
+)
 class LongformerForSequenceClassification(LongformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2152,13 +2161,6 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
             Mask to decide the attention given on each token, local attention or global attention. Tokens with global
             attention attends to all other tokens, and all other tokens attend to them. This is important for

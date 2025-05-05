@@ -47,6 +47,15 @@ from .configuration_beit import BeitConfig
 
 logger = logging.get_logger(__name__)
 
+# General docstring
+
+# Base docstring
+_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+
+# Image classification docstring
+_IMAGE_CLASS_CHECKPOINT = "microsoft/beit-base-patch16-224"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
+
 
 @dataclass
 class BeitModelOutputWithPooling(BaseModelOutputWithPooling):
@@ -727,12 +736,8 @@ class BeitEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class BeitPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = BeitConfig
     base_model_prefix = "beit"
     main_input_name = "pixel_values"
@@ -773,9 +778,9 @@ class BeitPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class BeitModel(BeitPreTrainedModel):
     def __init__(self, config: BeitConfig, add_pooling_layer: bool = True) -> None:
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state..
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -878,10 +883,12 @@ class BeitPooler(nn.Module):
 
 
 @auto_docstring(
-    custom_intro="""Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
+    custom_intro="""
+    Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
     visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
     predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
-    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
+    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.
+    """
 )
 class BeitForMaskedImageModeling(BeitPreTrainedModel):
     def __init__(self, config: BeitConfig) -> None:
@@ -912,13 +919,12 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
-        Example:
+        Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, BeitForMaskedImageModeling
@@ -975,7 +981,12 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Beit Model transformer with an image classification head on top (a linear layer on top of the average of the final
+    hidden states of the patch tokens) e.g. for ImageNet.
+    """
+)
 class BeitForImageClassification(BeitPreTrainedModel):
     def __init__(self, config: BeitConfig) -> None:
         super().__init__(config)
@@ -1434,9 +1445,13 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    BEiT backbone, to be used with frameworks like DETR and MaskFormer.
+    """
+)
 class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
-    def __init__(self, config: BeitConfig):
+    def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
 
@@ -1478,7 +1493,7 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         r"""
-        Example:
+        Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, AutoBackbone

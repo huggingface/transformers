@@ -748,8 +748,8 @@ class MT5ClassificationHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel with T5->MT5, t5->mt5
 @auto_docstring
+# Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel with T5->MT5, t5->mt5
 class MT5PreTrainedModel(PreTrainedModel):
     config_class = MT5Config
     load_tf_weights = load_tf_weights_in_mt5
@@ -1426,6 +1426,7 @@ class MT5Model(MT5PreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
+    # Copied from transformers.models.t5.modeling_t5.T5Model.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1469,6 +1470,21 @@ class MT5Model(MT5PreTrainedModel):
 
             To know more on how to prepare `decoder_input_ids` for pretraining take a look at [MT5
             Training](./mt5#training).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
+            `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
 
         Example:
 
@@ -1563,7 +1579,11 @@ class MT5Model(MT5PreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    MT5 Model with a `language modeling` head on top.
+    """
+)
 class MT5ForConditionalGeneration(MT5PreTrainedModel, GenerationMixin):
     r"""
     Examples:
@@ -1678,6 +1698,7 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel, GenerationMixin):
         return self.decoder
 
     @auto_docstring
+    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1722,6 +1743,21 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel, GenerationMixin):
 
             To know more on how to prepare `decoder_input_ids` for pretraining take a look at [MT5
             Training](./mt5#training).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
+            `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
             config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for
@@ -1982,6 +2018,7 @@ class MT5EncoderModel(MT5PreTrainedModel):
             self.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
 
     @auto_docstring
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2030,7 +2067,12 @@ class MT5EncoderModel(MT5PreTrainedModel):
         return encoder_outputs
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    MT5 model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
+    tasks.
+    """
+)
 class MT5ForSequenceClassification(MT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
@@ -2047,6 +2089,7 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
         self.model_parallel = False
 
     @auto_docstring
+    # Copied from transformers.models.t5.modeling_t5.T5ForSequenceClassification.forward with T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2089,6 +2132,21 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
 
             To know more on how to prepare `decoder_input_ids` for pretraining take a look at [MT5
             Training](./mt5#training).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
+            `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
@@ -2102,7 +2160,7 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
                 f"Passing input embeddings is currently not supported for {self.__class__.__name__}"
             )
 
-        # Copied from models.bart.modeling_bart.BartModel.forward different to other models, T5 automatically creates
+        # Copied from models.bart.modeling_bart.BartModel.forward different to other models, MT5 automatically creates
         # decoder_input_ids from input_ids if no decoder_input_ids are provided
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             if input_ids is None:
@@ -2196,6 +2254,7 @@ class MT5ForTokenClassification(MT5PreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    # Copied from transformers.models.t5.modeling_t5.T5ForTokenClassification.forward with T5->MT5
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -2217,12 +2276,9 @@ class MT5ForTokenClassification(MT5PreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
 
-            To know more on how to prepare `input_ids` for pretraining take a look a [MT5 Training](./mt5#training).
+            To know more on how to prepare `input_ids` for pretraining take a look a [MT5 Training](./t5#training).
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-
-
-        Returns:
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2308,6 +2364,7 @@ class MT5ForQuestionAnswering(MT5PreTrainedModel):
         return self.decoder
 
     @auto_docstring
+    # Copied from transformers.models.t5.modeling_t5.T5ForQuestionAnswering.forward
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2329,7 +2386,7 @@ class MT5ForQuestionAnswering(MT5PreTrainedModel):
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqQuestionAnsweringModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. MT5 is a model with relative position embeddings so you
+            Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
             should be able to pad the inputs on both the right and the left.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -2337,7 +2394,7 @@ class MT5ForQuestionAnswering(MT5PreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
 
-            To know more on how to prepare `input_ids` for pretraining take a look a [MT5 Training](./mt5#training).
+            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -2346,11 +2403,26 @@ class MT5ForQuestionAnswering(MT5PreTrainedModel):
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            MT5 uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            T5 uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
             is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
 
-            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [MT5
-            Training](./mt5#training).
+            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [T5
+            Training](./t5#training).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
+            `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = use_cache if use_cache is not None else self.config.use_cache

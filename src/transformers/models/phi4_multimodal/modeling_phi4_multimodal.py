@@ -46,13 +46,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-    is_torch_flex_attn_available,
-    logging,
-    torch_int,
-)
+from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging, torch_int
 from .configuration_phi4_multimodal import Phi4MultimodalAudioConfig, Phi4MultimodalConfig, Phi4MultimodalVisionConfig
 
 
@@ -1004,6 +998,7 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
         return (x - self.global_mean) * self.global_invstd
 
 
+@auto_docstring
 class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
     config_class = Phi4MultimodalAudioConfig
     supports_gradient_checkpointing = True
@@ -1476,7 +1471,6 @@ class Phi4MultimodalDecoderLayer(GradientCheckpointingLayer):
         self.resid_attn_dropout = nn.Dropout(config.resid_pdrop)
         self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1729,7 +1723,7 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
             the Processor).
         audio_embed_sizes (`torch.Tensor`, *optional*):
             Size of the audio inputs.
-        audio_attention_mask (`torch.Tensor`, *optional*):
+        audio_attention_mask (`torch.Tensor, *optional*):
             Attention mask for the audio inputs.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1974,13 +1968,12 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         return causal_mask
 
 
-@auto_docstring
 class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config: Phi4MultimodalConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.model = Phi4MultimodalModel(config)
         self.vocab_size = config.vocab_size
@@ -2043,7 +2036,7 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
             the Processor).
         audio_embed_sizes (`torch.Tensor`, *optional*):
             Size of the audio inputs.
-        audio_attention_mask (`torch.Tensor`, *optional*):
+        audio_attention_mask (`torch.Tensor, *optional*):
             Attention mask for the audio inputs.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

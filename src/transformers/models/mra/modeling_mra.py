@@ -813,8 +813,8 @@ class MraOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
-# Copied from transformers.models.yoso.modeling_yoso.YosoPreTrainedModel with Yoso->Mra,yoso->mra
 @auto_docstring
+# Copied from transformers.models.yoso.modeling_yoso.YosoPreTrainedModel with Yoso->Mra,yoso->mra
 class MraPreTrainedModel(PreTrainedModel):
     config_class = MraConfig
     base_model_prefix = "mra"
@@ -1035,7 +1035,12 @@ class MraClassificationHead(nn.Module):
         return x
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    MRA Model transformer with a sequence classification/regression head on top (a linear layer on top of
+    the pooled output) e.g. for GLUE tasks.
+    """
+)
 class MraForSequenceClassification(MraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

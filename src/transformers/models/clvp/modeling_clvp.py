@@ -50,8 +50,6 @@ from .configuration_clvp import (
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "susnato/clvp_dev"
-
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
@@ -436,7 +434,7 @@ class ClvpEncoderMLP(nn.Module):
 
 
 class ClvpEncoderLayer(nn.Module):
-    def __init__(self, config: ClvpEncoderConfig):
+    def __init__(self, config: ClvpConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -497,13 +495,13 @@ class ClvpEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.xlm.modeling_xlm.XLMSequenceSummary with XLMConfig->ClvpDecoderConfig,  XLM->Clvp
+# Copied from transformers.models.xlm.modeling_xlm.XLMSequenceSummary with XLM->Clvp
 class ClvpSequenceSummary(nn.Module):
     r"""
     Compute a single vector summary of a sequence hidden states.
 
     Args:
-        config ([`ClvpDecoderConfig`]):
+        config ([`ClvpConfig`]):
             The config used by the model. Relevant arguments in the config class of the model are (refer to the actual
             config class of your model for the default values it uses):
 
@@ -524,7 +522,7 @@ class ClvpSequenceSummary(nn.Module):
             - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and activation.
     """
 
-    def __init__(self, config: ClvpDecoderConfig):
+    def __init__(self, config: ClvpConfig):
         super().__init__()
 
         self.summary_type = getattr(config, "summary_type", "last")
@@ -845,14 +843,16 @@ class ClvpPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-@auto_docstring(
-    custom_intro="""
+class ClvpEncoder(ClvpPreTrainedModel):
+    """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`ClvpEncoderLayer`].
+
+    Args:
+        config: ClvpConfig
     """
-)
-class ClvpEncoder(ClvpPreTrainedModel):
-    def __init__(self, config: ClvpEncoderConfig):
+
+    def __init__(self, config: ClvpConfig):
         super().__init__(config)
 
         self.config = config
@@ -875,7 +875,6 @@ class ClvpEncoder(ClvpPreTrainedModel):
     def set_input_embeddings(self, value):
         self.token_embedding = value
 
-    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -886,6 +885,35 @@ class ClvpEncoder(ClvpPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
+        r"""
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`, *optional*):
+                Indices of input sequence tokens in the vocabulary.
+
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
+
+                [What are input IDs?](../glossary#input-ids)
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                input embeddings for the model. This bypasses the model's internal embedding lookup matrix.
+            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            position_ids (`torch.LongTensor`, *optional*):
+                Denotes the position ids of `input_ids`.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -971,13 +999,12 @@ class ClvpEncoder(ClvpPreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
+class ClvpDecoder(ClvpPreTrainedModel):
+    """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ClvpDecoderLayer`]
     """
-)
-class ClvpDecoder(ClvpPreTrainedModel):
-    def __init__(self, config: ClvpDecoderConfig):
+
+    def __init__(self, config):
         super().__init__(config)
 
         self.config = config
@@ -1219,9 +1246,13 @@ class ClvpModel(ClvpPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The CLVP decoder model with a language modelling head on top.
+    """
+)
 class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
-    def __init__(self, config: ClvpDecoderConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.config = config
@@ -1449,8 +1480,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
 @auto_docstring(
     custom_intro="""
     The composite CLVP model with a text encoder, speech encoder and speech decoder model.
-    The speech decoder model generates the speech_ids from the text and the text encoder and speech encoder works
-    together to filter out the best speech_ids.
     """
 )
 class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):

@@ -26,7 +26,9 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2CLS, ACT2FN
-from ...file_utils import ModelOutput
+from ...file_utils import (
+    ModelOutput,
+)
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_utils import PreTrainedModel
@@ -1305,7 +1307,6 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
 
         return embeddings, reference_points, encoder_bboxes, encoder_class_similarity, anchors
 
-    @auto_docstring
     def forward(
         self,
         vision_features,
@@ -1316,15 +1317,21 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-        r"""
-        vision_features (`torch.FloatTensor`):
-            The sequence of vision features. shape depends on the vision backbone.
-        class_features (`torch.FloatTensor`):
-            The sequence of class features of shape `(class_sequence_length, batch_size, class_embed_dim)`.
-        task_features (`torch.FloatTensor`):
-            The sequence of task features of shape `(task_sequence_length, batch_size, decoder_hidden_dim)`.
-        task_mask (`torch.LongTensor`):
-            The mask for the task features of shape `(batch_size, task_sequence_length)`.
+        """
+        Args:
+            vision_features (`torch.FloatTensor`): The sequence of vision features. shape depends on the vision
+                backbone.
+            class_features (`torch.FloatTensor`): The sequence of class features of shape
+                `(class_sequence_length, batch_size, class_embed_dim)`.
+            task_features (`torch.FloatTensor`): The sequence of task features of shape
+                `(task_sequence_length, batch_size, decoder_hidden_dim)`.
+            task_mask (`torch.LongTensor`): The mask for the task features of shape `(batch_size, task_sequence_length)`.
+            output_attentions (`bool`, *optional*): Whether or not to return the attentions tensors of all attention
+                layers. See `attentions` under returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*): Whether or not to return the hidden states of all layers. See
+                `hidden_states` under returned tensors for more detail.
+            return_dict (`bool`, *optional*): Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain
+                tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1518,17 +1525,30 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], OmDetTurboObjectDetectionOutput]:
         r"""
-        classes_input_ids (`torch.LongTensor`):
-            <fill_description>
-        classes_attention_mask (`torch.LongTensor`):
-            <fill_description>
-        tasks_input_ids (`torch.LongTensor`):
-            <fill_description>
-        tasks_attention_mask (`torch.LongTensor`):
-            <fill_description>
-        classes_structure (`torch.LongTensor`):
-            <fill_description>
+        classes_input_ids (`torch.LongTensor` of shape `(total_classes (>= batch_size), sequence_length)`):
+            Indices of input classes sequence tokens in the vocabulary of the language model.
+            Several classes can be provided for each tasks, thus the tokenized classes are flattened
+            and the structure of the classes is provided in the `classes_structure` argument.
 
+            Indices can be obtained using [`OmDetTurboProcessor`]. See [`OmDetTurboProcessor.__call__`] for
+            details.
+
+            [What are input IDs?](../glossary#input-ids)
+        classes_attention_mask (`torch.BoolTensor` of shape `(total_classes (>= batch_size), num_classes, sequence_length)`):
+            Attention mask for the classes. This is a binary mask that indicates which tokens should be attended to,
+            and which should not.
+        tasks_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input tasks sequence tokens in the vocabulary of the language model.
+
+            Indices can be obtained using [`OmDetTurboProcessor`]. See [`OmDetTurboProcessor.__call__`] for
+            details.
+
+            [What are input IDs?](../glossary#input-ids)
+        tasks_attention_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
+            Attention mask for the tasks. This is a binary mask that indicates which tokens should be attended to,
+            and which should not.
+        classes_structure (torch.LongTensor of shape `(batch_size)`):
+            Structure of the classes. This tensor indicates the number of classes for each task.
 
         Examples:
 

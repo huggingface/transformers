@@ -458,12 +458,8 @@ class BlipEncoderLayer(nn.Module):
         return outputs
 
 
+@auto_docstring
 class BlipPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = BlipConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
@@ -648,7 +644,11 @@ class BlipVisionModel(BlipPreTrainedModel):
         return self.embeddings
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    This model is going to be deprecated in future versions. Please use `BlipForConditionalGeneration`, `BlipForQuestionAnswering` or `BlipForImageTextRetrieval` depending on your usecase.
+    """
+)
 class BlipModel(BlipPreTrainedModel):
     config_class = BlipConfig
 
@@ -789,7 +789,6 @@ class BlipModel(BlipPreTrainedModel):
             obtained by applying the image embeddings to the text encoder using the cross-attention mechanism.
 
         Examples:
-
         ```python
         >>> from PIL import Image
         >>> import requests
@@ -1395,8 +1394,8 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BlipTextVisionModelOutput]:
         r"""
-        use_itm_head (`bool`, *optional*, defaults to `True`):
-            Whether or not to use the image-text matching head.
+        use_itm_head (<fill_type>):
+            <fill_docstring>
 
         Examples:
 

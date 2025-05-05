@@ -33,7 +33,10 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import auto_docstring, logging
+from ...utils import (
+    auto_docstring,
+    logging,
+)
 from .configuration_layoutlm import LayoutLMConfig
 
 
@@ -1168,18 +1171,12 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    LayoutLM Model with a span classification head on top for extractive question-answering tasks such as
-    [DocVQA](https://rrc.cvc.uab.es/?ch=17) (a linear layer on top of the final hidden-states output to compute `span
-    start logits` and `span end logits`).
-    """
-)
+@auto_docstring
 class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
     def __init__(self, config, has_visual_segment_embedding=True):
         r"""
-        has_visual_segment_embedding (`<fill_type>`, defaults to `True`):
-            <fill_description>
+        has_visual_segment_embedding (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1210,9 +1207,8 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
-        bbox (`torch.LongTensor`, *optional*):
-            <fill_description>
-
+        bbox (<fill_type>):
+            <fill_docstring>
 
         Example:
 

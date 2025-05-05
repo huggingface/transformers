@@ -20,9 +20,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import DynamicCache
-from ...utils import (
-    logging,
-)
+from ...utils import logging
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 from ..idefics3.modeling_idefics3 import (
@@ -327,11 +325,6 @@ class SmolVLMModel(Idefics3Model):
 
 
 class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
-    """
-    A subclass of Idefics3ForConditionalGeneration that uses SmolVLMModel
-    instead of the default Idefics3Model.
-    """
-
     def __init__(self, config):
         super().__init__(config)
         self.model = SmolVLMModel(config)
@@ -340,14 +333,6 @@ class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
 
     def forward(self, **super_kwargs):
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `SmolVLMForConditionalGeneration`).
-                Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
-                computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        Returns:
-
         Example:
 
         ```python

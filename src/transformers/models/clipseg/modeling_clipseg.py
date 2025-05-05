@@ -429,12 +429,8 @@ class CLIPSegEncoderLayer(nn.Module):
         return outputs
 
 
+@auto_docstring
 class CLIPSegPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = CLIPSegConfig
     base_model_prefix = "clip"
     supports_gradient_checkpointing = True
@@ -592,7 +588,6 @@ class CLIPSegTextTransformer(nn.Module):
         self.eos_token_id = config.eos_token_id
 
     @auto_docstring
-    # Adapted from transformers.models.clip.modeling_clip.CLIPTextTransformer.forward with clip->clipseg, CLIP->CLIPSeg
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -602,10 +597,6 @@ class CLIPSegTextTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -748,10 +739,6 @@ class CLIPSegVisionTransformer(nn.Module):
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = True,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -783,7 +770,6 @@ class CLIPSegVisionTransformer(nn.Module):
         )
 
 
-@auto_docstring
 class CLIPSegVisionModel(CLIPSegPreTrainedModel):
     config_class = CLIPSegVisionConfig
     main_input_name = "pixel_values"
@@ -1288,14 +1274,14 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CLIPSegOutput]:
         r"""
-        conditional_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values from the query images for computing the conditional embeddings.
-        conditional_embeddings (`torch.FloatTensor`, *optional*):
-            Conditional embeddings to be used instead of computing them from conditional_pixel_values.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        conditional_pixel_values (<fill_type>):
+            <fill_docstring>
+        conditional_embeddings (<fill_type>):
+            <fill_docstring>
 
         Examples:
 

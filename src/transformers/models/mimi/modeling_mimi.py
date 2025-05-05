@@ -45,9 +45,6 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-# General docstring
-
-
 @dataclass
 class MimiOutput(ModelOutput):
     """
@@ -1427,7 +1424,11 @@ class MimiPreTrainedModel(PreTrainedModel):
             module.scale.data.fill_(self.config.layer_scale_initial_scale)
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Mimi neural audio codec model.
+    """
+)
 class MimiModel(MimiPreTrainedModel):
     def __init__(self, config: MimiConfig):
         super().__init__(config)
@@ -1651,12 +1652,12 @@ class MimiModel(MimiPreTrainedModel):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Raw audio input converted to Float.
-        padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
             for *masked*.
         num_quantizers (`int`, *optional*):
             Number of quantizers (i.e codebooks) to use. By default, all quantizers are used.
-        audio_codes (`torch.LongTensor` of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
             Discret code embeddings computed using `model.encode`.
         encoder_past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.

@@ -627,6 +627,9 @@ class DepthProNeck(nn.Module):
         return features
 
 
+# General docstring
+
+
 @auto_docstring
 class DepthProPreTrainedModel(PreTrainedModel):
     config_class = DepthProConfig
@@ -656,7 +659,7 @@ class DepthProPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DepthProModel(DepthProPreTrainedModel):
-    def __init__(self, config: DepthProConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
         self.encoder = DepthProEncoder(config)
@@ -1029,10 +1032,10 @@ class DepthProDepthEstimationHead(nn.Module):
     """
 )
 class DepthProForDepthEstimation(DepthProPreTrainedModel):
-    def __init__(self, config: DepthProConfig, use_fov_model: Optional[bool] = None):
-        """
-        use_fov_model (`bool`, *optional*):
-            Whether to use `DepthProFovModel` to generate the field of view.
+    def __init__(self, config, use_fov_model=None):
+        r"""
+        use_fov_model (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config

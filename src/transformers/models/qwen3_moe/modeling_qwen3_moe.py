@@ -842,13 +842,12 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-@auto_docstring
 class Qwen3MoeForCausalLM(Qwen3MoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config: Qwen3MoeConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.model = Qwen3MoeModel(config)
         self.vocab_size = config.vocab_size
@@ -897,18 +896,10 @@ class Qwen3MoeForCausalLM(Qwen3MoePreTrainedModel, GenerationMixin):
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
@@ -982,9 +973,22 @@ class Qwen3MoeForCausalLM(Qwen3MoePreTrainedModel, GenerationMixin):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Qwen3Moe Model transformer with a sequence classification head on top (linear layer).
+
+    [`Qwen3MoeForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    (e.g. GPT-2) do.
+
+    Since it does classification on the last token, it requires to know the position of the last token. If a
+    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
+    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
+    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
+    each row of the batch).
+    """
+)
 class Qwen3MoeForSequenceClassification(Qwen3MoePreTrainedModel):
-    def __init__(self, config: Qwen3MoeConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = Qwen3MoeModel(config)
@@ -1014,11 +1018,10 @@ class Qwen3MoeForSequenceClassification(Qwen3MoePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> SequenceClassifierOutputWithPast:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-                config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-                `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         transformer_outputs: BaseModelOutputWithPast = self.model(
@@ -1072,7 +1075,7 @@ class Qwen3MoeForSequenceClassification(Qwen3MoePreTrainedModel):
 
 @auto_docstring
 class Qwen3MoeForTokenClassification(Qwen3MoePreTrainedModel):
-    def __init__(self, config: Qwen3MoeConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = Qwen3MoeModel(config)
@@ -1109,11 +1112,10 @@ class Qwen3MoeForTokenClassification(Qwen3MoePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> TokenClassifierOutput:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-                config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-                `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         outputs: BaseModelOutputWithPast = self.model(
@@ -1146,7 +1148,7 @@ class Qwen3MoeForTokenClassification(Qwen3MoePreTrainedModel):
 class Qwen3MoeForQuestionAnswering(Qwen3MoePreTrainedModel):
     base_model_prefix = "transformer"
 
-    def __init__(self, config: Qwen3MoeConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.transformer = Qwen3MoeModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)

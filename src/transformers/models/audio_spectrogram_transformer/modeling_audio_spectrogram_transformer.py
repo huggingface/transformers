@@ -376,12 +376,8 @@ class ASTEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class ASTPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = ASTConfig
     base_model_prefix = "audio_spectrogram_transformer"
     main_input_name = "input_values"
@@ -449,7 +445,6 @@ class ASTModel(ASTPreTrainedModel):
             the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
             tensor of type `torch.FloatTensor`. See [`~ASTFeatureExtractor.__call__`]
-
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -504,7 +499,12 @@ class ASTMLPHead(nn.Module):
         return hidden_state
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Audio Spectrogram Transformer model with an audio classification head on top (a linear layer on top of the pooled
+    output) e.g. for datasets like AudioSet, Speech Commands v2.
+    """
+)
 class ASTForAudioClassification(ASTPreTrainedModel):
     def __init__(self, config: ASTConfig) -> None:
         super().__init__(config)

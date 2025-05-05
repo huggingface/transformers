@@ -35,13 +35,14 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
-from ...utils import auto_docstring, logging
+from ...utils import (
+    auto_docstring,
+    logging,
+)
 from .configuration_autoformer import AutoformerConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "AutoformerConfig"
 
 
 @dataclass
@@ -888,6 +889,7 @@ class AutoformerDecoderLayer(nn.Module):
         return outputs
 
 
+@auto_docstring
 class AutoformerPreTrainedModel(PreTrainedModel):
     config_class = AutoformerConfig
     base_model_prefix = "model"
@@ -1475,7 +1477,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
             The sequence length here is equal to `context_length` + `max(config.lags_sequence)`.
 
             Missing values need to be replaced with zeros.
-
         past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`, *optional*):
             Optional time features, which the model internally will add to `past_values`. These could be things like
             "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
@@ -1488,14 +1489,12 @@ class AutoformerModel(AutoformerPreTrainedModel):
             Transformer requires to provide additional time features.
 
             The Autoformer only learns additional embeddings for `static_categorical_features`.
-
         past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected in
             `[0, 1]`:
 
             - 1 for values that are **observed**,
             - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-
         static_categorical_features (`torch.LongTensor` of shape `(batch_size, number of static categorical features)`, *optional*):
             Optional static categorical features for which the model will learn an embedding, which it will add to the
             values of the time series.
@@ -1503,14 +1502,12 @@ class AutoformerModel(AutoformerPreTrainedModel):
             Static categorical features are features which have the same value for all time steps (static over time).
 
             A typical example of a static categorical feature is a time series ID.
-
         static_real_features (`torch.FloatTensor` of shape `(batch_size, number of static real features)`, *optional*):
             Optional static real features which the model will add to the values of the time series.
 
             Static real features are features which have the same value for all time steps (static over time).
 
             A typical example of a static real feature is promotion information.
-
         future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length)`):
             Future values of the time series, that serve as labels for the model. The `future_values` is what the
             Transformer needs to learn to output, given the `past_values`.
@@ -1518,7 +1515,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
             See the demo notebook and code snippets for details.
 
             Missing values need to be replaced with zeros.
-
         future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`, *optional*):
             Optional time features, which the model internally will add to `future_values`. These could be things like
             "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
@@ -1531,16 +1527,15 @@ class AutoformerModel(AutoformerPreTrainedModel):
             Transformer requires to provide additional features.
 
             The Autoformer only learns additional embeddings for `static_categorical_features`.
-
-        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Mask to avoid performing attention on certain token indices. By default, a causal mask will be used, to
-            make sure the model can only look at previous inputs in order to predict the future.
-
-        decoder_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
+        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+            Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
 
         Examples:
 
@@ -1748,7 +1743,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             The sequence length here is equal to `context_length` + `max(config.lags_sequence)`.
 
             Missing values need to be replaced with zeros.
-
         past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`, *optional*):
             Optional time features, which the model internally will add to `past_values`. These could be things like
             "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
@@ -1761,14 +1755,12 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             Transformer requires to provide additional time features.
 
             The Autoformer only learns additional embeddings for `static_categorical_features`.
-
         past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected in
             `[0, 1]`:
 
             - 1 for values that are **observed**,
             - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-
         static_categorical_features (`torch.LongTensor` of shape `(batch_size, number of static categorical features)`, *optional*):
             Optional static categorical features for which the model will learn an embedding, which it will add to the
             values of the time series.
@@ -1776,14 +1768,12 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             Static categorical features are features which have the same value for all time steps (static over time).
 
             A typical example of a static categorical feature is a time series ID.
-
         static_real_features (`torch.FloatTensor` of shape `(batch_size, number of static real features)`, *optional*):
             Optional static real features which the model will add to the values of the time series.
 
             Static real features are features which have the same value for all time steps (static over time).
 
             A typical example of a static real feature is promotion information.
-
         future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length)`):
             Future values of the time series, that serve as labels for the model. The `future_values` is what the
             Transformer needs to learn to output, given the `past_values`.
@@ -1791,7 +1781,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             See the demo notebook and code snippets for details.
 
             Missing values need to be replaced with zeros.
-
         future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`, *optional*):
             Optional time features, which the model internally will add to `future_values`. These could be things like
             "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
@@ -1804,15 +1793,18 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             Transformer requires to provide additional features.
 
             The Autoformer only learns additional embeddings for `static_categorical_features`.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 
-        future_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`, *optional*):
-            Boolean mask to indicate which `future_values` were observed and which were missing. Mask values selected
-            in `[0, 1]`:
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+            Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        future_observed_mask (<fill_type>):
+            <fill_docstring>
 
-            - 1 for values that are **observed**,
-            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-
-            This mask is used to filter out missing values for the final loss calculation.
         Examples:
 
         ```python

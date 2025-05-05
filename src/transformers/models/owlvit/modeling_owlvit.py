@@ -691,6 +691,12 @@ class OwlViTTextTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -767,6 +773,11 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
+
         Examples:
         ```python
         >>> from transformers import AutoProcessor, OwlViTTextModel
@@ -869,7 +880,6 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-
         Examples:
         ```python
         >>> from PIL import Image
@@ -942,6 +952,11 @@ class OwlViTModel(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
+
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
             applying the projection layer to the pooled output of [`OwlViTTextModel`].
@@ -1028,11 +1043,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, OwlViTOutput]:
         r"""
-        return_base_image_embeds (`bool`, *optional*):
-            <fill_description>
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
-
+        return_base_image_embeds (`bool`, *optional*):
+            Whether or not to return the base image embeddings.
 
         Examples:
         ```python
@@ -1384,10 +1398,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         query_feature_map: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
     ) -> torch.FloatTensor:
-        r"""
-        query_pixel_values (`torch.FloatTensor`, *optional*):
-            <fill_description>
-        """
         _, class_embeds = self.class_predictor(query_image_features)
         pred_boxes = self.box_predictor(query_image_features, query_feature_map, interpolate_pos_encoding)
         pred_boxes_as_corners = center_to_corners_format(pred_boxes)
@@ -1437,9 +1447,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> OwlViTImageGuidedObjectDetectionOutput:
         r"""
-        query_pixel_values (`torch.FloatTensor`, *optional*):
-            <fill_description>
-
+        query_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values of query image(s) to be detected. Pass in one query image per target image.
 
         Examples:
         ```python
@@ -1542,6 +1551,14 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> OwlViTObjectDetectionOutput:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids).
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the last hidden state. See `text_model_last_hidden_state` and
+            `vision_model_last_hidden_state` under returned tensors for more detail.
+
         Examples:
         ```python
         >>> import requests

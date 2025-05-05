@@ -51,9 +51,6 @@ from .configuration_starcoder2 import Starcoder2Config
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "Starcoder2Config"
-_CHECKPOINT_FOR_DOC = "bigcode/starcoder2-7b"
-
 
 class Starcoder2MLP(nn.Module):
     def __init__(self, config: Starcoder2Config):

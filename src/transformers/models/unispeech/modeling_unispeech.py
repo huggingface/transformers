@@ -1225,33 +1225,6 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-UNISPEECH_CUSTOM_ARGS_DOCSTRING = r"""
-    input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-        Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-        into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-        soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-        conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
-    attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-        Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-        1]`:
-
-        - 1 for tokens that are **not masked**,
-        - 0 for tokens that are **masked**.
-
-        [What are attention masks?](../glossary#attention-mask)
-
-        <Tip warning={true}>
-
-        `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-        True`. For all models whose processor has `config.return_attention_mask == False`, `attention_mask` should
-        **not** be passed to avoid degraded performance when doing batched inference. For such models
-        `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware that these
-        models also yield slightly different results depending on whether `input_values` is padded or not.
-
-        </Tip>
-"""
-
-
 UniSpeechBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
@@ -1320,7 +1293,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
 
         return hidden_states
 
-    @auto_docstring(custom_args=UNISPEECH_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1331,9 +1304,8 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, UniSpeechBaseModelOutput]:
         r"""
-        mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
-            masked extracted features in *config.proj_codevector_dim* space.
+        mask_time_indices (<fill_type>):
+            <fill_docstring>
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1374,7 +1346,11 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         )
 
 
-@auto_docstring(custom_intro="""UniSpeech Model with a vector-quantization module and ctc loss for pre-training.""")
+@auto_docstring(
+    custom_intro="""
+    UniSpeech Model with a vector-quantization module and ctc loss for pre-training.
+    """
+)
 class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
     def __init__(self, config: UniSpeechConfig):
         super().__init__(config)
@@ -1436,7 +1412,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         logits = logits / temperature
         return logits
 
-    @auto_docstring(custom_args=UNISPEECH_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1512,11 +1488,13 @@ _HIDDEN_STATES_START_POSITION = 2
 
 
 @auto_docstring(
-    custom_intro="""UniSpeech Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC)."""
+    custom_intro="""
+    UniSpeech Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
+    """
 )
 class UniSpeechForCTC(UniSpeechPreTrainedModel):
-    def __init__(self, config: UniSpeechConfig, target_lang: Optional[str] = None):
-        """
+    def __init__(self, config, target_lang: Optional[str] = None):
+        r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
             adapter.<lang>.bin. Only relevant when using an instance of [`UniSpeechForCTC`] with adapters. Uses 'eng' by
@@ -1592,7 +1570,7 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
         for param in self.unispeech.parameters():
             param.requires_grad = False
 
-    @auto_docstring(custom_args=UNISPEECH_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1671,7 +1649,7 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
     """
 )
 class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
-    def __init__(self, config: UniSpeechConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1715,7 +1693,7 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
         for param in self.unispeech.parameters():
             param.requires_grad = False
 
-    @auto_docstring(custom_args=UNISPEECH_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1726,6 +1704,11 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`UniSpeechProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

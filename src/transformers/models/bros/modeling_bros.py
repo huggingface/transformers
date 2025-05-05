@@ -689,10 +689,10 @@ class BrosPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class BrosModel(BrosPreTrainedModel):
-    def __init__(self, config: BrosConfig, add_pooling_layer=True):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state.
+    def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -869,7 +869,7 @@ class BrosModel(BrosPreTrainedModel):
 class BrosForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config: BrosConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -981,7 +981,7 @@ class BrosForTokenClassification(BrosPreTrainedModel):
 class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config: BrosConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
         self.num_labels = config.num_labels
@@ -1033,10 +1033,10 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        initial_token_labels (`torch.FloatTensor`, *optional*):
-            Labels for the initial token classification task.
-        subsequent_token_labels (`torch.FloatTensor`, *optional*):
-            Labels for the subsequent token classification task.
+        initial_token_labels (<fill_type>):
+            <fill_docstring>
+        subsequent_token_labels (<fill_type>):
+            <fill_docstring>
 
         Examples:
 
@@ -1134,7 +1134,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
 class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config: BrosConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
         self.num_labels = config.num_labels

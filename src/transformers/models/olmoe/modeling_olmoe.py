@@ -725,7 +725,6 @@ class OlmoePreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-# TODO: re-enable check: Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Olmoe
 class OlmoeModel(OlmoePreTrainedModel):
     def __init__(self, config: OlmoeConfig):
         super().__init__(config)
@@ -750,7 +749,6 @@ class OlmoeModel(OlmoePreTrainedModel):
         self.embed_tokens = value
 
     @auto_docstring
-    # Ignore copy
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

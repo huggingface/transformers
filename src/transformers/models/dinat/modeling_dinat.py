@@ -53,6 +53,9 @@ else:
 logger = logging.get_logger(__name__)
 
 
+# drop_path and DinatDropPath are from the timm library.
+
+
 @dataclass
 class DinatEncoderOutput(ModelOutput):
     """
@@ -601,12 +604,8 @@ class DinatEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class DinatPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = DinatConfig
     base_model_prefix = "dinat"
     main_input_name = "pixel_values"
@@ -626,10 +625,10 @@ class DinatPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DinatModel(DinatPreTrainedModel):
-    def __init__(self, config: DinatConfig, add_pooling_layer=True):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state.
+    def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
 
@@ -659,7 +658,7 @@ class DinatModel(DinatPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @auto_docstring()
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -714,7 +713,7 @@ class DinatModel(DinatPreTrainedModel):
     """
 )
 class DinatForImageClassification(DinatPreTrainedModel):
-    def __init__(self, config: DinatConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         requires_backends(self, ["natten"])
@@ -730,7 +729,7 @@ class DinatForImageClassification(DinatPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring()
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -800,7 +799,7 @@ class DinatForImageClassification(DinatPreTrainedModel):
     """
 )
 class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
-    def __init__(self, config: DinatConfig):
+    def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
 
@@ -822,7 +821,7 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @auto_docstring()
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -830,7 +829,7 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
-        """
+        r"""
         Examples:
 
         ```python

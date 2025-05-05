@@ -649,7 +649,7 @@ class DebertaPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DebertaModel(DebertaPreTrainedModel):
-    def __init__(self, config: DebertaConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.embeddings = DebertaEmbeddings(config)
@@ -850,7 +850,7 @@ class DebertaOnlyMLMHead(nn.Module):
 class DebertaForMaskedLM(DebertaPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
-    def __init__(self, config: DebertaConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.legacy = config.legacy
         self.deberta = DebertaModel(config)
@@ -890,6 +890,13 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MaskedLMOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        """
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.deberta(
@@ -948,9 +955,14 @@ class ContextPooler(nn.Module):
         return self.config.hidden_size
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    DeBERTa Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """
+)
 class DebertaForSequenceClassification(DebertaPreTrainedModel):
-    def __init__(self, config: DebertaConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         num_labels = getattr(config, "num_labels", 2)
@@ -1057,7 +1069,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
 
 @auto_docstring
 class DebertaForTokenClassification(DebertaPreTrainedModel):
-    def __init__(self, config: DebertaConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1119,7 +1131,7 @@ class DebertaForTokenClassification(DebertaPreTrainedModel):
 
 @auto_docstring
 class DebertaForQuestionAnswering(DebertaPreTrainedModel):
-    def __init__(self, config: DebertaConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 

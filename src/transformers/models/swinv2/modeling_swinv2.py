@@ -28,12 +28,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_swinv2 import Swinv2Config
 
@@ -992,12 +987,12 @@ class Swinv2PreTrainedModel(PreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.swin.modeling_swin.SwinModel with SWIN->SWINV2,Swin->Swinv2
 class Swinv2Model(Swinv2PreTrainedModel):
-    def __init__(self, config: Swinv2Config, add_pooling_layer=True, use_mask_token=False):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-                Whether or not to apply pooling layer.
-        use_mask_token (`bool`, *optional*, defaults to `False`):
-                Whether or not to create and apply mask tokens in the embedding layer.
+    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
+        use_mask_token (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -1092,20 +1087,20 @@ class Swinv2Model(Swinv2PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Swinv2 Model with a decoder on top for masked image modeling, as proposed in
+        Swinv2 Model with a decoder on top for masked image modeling, as proposed in
     [SimMIM](https://arxiv.org/abs/2111.09886).
 
-    <Tip>
+        <Tip>
 
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
+        Note that we provide a script to pre-train this model on custom data in our [examples
+        directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
 
-    </Tip>
+        </Tip>
     """
 )
 # Copied from transformers.models.swin.modeling_swin.SwinForMaskedImageModeling with swin->swinv2, base-simmim-window6-192->tiny-patch4-window8-256,SWIN->SWINV2,Swin->Swinv2,192->256
 class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
-    def __init__(self, config: Swinv2Config):
+    def __init__(self, config):
         super().__init__(config)
 
         self.swinv2 = Swinv2Model(config, add_pooling_layer=False, use_mask_token=True)
@@ -1121,7 +1116,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring()
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1137,7 +1132,6 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
 
         Examples:
-
         ```python
         >>> from transformers import AutoImageProcessor, Swinv2ForMaskedImageModeling
         >>> import torch
@@ -1224,7 +1218,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
 )
 # Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with SWIN->SWINV2,Swin->Swinv2,swin->swinv2
 class Swinv2ForImageClassification(Swinv2PreTrainedModel):
-    def __init__(self, config: Swinv2Config):
+    def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -1293,7 +1287,7 @@ class Swinv2ForImageClassification(Swinv2PreTrainedModel):
     """
 )
 class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
-    def __init__(self, config: Swinv2Config):
+    def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
 
@@ -1315,7 +1309,7 @@ class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
-        """
+        r"""
         Examples:
 
         ```python

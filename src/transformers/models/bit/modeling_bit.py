@@ -653,7 +653,7 @@ class BitPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class BitModel(BitPreTrainedModel):
-    def __init__(self, config: BitConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
 
@@ -701,9 +701,14 @@ class BitModel(BitPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    BiT Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    ImageNet.
+    """
+)
 class BitForImageClassification(BitPreTrainedModel):
-    def __init__(self, config: BitConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.bit = BitModel(config)
@@ -766,9 +771,13 @@ class BitForImageClassification(BitPreTrainedModel):
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    BiT backbone, to be used with frameworks like DETR and MaskFormer.
+    """
+)
 class BitBackbone(BitPreTrainedModel, BackboneMixin):
-    def __init__(self, config: BitConfig):
+    def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
 

@@ -522,12 +522,8 @@ class MLCDVisionTransformer(nn.Module):
         )
 
 
+@auto_docstring
 class MLCDPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = MLCDVisionConfig
     base_model_prefix = "mlcd"
     supports_gradient_checkpointing = True
@@ -590,7 +586,7 @@ class MLCDVisionModel(MLCDPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-        Examples:
+        Example:
 
         ```python
         >>> import requests

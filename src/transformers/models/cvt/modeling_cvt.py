@@ -536,10 +536,10 @@ class CvtPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class CvtModel(CvtPreTrainedModel):
-    def __init__(self, config: CvtConfig, add_pooling_layer: bool = True):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state..
+    def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -586,9 +586,14 @@ class CvtModel(CvtPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Cvt Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
+    the [CLS] token) e.g. for ImageNet.
+    """
+)
 class CvtForImageClassification(CvtPreTrainedModel):
-    def __init__(self, config: CvtConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels

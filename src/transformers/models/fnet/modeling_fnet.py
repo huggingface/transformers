@@ -24,7 +24,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...utils import is_scipy_available
+from ...utils import auto_docstring, is_scipy_available
 
 
 if is_scipy_available():
@@ -45,7 +45,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
-    auto_docstring,
     logging,
 )
 from .configuration_fnet import FNetConfig
@@ -389,12 +388,8 @@ class FNetPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+@auto_docstring
 class FNetPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = FNetConfig
     base_model_prefix = "fnet"
     supports_gradient_checkpointing = True
@@ -443,17 +438,19 @@ class FNetForPreTrainingOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-@auto_docstring(
-    custom_intro="""
+@auto_docstring
+class FNetModel(FNetPreTrainedModel):
+    """
+
     The model can behave as an encoder, following the architecture described in [FNet: Mixing Tokens with Fourier
     Transforms](https://arxiv.org/abs/2105.03824) by James Lee-Thorp, Joshua Ainslie, Ilya Eckstein, Santiago Ontanon.
+
     """
-)
-class FNetModel(FNetPreTrainedModel):
-    def __init__(self, config: FNetConfig, add_pooling_layer: bool = True):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state.
+
+    def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -552,7 +549,7 @@ class FNetModel(FNetPreTrainedModel):
 class FNetForPreTraining(FNetPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
-    def __init__(self, config: FNetConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.fnet = FNetModel(config)
@@ -642,7 +639,7 @@ class FNetForPreTraining(FNetPreTrainedModel):
 class FNetForMaskedLM(FNetPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
-    def __init__(self, config: FNetConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.fnet = FNetModel(config)
@@ -703,11 +700,11 @@ class FNetForMaskedLM(FNetPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    FNet Model with a next sentence prediction (classification) head on top.
+    FNet Model with a `next sentence prediction (classification)` head on top.
     """
 )
 class FNetForNextSentencePrediction(FNetPreTrainedModel):
-    def __init__(self, config: FNetConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.fnet = FNetModel(config)
@@ -791,9 +788,14 @@ class FNetForNextSentencePrediction(FNetPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    FNet Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
+    """
+)
 class FNetForSequenceClassification(FNetPreTrainedModel):
-    def __init__(self, config: FNetConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.fnet = FNetModel(config)
@@ -867,7 +869,7 @@ class FNetForSequenceClassification(FNetPreTrainedModel):
 
 @auto_docstring
 class FNetForMultipleChoice(FNetPreTrainedModel):
-    def __init__(self, config: FNetConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.fnet = FNetModel(config)
@@ -889,6 +891,30 @@ class FNetForMultipleChoice(FNetPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MultipleChoiceModelOutput]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
+            model's internal embedding lookup matrix.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
@@ -935,7 +961,7 @@ class FNetForMultipleChoice(FNetPreTrainedModel):
 
 @auto_docstring
 class FNetForTokenClassification(FNetPreTrainedModel):
-    def __init__(self, config: FNetConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -993,7 +1019,7 @@ class FNetForTokenClassification(FNetPreTrainedModel):
 
 @auto_docstring
 class FNetForQuestionAnswering(FNetPreTrainedModel):
-    def __init__(self, config: FNetConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels

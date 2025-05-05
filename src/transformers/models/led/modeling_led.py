@@ -2051,6 +2051,29 @@ class LEDModel(LEDPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], LEDSeq2SeqModelOutput]:
         r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`LedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+
+            LED uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+
+            If you want to change padding behavior, you should read [`modeling_led._prepare_decoder_inputs`] and modify
+            to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the
+            default strategy.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to decide the attention given on each token, local attention or global attention for the encoder.
             Tokens with global attention attends to all other tokens, and all other tokens attend to them. This is
@@ -2129,7 +2152,11 @@ class LEDModel(LEDPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The LED Model with a language modeling head. Can be used for summarization.
+    """
+)
 class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
     base_model_prefix = "led"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
@@ -2194,6 +2221,29 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], LEDSeq2SeqLMOutput]:
         r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`LedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+
+            LED uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+
+            If you want to change padding behavior, you should read [`modeling_led._prepare_decoder_inputs`] and modify
+            to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the
+            default strategy.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to decide the attention given on each token, local attention or global attention for the encoder.
             Tokens with global attention attends to all other tokens, and all other tokens attend to them. This is
@@ -2209,21 +2259,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-        Example of Conditional generation:
-
-        ```python
-        >>> from transformers import AutoTokenizer, LEDForConditionalGeneration
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/led-base-16384")
-        >>> TXT = "My friends are <mask> but they eat too many carbs."
-
-        >>> model = LEDForConditionalGeneration.from_pretrained("allenai/led-base-16384")
-        >>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
-
-        >>> prediction = model.generate(input_ids)[0]
-        >>> print(tokenizer.decode(prediction, skip_special_tokens=True))
-
-        Example of Summarization:
+        Example Summarization:
 
         ```python
         >>> import torch
@@ -2259,7 +2295,21 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
         >>> print(tokenizer.decode(summary_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=True))
         ```
 
-        ```"""
+        Example Conditional generation :
+
+        ```python
+        >>> from transformers import AutoTokenizer, LEDForConditionalGeneration
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/led-base-16384")
+        >>> TXT = "My friends are <mask> but they eat too many carbs."
+
+        >>> model = LEDForConditionalGeneration.from_pretrained("allenai/led-base-16384")
+        >>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
+
+        >>> prediction = model.generate(input_ids)[0]
+        >>> print(tokenizer.decode(prediction, skip_special_tokens=True))
+        ```
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
@@ -2377,6 +2427,29 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], LEDSeq2SeqSequenceClassifierOutput]:
         r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`LedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+
+            LED uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+
+            If you want to change padding behavior, you should read [`modeling_led._prepare_decoder_inputs`] and modify
+            to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the
+            default strategy.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to decide the attention given on each token, local attention or global attention for the encoder.
             Tokens with global attention attends to all other tokens, and all other tokens attend to them. This is
@@ -2506,6 +2579,29 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], LEDSeq2SeqQuestionAnsweringModelOutput]:
         r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`LedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+
+            LED uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+
+            If you want to change padding behavior, you should read [`modeling_led._prepare_decoder_inputs`] and modify
+            to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the
+            default strategy.
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to decide the attention given on each token, local attention or global attention for the encoder.
             Tokens with global attention attends to all other tokens, and all other tokens attend to them. This is

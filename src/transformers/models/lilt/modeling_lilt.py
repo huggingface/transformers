@@ -597,8 +597,8 @@ class LiltPreTrainedModel(PreTrainedModel):
 class LiltModel(LiltPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         r"""
-        add_pooling_layer (`<fill_type>`, defaults to `True`):
-            <fill_description>
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -742,10 +742,15 @@ class LiltModel(LiltPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    LiLT Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
+    """
+)
 class LiltForSequenceClassification(LiltPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->Lilt, roberta->lilt
-    def __init__(self, config: LiltConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -859,7 +864,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
 @auto_docstring
 class LiltForTokenClassification(LiltPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->Lilt, roberta->lilt
-    def __init__(self, config: LiltConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -981,7 +986,7 @@ class LiltClassificationHead(nn.Module):
 @auto_docstring
 class LiltForQuestionAnswering(LiltPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->Lilt, roberta->lilt
-    def __init__(self, config: LiltConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 

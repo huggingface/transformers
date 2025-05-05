@@ -15,18 +15,11 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import auto_docstring, logging, torch_int
 from .configuration_ijepa import IJepaConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-# General docstring
 
 
 class IJepaPatchEmbeddings(nn.Module):
@@ -470,17 +463,14 @@ class IJepaPooler(nn.Module):
         return pooled_output
 
 
-_EXPECTED_OUTPUT_SHAPE = [1, 256, 1280]
-
-
 @auto_docstring
 class IJepaModel(IJepaPreTrainedModel):
     def __init__(self, config: IJepaConfig, add_pooling_layer: bool = False, use_mask_token: bool = False):
         r"""
-        add_pooling_layer (`bool`, defaults to `False`):
-            <fill_description>
-        use_mask_token (`bool`, defaults to `False`):
-            <fill_description>
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
+        use_mask_token (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -565,10 +555,6 @@ class IJepaModel(IJepaPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
-
-_IMAGE_CLASS_CHECKPOINT = "facebook/ijepa_vith14_1k"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
 @auto_docstring(

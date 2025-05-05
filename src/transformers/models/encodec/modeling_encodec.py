@@ -22,9 +22,9 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    ModelOutput,
     auto_docstring,
     logging,
 )
@@ -34,8 +34,7 @@ from .configuration_encodec import EncodecConfig
 logger = logging.get_logger(__name__)
 
 
-_CHECKPOINT_FOR_DOC = "facebook/encodec_24khz"
-_CONFIG_FOR_DOC = "EncodecConfig"
+# General docstring
 
 
 @dataclass
@@ -717,6 +716,9 @@ class EncodecModel(EncodecPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], EncodecOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
+            Raw audio input converted to Float and padded to the appropriate length in order to be encoded using chunks
+            of length self.chunk_length and a stride of `config.chunk_stride`.
         padding_mask (`torch.BoolTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Mask to avoid computing scaling factors on padding token indices (can we avoid computing conv on these+).
             Mask values selected in `[0, 1]`:
@@ -726,12 +728,11 @@ class EncodecModel(EncodecPreTrainedModel):
 
             <Tip warning={true}>
 
-             `padding_mask` should always be passed, unless the input was truncated or not padded. This is because in
-             order to process tensors effectively, the input audio should be padded so that `input_length % stride =
-             step` with `step = chunk_length-stride`. This ensures that all chunks are of the same shape
+            `padding_mask` should always be passed, unless the input was truncated or not padded. This is because in
+            order to process tensors effectively, the input audio should be padded so that `input_length % stride =
+            step` with `step = chunk_length-stride`. This ensures that all chunks are of the same shape
 
             </Tip>
-
         bandwidth (`float`, *optional*):
             The target bandwidth. Must be one of `config.target_bandwidths`. If `None`, uses the smallest possible
             bandwidth. bandwidth is represented as a thousandth of what it is, e.g. 6kbps bandwidth is represented as

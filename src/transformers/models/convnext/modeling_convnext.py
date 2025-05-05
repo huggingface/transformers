@@ -276,7 +276,7 @@ class ConvNextPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class ConvNextModel(ConvNextPreTrainedModel):
-    def __init__(self, config: ConvNextConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
 
@@ -327,9 +327,14 @@ class ConvNextModel(ConvNextPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    ConvNext Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    ImageNet.
+    """
+)
 class ConvNextForImageClassification(ConvNextPreTrainedModel):
-    def __init__(self, config: ConvNextConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -398,9 +403,13 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    ConvNeXt backbone, to be used with frameworks like DETR and MaskFormer.
+    """
+)
 class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
-    def __init__(self, config: ConvNextConfig):
+    def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
 
@@ -424,7 +433,7 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
-        """
+        r"""
         Examples:
 
         ```python

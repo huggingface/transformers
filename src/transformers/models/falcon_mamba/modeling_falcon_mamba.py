@@ -27,11 +27,7 @@ from ...activations import ACT2FN
 from ...cache_utils import MambaCache
 from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
 from .configuration_falcon_mamba import FalconMambaConfig
 
@@ -549,26 +545,9 @@ class FalconMambaCausalLMOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-FALCONMAMBA_CUSTOM_ARGS_DOCSTRING = r"""
-    input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-        Indices of input sequence tokens in the vocabulary.
-
-        If `cache_params.seqlen_offset>0`, only `input_ids` that do not have their past calculated should be passed as
-        `input_ids`.
-
-        Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-        [`PreTrainedTokenizer.__call__`] for details.
-
-        [What are input IDs?](../glossary#input-ids)
-    cache_params (`MambaCache`, *optional*):
-        If passed along, the model uses the previous state in all the blocks (which will give the output for the
-        `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
-"""
-
-
 @auto_docstring
 class FalconMambaModel(FalconMambaPreTrainedModel):
-    def __init__(self, config: FalconMambaConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -587,7 +566,7 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings = new_embeddings
 
-    @auto_docstring(custom_args=FALCONMAMBA_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -599,6 +578,13 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, FalconMambaOutput]:
+        r"""
+        cache_params (`MambaCache`, *optional*):
+            If passed along, the model uses the previous state in all the blocks (which will give the output for the
+            `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
+        use_cache (`bool`, *optional*):
+            If set to `True`, the `cache_params` is returned and can be used to quickly generate the next logits.
+        """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -664,12 +650,17 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The FALCONMAMBA Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    embeddings).
+    """
+)
 # Copied from transformers.models.mamba.modeling_mamba.MambaForCausalLM with MAMBA->FALCONMAMBA,Mamba->FalconMamba,mamba->falcon_mamba,FalconMambaCache->MambaCache
 class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config: FalconMambaConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.backbone = FalconMambaModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -755,7 +746,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         )
         return model_inputs
 
-    @auto_docstring(custom_args=FALCONMAMBA_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -770,10 +761,15 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         **kwargs,  # for now we need this for generation
     ) -> Union[Tuple, FalconMambaCausalLMOutput]:
         r"""
+        cache_params (`MambaCache`, *optional*):
+            If passed along, the model uses the previous state in all the blocks (which will give the output for the
+            `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+        use_cache (`bool`, *optional*):
+            If set to `True`, the `cache_params` is returned and can be used to quickly generate the next logits.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

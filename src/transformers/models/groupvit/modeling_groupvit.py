@@ -27,7 +27,12 @@ from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging, torch_int
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    logging,
+    torch_int,
+)
 from .configuration_groupvit import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
 
 
@@ -1132,7 +1137,6 @@ class GroupViTVisionTransformer(nn.Module):
         )
 
 
-@auto_docstring
 class GroupViTVisionModel(GroupViTPreTrainedModel):
     config_class = GroupViTVisionConfig
     main_input_name = "pixel_values"
@@ -1339,11 +1343,10 @@ class GroupViTModel(GroupViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, GroupViTModelOutput]:
         r"""
-        output_segmentation (`bool`, *optional*):
-            <fill_description>
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
-
+        output_segmentation (<fill_type>):
+            <fill_docstring>
 
         Examples:
 

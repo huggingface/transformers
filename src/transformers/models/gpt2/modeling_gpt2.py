@@ -640,22 +640,22 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
 PARALLELIZE_DOCSTRING = r"""
     This is an experimental feature and is a subject to change at a moment's notice.
 
-        Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
-        it will evenly distribute blocks across all devices.
+    Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
+    it will evenly distribute blocks across all devices.
 
-        Args:
-            device_map (`Dict[int, list]`, *optional*):
-                A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
-                automatically mapped to the first device (for esoteric reasons). That means that the first device should
-                have fewer attention modules mapped to it than other devices. For reference, the gpt2 models have the
-                following number of attention modules:
+    Args:
+        device_map (`Dict[int, list]`, *optional*):
+            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
+            automatically mapped to the first device (for esoteric reasons). That means that the first device should
+            have fewer attention modules mapped to it than other devices. For reference, the gpt2 models have the
+            following number of attention modules:
 
-                    - openai-community/gpt2: 12
-                    - openai-community/gpt2-medium: 24
-                    - openai-community/gpt2-large: 36
-                    - openai-community/gpt2-xl: 48
+                - openai-community/gpt2: 12
+                - openai-community/gpt2-medium: 24
+                - openai-community/gpt2-large: 36
+                - openai-community/gpt2-xl: 48
 
-        Example:
+    Example:
 
     ```python
     # Here is an example of a device map on a machine with 4 GPUs using gpt2-xl, which has a total of 48 attention modules:
@@ -693,7 +693,7 @@ DEPARALLELIZE_DOCSTRING = r"""
 class GPT2Model(GPT2PreTrainedModel):
     _supports_param_buffer_assignment = False
 
-    def __init__(self, config: GPT2Config):
+    def __init__(self, config):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
@@ -790,6 +790,20 @@ class GPT2Model(GPT2PreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+        r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
+            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            sequence tokens in the vocabulary.
+
+            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            `input_ids`.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1096,12 +1110,15 @@ class GPT2Model(GPT2PreTrainedModel):
 
 
 @auto_docstring(
-    custom_intro="The GPT2 Model transformer with a language modeling head on top (linear layer with weights tied to the input embeddings).",
+    custom_intro="""
+    The GPT2 Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    embeddings).
+    """
 )
 class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config: GPT2Config):
+    def __init__(self, config):
         super().__init__(config)
         self.transformer = GPT2Model(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
@@ -1171,6 +1188,18 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
+            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            sequence tokens in the vocabulary.
+
+            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            `input_ids`.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
         labels (`torch.LongTensor` of shape `(batch_size, input_ids_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
@@ -1229,7 +1258,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
 
 @auto_docstring(
     custom_intro="""
-    The GPT-2 Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
+        The GPT2 Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
     RocStories/SWAG tasks. The two heads are two linear layers. The language modeling head has its weights tied to the
     input embeddings, the classification head takes as input the input of a specified classification token index in the
     input sequence).
@@ -1238,7 +1267,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
 class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config: GPT2Config):
+    def __init__(self, config):
         super().__init__(config)
         config.num_labels = 1
         self.transformer = GPT2Model(config)
@@ -1312,6 +1341,18 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> Union[Tuple, GPT2DoubleHeadsModelOutput]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
+            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            sequence tokens in the vocabulary.
+
+            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            `input_ids`.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
         mc_token_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`, *optional*, default to index of the last token of the input):
             Index of the classification token in each input sequence. Selected in the range `[0, input_ids.size(-1) -
             1]`.
@@ -1428,10 +1469,12 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
     Since it does classification on the last token, it requires to know the position of the last token. If a
     `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
     no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
+    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
+    each row of the batch).
     """
 )
 class GPT2ForSequenceClassification(GPT2PreTrainedModel):
-    def __init__(self, config: GPT2Config):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPT2Model(config)
@@ -1461,6 +1504,18 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
+            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            sequence tokens in the vocabulary.
+
+            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            `input_ids`.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1544,7 +1599,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
 
 @auto_docstring
 class GPT2ForTokenClassification(GPT2PreTrainedModel):
-    def __init__(self, config: GPT2Config):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1582,6 +1637,18 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
+            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            sequence tokens in the vocabulary.
+
+            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            `input_ids`.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1627,7 +1694,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
 
 @auto_docstring
 class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
-    def __init__(self, config: GPT2Config):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPT2Model(config)
@@ -1655,6 +1722,20 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+        r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
+            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
+            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            sequence tokens in the vocabulary.
+
+            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            `input_ids`.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.transformer(

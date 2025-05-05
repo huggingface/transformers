@@ -30,10 +30,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_esm import EsmConfig
 
 
@@ -696,8 +693,10 @@ class EsmPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-@auto_docstring(
-    custom_intro="""
+@auto_docstring
+class EsmModel(EsmPreTrainedModel):
+    """
+
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in [Attention is
     all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
@@ -707,12 +706,11 @@ class EsmPreTrainedModel(PreTrainedModel):
     to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
-)
-class EsmModel(EsmPreTrainedModel):
-    def __init__(self, config: EsmConfig, add_pooling_layer=True):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state.
+
+    def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -759,6 +757,24 @@ class EsmModel(EsmPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+        r"""
+        input_ids (`torch.LongTensor` of shape `((batch_size, sequence_length))`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        position_ids (`torch.LongTensor` of shape `((batch_size, sequence_length))`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `((batch_size, sequence_length), hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -861,7 +877,7 @@ class EsmModel(EsmPreTrainedModel):
 class EsmForMaskedLM(EsmPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight"]
 
-    def __init__(self, config: EsmConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         if config.is_decoder:
@@ -962,9 +978,14 @@ class EsmLMHead(nn.Module):
         return x
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    ESM Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
+    """
+)
 class EsmForSequenceClassification(EsmPreTrainedModel):
-    def __init__(self, config: EsmConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1047,7 +1068,7 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
 
 @auto_docstring
 class EsmForTokenClassification(EsmPreTrainedModel):
-    def __init__(self, config: EsmConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 

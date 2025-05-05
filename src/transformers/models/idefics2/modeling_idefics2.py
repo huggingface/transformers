@@ -514,7 +514,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Idefics2 vision encoder model that returns raw image embeddings.
+    Idefics2 vision encoder model that returnss raw image embeddings.
     """
 )
 class Idefics2VisionTransformer(Idefics2PreTrainedModel):
@@ -539,6 +539,7 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings = value
 
+    @auto_docstring
     def forward(
         self,
         pixel_values,
@@ -547,6 +548,10 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
+        r"""
+        patch_attention_mask (<fill_type>):
+            <fill_docstring>
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -797,8 +802,6 @@ class Idefics2PerceiverLayer(nn.Module):
 @auto_docstring(
     custom_intro="""
     Idefics2 perceiver resampler model that performs `depth` blocks of cross-attention with a fixed
-    `n_latents` inputs to decrease embedding sequence length. The Resampler acts as a form of learned pooling and
-    is derived from [Perceiver: General Perception with Iterative Attention](https://arxiv.org/abs/2103.03206)
     """
 )
 class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
@@ -824,11 +827,16 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
 
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
+    @auto_docstring
     def forward(
         self,
         context: torch.Tensor,
         attention_mask: torch.Tensor,
     ) -> torch.Tensor:
+        r"""
+        context (<fill_type>):
+            <fill_docstring>
+        """
         # seq embed -> bsz seq embed
         latents = self.latents.unsqueeze(0).expand((context.shape[0], *self.latents.size()))
 
@@ -878,7 +886,11 @@ class Idefics2Connector(nn.Module):
         return image_hidden_states
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Idefics2 model consisting of a SIGLIP vision encoder and Mistral language decoder
+    """
+)
 class Idefics2Model(Idefics2PreTrainedModel):
     def __init__(self, config: Idefics2Config):
         super().__init__(config)
@@ -954,18 +966,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         new_inputs_embeds[special_image_token_mask] = reshaped_image_hidden_states.to(new_inputs_embeds.device)
         return new_inputs_embeds
 
-    @auto_docstring(
-        custom_intro="""
-        Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
-        the model have image padding -> (batch_size, max_num_images, 3, max_heights, max_widths) where
-        max_num_images is the maximum number of images among the batch_size samples in the batch.
-
-        Padding images are not needed beyond padding the pixel_values at the entrance of the model.
-        For efficiency, we only pass through the vision_model's forward the real images by
-        discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
-        image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
-        """
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1114,7 +1115,11 @@ class Idefics2Model(Idefics2PreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Idefics2 Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top.
+    """
+)
 class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 

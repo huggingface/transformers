@@ -33,12 +33,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from ..auto import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 
@@ -397,12 +392,8 @@ class Blip2EncoderLayer(nn.Module):
         return outputs
 
 
+@auto_docstring
 class Blip2PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = Blip2Config
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
@@ -1325,14 +1316,29 @@ class Blip2Model(Blip2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ):
         r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
+
+            T5 uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+
+            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [T5
+            Training](./t5#training).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+
         Returns:
             text_outputs (`CausalLMOutputWithPast`, or `tuple(torch.FloatTensor)` if `return_dict=False`):
                 The language model outputs. If `return_dict=True`, the output is a [`CausalLMOutputWithPast`] that
                 contains the language model logits, the past key values and the hidden states if
                 `output_hidden_states=True`.
-
         Examples:
-
         ```python
         >>> import torch
         >>> from transformers import AutoTokenizer, Blip2Model
@@ -1388,9 +1394,7 @@ class Blip2Model(Blip2PreTrainedModel):
                 The vision model outputs. If `return_dict=True`, the output is a [`BaseModelOutputWithPooling`] that
                 contains the image features, the pooled image features and the hidden states if
                 `output_hidden_states=True`.
-
         Examples:
-
         ```python
         >>> import torch
         >>> from PIL import Image
@@ -1436,9 +1440,7 @@ class Blip2Model(Blip2PreTrainedModel):
                 The vision model outputs. If `return_dict=True`, the output is a [`BaseModelOutputWithPooling`] that
                 contains the image features, the pooled image features and the hidden states if
                 `output_hidden_states=True`.
-
         Examples:
-
         ```python
         >>> import torch
         >>> from PIL import Image
@@ -1499,6 +1501,19 @@ class Blip2Model(Blip2PreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, Blip2ForConditionalGenerationModelOutput]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of input sequence tokens in the vocabulary of the language model. Input tokens can optionally be
+            provided to serve as text prompt, which the language model can continue.
+
+            Indices can be obtained using [`Blip2Processor`]. See [`Blip2Processor.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+
+            Only relevant in case an encoder-decoder language model (like T5) is used.
+
         Examples:
 
         ```python
@@ -1615,11 +1630,7 @@ class Blip2Model(Blip2PreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    BLIP-2 Text Model with a projection layer on top (a linear layer on top of the pooled output).
-    """
-)
+@auto_docstring
 class Blip2TextModelWithProjection(Blip2PreTrainedModel):
     supports_gradient_checkpointing = False
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
@@ -1710,11 +1721,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    BLIP-2 Vision Model with a projection layer on top (a linear layer on top of the pooled output).
-    """
-)
+@auto_docstring
 class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
@@ -1918,6 +1925,19 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
     ) -> Union[Tuple, Blip2ForConditionalGenerationModelOutput]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of input sequence tokens in the vocabulary of the language model. Input tokens can optionally be
+            provided to serve as text prompt, which the language model can continue.
+
+            Indices can be obtained using [`Blip2Processor`]. See [`Blip2Processor.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+
+            Only relevant in case an encoder-decoder language model (like T5) is used.
+
         Examples:
 
         Prepare processor, model and image input
@@ -2233,6 +2253,13 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Blip2ImageTextMatchingModelOutput]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of input sequence tokens in the vocabulary of the language model. Input tokens can optionally be
+            provided to serve as text prompt, which the language model can continue.
+
+            Indices can be obtained using [`Blip2Processor`]. See [`Blip2Processor.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
         use_image_text_matching_head (`bool`, *optional*):
             Whether to return the Image-Text Matching or Contrastive scores.
 

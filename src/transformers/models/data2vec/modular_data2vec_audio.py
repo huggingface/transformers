@@ -4,9 +4,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    Wav2Vec2BaseModelOutput,
-)
+from ...modeling_outputs import Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from ..wav2vec2.modeling_wav2vec2 import (
@@ -23,9 +21,6 @@ from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2SamePadLayer,
 )
 from .configuration_data2vec_audio import Data2VecAudioConfig
-
-
-_HIDDEN_STATES_START_POSITION = 2
 
 
 class Data2VecAudioConvLayer(nn.Module):
@@ -123,7 +118,6 @@ class Data2VecAudioAdapter(Wav2Vec2Adapter):
     pass
 
 
-@auto_docstring
 class Data2VecAudioPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
     config_class = Data2VecAudioConfig
     base_model_prefix = "data2vec_audio"
@@ -167,32 +161,6 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
         raise AttributeError("Not needed for Data2VecAudio")
 
 
-DATA2VEC_AUDIO_CUSTOM_ARGS_DOCSTRING = r"""
-    input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-        Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-        into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-        soundfile*). To prepare the array into *input_values*, the [`AutoProcessor`] should be used for padding and
-        conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
-    attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-        Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-        1]`:
-
-        - 1 for tokens that are **not masked**,
-        - 0 for tokens that are **masked**.
-
-        [What are attention masks?](../glossary#attention-mask)
-
-        <Tip warning={true}>
-
-        `attention_mask` should be passed if the corresponding processor has `config.return_attention_mask ==
-        True`, which is the case for all pre-trained Data2Vec Audio models. Be aware that that even with
-        `attention_mask`, zero-padded inputs will have slightly different outputs compared to non-padded inputs
-        because there are more than one convolutional layer in the positional encodings. For a more detailed
-        explanation, see [here](https://github.com/huggingface/transformers/issues/25621#issuecomment-1713759349).
-
-        </Tip>
-"""
-
 Data2VecAudioBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
@@ -225,16 +193,18 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel, Wav2Vec2Model):
         """
         self.feature_extractor._freeze_parameters()
 
-    @auto_docstring(custom_args=DATA2VEC_AUDIO_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         return super().forward(**super_kwargs)
 
 
 @auto_docstring(
-    custom_intro="""Data2VecAudio Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC)."""
+    custom_intro="""
+    Data2VecAudio Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
+    """
 )
 class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel, Wav2Vec2ForCTC):
-    def __init__(self, config: Data2VecAudioConfig):
+    def __init__(self, config):
         Data2VecAudioPreTrainedModel.__init__(config)
 
         self.data2vec_audio = Data2VecAudioModel(config)
@@ -261,35 +231,37 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel, Wav2Vec2ForCTC):
     def tie_weights(self):
         raise AttributeError("Not needed for Data2VecAudio")
 
-    @auto_docstring(custom_args=DATA2VEC_AUDIO_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         return super().forward(**super_kwargs)
 
 
 @auto_docstring(
-    custom_intro="""Data2VecAudio Model with a sequence classification head on top (a linear layer over the pooled output) for tasks
-    like SUPERB Keyword Spotting."""
+    custom_intro="""
+    Data2VecAudio Model with a sequence classification head on top (a linear layer over the pooled output) for tasks
+    like SUPERB Keyword Spotting.
+    """
 )
 class Data2VecAudioForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    @auto_docstring(custom_args=DATA2VEC_AUDIO_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         return super().forward(**super_kwargs)
 
 
-@auto_docstring(
-    custom_intro="""Data2VecAudio Model with a frame classification head on top for tasks like Speaker Diarization."""
-)
+@auto_docstring
 class Data2VecAudioForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
-    @auto_docstring(custom_args=DATA2VEC_AUDIO_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         return super().forward(**super_kwargs)
 
 
 @auto_docstring(
-    custom_intro="""Data2VecAudio Model with an XVector feature extraction head on top for tasks like Speaker Verification."""
+    custom_intro="""
+    Data2VecAudio Model with an XVector feature extraction head on top for tasks like Speaker Verification.
+    """
 )
 class Data2VecAudioForXVector(Wav2Vec2ForXVector):
-    @auto_docstring(custom_args=DATA2VEC_AUDIO_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(self, **super_kwargs):
         return super().forward(**super_kwargs)
 

@@ -29,10 +29,7 @@ from ...modeling_outputs import (
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_efficientnet import EfficientNetConfig
 
 
@@ -433,12 +430,8 @@ class EfficientNetEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class EfficientNetPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = EfficientNetConfig
     base_model_prefix = "efficientnet"
     main_input_name = "pixel_values"
@@ -514,9 +507,14 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    EfficientNet Model with an image classification head on top (a linear layer on top of the pooled features), e.g.
+    for ImageNet.
+    """
+)
 class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
-    def __init__(self, config: EfficientNetConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config

@@ -2893,11 +2893,11 @@ class OneFormerModel(OneFormerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> OneFormerModelOutput:
         r"""
-        task_inputs (`torch.Tensor`):
-            <fill_description>
-        text_inputs (`torch.Tensor`, *optional*):
-            <fill_description>
-
+        task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
+            for details.
+        text_inputs (<fill_type>):
+            <fill_docstring>
 
         Example:
 
@@ -3042,14 +3042,6 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         auxiliary_predictions: Dict[str, Tensor],
         calculate_contrastive_loss: bool,
     ) -> Dict[str, Tensor]:
-        r"""
-        task_inputs (`torch.Tensor`):
-            <fill_description>
-        text_inputs (`torch.Tensor`, *optional*):
-            <fill_description>
-        output_auxiliary_logits (`bool`, *optional*):
-            <fill_description>
-        """
         loss_dict: Dict[str, Tensor] = self.criterion(
             masks_queries_logits=masks_queries_logits,
             class_queries_logits=class_queries_logits,
@@ -3087,18 +3079,18 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> OneFormerForUniversalSegmentationOutput:
         r"""
-        task_inputs (`torch.Tensor`):
-            <fill_description>
-        text_inputs (`torch.Tensor`, *optional*):
-            <fill_description>
-        output_auxiliary_logits (`bool`, *optional*):
-            <fill_description>
+        task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
+            for details.
+        text_inputs (`List[torch.Tensor]`, *optional*):
+            Tensor fof shape `(num_queries, sequence_length)` to be fed to a model
         mask_labels (`List[torch.Tensor]`, *optional*):
             List of mask labels of shape `(num_labels, height, width)` to be fed to a model
         class_labels (`List[torch.LongTensor]`, *optional*):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
-
+        output_auxiliary_logits (<fill_type>):
+            <fill_docstring>
 
         Example:
 

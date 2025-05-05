@@ -321,7 +321,11 @@ class PoolFormerFinalPooler(nn.Module):
         return output
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    PoolFormer Model transformer with an image classification head on top
+    """
+)
 class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

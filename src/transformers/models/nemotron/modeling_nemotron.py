@@ -38,12 +38,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-    is_torch_flex_attn_available,
-    logging,
-)
+from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_nemotron import NemotronConfig
 
 
@@ -54,9 +49,6 @@ if is_torch_flex_attn_available():
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "nvidia/nemotron-3-8b-base-4k-hf"
-_CONFIG_FOR_DOC = "NemotronConfig"
 
 
 def _cast_if_autocast_enabled(*args):
@@ -507,7 +499,6 @@ class NemotronDecoderLayer(nn.Module):
         self.input_layernorm = NemotronLayerNorm1P(config.hidden_size, eps=config.norm_eps)
         self.post_attention_layernorm = NemotronLayerNorm1P(config.hidden_size, eps=config.norm_eps)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -520,6 +511,28 @@ class NemotronDecoderLayer(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*):
+                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
+                query_sequence_length, key_sequence_length)` if default attention is used.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -585,6 +598,13 @@ class NemotronPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class NemotronModel(NemotronPreTrainedModel):
+    """
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`NemotronDecoderLayer`]
+
+    Args:
+        config: NemotronConfig
+    """
+
     def __init__(self, config: NemotronConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -849,7 +869,7 @@ class NemotronModel(NemotronPreTrainedModel):
 class NemotronForCausalLM(NemotronPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config: NemotronConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.model = NemotronModel(config)
         self.vocab_size = config.vocab_size
@@ -878,7 +898,6 @@ class NemotronForCausalLM(NemotronPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
-    # Ignore copy (doc string different)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -899,13 +918,6 @@ class NemotronForCausalLM(NemotronPreTrainedModel, GenerationMixin):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        logits_to_keep (`int` or `torch.Tensor`, *optional*):
-            If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-            `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-            token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-            If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-            This is useful when using packed tensor format (single dimension for batch and sequence length).
 
         Example:
 
@@ -959,10 +971,23 @@ class NemotronForCausalLM(NemotronPreTrainedModel, GenerationMixin):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Nemotron Model transformer with a sequence classification head on top (linear layer).
+
+    [`NemotronForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    (e.g. GPT-2) do.
+
+    Since it does classification on the last token, it requires to know the position of the last token. If a
+    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
+    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
+    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
+    each row of the batch).
+    """
+)
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronForSequenceClassification(NemotronPreTrainedModel):
-    def __init__(self, config: NemotronConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = NemotronModel(config)
@@ -992,11 +1017,10 @@ class NemotronForSequenceClassification(NemotronPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> SequenceClassifierOutputWithPast:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-                config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-                `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         transformer_outputs: BaseModelOutputWithPast = self.model(
@@ -1054,7 +1078,7 @@ class NemotronForQuestionAnswering(NemotronPreTrainedModel):
     base_model_prefix = "transformer"
 
     # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Nemotron
-    def __init__(self, config: NemotronConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.transformer = NemotronModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
@@ -1116,7 +1140,7 @@ class NemotronForQuestionAnswering(NemotronPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronForTokenClassification(NemotronPreTrainedModel):
-    def __init__(self, config: NemotronConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = NemotronModel(config)
@@ -1153,11 +1177,10 @@ class NemotronForTokenClassification(NemotronPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> TokenClassifierOutput:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-                config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-                `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         outputs: BaseModelOutputWithPast = self.model(

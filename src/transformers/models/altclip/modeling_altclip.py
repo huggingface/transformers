@@ -1070,7 +1070,6 @@ class AltCLIPVisionTransformer(nn.Module):
         )
 
 
-@auto_docstring
 class AltCLIPVisionModel(AltCLIPPreTrainedModel):
     config_class = AltCLIPVisionConfig
     main_input_name = "pixel_values"
@@ -1094,7 +1093,7 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-        Example:
+        Examples:
 
         ```python
         >>> from PIL import Image
@@ -1124,9 +1123,8 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
         )
 
 
-class AltRobertaModel(AltCLIPPreTrainedModel):
-    """
-
+@auto_docstring(
+    custom_intro="""
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in *Attention is
     all you need*_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
@@ -1137,16 +1135,16 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
 
     .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
-
     """
-
+)
+class AltRobertaModel(AltCLIPPreTrainedModel):
     config_class = AltCLIPTextConfig
 
-    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapTextConfig->AltCLIPTextConfig, ClapText->AltRoberta
-    def __init__(self, config: AltCLIPTextConfig, add_pooling_layer=True):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state.
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->AltRoberta
+    def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -1173,6 +1171,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @auto_docstring
     # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
         self,
@@ -1285,11 +1284,10 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         )
 
 
-@auto_docstring
 class AltCLIPTextModel(AltCLIPPreTrainedModel):
     config_class = AltCLIPTextConfig
 
-    def __init__(self, config: AltCLIPTextConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.roberta = AltRobertaModel(config, add_pooling_layer=False)
         self.transformation = nn.Linear(config.hidden_size, config.project_dim)
@@ -1321,23 +1319,7 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPoolingAndProjection]:
         r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-
-        Example:
+        Examples:
 
         ```python
         >>> from transformers import AutoProcessor, AltCLIPTextModel
@@ -1391,7 +1373,6 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
         )
 
 
-@auto_docstring
 class AltCLIPModel(AltCLIPPreTrainedModel):
     config_class = AltCLIPConfig
 
@@ -1432,13 +1413,17 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
+        token_type_ids=None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
-        Example:
+        Returns:
+            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
+            applying the projection layer to the pooled output of [`AltCLIPTextModel`].
+
+        Examples:
 
         ```python
         >>> from transformers import AutoProcessor, AltCLIPModel
@@ -1483,7 +1468,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
             applying the projection layer to the pooled output of [`AltCLIPVisionModel`].
 
-        Example:
+        Examples:
 
         ```python
         >>> from PIL import Image
@@ -1532,11 +1517,10 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, AltCLIPOutput]:
         r"""
-        Args:
-            return_loss (`bool`, *optional*):
-                Whether or not to return the contrastive loss.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
 
-        Example:
+        Examples:
 
         ```python
         >>> from PIL import Image

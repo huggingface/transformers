@@ -1679,14 +1679,13 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> MaskFormerForInstanceSegmentationOutput:
         r"""
-        output_auxiliary_logits (`bool`, *optional*):
-            <fill_description>
         mask_labels (`List[torch.Tensor]`, *optional*):
             List of mask labels of shape `(num_labels, height, width)` to be fed to a model
         class_labels (`List[torch.LongTensor]`, *optional*):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
-
+        output_auxiliary_logits (<fill_type>):
+            <fill_docstring>
 
         Examples:
 

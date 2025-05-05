@@ -434,7 +434,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -449,10 +449,6 @@ class Gemma2Model(Gemma2PreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
-        r"""
-        Args:
-            last_cache_position (`int`): equivalent to `cache_position[-1]` but allow indexing without breaking dynamo tracing.
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -658,7 +654,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config: Gemma2Config):
+    def __init__(self, config):
         super().__init__(config)
         self.model = Gemma2Model(config)
         self.vocab_size = config.vocab_size
@@ -685,7 +681,6 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -703,22 +698,12 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
-        Example:
-
 
         ```python
         >>> from transformers import AutoTokenizer, Gemma2ForCausalLM
@@ -834,9 +819,22 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Gemma2 Model transformer with a sequence classification head on top (linear layer).
+
+    [`Gemma2ForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    (e.g. GPT-2) do.
+
+    Since it does classification on the last token, it requires to know the position of the last token. If a
+    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
+    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
+    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
+    each row of the batch).
+    """
+)
 class Gemma2ForSequenceClassification(Gemma2PreTrainedModel):
-    def __init__(self, config: Gemma2Config):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = Gemma2Model(config)
@@ -866,11 +864,10 @@ class Gemma2ForSequenceClassification(Gemma2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> SequenceClassifierOutputWithPast:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-                config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-                `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         transformer_outputs: BaseModelOutputWithPast = self.model(
@@ -924,7 +921,7 @@ class Gemma2ForSequenceClassification(Gemma2PreTrainedModel):
 
 @auto_docstring
 class Gemma2ForTokenClassification(Gemma2PreTrainedModel):
-    def __init__(self, config: Gemma2Config):
+    def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = Gemma2Model(config)
@@ -961,11 +958,10 @@ class Gemma2ForTokenClassification(Gemma2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> TokenClassifierOutput:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-                config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-                `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         outputs: BaseModelOutputWithPast = self.model(

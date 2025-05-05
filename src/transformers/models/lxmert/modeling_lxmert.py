@@ -26,7 +26,11 @@ from torch.nn import CrossEntropyLoss, SmoothL1Loss
 
 from ...activations import ACT2FN, gelu
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    logging,
+)
 from .configuration_lxmert import LxmertConfig
 
 
@@ -1123,7 +1127,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        obj_labels (`Dict[str, Tuple[Torch.FloatTensor, Torch.FloatTensor]]`, *optional*):
+        obj_labels (`Dict[Str: Tuple[Torch.FloatTensor, Torch.FloatTensor]]`, *optional*):
             each key is named after each one of the visual losses and each element of the tuple is of the shape
             `(batch_size, num_features)` and `(batch_size, num_features, visual_feature_dim)` for each the label id and
             the label score respectively
@@ -1134,7 +1138,9 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             - 0 indicates that the sentence does not match the image,
             - 1 indicates that the sentence does match the image.
         ans (`Torch.Tensor` of shape `(batch_size)`, *optional*):
-            a one hot representation of the correct answer
+            a one hot representation hof the correct answer *optional*
+
+        Returns:
         """
 
         if "masked_lm_labels" in kwargs:
@@ -1231,7 +1237,11 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Lxmert Model with a visual-answering head on top for downstream QA tasks
+    """
+)
 class LxmertForQuestionAnswering(LxmertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

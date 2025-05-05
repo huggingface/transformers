@@ -34,15 +34,13 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import auto_docstring, logging, torch_int
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
 logger = logging.get_logger(__name__)
+
+_TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 
 @dataclass
@@ -989,7 +987,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
 class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
     config_class = BridgeTowerVisionConfig
 
-    def __init__(self, config: BridgeTowerVisionConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.visual = BridgeTowerVisionTransformer(config)
 
@@ -1001,9 +999,8 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
         return self.visual(image.type(self.dtype), image_mask, interpolate_pos_encoding)
 
 
-class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
-    """
-
+@auto_docstring(
+    custom_intro="""
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in *Attention is
     all you need*_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
@@ -1014,12 +1011,16 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
 
     .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
-
     """
-
+)
+class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
     config_class = BridgeTowerTextConfig
 
-    def __init__(self, config: BridgeTowerTextConfig, add_pooling_layer: bool = True):
+    def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
+        """
         super().__init__(config)
         self.config = config
 
@@ -1045,6 +1046,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @auto_docstring
     # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
         self,
@@ -1157,9 +1159,13 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on
+    """
+)
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
-    def __init__(self, config: BridgeTowerConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
         vision_config = config.vision_config
@@ -1244,7 +1250,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
         image_token_type_idx (`int`, *optional*):
-            The token type ids for images.
+            - The token type ids for images.
         output_hidden_states (`bool`, *optional*):
             If set to `True`, hidden states are returned as a list containing the hidden states of text, image, and
             cross-modal components respectively. i.e. `(hidden_states_text, hidden_states_image,
@@ -1508,11 +1514,15 @@ class BridgeTowerITMHead(nn.Module):
         return itm_score
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    BridgeTower Model with a language modeling head on top as done during pretraining.
+    """
+)
 class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
     _tied_weights_keys = ["mlm_score.decoder.weight"]
 
-    def __init__(self, config: BridgeTowerConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.bridgetower = BridgeTowerModel(config)
@@ -1547,6 +1557,10 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
         Examples:
 
@@ -1615,7 +1629,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
     """
 )
 class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
-    def __init__(self, config: BridgeTowerConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.bridgetower = BridgeTowerModel(config)
@@ -1726,7 +1740,7 @@ class BridgeTowerContrastiveHead(nn.Module):
     """
 )
 class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
-    def __init__(self, config: BridgeTowerConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.bridgetower = BridgeTowerModel(config)

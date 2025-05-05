@@ -466,7 +466,12 @@ class PvtV2Model(PvtV2PreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Pvt-v2 Model transformer with an image classification head on top (a linear layer on top of the final hidden state
+    of the [CLS] token) e.g. for ImageNet.
+    """
+)
 class PvtV2ForImageClassification(PvtV2PreTrainedModel):
     def __init__(self, config: PvtV2Config) -> None:
         super().__init__(config)
@@ -554,7 +559,11 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    PVTv2 backbone, to be used with frameworks like DETR and MaskFormer.
+    """
+)
 class PvtV2Backbone(PvtV2Model, BackboneMixin):
     def __init__(self, config: PvtV2Config):
         super().__init__(config)
@@ -570,7 +579,6 @@ class PvtV2Backbone(PvtV2Model, BackboneMixin):
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         r"""
-
         Examples:
 
         ```python

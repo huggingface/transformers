@@ -1113,34 +1113,6 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-HUBERT_CUSTOM_ARGS_DOCSTRING = r"""
-    input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-        Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-        into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-        soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-        conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
-    attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-        Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-        1]`:
-
-        - 1 for tokens that are **not masked**,
-        - 0 for tokens that are **masked**.
-
-        [What are attention masks?](../glossary#attention-mask)
-
-        <Tip warning={true}>
-
-        `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-        True`. For all models whose processor has `config.return_attention_mask == False`, such as
-        [hubert-base](https://huggingface.co/facebook/hubert-base-ls960), `attention_mask` should **not** be passed
-        to avoid degraded performance when doing batched inference. For such models `input_values` should simply be
-        padded with 0 and passed without `attention_mask`. Be aware that these models also yield slightly different
-        results depending on whether `input_values` is padded or not.
-
-        </Tip>
-"""
-
-
 @auto_docstring
 class HubertModel(HubertPreTrainedModel):
     def __init__(self, config: HubertConfig):
@@ -1207,7 +1179,7 @@ class HubertModel(HubertPreTrainedModel):
 
         return hidden_states
 
-    @auto_docstring(custom_args=HUBERT_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1218,9 +1190,8 @@ class HubertModel(HubertPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
-        mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
-            masked extracted features in *config.proj_codevector_dim* space.
+        mask_time_indices (<fill_type>):
+            <fill_docstring>
 
         Example:
 
@@ -1285,11 +1256,13 @@ _HIDDEN_STATES_START_POSITION = 1
 
 
 @auto_docstring(
-    custom_intro="""Hubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC)."""
+    custom_intro="""
+    Hubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
+    """
 )
 class HubertForCTC(HubertPreTrainedModel):
-    def __init__(self, config: HubertConfig, target_lang: Optional[str] = None):
-        """
+    def __init__(self, config, target_lang: Optional[str] = None):
+        r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
             adapter.<lang>.bin. Only relevant when using an instance of [`HubertForCTC`] with adapters. Uses 'eng' by
@@ -1365,7 +1338,7 @@ class HubertForCTC(HubertPreTrainedModel):
         for param in self.hubert.parameters():
             param.requires_grad = False
 
-    @auto_docstring(custom_args=HUBERT_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1444,7 +1417,7 @@ class HubertForCTC(HubertPreTrainedModel):
     """
 )
 class HubertForSequenceClassification(HubertPreTrainedModel):
-    def __init__(self, config: HubertConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1488,7 +1461,7 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         for param in self.hubert.parameters():
             param.requires_grad = False
 
-    @auto_docstring(custom_args=HUBERT_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1499,6 +1472,11 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`HubertProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

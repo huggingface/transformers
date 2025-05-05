@@ -67,30 +67,6 @@ logger = logging.get_logger(__name__)
 
 _HIDDEN_STATES_START_POSITION = 2
 
-# General docstring
-_CONFIG_FOR_DOC = "Wav2Vec2Config"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
-_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
-
-# CTC docstring
-_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
-_CTC_EXPECTED_LOSS = 53.48
-
-# Audio class docstring
-_SEQ_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-ks"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
-_SEQ_CLASS_EXPECTED_LOSS = 6.54
-
-# Frame class docstring
-_FRAME_CLASS_CHECKPOINT = "anton-l/wav2vec2-base-superb-sd"
-_FRAME_EXPECTED_OUTPUT = [0, 0]
-
-# Speaker Verification docstring
-_XVECTOR_CHECKPOINT = "anton-l/wav2vec2-base-superb-sv"
-_XVECTOR_EXPECTED_OUTPUT = 0.98
-
 
 @dataclass
 class Wav2Vec2ForPreTrainingOutput(ModelOutput):
@@ -1317,12 +1293,8 @@ class Wav2Vec2AttnAdapterLayer(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class Wav2Vec2PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = Wav2Vec2Config
     base_model_prefix = "wav2vec2"
     main_input_name = "input_values"
@@ -1636,34 +1608,6 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         self.target_lang = target_lang
 
 
-WAV2VEC2_CUSTOM_ARGS_DOCSTRING = r"""
-    input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-        Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-        into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-        soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-        conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
-    attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-        Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-        1]`:
-
-        - 1 for tokens that are **not masked**,
-        - 0 for tokens that are **masked**.
-
-        [What are attention masks?](../glossary#attention-mask)
-
-        <Tip warning={true}>
-
-        `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-        True`. For all models whose processor has `config.return_attention_mask == False`, such as
-        [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), `attention_mask` should **not** be
-        passed to avoid degraded performance when doing batched inference. For such models `input_values` should
-        simply be padded with 0 and passed without `attention_mask`. Be aware that these models also yield slightly
-        different results depending on whether `input_values` is padded or not.
-
-        </Tip>
-"""
-
-
 @auto_docstring
 class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config):
@@ -1751,7 +1695,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         return hidden_states
 
-    @auto_docstring(custom_args=WAV2VEC2_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1762,9 +1706,8 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
         r"""
-        mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
-            masked extracted features in *config.proj_codevector_dim* space.
+        mask_time_indices (<fill_type>):
+            <fill_docstring>
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1810,7 +1753,11 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         )
 
 
-@auto_docstring(custom_intro="""Wav2Vec2 Model with a quantizer and `VQ` head on top.""")
+@auto_docstring(
+    custom_intro="""
+    Wav2Vec2 Model with a quantizer and `VQ` head on top.
+    """
+)
 class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
@@ -1871,7 +1818,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         logits = logits / temperature
         return logits
 
-    @auto_docstring(custom_args=WAV2VEC2_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -2031,9 +1978,9 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         )
 
 
-@auto_docstring(custom_intro="""Wav2Vec2 Model with a `language modeling` head on top.""")
+@auto_docstring
 class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
-    def __init__(self, config: Wav2Vec2Config):
+    def __init__(self, config):
         super().__init__(config)
 
         warnings.warn(
@@ -2047,7 +1994,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring(custom_args=WAV2VEC2_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: torch.FloatTensor,
@@ -2057,13 +2004,6 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, MaskedLMOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
-            Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
-            the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`.
-            All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
-            config.vocab_size - 1]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.wav2vec2(
@@ -2085,11 +2025,13 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
 
 
 @auto_docstring(
-    custom_intro="""Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC)."""
+    custom_intro="""
+    Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
+    """
 )
 class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
-    def __init__(self, config: Wav2Vec2Config, target_lang: Optional[str] = None):
-        """
+    def __init__(self, config, target_lang: Optional[str] = None):
+        r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
             adapter.<lang>.bin. Only relevant when using an instance of [`Wav2Vec2ForCTC`] with adapters. Uses 'eng' by
@@ -2165,7 +2107,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         for param in self.wav2vec2.parameters():
             param.requires_grad = False
 
-    @auto_docstring(custom_args=WAV2VEC2_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -2244,7 +2186,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
     """
 )
 class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
-    def __init__(self, config: Wav2Vec2Config):
+    def __init__(self, config):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -2288,7 +2230,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         for param in self.wav2vec2.parameters():
             param.requires_grad = False
 
-    @auto_docstring(custom_args=WAV2VEC2_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -2299,6 +2241,11 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -2352,13 +2299,9 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    Wav2Vec2 Model with a frame classification head on top for tasks like Speaker Diarization.
-    """
-)
+@auto_docstring
 class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
-    def __init__(self, config: Wav2Vec2Config):
+    def __init__(self, config):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -2401,7 +2344,7 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         for param in self.wav2vec2.parameters():
             param.requires_grad = False
 
-    @auto_docstring(custom_args=WAV2VEC2_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -2412,6 +2355,11 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -2517,7 +2465,7 @@ class TDNNLayer(nn.Module):
     """
 )
 class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
-    def __init__(self, config: Wav2Vec2Config):
+    def __init__(self, config):
         super().__init__(config)
 
         self.wav2vec2 = Wav2Vec2Model(config)
@@ -2578,7 +2526,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
 
         return input_lengths
 
-    @auto_docstring(custom_args=WAV2VEC2_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -2589,6 +2537,11 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, XVectorOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

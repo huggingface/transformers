@@ -50,15 +50,6 @@ if is_flash_attn_available():
 logger = logging.get_logger(__name__)
 
 
-# Base model docstring
-_EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
-
-# SequenceClassification docstring
-_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ArthurZ/opt-350m-dummy-sc"
-_SEQ_CLASS_EXPECTED_LOSS = 1.71
-_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
-
-
 class OPTLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -1219,7 +1210,6 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
-
         Example:
 
         ```python

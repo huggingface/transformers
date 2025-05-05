@@ -833,7 +833,10 @@ class FunnelForPreTrainingOutput(ModelOutput):
 
 
 @auto_docstring(
-    custom_intro="The base Funnel Transformer Model transformer outputting raw hidden-states without upsampling head (also called decoder) or any task-specific head on top."
+    custom_intro="""
+    The base Funnel Transformer Model transformer outputting raw hidden-states without upsampling head (also called
+    decoder) or any task-specific head on top.
+    """
 )
 class FunnelBaseModel(FunnelPreTrainedModel):
     def __init__(self, config: FunnelConfig) -> None:
@@ -1150,7 +1153,12 @@ class FunnelForMaskedLM(FunnelPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Funnel Transformer Model with a sequence classification/regression head on top (two linear layer on top of the
+    first timestep of the last hidden state) e.g. for GLUE tasks.
+    """
+)
 class FunnelForSequenceClassification(FunnelPreTrainedModel):
     def __init__(self, config: FunnelConfig) -> None:
         super().__init__(config)
@@ -1231,12 +1239,7 @@ class FunnelForSequenceClassification(FunnelPreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    Funnel Transformer Model with a multiple choice classification head on top (two linear layer on top of the first
-    timestep of the last hidden state, and a softmax) e.g. for RocStories/SWAG tasks.
-    """
-)
+@auto_docstring
 class FunnelForMultipleChoice(FunnelPreTrainedModel):
     def __init__(self, config: FunnelConfig) -> None:
         super().__init__(config)

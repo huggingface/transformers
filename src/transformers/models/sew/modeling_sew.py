@@ -30,10 +30,7 @@ from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_sew import SEWConfig
 
 
@@ -45,21 +42,6 @@ logger = logging.get_logger(__name__)
 
 
 _HIDDEN_STATES_START_POSITION = 1
-SEW_CUSTOM_ARGS_DOCSTRING = """
-    input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-        Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-        into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-        soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-        conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
-    attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-        Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-        1]`:
-
-        - 1 for tokens that are **not masked**,
-        - 0 for tokens that are **masked**.
-
-        [What are attention masks?](../glossary#attention-mask)
-"""
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
@@ -1099,7 +1081,7 @@ class SEWModel(SEWPreTrainedModel):
 
         return hidden_states
 
-    @auto_docstring(custom_args=SEW_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1109,9 +1091,9 @@ class SEWModel(SEWPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-        """
-        mask_time_indices (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Boolean masked positions. Indicates which positions are masked (1) and which aren't (0).
+        r"""
+        mask_time_indices (<fill_type>):
+            <fill_docstring>
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1154,12 +1136,14 @@ class SEWModel(SEWPreTrainedModel):
 
 
 @auto_docstring(
-    custom_intro="""SEW Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
+    custom_intro="""
+    SEW Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
+    """
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->SEW, wav2vec2->sew, WAV2VEC2->SEW
 class SEWForCTC(SEWPreTrainedModel):
-    def __init__(self, config: SEWConfig, target_lang: Optional[str] = None):
-        """
+    def __init__(self, config, target_lang: Optional[str] = None):
+        r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
             adapter.<lang>.bin. Only relevant when using an instance of [`SEWForCTC`] with adapters. Uses 'eng' by
@@ -1235,7 +1219,7 @@ class SEWForCTC(SEWPreTrainedModel):
         for param in self.sew.parameters():
             param.requires_grad = False
 
-    @auto_docstring(custom_args=SEW_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1311,11 +1295,11 @@ class SEWForCTC(SEWPreTrainedModel):
     custom_intro="""
     SEW Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like SUPERB
     Keyword Spotting.
-"""
+    """
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->SEW, wav2vec2->sew, WAV2VEC2->SEW
 class SEWForSequenceClassification(SEWPreTrainedModel):
-    def __init__(self, config: SEWConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1359,7 +1343,7 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
         for param in self.sew.parameters():
             param.requires_grad = False
 
-    @auto_docstring(custom_args=SEW_CUSTOM_ARGS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1370,6 +1354,11 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`SEWProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

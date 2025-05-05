@@ -25,18 +25,10 @@ from transformers.models.blip.image_processing_blip import BlipImageProcessor
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...generation import (
-    ClassifierFreeGuidanceLogitsProcessor,
-    GenerationMixin,
-    GenerationMode,
-    LogitsProcessorList,
-)
+from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode, LogitsProcessorList
 from ...generation.utils import GenerateDecoderOnlyOutput
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_transforms import (
-    resize,
-    to_channel_dimension_format,
-)
+from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
@@ -50,13 +42,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-    is_torch_available,
-    is_vision_available,
-    logging,
-)
+from ...utils import auto_docstring, can_return_tuple, is_torch_available, is_vision_available, logging
 from ..auto import AutoModel
 from ..blip_2.modeling_blip_2 import Blip2VisionModel
 from ..chameleon.configuration_chameleon import ChameleonVQVAEConfig
@@ -71,11 +57,7 @@ from ..chameleon.modeling_chameleon import (
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..llama.modeling_llama import eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
-from ..siglip.modeling_siglip import (
-    SiglipEncoder,
-    SiglipEncoderLayer,
-    SiglipVisionEmbeddings,
-)
+from ..siglip.modeling_siglip import SiglipEncoder, SiglipEncoderLayer, SiglipVisionEmbeddings
 
 
 if is_torch_available():
@@ -87,12 +69,13 @@ if is_torch_available():
 if is_vision_available():
     import PIL
 
-
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
+
+# General docstring
 
 
 class JanusVisionConfig(SiglipVisionConfig):
@@ -824,8 +807,6 @@ class JanusVQVAEDecoder(nn.Module):
 
 
 class JanusVQVAE(ChameleonVQVAE):
-    """Vision Transformer-based VQ-VAE model for encoding and decoding pixel values."""
-
     _no_split_modules = [
         "JanusVQVAEAttnBlock",
         "JanusVQVAEResnetBlock",
@@ -861,21 +842,11 @@ class JanusVQVAE(ChameleonVQVAE):
         return pixel_values
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
-        """
-        Encodes pixel values into quantized tokens and decodes them back.
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-                The tensors corresponding to the input images.
-        Returns:
-            decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                Reconstructed pixel values after encoding and decoding the input.
-            embedding_loss (`torch.FloatTensor`): Embedding loss.
-        """
-
         batch_size = pixel_values.shape[0]
         quant, embedding_loss, indices = self.encode(pixel_values)
         decoded_pixel_values = self.decode(indices.view(batch_size, -1))
@@ -918,7 +889,11 @@ class JanusVQVAEHead(nn.Module):
         return hidden_states
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Janus model which consists of a siglip vision backbone, a Llama language model and a VQ model.
+    """
+)
 class JanusModel(JanusPreTrainedModel):
     def __init__(self, config: JanusConfig):
         super().__init__(config)
@@ -968,7 +943,7 @@ class JanusModel(JanusPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
-    ) -> JanusCausalLMOutputWithPast:
+    ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1082,7 +1057,13 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
-    ) -> JanusCausalLMOutputWithPast:
+    ):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

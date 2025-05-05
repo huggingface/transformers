@@ -29,6 +29,8 @@ from .configuration_depth_anything import DepthAnythingConfig
 
 logger = logging.get_logger(__name__)
 
+# General docstring
+
 
 class DepthAnythingReassembleLayer(nn.Module):
     def __init__(self, config, channels, factor):
@@ -329,7 +331,7 @@ class DepthAnythingDepthEstimationHead(nn.Module):
 class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
     _no_split_modules = ["DPTViTEmbeddings"]
 
-    def __init__(self, config: DepthAnythingConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.backbone = load_backbone(config)

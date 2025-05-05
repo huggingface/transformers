@@ -25,10 +25,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_glpn import GLPNConfig
 
 
@@ -427,12 +424,10 @@ class GLPNPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-@auto_docstring(
-    custom_intro="The bare GLPN encoder (Mix-Transformer) outputting raw hidden-states without any specific head on top."
-)
+@auto_docstring
 class GLPNModel(GLPNPreTrainedModel):
     # Copied from transformers.models.segformer.modeling_segformer.SegformerModel.__init__ with Segformer->GLPN
-    def __init__(self, config: GLPNConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
 
@@ -451,6 +446,7 @@ class GLPNModel(GLPNPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
+    # Copied from transformers.models.segformer.modeling_segformer.SegformerModel.forward
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -620,10 +616,12 @@ class GLPNDepthEstimationHead(nn.Module):
 
 
 @auto_docstring(
-    custom_intro="GLPN Model transformer with a lightweight depth estimation head on top e.g. for KITTI, NYUv2."
+    custom_intro="""
+    GLPN Model transformer with a lightweight depth estimation head on top e.g. for KITTI, NYUv2.
+    """
 )
 class GLPNForDepthEstimation(GLPNPreTrainedModel):
-    def __init__(self, config: GLPNConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.glpn = GLPNModel(config)

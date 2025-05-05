@@ -31,19 +31,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_chinese_clip import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "OFA-Sys/chinese-clip-vit-base-patch16"
-_CONFIG_FOR_DOC = "ChineseCLIPConfig"
 
 
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
@@ -730,12 +722,8 @@ class ChineseCLIPTextPooler(nn.Module):
         return pooled_output
 
 
+@auto_docstring
 class ChineseCLIPPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = ChineseCLIPConfig
     base_model_prefix = "chinese_clip"
     supports_gradient_checkpointing = True
@@ -1013,7 +1001,11 @@ class ChineseCLIPVisionTransformer(nn.Module):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The text model from CHINESE_CLIP without any head or projection on top.
+    """
+)
 class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     """
 
@@ -1030,10 +1022,10 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     config_class = ChineseCLIPTextConfig
     _no_split_modules = ["ChineseCLIPTextEmbeddings"]
 
-    def __init__(self, config: ChineseCLIPTextConfig, add_pooling_layer: bool = True):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state.
+    def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -1172,7 +1164,11 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The vision model from CHINESE_CLIP without any head or projection on top.
+    """
+)
 class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
     config_class = ChineseCLIPVisionConfig
     main_input_name = "pixel_values"

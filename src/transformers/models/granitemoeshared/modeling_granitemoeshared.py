@@ -696,7 +696,11 @@ class GraniteMoeSharedDecoderLayer(nn.Module):
         return outputs
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The bare GraniteMoeShared Model outputting raw hidden-states without any specific head on top.
+    """
+)
 class GraniteMoeSharedPreTrainedModel(PreTrainedModel):
     config_class = GraniteMoeSharedConfig
     base_model_prefix = "model"
@@ -1128,7 +1132,6 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-@auto_docstring
 class GraniteMoeSharedForCausalLM(GraniteMoeSharedPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1181,10 +1184,10 @@ class GraniteMoeSharedForCausalLM(GraniteMoeSharedPreTrainedModel, GenerationMix
         **kwargs,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 

@@ -28,7 +28,11 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    logging,
+)
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_decision_transformer import DecisionTransformerConfig
 
@@ -481,9 +485,8 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
                 p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
 
 
-@auto_docstring
 class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
-    def __init__(self, config: DecisionTransformerConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
@@ -511,7 +514,6 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
-    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -756,8 +758,12 @@ class DecisionTransformerOutput(ModelOutput):
     last_hidden_state: Optional[torch.FloatTensor] = None
 
 
-@auto_docstring
 class DecisionTransformerPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
     config_class = DecisionTransformerConfig
     base_model_prefix = "decision_transformer"
     main_input_name = "states"
@@ -782,12 +788,18 @@ class DecisionTransformerPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The model builds upon the GPT2 architecture to perform autoregressive prediction of actions in an offline RL
-    setting. Refer to the paper for more details: https://arxiv.org/abs/2106.01345
+    The Decision Transformer Model
     """
 )
 class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
-    def __init__(self, config: DecisionTransformerConfig):
+    """
+
+    The model builds upon the GPT2 architecture to perform autoregressive prediction of actions in an offline RL
+    setting. Refer to the paper for more details: https://arxiv.org/abs/2106.01345
+
+    """
+
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
         self.hidden_size = config.hidden_size

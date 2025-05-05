@@ -33,7 +33,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import auto_docstring, logging, torch_int
+from ...utils import (
+    auto_docstring,
+    logging,
+    torch_int,
+)
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
 
@@ -691,6 +695,16 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, token_sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
+            token. See `pixel_values` for `patch_sequence_length`.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
         bbox (`torch.LongTensor` of shape `(batch_size, token_sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
             config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
@@ -699,6 +713,29 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
 
             Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
             token. See `pixel_values` for `patch_sequence_length`.
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, token_sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
+            token. See `pixel_values` for `patch_sequence_length`.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `(batch_size, token_sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
+            token. See `pixel_values` for `patch_sequence_length`.
+
+            [What are position IDs?](../glossary#position-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, token_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
+            model's internal embedding lookup matrix.
 
         Examples:
 
@@ -980,13 +1017,7 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    LayoutLMv3 Model with a span classification head on top for extractive question-answering tasks such as
-    [DocVQA](https://rrc.cvc.uab.es/?ch=17) (a linear layer on top of the text part of the hidden-states output to
-    compute `span start logits` and `span end logits`).
-    """
-)
+@auto_docstring
 class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

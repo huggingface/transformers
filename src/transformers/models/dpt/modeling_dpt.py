@@ -29,10 +29,10 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, ModelOutput, SemanticSegmenterOutput
+from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import auto_docstring, logging, torch_int
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from ...utils.backbone_utils import load_backbone
 from .configuration_dpt import DPTConfig
 
@@ -845,10 +845,10 @@ class DPTPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DPTModel(DPTPreTrainedModel):
-    def __init__(self, config: DPTConfig, add_pooling_layer=True):
-        """
-        add_pooling_layer (`bool`, *optional*, defaults to `True`):
-            Whether to add a pooling layer on top of the last layer hidden state.
+    def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(config)
         self.config = config
@@ -1047,7 +1047,7 @@ class DPTDepthEstimationHead(nn.Module):
     """
 )
 class DPTForDepthEstimation(DPTPreTrainedModel):
-    def __init__(self, config: DPTConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.backbone = None
@@ -1221,13 +1221,9 @@ class DPTAuxiliaryHead(nn.Module):
         return logits
 
 
-@auto_docstring(
-    custom_intro="""
-    DPT Model with a semantic segmentation head on top e.g. for ADE20k, CityScapes.
-    """
-)
+@auto_docstring
 class DPTForSemanticSegmentation(DPTPreTrainedModel):
-    def __init__(self, config: DPTConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.dpt = DPTModel(config, add_pooling_layer=False)

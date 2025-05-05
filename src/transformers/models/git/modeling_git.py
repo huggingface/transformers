@@ -925,7 +925,11 @@ class GitVisionTransformer(nn.Module):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The vision model from CLIP, used in GIT, without any head or projection on top.
+    """
+)
 class GitVisionModel(GitPreTrainedModel):
     config_class = GitVisionConfig
     main_input_name = "pixel_values"
@@ -993,10 +997,12 @@ class GitProjection(nn.Module):
 
 
 @auto_docstring(
-    custom_intro="The bare GIT Model transformer consisting of a CLIP image encoder and text decoder outputting raw hidden-states without any specific head on top."
+    custom_intro="""
+    The bare GIT Model transformer consisting of a CLIP image encoder and text decoder outputting raw hidden-states
+    """
 )
 class GitModel(GitPreTrainedModel):
-    def __init__(self, config: GitConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
 
@@ -1252,11 +1258,15 @@ class GitModel(GitPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    GIT Model with a `language modeling` head on top for autoregressive language modeling.
+    """
+)
 class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["output.weight"]
 
-    def __init__(self, config: GitConfig):
+    def __init__(self, config):
         super().__init__(config)
 
         self.git = GitModel(config)
@@ -1294,6 +1304,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
+
         Examples:
 
         Image captioning example:
