@@ -1657,7 +1657,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         self.decoder_query_perturber = decoder_query_perturber
         self.dec_layer_number = config.dec_layer_number
         self.dec_layer_dropout_prob = config.dec_layer_dropout_prob
-        self.rm_detach = config.rm_detach
+        self.dec_detach = config.dec_detach
 
         self.post_init()
 
@@ -1754,10 +1754,10 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
                             topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
                         )  # unsigmoid
 
-                if self.rm_detach and "dec" in self.rm_detach:
-                    reference_points = new_reference_points
-                else:
+                if self.dec_detach:
                     reference_points = new_reference_points.detach()
+                else:
+                    reference_points = new_reference_points
                 if self.use_detached_boxes_dec_out:
                     ref_points.append(reference_points)
                 else:
