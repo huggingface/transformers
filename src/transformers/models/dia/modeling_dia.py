@@ -63,19 +63,25 @@ _CONFIG_FOR_DOC = "DiaConfig"
 _CHECKPOINT_FOR_DOC = "nari-labs/Dia-1.6B"
 
 
-class DiaRotaryEmbedding(nn.Module):
-    """Rotary Position Embedding (RoPE) implementation in PyTorch."""
 
-    def __init__(
-        self,
-        embedding_dims: int,
-        min_timescale: int = 1,
-        max_timescale: int = 10000,
-        dtype: torch.dtype = torch.float32,
-    ):
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+class DiaRotaryEmbedding(nn.Module):
+    def __init__(self, config: BambaConfig, device=None):
         super().__init__()
-        if embedding_dims % 2 != 0:
-            raise ValueError("Embedding dim must be even for RoPE.")
         self.embedding_dims = embedding_dims
         self.min_timescale = min_timescale
         self.max_timescale = max_timescale
@@ -86,17 +92,17 @@ class DiaRotaryEmbedding(nn.Module):
         timescale = (self.min_timescale * (self.max_timescale / self.min_timescale) ** fraction).to(torch.float32)
         self.register_buffer("timescale", timescale, persistent=False)
 
-    def forward(self, inputs: torch.Tensor, position: torch.Tensor):
-        """Applies RoPE."""
-        position = position.unsqueeze(-1).unsqueeze(-1)
-        sinusoid_inp = position / self.timescale
-        sin = torch.sin(sinusoid_inp)
-        cos = torch.cos(sinusoid_inp)
-        first_half, second_half = torch.chunk(inputs.to(torch.float32), 2, dim=-1)
-        first_part = first_half * cos - second_half * sin
-        second_part = second_half * cos + first_half * sin
-        return torch.cat((first_part.to(self.compute_dtype), second_part.to(self.compute_dtype)), dim=-1)
-
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (position_ids_expanded.float() / self.timescale).transpose(1, 2)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
