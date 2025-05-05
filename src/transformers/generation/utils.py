@@ -968,7 +968,7 @@ class GenerationMixin:
                 atm_translator = AssistantVocabTranslatorCache.get_translator(
                     target_tokenizer,
                     assistant_tokenizer,
-                    self.config.vocab_size,
+                    self.config.get_text_config().vocab_size,
                     assistant_model=assistant_model,
                     assistant_prune_lm_head=True,  # prune LM head of assistant model
                 )
@@ -1234,7 +1234,9 @@ class GenerationMixin:
         # Watermarking should be after all logits processing is finished (see #34630)
         if generation_config.watermarking_config is not None:
             processors.append(
-                generation_config.watermarking_config.construct_processor(self.config.vocab_size, device)
+                generation_config.watermarking_config.construct_processor(
+                    self.config.get_text_config().vocab_size, device
+                )
             )
 
         # `LogitNormalization` should always be the last logit processor, when present
@@ -1412,7 +1414,7 @@ class GenerationMixin:
 
         # 3. Optionally normalize the logits (across the vocab dimension)
         if normalize_logits:
-            scores = scores.reshape(-1, self.config.vocab_size, scores.shape[-1])
+            scores = scores.reshape(-1, self.config.get_text_config().vocab_size, scores.shape[-1])
             scores = torch.nn.functional.log_softmax(scores, dim=1)
             scores = scores.reshape(-1, scores.shape[-1])
 
@@ -1426,7 +1428,7 @@ class GenerationMixin:
         beam_indices[beam_indices_mask] = 0
 
         # 6. multiply beam_indices with vocab size to gather correctly from scores
-        beam_sequence_indices = beam_indices * self.config.vocab_size
+        beam_sequence_indices = beam_indices * self.config.get_text_config().vocab_size
 
         # 7. Define which indices contributed to scores
         cut_idx = sequences.shape[-1] - max_beam_length
