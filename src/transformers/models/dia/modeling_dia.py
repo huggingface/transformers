@@ -63,29 +63,40 @@ _CONFIG_FOR_DOC = "DiaConfig"
 _CHECKPOINT_FOR_DOC = "nari-labs/Dia-1.6B"
 
 
-def sinusoids(length: int, channels: int, max_timescale: float = 10000) -> torch.Tensor:
-    """Returns sinusoids for positional embedding"""
-    if channels % 2 != 0:
-        raise ValueError(
-            f"Number of channels has to be divisible by 2 for sinusoidal positional embeddings, got {channels} channels."
-        )
-    log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
-    inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
-    scaled_time = torch.arange(length).view(-1, 1) * inv_timescales.view(1, -1)
-    return torch.cat([scaled_time.sin(), scaled_time.cos()], dim=1)
+class DiaRotaryEmbedding(nn.Module):
+    """Rotary Position Embedding (RoPE) implementation in PyTorch."""
 
+    def __init__(
+        self,
+        embedding_dims: int,
+        min_timescale: int = 1,
+        max_timescale: int = 10000,
+        dtype: torch.dtype = torch.float32,
+    ):
+        super().__init__()
+        if embedding_dims % 2 != 0:
+            raise ValueError("Embedding dim must be even for RoPE.")
+        self.embedding_dims = embedding_dims
+        self.min_timescale = min_timescale
+        self.max_timescale = max_timescale
+        self.compute_dtype = dtype
 
+        half_embedding_dim = embedding_dims // 2
+        fraction = (2.0 * torch.arange(0, half_embedding_dim)) / embedding_dims
+        timescale = (self.min_timescale * (self.max_timescale / self.min_timescale) ** fraction).to(torch.float32)
+        self.register_buffer("timescale", timescale, persistent=False)
 
+    def forward(self, inputs: torch.Tensor, position: torch.Tensor):
+        """Applies RoPE."""
+        position = position.unsqueeze(-1).unsqueeze(-1)
+        sinusoid_inp = position / self.timescale
+        sin = torch.sin(sinusoid_inp)
+        cos = torch.cos(sinusoid_inp)
+        first_half, second_half = torch.chunk(inputs.to(torch.float32), 2, dim=-1)
+        first_part = first_half * cos - second_half * sin
+        second_part = second_half * cos + first_half * sin
+        return torch.cat((first_part.to(self.compute_dtype), second_part.to(self.compute_dtype)), dim=-1)
 
-class DiaPositionalEmbedding(nn.Embedding):
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
-        super().__init__(num_positions, embedding_dim)
-
-    def forward(self, input_ids, past_key_values_length=0, position_ids=None):
-        if position_ids is None:
-            return self.weight[past_key_values_length : past_key_values_length + input_ids.shape[1]]
-        else:
-            return self.weight[position_ids]
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -221,7 +232,6 @@ class DiaCrossAttention(nn.Module):
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -261,7 +271,6 @@ class DiaCrossAttention(nn.Module):
 
 
 
-# Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Dia, MBART->DIA
 class DiaEncoderLayer(nn.Module):
     def __init__(self, config: DiaConfig, compute_dtype: torch.dtype):
         super().__init__()
@@ -288,21 +297,27 @@ class DiaEncoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_values: EncoderInferenceState,
+        attention_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
-        x_norm = self.pre_sa_norm(hidden_states).to(self.compute_dtype)
+        normed_states = self.pre_sa_norm(hidden_states)
 
-        sa_out = self.self_attention(
+        hidden_states, self_attn_weights = self.self_attention(
             hidden_states=normed_states
-            position_ids=position_ids,
-            attn_mask=state.attn_mask, # I don't mind if this never changes
+            attention_mask=attention_mask, # I don't mind if this never changes
+            position_embeddings=position_embeddings,
+            **kwargs
         )
-        hidden_states = residual + sa_out
+        hidden_states = residual + hidden_states
 
         residual = hidden_states
-        x_norm = self.post_sa_norm(hidden_states).to(self.compute_dtype)
-        mlp_out = self.mlp(x_norm)
+        normed_states = self.post_sa_norm(hidden_states)
+        mlp_out = self.mlp(normed_states)
         hidden_states = residual + mlp_out
         return hidden_states
 
