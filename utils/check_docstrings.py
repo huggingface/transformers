@@ -1073,7 +1073,7 @@ def generate_new_docstring_for_signature(
     signature_content = [line.split("#")[0] for line in signature_content]
     signature_content = "".join(signature_content)
     signature_content = "".join(signature_content.split(")")[:-1])
-    args_in_signature = re.findall(r"(?:[,(]\s*)(\w+)\s*(?::\s*[^=)]+)?(?:\s*=\s*[^,)]+)?", signature_content)
+    args_in_signature = re.findall(r"(?:[,(]\s*)(\w+)\s*(?::\s*[^=,)]+)?(?:\s*=\s*[^,)]+)?", signature_content)
     if "self" in args_in_signature:
         args_in_signature.remove("self")
     # Parse docstring if present
@@ -1096,7 +1096,7 @@ def generate_new_docstring_for_signature(
                 "type": "<fill_type>",
                 "optional": False,
                 "shape": None,
-                "description": f"\n{arg_indent}<fill_docstring>",
+                "description": f"\n{arg_indent}    <fill_docstring>",
                 "default": None,
                 "additional_info": None,
             }

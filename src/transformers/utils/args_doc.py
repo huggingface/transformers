@@ -1003,6 +1003,7 @@ def _get_parameter_info(param_name, documented_params, source_args_dict, param_t
     shape = None
     shape_string = ""
     is_documented = True
+    additional_info = None
 
     if param_name in documented_params:
         # Parameter is documented in the function's docstring
@@ -1319,12 +1320,12 @@ def _process_parameters_section(
         print("\n".join(undocumented_parameters))
 
     # Fix missing args
-    if missing_args:
-        if parent_class is not None:
-            obj = parent_class.__init__
-        else:
-            obj = func
-        # fix_docstring(obj, missing_args)
+    # if missing_args:
+    #     if parent_class is not None:
+    #         obj = parent_class.__init__
+    #     else:
+    #         obj = func
+    #     # fix_docstring(obj, missing_args)
 
     return docstring
 
