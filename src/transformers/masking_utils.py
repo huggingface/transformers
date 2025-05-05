@@ -240,7 +240,10 @@ def create_4d_causal_mask(
     if sliding_window is not None and chunk_size is not None:
         raise ValueError("`sliding_window` and `chunk_size` are mutually exclusive for mask creation")
 
-    kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)
+    # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
+    # but without data-dependent slicing (i.e. torch.compile friendly)
+    kv_arange = torch.arange(kv_length, device=cache_position.device)
+    kv_arange += kv_offset
     reshaped_cache_position = cache_position.view(-1, 1)
 
     # Simplest and most efficient way to obtain a causal mask
