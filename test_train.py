@@ -12,7 +12,8 @@ CP_SIZE=2 TP_SIZE=2 torchrun --nproc_per_node=4 test_train.py
 TP_SIZE=1 CP_SIZE=4 torchrun --nproc_per_node=4 test_train.py
 TP_SIZE=1 DP_SIZE=4 torchrun --nproc_per_node=4 test_train.py
 TP_SIZE=4 DP_SIZE=1 torchrun --nproc_per_node=4 --rdzv_endpoint=localhost:29503 test_train.py
-TP_SIZE=1 DP_SIZE=1 torchrun --nproc_per_node=1 --rdzv_endpoint=localhost:29504 test_train.py
+IGNORE_SANITY=1 CP_SIZE=1 TP_SIZE=1 DP_SIZE=1 torchrun --nproc_per_node=1 --rdzv_endpoint=l
+ocalhost:29504 test_train.py
 """
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
@@ -40,7 +41,7 @@ from typing import Iterable
 import math
 from contextlib import contextmanager, nullcontext
 
-ignore_sanity_checks = int(os.environ.get("IGNORE_SANITY", 1)) == 1
+ignore_sanity_checks = int(os.environ.get("IGNORE_SANITY", 0)) == 1
 # torch.use_deterministic_algorithms(True)
 torch.backends.cudnn.deterministic = True
 
@@ -100,7 +101,7 @@ def main():
                 },
                 name=f"tp{tp_size}_dp{dp_size}_cp{cp_size}"
             )
-            logger.info(f"Sanity check is set to: {ignore_sanity_checks}")
+            logger.info(f"ignore_sanity_checks is set to: {ignore_sanity_checks}")
             logger.info("Wandb initialized.")
             # Log the current file to wandb
             wandb.save("test_train.py")
