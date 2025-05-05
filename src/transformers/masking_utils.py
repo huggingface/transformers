@@ -4,8 +4,8 @@ from typing import Optional
 import torch
 import torch.nn.functional as F
 
-from ...configuration_utils import PretrainedConfig
 from .cache_utils import Cache
+from .configuration_utils import PretrainedConfig
 from .utils.import_utils import is_torchdynamo_compiling
 
 
