@@ -1250,7 +1250,7 @@ if __name__ == "__main__":
         sorted_dict = sorted(model_results.items(), key=lambda t: t[0])
         for job, job_result in sorted_dict:
             model_name = job
-            if model_name.startswith("model_"):
+            if model_name.startswith("models_"):
                 model_name = model_name[len("models_"):]
             model_job_links[model_name] = job_result["job_link"]
 
