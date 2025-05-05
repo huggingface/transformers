@@ -136,7 +136,7 @@ def _eager_bidir_attention(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
-    attn_mask: torch.Tensor | None,
+    attn_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float,
     **kwargs,
