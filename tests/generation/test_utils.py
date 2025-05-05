@@ -135,6 +135,7 @@ VLM_CLASS_NAMES = [
     "chameleon",
     "internvl",
     "qwen2_5omni",  # the file is named `qwen2_5_omni`, but the model class is `Qwen2_5Omni`
+    "ovis2",
 ]
 
 
