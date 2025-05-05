@@ -260,8 +260,7 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
 
 # Copied from transformers.models.detr.image_processing_detr.get_max_height_width
 def get_max_height_width(
-    images: List[np.ndarray],
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    images: List[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
 ) -> List[int]:
     """
     Get the maximum height and width across all images in a batch.
@@ -280,9 +279,7 @@ def get_max_height_width(
 
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
 def make_pixel_mask(
-    image: np.ndarray,
-    output_size: Tuple[int, int],
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    image: np.ndarray, output_size: Tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
 ) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -358,10 +355,7 @@ def prepare_coco_detection_annotation(
 
     # for conversion to coco api
     area = np.asarray([obj["area"] for obj in annotations], dtype=np.float32)
-    iscrowd = np.asarray(
-        [obj["iscrowd"] if "iscrowd" in obj else 0 for obj in annotations],
-        dtype=np.int64,
-    )
+    iscrowd = np.asarray([obj["iscrowd"] if "iscrowd" in obj else 0 for obj in annotations], dtype=np.int64)
 
     boxes = [obj["bbox"] for obj in annotations]
     # guard against no boxes via resizing
@@ -463,16 +457,13 @@ def prepare_coco_panoptic_annotation(
             new_target["masks"] = masks
         new_target["boxes"] = masks_to_boxes(masks)
         new_target["class_labels"] = np.array(
-            [segment_info["category_id"] for segment_info in target["segments_info"]],
-            dtype=np.int64,
+            [segment_info["category_id"] for segment_info in target["segments_info"]], dtype=np.int64
         )
         new_target["iscrowd"] = np.asarray(
-            [segment_info["iscrowd"] for segment_info in target["segments_info"]],
-            dtype=np.int64,
+            [segment_info["iscrowd"] for segment_info in target["segments_info"]], dtype=np.int64
         )
         new_target["area"] = np.asarray(
-            [segment_info["area"] for segment_info in target["segments_info"]],
-            dtype=np.float32,
+            [segment_info["area"] for segment_info in target["segments_info"]], dtype=np.float32
         )
 
     return new_target
@@ -480,11 +471,7 @@ def prepare_coco_panoptic_annotation(
 
 # Copied from transformers.models.detr.image_processing_detr.get_segmentation_image
 def get_segmentation_image(
-    masks: np.ndarray,
-    input_size: Tuple,
-    target_size: Tuple,
-    stuff_equiv_classes,
-    deduplicate=False,
+    masks: np.ndarray, input_size: Tuple, target_size: Tuple, stuff_equiv_classes, deduplicate=False
 ):
     h, w = input_size
     final_h, final_w = target_size
@@ -519,9 +506,7 @@ def get_mask_area(seg_img: np.ndarray, target_size: Tuple[int, int], n_classes: 
 
 
 # Copied from transformers.models.detr.image_processing_detr.score_labels_from_class_probabilities
-def score_labels_from_class_probabilities(
-    logits: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray]:
+def score_labels_from_class_probabilities(logits: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     probs = scipy.special.softmax(logits, axis=-1)
     labels = probs.argmax(-1, keepdims=True)
     scores = np.take_along_axis(probs, labels, axis=-1)
@@ -778,10 +763,7 @@ def compute_segments(
 
     if target_size is not None:
         mask_probs = nn.functional.interpolate(
-            mask_probs.unsqueeze(0),
-            size=target_size,
-            mode="bilinear",
-            align_corners=False,
+            mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
         )[0]
 
     current_segment_id = 0
@@ -829,7 +811,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
     Constructs a Dino DETR image processor.
 
     Args:
-        format (`str`, *optional*, defaults to `"coco_detection"`):
+        format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
             Data format of the annotations. One of "coco_detection" or "coco_panoptic".
         do_resize (`bool`, *optional*, defaults to `True`):
             Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be
@@ -853,9 +835,9 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
-        do_normalize:
             Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
             `preprocess` method.
+        do_normalize (`bool`, *optional*, defaults to `True`): <fill_docstring>
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
             Mean values to use when normalizing the image. Can be a single value or a list of values, one for each
             channel. Can be overridden by the `image_mean` parameter in the `preprocess` method.
@@ -983,10 +965,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         if format == AnnotationFormat.COCO_DETECTION:
             return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
             target = prepare_coco_detection_annotation(
-                image,
-                target,
-                return_segmentation_masks,
-                input_data_format=input_data_format,
+                image, target, return_segmentation_masks, input_data_format=input_data_format
             )
         elif format == AnnotationFormat.COCO_PANOPTIC:
             return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
@@ -1047,17 +1026,11 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             new_size = get_resize_output_image_size(
-                image,
-                size["shortest_edge"],
-                size["longest_edge"],
-                input_data_format=input_data_format,
+                image, size["shortest_edge"], size["longest_edge"], input_data_format=input_data_format
             )
         elif "max_height" in size and "max_width" in size:
             new_size = get_image_size_for_max_height_width(
-                image,
-                size["max_height"],
-                size["max_width"],
-                input_data_format=input_data_format,
+                image, size["max_height"], size["max_width"], input_data_format=input_data_format
             )
         elif "height" in size and "width" in size:
             new_size = (size["height"], size["width"])
@@ -1117,12 +1090,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
-        return rescale(
-            image,
-            rescale_factor,
-            data_format=data_format,
-            input_data_format=input_data_format,
-        )
+        return rescale(image, rescale_factor, data_format=data_format, input_data_format=input_data_format)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize_annotation
     def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
@@ -1206,11 +1174,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         )
         if annotation is not None:
             annotation = self._update_annotation_for_padded_image(
-                annotation,
-                (input_height, input_width),
-                (output_height, output_width),
-                padding,
-                update_bboxes,
+                annotation, (input_height, input_width), (output_height, output_width), padding, update_bboxes
             )
         return padded_image, annotation
 
@@ -1286,11 +1250,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
 
         if return_pixel_mask:
             masks = [
-                make_pixel_mask(
-                    image=image,
-                    output_size=padded_size,
-                    input_data_format=input_data_format,
-                )
+                make_pixel_mask(image=image, output_size=padded_size, input_data_format=input_data_format)
                 for image in images
             ]
             data["pixel_mask"] = masks
@@ -1439,10 +1399,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-        validate_kwargs(
-            captured_kwargs=kwargs.keys(),
-            valid_processor_keys=self._valid_processor_keys,
-        )
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         # Here, the pad() method pads to the maximum of (width, height). It does not need to be validated.
         validate_preprocess_arguments(
@@ -1517,15 +1474,10 @@ class DinoDetrImageProcessor(BaseImageProcessor):
                 for image, target in zip(images, annotations):
                     orig_size = get_image_size(image, input_data_format)
                     resized_image = self.resize(
-                        image,
-                        size=size,
-                        resample=resample,
-                        input_data_format=input_data_format,
+                        image, size=size, resample=resample, input_data_format=input_data_format
                     )
                     resized_annotation = self.resize_annotation(
-                        target,
-                        orig_size,
-                        get_image_size(resized_image, input_data_format),
+                        target, orig_size, get_image_size(resized_image, input_data_format)
                     )
                     resized_images.append(resized_image)
                     resized_annotations.append(resized_annotation)
@@ -1534,12 +1486,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
                 del resized_images, resized_annotations
             else:
                 images = [
-                    self.resize(
-                        image,
-                        size=size,
-                        resample=resample,
-                        input_data_format=input_data_format,
-                    )
+                    self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
                     for image in images
                 ]
 
