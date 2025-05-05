@@ -372,7 +372,11 @@ def sdpa_mask(
         # Merge the padding mask into the causal mask if needed
         if attention_mask is not None:
             # Offset the padding mask as well
-            local_padding_mask = attention_mask[:, kv_offset : kv_offset + kv_length]
+            # Equivalent to: `local_padding_mask = attention_mask[:, kv_offset : kv_offset + kv_length]`,
+            # but without data-dependent slicing (i.e. torch.compile friendly)
+            mask_indexes = torch.arange(min(kv_length, attention_mask.shape[-1]), device=cache_position.device)
+            mask_indexes += kv_offset
+            local_padding_mask = attention_mask[:, mask_indexes]
             # It may be smaller, in which case we pad with 0s to indicate the entries should not take part in the attention
             if (padding_length := kv_length - local_padding_mask.shape[-1]) > 0:
                 local_padding_mask = torch.nn.functional.pad(local_padding_mask, (0, padding_length))
