@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 def main():
     tp_size = int(os.environ.get("TP_SIZE", 1))
     dp_size = int(os.environ.get("DP_SIZE", 1))
-    cp_size = int(os.environ.get("CP_SIZE", 1))  # Add CP size configuration
+    cp_size = int(os.environ.get("CP_SIZE", 4))  # Add CP size configuration
     sdpa_backend = SDPBackend.FLASH_ATTENTION # For CP
     # sdpa_backend = SDPBackend.MATH # For CP
     global_batch_size = 8 # Desired global batch size
@@ -100,6 +100,7 @@ def main():
                 },
                 name=f"tp{tp_size}_dp{dp_size}_cp{cp_size}"
             )
+            logger.info(f"Sanity check is set to: {ignore_sanity_checks}")
             logger.info("Wandb initialized.")
             # Log the current file to wandb
             wandb.save("test_train.py")
@@ -197,9 +198,52 @@ def main():
     tokenized_dataset = raw_dataset.map(tokenize_function, batched=True, remove_columns=["text"])
     logger.info(f"Dataset loaded and tokenized. Size: {len(tokenized_dataset)}")
 
-    # Shuffle the dataset after tokenization
-    tokenized_dataset = tokenized_dataset.shuffle(seed=42)
-    logger.info("Dataset shuffled after tokenization")
+    # Create packed sequences
+    def create_packed_sequences(examples):
+        # Flatten all sequences
+        all_tokens = []
+        all_labels = []
+        for input_ids, labels in zip(examples['input_ids'], examples['labels']):
+            all_tokens.extend(input_ids)
+            all_labels.extend(labels)
+        
+        # Split into sequences of seq_len
+        num_sequences = len(all_tokens) // seq_len
+        packed_input_ids = []
+        packed_labels = []
+        
+        for i in range(num_sequences):
+            start_idx = i * seq_len
+            end_idx = start_idx + seq_len
+            packed_input_ids.append(all_tokens[start_idx:end_idx])
+            packed_labels.append(all_labels[start_idx:end_idx])
+        
+        # Handle remaining tokens if any
+        # remaining_tokens = len(all_tokens) % seq_len
+        # if remaining_tokens > 0:
+        #     # Only include if it's a significant portion of seq_len
+        #     if remaining_tokens >= seq_len // 2:
+        #         packed_input_ids.append(all_tokens[-remaining_tokens:])
+        #         packed_labels.append(all_labels[-remaining_tokens:])
+
+        return {
+            'input_ids': packed_input_ids,
+            'labels': packed_labels
+        }
+
+    # Apply packing to the dataset
+    packed_dataset = tokenized_dataset.map(
+        create_packed_sequences,
+        batched=True,
+        remove_columns=tokenized_dataset.column_names,
+        batch_size=1000,  # Process in batches for efficiency
+        num_proc=60
+    )
+    logger.info(f"Dataset packed. New size: {len(packed_dataset)}")
+
+    # Shuffle the packed dataset
+    packed_dataset = packed_dataset.shuffle(seed=42)
+    logger.info("Packed dataset shuffled")
 
     # Calculate local batch size
     if dist.is_initialized():
@@ -210,41 +254,26 @@ def main():
 
     logger.info(f"Global batch size: {global_batch_size}, DP size: {dp_size if dist.is_initialized() else 1}, Local batch size: {local_batch_size}")
 
-    # Create a custom collate function for packing sequences
-    def pack_collate_fn(batch):
-        # Sort batch by length (descending) for efficient packing
-        batch = sorted(batch, key=lambda x: len(x['input_ids']), reverse=True)
-        
-        # Initialize packed tensors
-        max_len = min(seq_len, max(len(item['input_ids']) for item in batch))
-        input_ids = torch.full((len(batch), max_len), tokenizer.pad_token_id, dtype=torch.long)
-        attention_mask = torch.zeros((len(batch), max_len), dtype=torch.long)
-        labels = torch.full((len(batch), max_len), tokenizer.pad_token_id, dtype=torch.long)
-        
-        # Fill the tensors
-        for i, item in enumerate(batch):
-            length = min(len(item['input_ids']), max_len)
-            input_ids[i, :length] = torch.tensor(item['input_ids'][:length])
-            attention_mask[i, :length] = 1
-            labels[i, :length] = torch.tensor(item['labels'][:length])
-        
+    # Simple collate function since sequences are already packed
+    def collate_fn(batch):
+        input_ids = torch.tensor([item['input_ids'] for item in batch], dtype=torch.long)
+        labels = torch.tensor([item['labels'] for item in batch], dtype=torch.long)
         return {
             'input_ids': input_ids,
-            'attention_mask': attention_mask,
             'labels': labels
         }
 
     if dist.is_initialized():
-        sampler = DistributedSampler(tokenized_dataset, num_replicas=dp_mesh.size(), rank=dp_mesh.get_local_rank(), shuffle=False)
+        sampler = DistributedSampler(packed_dataset, num_replicas=dp_mesh.size(), rank=dp_mesh.get_local_rank(), shuffle=False)
     else:
         sampler = None
     
     dataloader = DataLoader(
-        tokenized_dataset,
+        packed_dataset,
         batch_size=local_batch_size,
         sampler=sampler,
         shuffle=False,
-        collate_fn=pack_collate_fn,
+        collate_fn=collate_fn,
     )
     logger.info(f"DataLoader created. Distributed: {dist.is_initialized()}")
 
