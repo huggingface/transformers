@@ -40,6 +40,7 @@ class DiaEncoderConfig(PretrainedConfig):
         vocab_size=128,
         num_key_value_heads=16,
         dropout=0,
+        hidden_act="silu",
         **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers
@@ -51,6 +52,7 @@ class DiaEncoderConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.num_key_value_heads = num_key_value_heads
         self.dropout = dropout
+        self.hidden_act = hidden_act
         super().__init__(**kwargs)
 
 
@@ -70,6 +72,8 @@ class DiaDecoderConfig(PretrainedConfig):
         norm_eps=1e-5,
         vocab_size=1028,
         dropout=0,
+        hidden_act="silu",
+        num_channels=9,
         **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers
@@ -83,6 +87,8 @@ class DiaDecoderConfig(PretrainedConfig):
         self.norm_eps = norm_eps
         self.vocab_size = vocab_size
         self.dropout = dropout
+        self.hidden_act = hidden_act
+        self.num_channels=num_channels
         super().__init__(**kwargs)
 
 

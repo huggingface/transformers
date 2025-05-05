@@ -366,22 +366,16 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DiaConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attention = DiaSelfAttention(config)
-        self.cross_attention = DiaCrossAttention(config)
+        self.self_attention = DiaSelfAttention(config, layer_idx)
+        self.cross_attention = DiaCrossAttention(config, layer_idx)
         self.pre_sa_norm = RMSNorm(
-            config.hidden_size,
-            eps=config.norm_eps,
-            dtype=torch.float32,
+            config.hidden_size, eps=config.norm_eps,
         )
         self.pre_ca_norm = RMSNorm(
-            config.hidden_size,
-            eps=config.norm_eps,
-            dtype=torch.float32,
+            config.hidden_size, eps=config.norm_eps,
         )
         self.pre_mlp_norm = RMSNorm(
-            config.hidden_size,
-            eps=config.norm_eps,
-            dtype=torch.float32,
+            config.hidden_size, eps=config.norm_eps,
         )
         self.mlp = DiaMLP(config)
 
@@ -463,13 +457,13 @@ class DiaMultiChannelEmbed(nn.Module):
 class DiaDecoder(DiaPreTrainedModel):
     """Transformer Decoder Stack using DenseGeneral."""
 
-    def __init__(self, config: DiaDecoderConfig, compute_dtype: torch.dtype):
+    def __init__(self, config: DiaDecoderConfig):
         super().__init__(config)
         self.num_channels = config.num_channels
         self.vocab_size = config.vocab_size
         self.embeddings = DiaMultiChannelEmbed(config)
         self.layers = nn.ModuleList(
-            [DiaDecoderLayer(config=config, compute_dtype=compute_dtype) for _ in range(config.num_layers)]
+            [DiaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
         )
 
         self.norm = RMSNorm(
