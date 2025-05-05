@@ -37,6 +37,9 @@ class DiaEncoderConfig(PretrainedConfig):
         num_attention_heads=16,
         head_dim=128,
         norm_eps=1e-5,
+        vocab_size=128,
+        num_key_value_heads=16,
+        dropout=0,
         **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers
@@ -45,6 +48,9 @@ class DiaEncoderConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.head_dim = head_dim
         self.norm_eps = norm_eps
+        self.vocab_size = vocab_size
+        self.num_key_value_heads = num_key_value_heads
+        self.dropout = dropout
         super().__init__(**kwargs)
 
 
@@ -62,6 +68,8 @@ class DiaDecoderConfig(PretrainedConfig):
         cross_query_heads=16,
         cross_head_dim=128,
         norm_eps=1e-5,
+        vocab_size=1028,
+        dropout=0,
         **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers
@@ -73,6 +81,8 @@ class DiaDecoderConfig(PretrainedConfig):
         self.cross_query_heads = cross_query_heads
         self.cross_head_dim = cross_head_dim
         self.norm_eps = norm_eps
+        self.vocab_size = vocab_size
+        self.dropout = dropout
         super().__init__(**kwargs)
 
 
@@ -95,8 +105,8 @@ class DiaConfig(PretrainedConfig):
         pad_token_id=0,
         **kwargs,
     ):
-        self.encoder_config = encoder_config
-        self.decoder_config = decoder_config
+        self.encoder_config = encoder_config if encoder_config is not None else DiaEncoderConfig()
+        self.decoder_config = decoder_config if encoder_config is not None else DiaDecoderConfig()
         self.src_vocab_size = src_vocab_size
         self.tgt_vocab_size = tgt_vocab_size
         self.dropout = dropout

@@ -123,12 +123,12 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
         super().__init__()
         self.config = config
         self.num_heads = self.config.num_attention_heads
-        self.num_key_value_heads = self.config.num_key_value_heads
+        self.num_key_value_heads = self.config.num_key_value_heads or self.num_heads
         self.dropout = config.dropout
         self.hidden_size = config.hidden_size
         self.head_dim = config.hidden_size // self.num_heads
         self.layer_idx = layer_idx
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -253,19 +253,14 @@ class DiaCrossAttention(nn.Module):
 
 
 class DiaEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: DiaConfig, compute_dtype: torch.dtype):
+    def __init__(self, config: DiaConfig, layer_idx):
         super().__init__()
-        self.config = config
         self.pre_sa_norm = RMSNorm(
-            config.hidden_size,
-            eps=config.norm_eps,
-            dtype=torch.float32,
+            config.hidden_size, eps=config.norm_eps
         )
-        self.self_attention = DiaSelfAttention(config)
+        self.self_attention = DiaSelfAttention(config, layer_idx)
         self.post_sa_norm = RMSNorm(
-            config.hidden_size,
-            eps=config.norm_eps,
-            dtype=torch.float32,
+            config.hidden_size, eps=config.norm_eps
         )
         self.mlp = DiaMLP(config)
 
@@ -324,25 +319,15 @@ class DiaPreTrainedModel(PreTrainedModel):
 
 
 class DiaEncoder(DiaPreTrainedModel):
-    """Transformer Encoder Stack using DenseGeneral."""
 
-    def __init__(self, config: DiaConfig, compute_dtype: torch.dtype):
-        super().__init__()
+    def __init__(self, config: DiaConfig):
+        super().__init__(config)
         self.config = config
-        model_config = config.model
-        enc_config = config.model.encoder
-        self.compute_dtype = compute_dtype
 
-        self.embedding = nn.Embedding(
-            model_config.src_vocab_size,
-            enc_config.n_embd,
-            dtype=compute_dtype,
-        )
-        self.layers = nn.ModuleList([DiaEncoderLayer(config, compute_dtype) for _ in range(enc_config.n_layer)])
+        self.embedding = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.layers = nn.ModuleList([DiaEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
         self.norm = RMSNorm(
-            enc_config.n_embd,
-            eps=model_config.normalization_layer_epsilon,
-            dtype=torch.float32,
+            config.hidden_size, eps=config.norm_eps, dtype=torch.float32,
         )
 
     def forward(
