@@ -439,6 +439,29 @@ class DiaDecoderLayer(nn.Module):
         return x
 
 
+class DiaMultiChannelEmbed(nn.Module):
+    """ In order to efficiently compute the audio embedding from the 9 different channels
+    we vectorize the embedding process by using a single embedding layer, and an offset.
+    Example: 
+    - num_embeds = 3
+    - vocab_size = 8
+    - num_chanels = 4
+    We would have offsets = [0, 256, 512]
+    If audio_codes = [0, 1, 2, 3], [1, 3, 4, 7], [5, 6, 7, 8]
+    then tokens = audio_codes + offsets
+                = [0, 1, 2, 3, 256, 259, 260, 263, 517, 5128, 519, 520]
+    This allows us to use a single embedding layer for all channels.
+    """
+    def __init__(self, config: DiaConfig):
+        super().__init__()
+        self.embed = nn.Embedding(config.num_embeds * config.vocab_size, config.num_chanels)
+        offsets = torch.arange(config.num_chanels, dtype=torch.long) * config.num_embeds           # (C,)
+        self.register_buffer("offsets", offsets, persistent=False)
+
+    def forward(self, audio_codes: torch.Tensor) -> torch.Tensor:
+        tokens = (audio_codes + self.offsets).squeeze(1)
+        embeds = self.embed(tokens)
+        return embeds.sum(dim=1, keepdim=True)
 
 class Decoder(DiaPreTrainedModel):
     """Transformer Decoder Stack using DenseGeneral."""
@@ -452,12 +475,7 @@ class Decoder(DiaPreTrainedModel):
         self.num_channels = data_config.channels
         self.num_layers = dec_config.n_layer
 
-        self.embeddings = nn.ModuleList(
-            [
-                nn.Embedding(model_config.tgt_vocab_size, dec_config.n_embd, dtype=compute_dtype)
-                for _ in range(self.num_channels)
-            ]
-        )
+        self.embeddings = DiaMultiChannelEmbed(config)
         self.layers = nn.ModuleList(
             [DecoderLayer(config=config, compute_dtype=compute_dtype) for _ in range(self.num_layers)]
         )
@@ -556,26 +574,22 @@ class Decoder(DiaPreTrainedModel):
             - present_key_values: A list containing the updated self-attention KV cache
                                  for each layer for the *current* decoding step.
         """
-        _, _, num_channels_in = tgt_ids_BxTxC.shape
-        assert num_channels_in == self.num_channels, "Input channels mismatch"
-
-        # Embeddings
-        x = None
-        for i in range(self.num_channels):
-            channel_tokens = tgt_ids_BxTxC[..., i]
-            channel_embed = self.embeddings[i](channel_tokens)
-            x = channel_embed if x is None else x + channel_embed
+        hidden_states = self.embeddings(audio_codes)  # (B, 1, C)
 
         for i, layer in enumerate(self.layers):
             self_cache = state.self_attn_cache[i]
             cross_cache = state.cross_attn_cache[i]
-            x = layer(x, state, self_attn_cache=self_cache, cross_attn_cache=cross_cache, prefill=True)
+            hidden_states = layer(
+                hidden_states,  # (2, 1, D)
+                state,
+                self_attn_cache=self_cache,
+                cross_attn_cache=cross_cache,
+            )
 
-        # Final Norm
-        x = self.norm(x)
-        logits_BxTxCxV = self.logits_dense(x)
+        hidden_states = self.norm(hidden_states)
+        last_hidden_states = self.logits_dense(hidden_states)
 
-        return logits_BxTxCxV.to(torch.float32)
+        return last_hidden_states.to(torch.float32)
 
 
 

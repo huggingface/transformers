@@ -40,8 +40,6 @@ class DiaProcessor(ProcessorMixin):
 
     def __init__(self, feature_extractor, tokenizer, audio_model=None):
         super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
-        self._in_target_context_manager = False
         self.audio_tokenizer = AutoModel.from_pretrained(audio_model)
 
     def _prepare_audio_prompt(self, audio_prompt: torch.Tensor | None) -> tuple[torch.Tensor, int]:
@@ -127,7 +125,7 @@ class DiaProcessor(ProcessorMixin):
         This method forwards all its arguments to DiaTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
-        return self.tokenizer.decode(*args, **kwargs)
+        return self.audio_tokenizer.decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
