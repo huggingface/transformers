@@ -68,7 +68,8 @@ if __name__ == "__main__":
         for model, model_result in _data.items():
             for device, failed_tests in model_result.items():
                 # prepare job_link and add it to each entry of new failed test information.
-                job_link = model_job_links[model][device]
+                # need to change from `single-gpu` to `single` and same for `multi-gpu` to match `job_link`.
+                job_link = model_job_links[model][device.replace("-gpu", "")]
                 failed_tests = [x.update({"job_link": job_link}) for x in failed_tests if x["author"] == author or x["merged_by"] == author]
                 model_result[device] = failed_tests
             _data[model] = {k: v for k, v in model_result.items() if len(v) > 0}
