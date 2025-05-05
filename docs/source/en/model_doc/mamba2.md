@@ -21,9 +21,9 @@ rendered properly in your Markdown viewer.
 
 # Mamba 2
 
-[Mamba2](https://huggingface.co/papers/2405.21060) is the second iteration of selective structured state space model (SSMs) by Tri Dao and Albert Gu. It brings many improvements to the original architecture such as better parallelism support and more optimized support for higher dimensionalities. It is recommended to use the mistralai/Mamba-Codestral-7B-v0.1 model since it has the most stable performance.
+[Mamba2](https://huggingface.co/papers/2405.21060) is the second iteration of selective structured state space model (SSMs) by Tri Dao and Albert Gu. It brings many improvements to the original architecture such as better parallelism support and more optimized support for higher dimensionalities. 
 
-You can Mamba2 based models such as [mistralai/Mamba-Codestral-7B-v0.1](https://huggingface.co/mistralai/Mamba-Codestral-7B-v0.1) model in the [mistral](https://huggingface.co/mistralai) organization and the original Mamba2 checkpoints under the [State Space Models](https://huggingface.co/state-spaces) organization.
+Mamba2-based models such as [mistralai/Mamba-Codestral-7B-v0.1](https://huggingface.co/mistralai/Mamba-Codestral-7B-v0.1) can be found under the [mistral](https://huggingface.co/mistralai) organization.
 
 > [!TIP]
 > Click on the Mamba models in the right sidebar for more examples of how to apply Mamba to different language tasks.
