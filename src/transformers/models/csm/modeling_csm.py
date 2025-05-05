@@ -823,11 +823,16 @@ class CsmCodebooksHead(nn.Module):
             seq_length = hidden_states.shape[1]
             codebook_weight = self.weight[torch.arange(seq_length)]
         else:
-            codebook_idxs = cache_position.unsqueeze(0) - 1
+            codebook_idxs = cache_position - 1
             codebook_weight = self.weight[codebook_idxs]
 
-        hidden_states = torch.matmul(hidden_states.unsqueeze(2), codebook_weight)
-        return hidden_states.squeeze(2)
+        hidden_states = [
+            nn.functional.linear(hidden_states[:, codebook_idx, :], codebook_weight[codebook_idx].T)
+            for codebook_idx in range(codebook_weight.shape[0])
+        ]
+        hidden_states = torch.stack(hidden_states, dim=1)
+
+        return hidden_states
 
 
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
