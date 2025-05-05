@@ -14,11 +14,8 @@
 
 import unittest
 
-import numpy as np
-
 from transformers.models.dia import DiaTokenizer, DiaTokenizerFast
-from transformers.models.dia.tokenization_dia import _combine_tokens_into_words, _find_longest_common_sequence
-from transformers.testing_utils import require_flax, require_tf, require_torch, slow
+from transformers.testing_utils import slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

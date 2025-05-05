@@ -21,7 +21,6 @@ from typing import List, Optional, Union
 import numpy as np
 
 from ... import is_torch_available
-from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
@@ -196,17 +195,16 @@ def revert_audio_delay(
     return result_BxTxC
 
 
-
 class FeatureExtractionArgs:
     # add doc
-    truncation: bool = True,
-    sampling_rate: Optional[int] = None,
-    pad_to_multiple_of: Optional[int] = None,
-    return_tensors: Optional[Union[str, TensorType]] = None,
-    return_attention_mask: Optional[bool] = None,
-    padding: Optional[str] = "max_length",
-    max_length: Optional[int] = None,
-    device: Optional[str] = "cpu",
+    truncation: bool = (True,)
+    sampling_rate: Optional[int] = (None,)
+    pad_to_multiple_of: Optional[int] = (None,)
+    return_tensors: Optional[Union[str, TensorType]] = (None,)
+    return_attention_mask: Optional[bool] = (None,)
+    padding: Optional[str] = ("max_length",)
+    max_length: Optional[int] = (None,)
+    device: Optional[str] = ("cpu",)
 
 
 class DiaFeatureExtractor(SequenceFeatureExtractor):
@@ -308,9 +306,10 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=return_attention_mask or do_normalize,
         )
 
+        return_tensors = kwargs.get("return_tensors", None)
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
-
         return padded_inputs
+
 
 __all__ = ["DiaFeatureExtractor"]

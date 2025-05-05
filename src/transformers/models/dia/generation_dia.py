@@ -12,38 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
-import math
-import warnings
-import zlib
-from typing import Callable, Iterator, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
-from torch import nn
 
-from transformers.cache_utils import EncoderDecoderCache
-
-from ...generation import GenerationConfig, GenerationMixin
-from ...generation.logits_process import (
-    LogitsProcessorList,
-    SuppressTokensAtBeginLogitsProcessor,
-    SuppressTokensLogitsProcessor,
-    DiaNoSpeechDetection,
-    DiaTimeStampLogitsProcessor,
-)
-from ...generation.stopping_criteria import StoppingCriteriaList
-from ...modeling_outputs import BaseModelOutput
+from ...generation import GenerationMixin
 from ...utils import logging
-from .tokenization_dia import TASK_IDS, TO_LANGUAGE_CODE
 
 
 logger = logging.get_logger(__name__)
 
 
 class DiaGenerationMixin(GenerationMixin):
-
     @torch.inference_mode()
     def generate(
         self,
@@ -82,7 +62,7 @@ class DiaGenerationMixin(GenerationMixin):
         eos_detected = False
         eos_countdown = -1
 
-        if use_torch_compile: # TODO only compile decoding steps?
+        if use_torch_compile:  # TODO only compile decoding steps?
             step_fn = torch.compile(self._decoder_step, mode="default")
         else:
             step_fn = self._decoder_step
@@ -143,4 +123,4 @@ class DiaGenerationMixin(GenerationMixin):
             total_duration = time.time() - total_start_time
             print(f"generate: total step={total_step}, total duration={total_duration:.3f}s")
 
-        return generated_codes 
+        return generated_codes

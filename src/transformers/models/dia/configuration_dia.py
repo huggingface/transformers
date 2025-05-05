@@ -14,18 +14,14 @@
 # limitations under the License.
 """Dia model configuration"""
 
-from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
+from typing import TYPE_CHECKING
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig, OnnxSeq2SeqConfigWithPast
 from ...utils import logging
 
 
 if TYPE_CHECKING:
-    from ...feature_extraction_utils import FeatureExtractionMixin
-    from ...tokenization_utils_base import PreTrainedTokenizerBase
-    from ...utils import TensorType
+    pass
 
 logger = logging.get_logger(__name__)
 
@@ -257,7 +253,6 @@ class DiaConfig(PretrainedConfig):
             begin_suppress_tokens=begin_suppress_tokens,
             **kwargs,
         )
-
 
 
 __all__ = ["DiaConfig"]

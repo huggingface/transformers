@@ -14,15 +14,13 @@
 # limitations under the License.
 """Tokenization classes for Dia."""
 
-import warnings
 from typing import List, Optional, Tuple
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
 
 
 class DiaTokenizer(PreTrainedTokenizer):
@@ -55,9 +53,6 @@ class DiaTokenizer(PreTrainedTokenizer):
         self._added_tokens_decoder = {0: pad_token, 1: "[S1]", 2: "[S2]"}
         self.offset = len(self._added_tokens_decoder)
         super().__init__(
-            vocab_file,
-            merges_file,
-            tokenizer_file=tokenizer_file,
             unk_token=pad_token,
             pad_token=pad_token,
             max_length=max_length,
@@ -101,7 +96,6 @@ class DiaTokenizer(PreTrainedTokenizer):
             bstring += tok_string
         string = bstring.decode("utf-8", errors="ignore")
         return string
-
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         return ()

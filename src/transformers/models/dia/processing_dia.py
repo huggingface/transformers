@@ -37,7 +37,6 @@ class DiaProcessor(ProcessorMixin):
     feature_extractor_class = "DacFeatureExtractor"
     tokenizer_class = "DiaTokenizer"
 
-
     def __init__(self, feature_extractor, tokenizer, audio_model=None):
         super().__init__(feature_extractor, tokenizer)
         self.audio_tokenizer = AutoModel.from_pretrained(audio_model)
@@ -133,5 +132,6 @@ class DiaProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.audio_tokenizer.decode(*args, **kwargs)
+
 
 __all__ = ["DiaProcessor"]

@@ -15,30 +15,14 @@
 # limitations under the License.
 
 import argparse
-import io
-import json
-import os
-import tempfile
-import urllib
-import warnings
-from typing import Any, List, Optional, Tuple
-
-import torch
-from huggingface_hub.utils import insecure_hashlib
-from torch import nn
-from tqdm import tqdm
 
 from transformers import (
-    GenerationConfig,
-    DiaConfig,
     DiaFeatureExtractor,
-    DiaForConditionalGeneration,
     DiaProcessor,
-    DiaTokenizer,
     DiaTokenizerFast,
 )
-from transformers.models.dia.tokenization_dia import LANGUAGES, bytes_to_unicode
 from transformers.utils.import_utils import _is_package_available
+
 
 # TODO if I do some checkpoint renaming
 
@@ -69,8 +53,6 @@ if __name__ == "__main__":
         except Exception as e:
             print(e)
         else:
-            from tiktoken.load import load_tiktoken_bpe
-
             tokenizer = convert_tiktoken_to_hf(is_multilingual, num_languages)
             feature_extractor = DiaFeatureExtractor(
                 feature_size=model.config.num_mel_bins,

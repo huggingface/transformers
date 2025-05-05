@@ -17,61 +17,45 @@ import copy
 import inspect
 import os
 import random
-import re
 import tempfile
-import time
 import unittest
 
-import numpy as np
 import pytest
-from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-import transformers
 from transformers import DiaConfig
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
-    require_non_xpu,
     require_torch,
-    require_torch_accelerator,
     require_torch_fp16,
     require_torch_gpu,
-    require_torch_multi_accelerator,
-    require_torchaudio,
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_torchaudio_available
+from transformers.utils import is_torch_available, is_torchaudio_available
 from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_datasets_available():
-    import datasets
-    from datasets import Audio, load_dataset
+    pass
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        DiaFeatureExtractor,
-        DiaForAudioClassification,
-        DiaForCausalLM,
         DiaForConditionalGeneration,
         DiaModel,
-        DiaProcessor,
-        set_seed,
     )
     from transformers.generation import (
         GenerateEncoderDecoderOutput,
     )
     from transformers.generation.logits_process import LogitsProcessor
-    from transformers.models.dia.modeling_dia import DiaDecoder, DiaEncoder, sinusoids
+    from transformers.models.dia.modeling_dia import DiaDecoder, DiaEncoder
 
     class DummyTimestampLogitProcessor(LogitsProcessor):
         """This processor fakes the correct timestamps tokens pattern [TOK_1] [TOK_2] ... [TOK_N] [TIME_STAMP_TOK_1] [TIME_STAMP_TOK_2] [TOK_N+1] ..."""
@@ -150,7 +134,7 @@ if is_torch_available():
 
 
 if is_torchaudio_available():
-    import torchaudio
+    pass
 
 
 def prepare_dia_inputs_dict(

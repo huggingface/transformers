@@ -242,7 +242,6 @@ class DiaCrossAttention(nn.Module):
 
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         query_states = apply_rotary_pos_emb(query_states, cos, sin) 
-        # TODO queries needs to have rope applied individually!
         if cross_attention_states is not None:
             key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
             value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
