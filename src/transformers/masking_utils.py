@@ -283,20 +283,9 @@ def sdpa_mask(
     batch_size: int,
     sliding_window: Optional[int] = None,
     chunk_size: Optional[int] = None,
+    allow_is_causal_skip: bool = True,
 ) -> Optional[torch.Tensor]:
     past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-
-    # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` to avoid materializing
-    # the mask
-    # if not isinstance(past_key_values, (StaticCache, SlidingWindowCache, HybridCache, HybridChunkedCache)):
-    #     if AttentionMaskConverter._ignore_causal_mask_sdpa(
-    #         attention_mask,
-    #         inputs_embeds=input_tensor,
-    #         past_key_values_length=past_seen_tokens,
-    #         is_training=self.training,
-    #     ):
-    #         return None
-
     query_length = cache_position.shape[0]
     # The kv_length and offset are the same for sliding attention or chunked attention -> only the mask pattern changes
     local_attention_size = sliding_window or chunk_size
@@ -371,6 +360,10 @@ def sdpa_mask(
     # We now create all the masks
     masks = []
     for kv_offset, kv_length, window, chunk in sizes_and_patterns:
+        # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
+        if allow_is_causal_skip and _ignore_causal_mask_sdpa(attention_mask, query_length, kv_length, window, chunk):
+            masks.append(None)
+            continue
         causal_mask = create_4d_causal_mask(batch_size, kv_length, cache_position, kv_offset, window, chunk)
         # Merge the padding mask into the causal mask if needed
         if attention_mask is not None:
@@ -388,16 +381,50 @@ def sdpa_mask(
 
         masks.append(causal_mask)
 
-    # CHECK VERSIONS BUT PROBABLY DROP THIS OR AT LEAST KEEP IT ONLY FOR FAULTY VERSION AS WE WANT TO KEEP MASK IN BOOL
-    # ALSO THE VERY BEST WOULD BE TO HAVE BOOLS REPRESENTED AS 1 BIT INSTEAD OF DEFAULT 1 BYTE IN TORCH
-    # if (
-    #     attention_mask is not None
-    #     and attention_mask.device.type in ["cuda", "xpu", "npu"]
-    # ):
-    #     # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-    #     # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-    #     # Details: https://github.com/pytorch/pytorch/issues/110213
-    #     min_dtype = torch.finfo(dtype).min
-    #     causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-
     return masks[0] if len(masks) == 1 else masks
+
+
+def _ignore_causal_mask_sdpa(
+    attention_mask: Optional[torch.Tensor],
+    query_length: int,
+    kv_length: int,
+    sliding_window: Optional[int] = None,
+    chunk_size: Optional[int] = None,
+) -> bool:
+    """
+    Detects whether the optional user-specified attention_mask & the automatically created causal mask can be
+    ignored in case PyTorch's SDPA is used, rather relying on SDPA's `is_causal` argument.
+
+    In case no token is masked in the `attention_mask` argument, if `query_length == 1` or
+    `key_value_length == query_length`, we rather rely on SDPA `is_causal` argument to use causal/non-causal masks,
+    allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is
+    passed).
+    """
+    is_tracing = torch.jit.is_tracing() or isinstance(attention_mask, torch.fx.Proxy) or is_torchdynamo_compiling()
+    local_attention_size = sliding_window or chunk_size
+
+    if attention_mask is None:
+        # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
+        # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
+        # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
+        # `ignore_causal_mask = True` if we are not tracing
+        if (
+            not is_tracing
+            and (query_length == 1 or kv_length == query_length)
+            and (local_attention_size is None or kv_length < local_attention_size)
+        ):
+            return True
+    elif local_attention_size is None or kv_length < local_attention_size:
+        if len(attention_mask.shape) == 4:
+            return False
+        elif not is_tracing and torch.all(attention_mask == 1):
+            if query_length == 1 or kv == query_length:
+                # For query_length == 1, causal attention and bi-directional attention are the same.
+                return True
+
+            # Unfortunately, for query_length > 1 and kv_length != query_length, we cannot generally ignore
+            # the attention mask, as SDPA causal mask is the upper triangular part instead of lower part. We will set
+            # `is_causal=False` in SDPA and rely on Transformers attention_mask instead, hence not setting it to None here.
+            # Reference: https://github.com/pytorch/pytorch/issues/108108
+
+    return False
