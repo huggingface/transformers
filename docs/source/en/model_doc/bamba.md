@@ -71,7 +71,8 @@ together while nevertheless processing the inputs as though they belonged to sep
 the examples are of varying lengths, padding-free training can provide significant speed ups and
 memory savings compared to batching the examples together and using padding, as the unnecessary
 compute and memory due to padding is avoided entirely. The performance gains depend on factors such
-as the model and the data distribution, but throughput gains up to ~2x are commonly seen.
+as the model and the data distribution, but throughput gains up to [~2x are commonly
+seen](https://github.com/huggingface/transformers/pull/35861#issue-2807873129).
 
 Using padding-free training with Bamba requires the `flash-attn`, `mamba-ssm`, and `causal-conv1d`
 packages, and the following arguments must be passed to the model in addition to `input_ids` and
