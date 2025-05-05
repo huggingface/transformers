@@ -2261,7 +2261,7 @@ class xLSTMCache:
     def __init__(
         self,
         config: PretrainedConfig,
-        max_batch_size: int = 1,
+        max_batch_size: int,
         dtype: torch.dtype = torch.bfloat16,
         device: Optional[str] = None,
         **kwargs,
