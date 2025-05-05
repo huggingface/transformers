@@ -193,7 +193,7 @@ class CsmProcessor(ProcessorMixin):
 
         for audio_value, p in zip(audio, saving_path):
             if isinstance(audio_value, torch.Tensor):
-                audio_value = audio_value.cpu().numpy()
+                audio_value = audio_value.cpu().float().numpy()
             sf.write(p, audio_value, sampling_rate)
 
     def __call__(
