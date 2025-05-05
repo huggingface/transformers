@@ -386,9 +386,7 @@ class DinoDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTest
 
             # do_pad=True, max_height=100, max_width=100, image=200x100 -> 100x100
             image_processor = image_processing_class(
-                size={"max_height": 100, "max_width": 100},
-                do_pad=True,
-                pad_size={"height": 100, "width": 100},
+                size={"max_height": 100, "max_width": 100}, do_pad=True, pad_size={"height": 100, "width": 100}
             )
             inputs = image_processor(images=[image_1], return_tensors="pt")
             self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 100, 100]))
