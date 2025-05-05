@@ -25,10 +25,7 @@ The `GraniteMoeHybrid` model builds on top of `GraniteMoeSharedModel` and `Bamba
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# Note: These docs were written prior to the public model release,
-# and this path is subject to change.
-# Please see https://huggingface.co/ibm-granite for the current model list.
-model_path = "ibm-granite/granite-4.0-tiny"
+model_path = "ibm-granite/granite-4.0-tiny-preview"
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 
 # drop device_map if running on CPU
