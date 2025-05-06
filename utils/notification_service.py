@@ -1251,7 +1251,7 @@ if __name__ == "__main__":
         for job, job_result in sorted_dict:
             model_name = job
             if model_name.startswith("models_"):
-                model_name = model_name[len("models_"):]
+                model_name = model_name[len("models_") :]
             model_job_links[model_name] = job_result["job_link"]
 
         with open(f"ci_results_{job_name}/model_job_links.json", "w", encoding="UTF-8") as fp:
