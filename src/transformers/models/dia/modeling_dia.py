@@ -48,7 +48,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(tensor, position_embeddings, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(tensor, position_embeddings, unsqueeze_dim=1):
     cos = position_embeddings[0].unsqueeze(unsqueeze_dim)
     sin = position_embeddings[1].unsqueeze(unsqueeze_dim)
     embed_tensor = (tensor * cos) + (rotate_half(tensor) * sin)
@@ -265,10 +265,10 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> torch.Tensor:
@@ -277,6 +277,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
 
         hidden_states, self_attn_weights = self.self_attention(
             hidden_states=normed_states,
+            cache_position=cache_position,
             attention_mask=attention_mask,  # I don't mind if this never changes
             position_embeddings=position_embeddings,
             **kwargs,
@@ -327,18 +328,20 @@ class DiaEncoder(DiaPreTrainedModel):
         self.norm = RMSNorm(
             config.hidden_size, eps=config.norm_eps, dtype=torch.float32,
         )
+        self.rotary_embeddings = DiaRotaryEmbedding(config)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        cache_position: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
     ) -> torch.Tensor:
         hidden_states = self.embedding(hidden_states)
-
+        position_embeddings = self.rotary_embeddings(hidden_states, cache_position)
         for layer in self.layers:
-            hidden_states = layer(hidden_states, past_key_values)
+            hidden_states = layer(hidden_states, cache_position,position_embeddings, past_key_values)
 
         hidden_states = self.norm(hidden_states).to(self.compute_dtype)
         return hidden_states
@@ -463,17 +466,22 @@ class DiaDecoder(DiaPreTrainedModel):
         self.num_channels = config.num_channels
         self.vocab_size = config.vocab_size
         self.embeddings = DiaMultiChannelEmbed(config)
+        self.rotary_embeddings = DiaRotaryEmbedding(config)
         self.layers = nn.ModuleList(
             [DiaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = RMSNorm(config.hidden_size, eps=config.norm_eps)
         self.logits_dense = nn.Linear(config.hidden_size, (self.num_channels * self.vocab_size), bias=False)
 
-    def forward(self, audio_codes: torch.Tensor, past_key_values) -> torch.Tensor:
+    def forward(self, audio_codes: torch.Tensor, cache_position, attention_mask, past_key_values) -> torch.Tensor:
         hidden_states = self.embeddings(audio_codes)
+        position_embeddings = self.rotary_embeddings(hidden_states, audio_codes)
         for i, layer in enumerate(self.layers):
             hidden_states = layer(
                 hidden_states,
+                position_embeddings,
+                cache_position,
+                attention_mask,
                 past_key_values=past_key_values,
             )
 
@@ -557,11 +565,11 @@ class DiaModel(DiaPreTrainedModel):
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             input_ids=input_ids,
-            attention_mask=decoder_attention_mask,
+            attention_mask=attention_mask,
             encoder_hidden_states=encoder_outputs,
             past_key_values=past_key_values,
-            inputs_embeds=decoder_inputs_embeds,
-            position_ids=decoder_position_ids,
+            inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
