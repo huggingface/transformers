@@ -78,11 +78,9 @@ Create and activate a virtual environment with [venv](https://docs.python.org/3/
 # venv
 python -m venv .my-env
 source .my-env/bin/activate
-pip install -r requirements/requirements.txt
 # uv
 uv venv .my-env
 source .my-env/bin/activate
-uv pip install -r requirements/requirements.txt
 ```
 
 Install Transformers in your virtual environment.
