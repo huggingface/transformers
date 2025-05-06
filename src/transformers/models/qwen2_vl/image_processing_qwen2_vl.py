@@ -66,7 +66,7 @@ def smart_resize(
 
     """
     if height < factor or width < factor:
-        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
+        raise ValueError(f"height:{height} and width:{width} must be larger than factor:{factor}")
     elif max(height, width) / min(height, width) > 200:
         raise ValueError(
             f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
@@ -124,7 +124,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -132,8 +132,8 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
-        min_pixels: int = None,
-        max_pixels: int = None,
+        min_pixels: Optional[int] = None,
+        max_pixels: Optional[int] = None,
         patch_size: int = 14,
         temporal_patch_size: int = 2,
         merge_size: int = 2,
@@ -169,18 +169,18 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
     def _preprocess(
         self,
         images: Union[ImageInput, VideoInput],
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        patch_size: int = None,
-        temporal_patch_size: int = None,
-        merge_size: int = None,
-        do_convert_rgb: bool = None,
+        patch_size: Optional[int] = None,
+        temporal_patch_size: Optional[int] = None,
+        merge_size: Optional[int] = None,
+        do_convert_rgb: Optional[bool] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
@@ -209,7 +209,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Standard deviation to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
             patch_size (`int`, *optional*, defaults to `self.patch_size`):
-                The spacial patch size of the vision encoder.
+                The spatial patch size of the vision encoder.
             temporal_patch_size (`int`, *optional*, defaults to `self.temporal_patch_size`):
                 The temporal patch size of the vision encoder.
             merge_size (`int`, *optional*, defaults to `self.merge_size`):
@@ -302,20 +302,20 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         videos: VideoInput = None,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        min_pixels: int = None,
-        max_pixels: int = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
+        min_pixels: Optional[int] = None,
+        max_pixels: Optional[int] = None,
         resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        patch_size: int = None,
-        temporal_patch_size: int = None,
-        merge_size: int = None,
-        do_convert_rgb: bool = None,
+        patch_size: Optional[int] = None,
+        temporal_patch_size: Optional[int] = None,
+        merge_size: Optional[int] = None,
+        do_convert_rgb: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -352,7 +352,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             max_pixels (`int`, *optional*, defaults to `self.max_pixels`):
                 The max pixels of the image to resize the image.
             patch_size (`int`, *optional*, defaults to `self.patch_size`):
-                The spacial patch size of the vision encoder.
+                The spatial patch size of the vision encoder.
             temporal_patch_size (`int`, *optional*, defaults to `self.temporal_patch_size`):
                 The temporal patch size of the vision encoder.
             merge_size (`int`, *optional*, defaults to `self.merge_size`):
@@ -379,17 +379,18 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
 
         """
+        min_pixels = min_pixels if min_pixels is not None else self.min_pixels
+        max_pixels = max_pixels if max_pixels is not None else self.max_pixels
+
         if size is not None:
             if "shortest_edge" not in size or "longest_edge" not in size:
                 raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
             min_pixels = size["shortest_edge"]
+        elif min_pixels is not None and max_pixels is not None:
+            # backward compatibility: override size with min_pixels and max_pixels if they are provided
+            size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
         else:
-            size = self.size
-        # backward compatibility: override size with min_pixels and max_pixels if they are provided
-        if min_pixels is not None:
-            size["shortest_edge"] = min_pixels
-        if max_pixels is not None:
-            size["longest_edge"] = max_pixels
+            size = {**self.size}
 
         do_resize = do_resize if do_resize is not None else self.do_resize
 

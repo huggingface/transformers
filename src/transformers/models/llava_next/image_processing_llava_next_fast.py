@@ -102,8 +102,8 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
                 A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
                 of the form `(height, width)`.
             do_pad (`bool`, *optional*):
-                    Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-                    number of patches in the batch. Padding will be applied to the bottom and right with zeros.
+                Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
+                number of patches in the batch. Padding will be applied to the bottom and right with zeros.
         """,
     )
     def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaNextFastImageProcessorKwargs]) -> BatchFeature:
@@ -164,10 +164,10 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         target_height, target_width = target_resolution
         new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
 
-        paste_x = (target_width - new_width) // 2
-        paste_y = (target_height - new_height) // 2
+        paste_x, r_x = divmod(target_width - new_width, 2)
+        paste_y, r_y = divmod(target_height - new_height, 2)
 
-        padded_image = F.pad(image, padding=[paste_x, paste_y, paste_x, paste_y])
+        padded_image = F.pad(image, padding=[paste_x, paste_y, paste_x + r_x, paste_y + r_y])
 
         return padded_image
 

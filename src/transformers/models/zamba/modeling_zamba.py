@@ -48,7 +48,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_mamba_ssm_available,
@@ -679,7 +678,7 @@ class ZambaMambaDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         original_hidden_states: Optional[torch.Tensor] = None,
-        layer_idx: int = None,
+        layer_idx: Optional[int] = None,
         attention_mask: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[ZambaHybridDynamicCache] = None,
@@ -747,7 +746,7 @@ class ZambaHybridLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         original_hidden_states: Optional[torch.Tensor] = None,
-        layer_idx: int = None,
+        layer_idx: Optional[int] = None,
         attention_mask: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[ZambaHybridDynamicCache] = None,
@@ -850,10 +849,9 @@ class ZambaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, ZambaRMSNorm):
+            module.weight.data.fill_(1.0)
         elif isinstance(module, ZambaMambaMixer):
-            module.A_log._no_weight_decay = True
-            module.D._no_weight_decay = True
-
             module.x_proj_weight.data.normal_(mean=0.0, std=std)
             dt_init_std = self.config.mamba_dt_rank**-0.5
             nn.init.uniform_(module.dt_proj_weight, -dt_init_std, dt_init_std)
@@ -866,10 +864,12 @@ class ZambaPreTrainedModel(PreTrainedModel):
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
+            module.dt_proj_bias.data.copy_(inv_dt)
 
-            with torch.no_grad():
-                module.dt_proj_bias.copy_(inv_dt)
-            module.dt_proj_bias._no_reinit = True
+            A = torch.arange(1, module.ssm_state_size + 1, dtype=torch.float32)[None, :]
+            A = A.expand(module.intermediate_size, -1).contiguous()
+            module.A_log.data.copy_(torch.log(A).reshape(module.n_mamba_heads, module.mamba_head_dim, -1))
+            module.D.data.fill_(1.0)
 
     @classmethod
     @classmethod
@@ -1033,7 +1033,7 @@ class ZambaModel(ZambaPreTrainedModel):
     @add_start_docstrings_to_model_forward(ZAMBA_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[ZambaHybridDynamicCache] = None,
@@ -1167,7 +1167,7 @@ class ZambaModel(ZambaPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
@@ -1207,12 +1207,11 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(ZAMBA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[ZambaHybridDynamicCache] = None,
@@ -1311,7 +1310,7 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
         use_cache=True,
         **kwargs,
     ):
-        # Overwitten -- has a unique cache type, `ZambaHybridDynamicCache`
+        # Overwritten -- has a unique cache type, `ZambaHybridDynamicCache`
 
         empty_past_kv = past_key_values is None
 
@@ -1440,7 +1439,7 @@ class ZambaForSequenceClassification(ZambaPreTrainedModel):
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
             non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1

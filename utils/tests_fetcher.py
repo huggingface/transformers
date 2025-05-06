@@ -59,7 +59,7 @@ import re
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from git import Repo
 
@@ -621,7 +621,7 @@ _re_single_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*
 _re_multi_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*)\s+import\s+\(([^\)]+)\)")
 
 
-def extract_imports(module_fname: str, cache: Dict[str, List[str]] = None) -> List[str]:
+def extract_imports(module_fname: str, cache: Optional[Dict[str, List[str]]] = None) -> List[str]:
     """
     Get the imports a given module makes.
 
@@ -703,7 +703,7 @@ def extract_imports(module_fname: str, cache: Dict[str, List[str]] = None) -> Li
     return result
 
 
-def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = None) -> List[str]:
+def get_module_dependencies(module_fname: str, cache: Optional[Dict[str, List[str]]] = None) -> List[str]:
     """
     Refines the result of `extract_imports` to remove subfolders and get a proper list of module filenames: if a file
     as an import `from utils import Foo, Bar`, with `utils` being a subfolder containing many files, this will traverse
@@ -736,19 +736,28 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
             # the object is fully defined in the __init__)
             if module.endswith("__init__.py"):
                 # So we get the imports from that init then try to find where our objects come from.
-                new_imported_modules = extract_imports(module, cache=cache)
+                new_imported_modules = dict(extract_imports(module, cache=cache))
 
                 # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
                 from transformers.utils.import_utils import define_import_structure
 
-                new_imported_modules_2 = define_import_structure(PATH_TO_REPO / module)
+                new_imported_modules_from_import_structure = define_import_structure(PATH_TO_REPO / module)
 
-                for mapping in new_imported_modules_2.values():
+                for mapping in new_imported_modules_from_import_structure.values():
                     for _module, _imports in mapping.items():
+                        # Import Structure returns _module keys as import paths rather than local paths
+                        # We replace with os.path.sep so that it's Windows-compatible
+                        _module = _module.replace(".", os.path.sep)
                         _module = module.replace("__init__.py", f"{_module}.py")
-                        new_imported_modules.append((_module, list(_imports)))
+                        if _module not in new_imported_modules:
+                            new_imported_modules[_module] = list(_imports)
+                        else:
+                            original_imports = new_imported_modules[_module]
+                            for potential_new_item in list(_imports):
+                                if potential_new_item not in original_imports:
+                                    new_imported_modules[_module].append(potential_new_item)
 
-                for new_module, new_imports in new_imported_modules:
+                for new_module, new_imports in new_imported_modules.items():
                     if any(i in new_imports for i in imports):
                         if new_module not in dependencies:
                             new_modules.append((new_module, [i for i in new_imports if i in imports]))
@@ -944,7 +953,7 @@ def create_reverse_dependency_map() -> Dict[str, List[str]]:
 
 
 def create_module_to_test_map(
-    reverse_map: Dict[str, List[str]] = None, filter_models: bool = False
+    reverse_map: Optional[Dict[str, List[str]]] = None, filter_models: bool = False
 ) -> Dict[str, List[str]]:
     """
     Extract the tests from the reverse_dependency_map and potentially filters the model tests.
@@ -1043,7 +1052,6 @@ def infer_tests_to_run(
         print("\n### test_all is TRUE, FETCHING ALL FILES###\n")
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 
-    # Create the map that will give us all impacted modules.
     reverse_map = create_reverse_dependency_map()
     impacted_files = modified_files.copy()
     for f in modified_files:
@@ -1154,17 +1162,14 @@ def parse_commit_message(commit_message: str) -> Dict[str, bool]:
 
 
 JOB_TO_TEST_FILE = {
-    "tests_tf": r"tests/models/.*/test_modeling_tf_.*",
     "tests_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_generate": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_tokenization": r"tests/models/.*/test_tokenization.*",
     "tests_processors": r"tests/models/.*/test_(?!(?:modeling_|tokenization_)).*",  # takes feature extractors, image processors, processors
     "examples_torch": r"examples/pytorch/.*test_.*",
-    "examples_tensorflow": r"examples/tensorflow/.*test_.*",
     "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
     # "repo_utils": r"tests/[^models].*test.*", TODO later on we might want to do
-    "pipelines_tf": r"tests/models/.*/test_modeling_tf_.*",
     "pipelines_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_hub": r"tests/.*",
     "tests_onnx": r"tests/models/.*/test_modeling_(?:tf_|(?!flax)).*",

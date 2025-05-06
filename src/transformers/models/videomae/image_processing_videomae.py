@@ -38,6 +38,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -60,6 +61,7 @@ def make_batched(videos) -> List[List[ImageInput]]:
     raise ValueError(f"Could not make batched video from {videos}")
 
 
+@requires(backends=("vision",))
 class VideoMAEImageProcessor(BaseImageProcessor):
     r"""
     Constructs a VideoMAE image processor.
@@ -70,7 +72,7 @@ class VideoMAEImageProcessor(BaseImageProcessor):
             `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
             Size of the output image after resizing. The shortest edge of the image will be resized to
-            `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overriden by
+            `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overridden by
             `size` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
@@ -103,10 +105,10 @@ class VideoMAEImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -178,14 +180,14 @@ class VideoMAEImageProcessor(BaseImageProcessor):
     def _preprocess_image(
         self,
         image: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_center_crop: Optional[bool] = None,
+        crop_size: Optional[Dict[str, int]] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
@@ -236,14 +238,14 @@ class VideoMAEImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         videos: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_center_crop: Optional[bool] = None,
+        crop_size: Optional[Dict[str, int]] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,

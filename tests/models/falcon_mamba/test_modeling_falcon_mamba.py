@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import math
 import unittest
-from typing import Dict, List, Tuple
 from unittest.util import safe_repr
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, FalconMambaConfig, is_torch_available
@@ -24,6 +22,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
     require_torch_accelerator,
+    require_torch_multi_accelerator,
     require_torch_multi_gpu,
     slow,
     torch_device,
@@ -211,7 +210,7 @@ class FalconMambaModelTester:
         output_two = outputs.last_hidden_state
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
-        # TODO the orignal mamba does not support decoding more than 1 token neither do we
+        # TODO the original mamba does not support decoding more than 1 token neither do we
 
     def create_and_check_falcon_mamba_cached_slow_forward_and_backwards(
         self, config, input_ids, *args, gradient_checkpointing=False
@@ -231,7 +230,7 @@ class FalconMambaModelTester:
             token_emb, cache, cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device)
         )
 
-        loss = torch.log(1 + torch.abs(outputs.sum()))
+        loss = torch.log1p(torch.abs(outputs.sum()))
         self.parent.assertEqual(loss.shape, ())
         self.parent.assertEqual(outputs.shape, (self.batch_size, self.seq_length, self.hidden_size))
         loss.backward()
@@ -304,7 +303,7 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         is_inside_interval = (min_value >= expected_min) and (max_value <= expected_max)
 
         if not is_inside_interval:
-            standardMsg = "%s not found in %s" % (safe_repr(member), safe_repr(container))
+            standardMsg = f"{safe_repr(member)} not found in {safe_repr(container)}"
             self.fail(self._formatMessage(msg, standardMsg))
 
     def test_config(self):
@@ -399,10 +398,10 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                     if isinstance(tuple_object, MambaCache):  # MODIFIED PART START
                         recursive_check(tuple_object.conv_states, dict_object.conv_states)
                         recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
-                    elif isinstance(tuple_object, (List, Tuple)):  # MODIFIED PART END
+                    elif isinstance(tuple_object, (list, tuple)):  # MODIFIED PART END
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -519,7 +518,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_training_kernel(self):
         model_id = "tiiuae/falcon-mamba-7b"
 

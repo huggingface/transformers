@@ -44,12 +44,13 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     from_pretrained_id = "IDEA-Research/grounding-dino-base"
     processor_class = GroundingDinoProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         vocab_tokens = ["[UNK]","[CLS]","[SEP]","[PAD]","[MASK]","want","##want","##ed","wa","un","runn","##ing",",","low","lowest"]  # fmt: skip
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
         image_processor_map = {
@@ -62,23 +63,23 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "rescale_factor": 1 / 255,
             "do_pad": True,
         }
-        self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
+        cls.image_processor_file = os.path.join(cls.tmpdirname, IMAGE_PROCESSOR_NAME)
+        with open(cls.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
 
         image_processor = GroundingDinoImageProcessor()
-        tokenizer = BertTokenizer.from_pretrained(self.from_pretrained_id)
+        tokenizer = BertTokenizer.from_pretrained(cls.from_pretrained_id)
 
         processor = GroundingDinoProcessor(image_processor, tokenizer)
 
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
-        self.batch_size = 7
-        self.num_queries = 5
-        self.embed_dim = 5
-        self.seq_length = 5
+        cls.batch_size = 7
+        cls.num_queries = 5
+        cls.embed_dim = 5
+        cls.seq_length = 5
 
-    def prepare_text_inputs(self, batch_size: Optional[int] = None):
+    def prepare_text_inputs(self, batch_size: Optional[int] = None, modality: Optional[str] = None):
         labels = ["a cat", "remote control"]
         labels_longer = ["a person", "a car", "a dog", "a cat"]
 
@@ -92,21 +93,24 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return [labels]
         return [labels, labels_longer] + [labels] * (batch_size - 2)
 
+    @classmethod
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_tokenizer with CLIP->Bert
-    def get_tokenizer(self, **kwargs):
-        return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    def get_tokenizer(cls, **kwargs):
+        return BertTokenizer.from_pretrained(cls.tmpdirname, **kwargs)
 
+    @classmethod
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_rust_tokenizer with CLIP->Bert
-    def get_rust_tokenizer(self, **kwargs):
-        return BertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    def get_rust_tokenizer(cls, **kwargs):
+        return BertTokenizerFast.from_pretrained(cls.tmpdirname, **kwargs)
 
+    @classmethod
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_image_processor with CLIP->GroundingDino
-    def get_image_processor(self, **kwargs):
-        return GroundingDinoImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+    def get_image_processor(cls, **kwargs):
+        return GroundingDinoImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.tearDown
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def get_fake_grounding_dino_output(self):
         torch.manual_seed(42)
@@ -147,13 +151,14 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer_fast = self.get_rust_tokenizer()
         image_processor = self.get_image_processor()
 
-        processor_slow = GroundingDinoProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
-        processor_slow.save_pretrained(self.tmpdirname)
-        processor_slow = GroundingDinoProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor_slow = GroundingDinoProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
+            processor_slow.save_pretrained(tmpdir)
+            processor_slow = GroundingDinoProcessor.from_pretrained(tmpdir, use_fast=False)
 
-        processor_fast = GroundingDinoProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
-        processor_fast.save_pretrained(self.tmpdirname)
-        processor_fast = GroundingDinoProcessor.from_pretrained(self.tmpdirname)
+            processor_fast = GroundingDinoProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
+            processor_fast.save_pretrained(tmpdir)
+            processor_fast = GroundingDinoProcessor.from_pretrained(tmpdir)
 
         self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
         self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
@@ -168,15 +173,20 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_save_load_pretrained_additional_features with CLIP->GroundingDino,GroundingDinoTokenizer->BertTokenizer
     def test_save_load_pretrained_additional_features(self):
-        processor = GroundingDinoProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = GroundingDinoProcessor(
+                tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor()
+            )
+            processor.save_pretrained(tmpdir)
 
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+            tokenizer_add_kwargs = BertTokenizer.from_pretrained(tmpdir, bos_token="(BOS)", eos_token="(EOS)")
+            image_processor_add_kwargs = GroundingDinoImageProcessor.from_pretrained(
+                tmpdir, do_normalize=False, padding_value=1.0
+            )
 
-        processor = GroundingDinoProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-        )
+            processor = GroundingDinoProcessor.from_pretrained(
+                tmpdir, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, BertTokenizerFast)

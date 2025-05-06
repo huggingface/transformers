@@ -29,7 +29,7 @@ The Qwen2-Audio is the new model series of large audio-language models from the 
 * voice chat: users can freely engage in voice interactions with Qwen2-Audio without text input
 * audio analysis: users could provide audio and text instructions for analysis during the interaction
 
-It was proposed in [Qwen2-Audio Technical Report](https://arxiv.org/abs/2407.10759) by Yunfei Chu, Jin Xu, Qian Yang, Haojie Wei, Xipin Wei, Zhifang Guo, Yichong Leng, Yuanjun Lv, Jinzheng He, Junyang Lin, Chang Zhou, Jingren Zhou. 
+It was proposed in [Qwen2-Audio Technical Report](https://arxiv.org/abs/2407.10759) by Yunfei Chu, Jin Xu, Qian Yang, Haojie Wei, Xipin Wei, Zhifang Guo, Yichong Leng, Yuanjun Lv, Jinzheng He, Junyang Lin, Chang Zhou, Jingren Zhou.
 
 The abstract from the paper is the following:
 
@@ -100,7 +100,7 @@ for message in conversation:
         for ele in message["content"]:
             if ele["type"] == "audio":
                 audios.append(librosa.load(
-                    BytesIO(urlopen(ele['audio_url']).read()), 
+                    BytesIO(urlopen(ele['audio_url']).read()),
                     sr=processor.feature_extractor.sampling_rate)[0]
                 )
 
@@ -125,7 +125,7 @@ processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", device_map="auto")
 
 conversation = [
-    {'role': 'system', 'content': 'You are a helpful assistant.'}, 
+    {'role': 'system', 'content': 'You are a helpful assistant.'},
     {"role": "user", "content": [
         {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"},
         {"type": "text", "text": "What's that sound?"},
@@ -148,7 +148,7 @@ for message in conversation:
             if ele["type"] == "audio":
                 audios.append(
                     librosa.load(
-                        BytesIO(urlopen(ele['audio_url']).read()), 
+                        BytesIO(urlopen(ele['audio_url']).read()),
                         sr=processor.feature_extractor.sampling_rate)[0]
                 )
 
@@ -203,7 +203,7 @@ for conversation in conversations:
                 if ele["type"] == "audio":
                     audios.append(
                         librosa.load(
-                            BytesIO(urlopen(ele['audio_url']).read()), 
+                            BytesIO(urlopen(ele['audio_url']).read()),
                             sr=processor.feature_extractor.sampling_rate)[0]
                     )
 
@@ -221,13 +221,18 @@ response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_
 
 [[autodoc]] Qwen2AudioConfig
 
-## Qwen2AudioConfig
+## Qwen2AudioEncoderConfig
 
 [[autodoc]] Qwen2AudioEncoderConfig
 
 ## Qwen2AudioProcessor
 
 [[autodoc]] Qwen2AudioProcessor
+
+## Qwen2AudioEncoder
+
+[[autodoc]] Qwen2AudioEncoder
+    - forward
 
 ## Qwen2AudioForConditionalGeneration
 

@@ -67,6 +67,7 @@ _re_parse_description = re.compile(r"\*optional\*, defaults to (.*)$")
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
 OBJECTS_TO_IGNORE = [
+    "Llama4Processor",
     # Deprecated
     "InputExample",
     "InputFeatures",
@@ -74,11 +75,6 @@ OBJECTS_TO_IGNORE = [
     "TFSequenceSummary",
     "TFBertTokenizer",
     "TFGPT2Tokenizer",
-    # Going through an argument deprecation cycle, remove after v4.46
-    "HybridCache",
-    "MambaCache",
-    "SlidingWindowCache",
-    "StaticCache",
     # Missing arguments in the docstring
     "ASTFeatureExtractor",
     "AlbertModel",
@@ -110,7 +106,6 @@ OBJECTS_TO_IGNORE = [
     "BlenderbotSmallConfig",
     "BlenderbotSmallTokenizerFast",
     "BlenderbotTokenizerFast",
-    "Blip2QFormerConfig",
     "Blip2VisionConfig",
     "BlipTextConfig",
     "BlipVisionConfig",
@@ -388,6 +383,7 @@ OBJECTS_TO_IGNORE = [
     "MegatronBertConfig",
     "MegatronBertForPreTraining",
     "MegatronBertModel",
+    "MLCDVisionConfig",
     "MobileBertConfig",
     "MobileBertModel",
     "MobileBertTokenizerFast",
@@ -473,6 +469,8 @@ OBJECTS_TO_IGNORE = [
     "SEWForCTC",
     "SamConfig",
     "SamPromptEncoderConfig",
+    "SamHQConfig",
+    "SamHQPromptEncoderConfig",
     "SeamlessM4TConfig",  # use of unconventional markdown
     "SeamlessM4Tv2Config",  # use of unconventional markdown
     "Seq2SeqTrainingArguments",
@@ -524,6 +522,7 @@ OBJECTS_TO_IGNORE = [
     "TimeSeriesTransformerConfig",
     "TokenClassificationPipeline",
     "TrOCRConfig",
+    "Phi4MultimodalProcessor",
     "TrainerState",
     "TrainingArguments",
     "TrajectoryTransformerConfig",
@@ -583,6 +582,7 @@ OBJECTS_TO_IGNORE = [
     "ZeroShotClassificationPipeline",
     "ZeroShotImageClassificationPipeline",
     "ZeroShotObjectDetectionPipeline",
+    "Llama4TextConfig",
 ]
 
 # Supported math operations when interpreting the value of defaults.
@@ -735,7 +735,7 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
         elif _re_parse_description.search(description) is None:
             idx = description.find(OPTIONAL_KEYWORD)
             len_optional = len(OPTIONAL_KEYWORD)
-            description = f"{description[:idx + len_optional]}, defaults to {str_default}"
+            description = f"{description[: idx + len_optional]}, defaults to {str_default}"
         else:
             description = _re_parse_description.sub(rf"*optional*, defaults to {str_default}", description)
 

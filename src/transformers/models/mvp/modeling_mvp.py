@@ -790,7 +790,7 @@ class MvpEncoder(MvpPreTrainedModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -987,7 +987,7 @@ class MvpDecoder(MvpPreTrainedModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1263,7 +1263,7 @@ class MvpModel(MvpPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1401,7 +1401,7 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
     @add_end_docstrings(MVP_CONDITIONAL_GENERATION_EXAMPLE)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1523,7 +1523,7 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
     @add_end_docstrings(MVP_SEQUENCE_CLASSIFICATION_SAMPLE)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1649,7 +1649,7 @@ class MvpForQuestionAnswering(MvpPreTrainedModel):
     @add_end_docstrings(MVP_QUESTION_ANSWERING_SAMPLE)
     def forward(
         self,
-        input_ids: torch.Tensor = None,
+        input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1797,7 +1797,7 @@ class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,

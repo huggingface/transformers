@@ -23,7 +23,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
-from ...utils.import_utils import export
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -33,7 +33,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 SPIECE_UNDERLINE = "▁"
 
 
-@export(backends=("sentencepiece",))
+@requires(backends=("sentencepiece",))
 class AlbertTokenizer(PreTrainedTokenizer):
     """
     Construct an ALBERT tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).

@@ -61,7 +61,6 @@ def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
 def multi_scale_deformable_attention(
     value: Tensor,
     value_spatial_shapes: Union[Tensor, List[Tuple]],
@@ -262,7 +261,7 @@ class OneFormerHungarianMatcher(nn.Module):
         """
         super().__init__()
         if cost_class == 0 and cost_mask == 0 and cost_dice == 0:
-            raise ValueError("All costs cant be 0")
+            raise ValueError("All costs can't be 0")
         self.cost_class = cost_class
         self.cost_mask = cost_mask
         self.cost_dice = cost_dice
@@ -305,7 +304,7 @@ class OneFormerHungarianMatcher(nn.Module):
             pred_probs = pred_probs.softmax(-1)
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
             # but approximate it in 1 - proba[target class].
-            # The 1 is a constant that doesn't change the matching, it can be ommitted.
+            # The 1 is a constant that doesn't change the matching, it can be omitted.
             cost_class = -pred_probs[:, labels]
 
             pred_mask = pred_mask[:, None]
@@ -359,7 +358,7 @@ class OneFormerLoss(nn.Module):
         num_points: int,
         oversample_ratio: float,
         importance_sample_ratio: float,
-        contrastive_temperature: float = None,
+        contrastive_temperature: Optional[float] = None,
     ):
         """
         This class computes the losses using the class predictions, mask predictions and the contrastive queries.
@@ -372,7 +371,7 @@ class OneFormerLoss(nn.Module):
             num_labels (`int`):
                 The number of classes.
             matcher (`OneFormerHungarianMatcher`):
-                A torch module that computes the assigments between the predictions and labels.
+                A torch module that computes the assignments between the predictions and labels.
             weight_dict (`Dict[str, float]`):
                 A dictionary of weights to be applied to the different losses.
             eos_coef (`float`):
@@ -685,7 +684,7 @@ class OneFormerLoss(nn.Module):
             - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth
               masks.
             - **loss_contrastive** -- The query-text contrstive loss computed using object and text queries.
-            if `use_auxiliary_loss` was set to `true` in [`OneFormerConfig`], the dictionary contains addional losses
+            if `use_auxiliary_loss` was set to `true` in [`OneFormerConfig`], the dictionary contains additional losses
             for each auxiliary predictions.
         """
 
@@ -755,10 +754,10 @@ class OneFormerTransformerDecoderOutput(BaseModelOutput):
             Tuple of class and mask predictions from each layer of the transformer decoder.
     """
 
-    object_queries: torch.FloatTensor = None
+    object_queries: Optional[torch.FloatTensor] = None
     contrastive_logits: Optional[torch.FloatTensor] = None
-    prediction_masks: torch.FloatTensor = None
-    prediction_class: torch.FloatTensor = None
+    prediction_masks: Optional[torch.FloatTensor] = None
+    prediction_class: Optional[torch.FloatTensor] = None
     auxiliary_predictions: Optional[Tuple[Dict[str, torch.FloatTensor]]] = None
 
 
@@ -783,7 +782,7 @@ class OneFormerPixelDecoderOutput(ModelOutput):
     """
 
     multi_scale_features: Tuple[torch.FloatTensor] = None
-    mask_features: torch.FloatTensor = None
+    mask_features: Optional[torch.FloatTensor] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -807,7 +806,7 @@ class OneFormerPixelLevelModuleOutput(ModelOutput):
 
     encoder_features: List[torch.FloatTensor] = None
     decoder_features: List[torch.FloatTensor] = None
-    decoder_last_feature: torch.FloatTensor = None
+    decoder_last_feature: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -850,13 +849,13 @@ class OneFormerModelOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     transformer_decoder_hidden_states: Optional[torch.FloatTensor] = None
-    transformer_decoder_object_queries: torch.FloatTensor = None
+    transformer_decoder_object_queries: Optional[torch.FloatTensor] = None
     transformer_decoder_contrastive_queries: Optional[torch.FloatTensor] = None
-    transformer_decoder_mask_predictions: torch.FloatTensor = None
-    transformer_decoder_class_predictions: torch.FloatTensor = None
+    transformer_decoder_mask_predictions: Optional[torch.FloatTensor] = None
+    transformer_decoder_class_predictions: Optional[torch.FloatTensor] = None
     transformer_decoder_auxiliary_predictions: Optional[Tuple[Dict[str, torch.FloatTensor]]] = None
     text_queries: Optional[torch.FloatTensor] = None
-    task_token: torch.FloatTensor = None
+    task_token: Optional[torch.FloatTensor] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -913,19 +912,19 @@ class OneFormerForUniversalSegmentationOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    class_queries_logits: torch.FloatTensor = None
-    masks_queries_logits: torch.FloatTensor = None
+    class_queries_logits: Optional[torch.FloatTensor] = None
+    masks_queries_logits: Optional[torch.FloatTensor] = None
     auxiliary_predictions: List[Dict[str, torch.FloatTensor]] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     pixel_decoder_hidden_states: Optional[List[torch.FloatTensor]] = None
     transformer_decoder_hidden_states: Optional[torch.FloatTensor] = None
-    transformer_decoder_object_queries: torch.FloatTensor = None
+    transformer_decoder_object_queries: Optional[torch.FloatTensor] = None
     transformer_decoder_contrastive_queries: Optional[torch.FloatTensor] = None
-    transformer_decoder_mask_predictions: torch.FloatTensor = None
-    transformer_decoder_class_predictions: torch.FloatTensor = None
+    transformer_decoder_mask_predictions: Optional[torch.FloatTensor] = None
+    transformer_decoder_class_predictions: Optional[torch.FloatTensor] = None
     transformer_decoder_auxiliary_predictions: Optional[List[Dict[str, torch.FloatTensor]]] = None
     text_queries: Optional[torch.FloatTensor] = None
-    task_token: torch.FloatTensor = None
+    task_token: Optional[torch.FloatTensor] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
@@ -1086,7 +1085,7 @@ class OneFormerPixelDecoderEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         reference_points=None,
         spatial_shapes=None,
         level_start_index=None,
@@ -1368,9 +1367,9 @@ class OneFormerPixelDecoder(nn.Module):
         _, height, width = mask.shape
         valid_height = torch.sum(~mask[:, :, 0], 1)
         valid_width = torch.sum(~mask[:, 0, :], 1)
-        valid_ratio_heigth = valid_height.to(dtype) / height
+        valid_ratio_height = valid_height.to(dtype) / height
         valid_ratio_width = valid_width.to(dtype) / width
-        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
+        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
     def forward(
@@ -2610,7 +2609,7 @@ class OneFormerTextTransformer(nn.Module):
         width: int,
         layers: int,
         heads: int,
-        attn_mask: torch.Tensor = None,
+        attn_mask: Optional[torch.Tensor] = None,
         use_checkpoint=False,
         layer_norm_eps=1e-05,
     ):

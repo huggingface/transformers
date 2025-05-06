@@ -20,11 +20,9 @@ python -m transformers.models.gemma3.convert_gemma3_weights_orbax_to_hf \
     --variant='gemma3_4b' \
     --tokenizer_path="$HOME/gemma3/tokenizer/gemma3_cleaned_262144_v2.spiece.model" \
     --checkpoint_path="$HOME/gemma3/gemma3_4b_pt_orbax/" \
-    --output_path="$HOME/gemma3/gemma3_4b_pt_safetensors/" \
-    --precision='bfloat16'
+    --output_path="$HOME/gemma3/gemma3_4b_pt_safetensors/"
 """
 
-import dataclasses
 from collections.abc import Iterator, Sequence
 from typing import Any
 
@@ -35,19 +33,18 @@ import tree
 from absl import app, flags, logging
 from orbax import checkpoint as obc
 
-from ...image_utils import PILImageResampling
-from ..gemma import GemmaTokenizerFast
-from . import (
+from transformers import (
+    Gemma3Config,
     Gemma3ForCausalLM,
     Gemma3ForConditionalGeneration,
     Gemma3ImageProcessor,
     Gemma3Processor,
-)
-from .configuration_gemma3 import (
-    Gemma3Config,
     Gemma3TextConfig,
+    GemmaTokenizerFast,
+    GenerationConfig,
     SiglipVisionConfig,
 )
+from transformers.image_utils import PILImageResampling
 
 
 # ==== Internal Constants and Classes ====
@@ -95,11 +92,7 @@ _CHAT_TEMPLATE = """{{ bos_token }}
 {%- endif -%}
 """
 
-_DTYPES = {
-    "float32": torch.float32,
-    "bfloat16": torch.bfloat16,
-    "float16": torch.float16,
-}
+_DTYPES = {"float32", "bfloat16", "float16"}
 
 _SIGLIP_BASE = "SigLiPFromPatches_0/siglip_encoder"
 _SIGLIP_EMBEDDING = "SigLiPFromPatches_0/siglip_encoder/embedding"
@@ -209,42 +202,32 @@ _VARIANTS = {
 
 # ==== Flags ====
 
-CHECKPOINT_PATH = flags.DEFINE_string(
+_CHECKPOINT_PATH = flags.DEFINE_string(
     name="checkpoint_path",
     default=None,
     help="Path to the Orbax checkpoint.",
     required=True,
 )
 
-INCLUDE_CHAT_TEMPLATE = flags.DEFINE_bool(
+_INCLUDE_CHAT_TEMPLATE = flags.DEFINE_bool(
     name="include_chat_template", default=False, help="If true, will save the default chat template with the tokenizer"
 )
 
-OUTPUT_PATH = flags.DEFINE_string(
+_OUTPUT_PATH = flags.DEFINE_string(
     name="output_path",
     default=None,
     help="Path to store the HF checkpoint.",
     required=True,
 )
 
-PRECISION = flags.DEFINE_enum(
-    name="precision",
-    default=None,
+_TRANSFORMER_DTYPE = flags.DEFINE_enum(
+    name="text_dtype",
+    default="bfloat16",
     help="The floating point precision (aka dtype) of the model.",
-    enum_values=set(_DTYPES.keys()),
-    required=True,
+    enum_values=_DTYPES,
 )
 
-_TEXT_ONLY = flags.DEFINE_bool(
-    name="text_only",
-    default=False,
-    help=(
-        "If True, the model is loaded and saved as a Gemma3ForCausalLM, "
-        "otherwise model saed as Gemma3ForConditionalGeneration."
-    ),
-)
-
-TOKENIZER_PATH = flags.DEFINE_string(
+_TOKENIZER_PATH = flags.DEFINE_string(
     name="tokenizer_path",
     default=None,
     help="Path to the SentencePiece model file.",
@@ -256,6 +239,19 @@ _VARIANT = flags.DEFINE_enum(
     default=_VARIANT_GEMMA_3_4B,
     help="The model variant to convert.",
     enum_values=set(_VARIANTS.keys()),
+)
+
+_VERBOSE = flags.DEFINE_bool(
+    name="verbose",
+    default=False,
+    help="If true, log the path, shape, and dtype of every converted layer.",
+)
+
+_VISION_DTYPE = flags.DEFINE_enum(
+    name="vision_dtype",
+    default="float32",
+    help="The floating point precision (aka dtype) of the model.",
+    enum_values=_DTYPES,
 )
 
 
@@ -343,8 +339,6 @@ def convert_siglip_weight(
     else:
         raise ValueError(f"Unexpected path `{path}`.")
 
-    if "vision" in normalized_path:
-        print(normalized_path)
     return normalized_path, updated_weights
 
 
@@ -369,7 +363,7 @@ def convert_transformer_weights(
             # Tied to language_model.lm_head.weight, assigned at the end.
             converted_paths = ["language_model.model.embed_tokens.weight"]
 
-            if not _TEXT_ONLY.value:
+            if _VARIANT.value != _VARIANT_GEMMA_3_1B:
                 # Gemma3 model doesn't have image soft token in input and output embeddings, resize to avoid bugs we had with Mllama
                 pre_expansion_embeddings = weights
                 mu = np.mean(pre_expansion_embeddings, axis=0)
@@ -378,12 +372,12 @@ def convert_transformer_weights(
                 weights = np.vstack([pre_expansion_embeddings, new_embeddings])
 
             converted_weights = [weights]
-        elif _TEXT_ONLY.value or prop in ("mm_output_embedding", "mm_input_embedding_extra"):
+        elif _VARIANT.value == _VARIANT_GEMMA_3_1B or prop in ("mm_output_embedding", "mm_input_embedding_extra"):
             return zip([], [])
         else:
             raise ValueError(f"Unexpected member, {prop}, in Embedder.")
     elif path.startswith(f"{_TRANSFORMER_EMBEDDER}/mm"):
-        if _TEXT_ONLY.value:
+        if _VARIANT.value == _VARIANT_GEMMA_3_1B:
             return zip([], [])
 
         if path.endswith("/mm_input_projection"):
@@ -463,31 +457,21 @@ def convert_transformer_weights(
     return zip(converted_paths, converted_weights)
 
 
-@dataclasses.dataclass(frozen=True)
-class ConversionResult:
-    state_tree: dict[str, torch.Tensor]
-    config: Gemma3Config
-
-
-def convert(
-    checkpoint_path: str,
-    config: Gemma3Config,
-    target_dtype: torch.dtype,
-) -> ConversionResult:
+def convert(checkpoint_path: str, config: Gemma3Config) -> dict[str, torch.Tensor]:
     """Loads Orbax checkpoint from `input_path` and converts it to HF tree."""
     checkpointer = obc.PyTreeCheckpointer()
     ckpt = checkpointer.restore(checkpoint_path)
     hf_tree: dict[str, torch.Tensor] = {}
 
-    def update_tree(path: str, weights: np.ndarray) -> None:
-        torch_tensor = torch.from_numpy(weights.astype("float32")).type(target_dtype)
-        logging.info(
-            "%s converted shape=%s with dtype=%s",
-            path,
-            weights.shape,
-            torch_tensor.dtype,
-        )
-        hf_tree[path] = torch_tensor
+    def update_tree(path: str, weights: np.ndarray, target_dtype: torch.dtype) -> None:
+        hf_tree[path] = torch.from_numpy(weights.astype("float32")).type(target_dtype)
+        if _VERBOSE.value:
+            logging.info(
+                "%s converted shape=%s with dtype=%s",
+                path,
+                weights.shape,
+                target_dtype,
+            )
 
     for paths, value in tree.flatten_with_path(ckpt):
         if paths[0].startswith("SigLiPFromPatches_"):
@@ -495,54 +479,86 @@ def convert(
                 continue
 
             path, weights = convert_siglip_weight(config=config.vision_config, paths=paths, weights=value)
-            update_tree(path, weights)
+            update_tree(path, weights, config.vision_config.torch_dtype)
         else:
             for path, weights in convert_transformer_weights(config=config.text_config, paths=paths, weights=value):
                 if config.vision_config is None:
                     path = path[len("language_model.") :]
 
-                update_tree(path, weights)
+                update_tree(path, weights, config.text_config.torch_dtype)
 
     if config.vision_config is None:
         hf_tree["lm_head.weight"] = hf_tree["model.embed_tokens.weight"]
     else:
         hf_tree["language_model.lm_head.weight"] = hf_tree["language_model.model.embed_tokens.weight"]
 
-    return ConversionResult(state_tree=hf_tree, config=config)
+    return hf_tree
 
 
 def main(*args):
     del args
 
+    output_path = _OUTPUT_PATH.value
     variant = _VARIANT.value
-    dtype = getattr(torch, PRECISION.value)
+
     config = _VARIANTS[variant]
-    output_path = OUTPUT_PATH.value
+    config.text_config.torch_dtype = getattr(torch, _TRANSFORMER_DTYPE.value)
 
     if variant == _VARIANT_GEMMA_3_1B:
-        flags.FLAGS.set_default(_TEXT_ONLY.name, True)
+        config.vision_config = None
+    else:
+        config.vision_config.torch_dtype = getattr(torch, _VISION_DTYPE.value)
+
+    if _INCLUDE_CHAT_TEMPLATE.value:
+        # Chat template is included for instruction tuned models, which treat
+        # both "<eos>" and "<end_of_turn>" as generation stoppers.
+        config.eos_token_id = [1, 106]
+
+    logging.info(
+        "Converting Gemma 3 (%s) @ %s (language) and %s (vision)",
+        variant,
+        _TRANSFORMER_DTYPE.value,
+        _VISION_DTYPE.value,
+    )
+    state_tree = convert(_CHECKPOINT_PATH.value, config)
+    logging.info("Converted Gemma 3 (%s) state tree from Orbax to Hugging Face.", variant)
+
+    with accelerate.init_empty_weights():
+        if variant == _VARIANT_GEMMA_3_1B:
+            model = Gemma3ForCausalLM(config=config.text_config)
+        else:
+            model = Gemma3ForConditionalGeneration(config)
+
+    model.load_state_dict(state_tree, assign=True, strict=True)
+    logging.info(
+        "Loaded Gemma 3 (%s) in Hugging Face Transformers as a %s instance.",
+        variant,
+        type(model).__name__,
+    )
+    model.save_pretrained(output_path, safe_serialization=True)
+    logging.info(
+        "Saved Gemma 3 (%s) to SafeTensors in %s using %s",
+        variant,
+        output_path,
+        type(model).__name__,
+    )
+    del model
+    del state_tree
 
     tokenizer = GemmaTokenizerFast(
-        TOKENIZER_PATH.value,
+        _TOKENIZER_PATH.value,
         add_bos_token=True,
         extra_special_tokens={
             "image_token": "<image_soft_token>",  # Should be ID=262_144
             "boi_token": "<start_of_image>",  # Should be ID=255_999
             "eoi_token": "<end_of_image>",  # Should be ID=256_000
         },
+        chat_template=_CHAT_TEMPLATE if _INCLUDE_CHAT_TEMPLATE.value else None,
     )
+    tokenizer.save_pretrained(output_path)
+    logging.info("Saved GemmaTokenizer for %s to %s", variant, output_path)
 
-    if INCLUDE_CHAT_TEMPLATE.value:
-        # Include chat template for CausalLM models
-        tokenizer.chat_template = _CHAT_TEMPLATE
-        config.eos_token_id = [1, 106]
-
-    if _TEXT_ONLY.value:
-        config.vision_config = None
-        tokenizer.save_pretrained(output_path)
-        logging.info("Saved GemmaTokenizer for %s to %s", variant, output_path)
-        del tokenizer
-    else:
+    if variant != _VARIANT_GEMMA_3_1B:
         image_processor = Gemma3ImageProcessor(
             image_seq_length=256,
             image_mean=(0.5,) * 3,
@@ -553,39 +569,25 @@ def main(*args):
         processor = Gemma3Processor(
             image_processor=image_processor,
             tokenizer=tokenizer,
+            chat_template=tokenizer.chat_template,
         )
-        if INCLUDE_CHAT_TEMPLATE.value:
-            # Duplicate so multimodal instruct models can also be used for CausalLM
-            processor.chat_template = tokenizer.chat_template
-
         processor.save_pretrained(output_path)
         logging.info("Saved Gemma3Processor for %s to %s", variant, output_path)
         del processor
-        del tokenizer
 
-    logging.info("Gemma 3 (%s) configured as: %s", variant, config)
-    logging.info("Converting Gemma 3 (%s) @ %s", variant, dtype)
-    result = convert(CHECKPOINT_PATH.value, config, dtype)
-    logging.info("Converted Gemma 3 (%s) state tree from Orbax to Hugging Face.", variant)
+    del tokenizer
 
-    with accelerate.init_empty_weights():
-        if config.vision_config is None:
-            model = Gemma3ForCausalLM(config=config.text_config)
-        else:
-            model = Gemma3ForConditionalGeneration(config)
-
-    model.load_state_dict(result.state_tree, assign=True, strict=True)
-    model.config.torch_dtype = dtype
-    logging.info("Loaded Gemma 3 (%s) in Hugging Face Transformers as a %s instance.", variant, type(model).__name__)
-    model.save_pretrained(output_path, safe_serialization=True)
-    logging.info(
-        "Saved Gemma 3 (%s) to SafeTensors in %s using %s",
-        variant,
-        output_path,
-        type(model).__name__,
+    generation_config = GenerationConfig(
+        pad_token_id=config.pad_token_id,
+        bos_token_id=config.bos_token_id,
+        eos_token_id=config.eos_token_id,
+        cache_implementation="hybrid",
+        temperature=1.0,
+        do_sample=True,
+        top_k=64,
+        top_p=0.95,
     )
-    del model
-    del result
+    generation_config.save_pretrained(output_path)
 
 
 if __name__ == "__main__":

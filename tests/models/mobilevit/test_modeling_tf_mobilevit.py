@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -284,7 +283,7 @@ class TFMobileViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
                     super().test_keras_fit()
 
     # The default test_loss_computation() uses -100 as a proxy ignore_index
-    # to test masked losses. Overridding to avoid -100 since semantic segmentation
+    # to test masked losses. Overriding to avoid -100 since semantic segmentation
     #  models use `semantic_loss_ignore_index` from the config.
     def test_loss_computation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

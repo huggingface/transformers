@@ -645,7 +645,7 @@ class XmodPreTrainedModel(PreTrainedModel):
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
+    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with BertLMPredictionHead->XmodLMHead
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -661,6 +661,8 @@ class XmodPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, XmodLMHead):
+            module.bias.data.zero_()
 
     def set_default_language(self, language: str):
         """
@@ -994,7 +996,7 @@ class XmodForCausalLM(XmodPreTrainedModel, GenerationMixin):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

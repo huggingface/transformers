@@ -553,13 +553,13 @@ class DetaImageProcessor(BaseImageProcessor):
         self,
         format: Union[str, AnnotationFormat] = AnnotationFormat.COCO_DETECTION,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Union[float, List[float]] = None,
-        image_std: Union[float, List[float]] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         do_convert_annotations: bool = True,
         do_pad: bool = True,
         pad_size: Optional[Dict[str, int]] = None,
@@ -593,7 +593,7 @@ class DetaImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         target: Dict,
         format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
@@ -889,7 +889,7 @@ class DetaImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         annotations: Optional[Union[List[Dict], List[List[Dict]]]] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
@@ -1222,3 +1222,6 @@ class DetaImageProcessor(BaseImageProcessor):
             )
 
         return results
+
+
+__all__ = ["DetaImageProcessor"]

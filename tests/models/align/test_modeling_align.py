@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -378,14 +377,6 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Align does not use inputs_embeds")
     def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip(reason="AlignTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="AlignTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow

@@ -512,7 +512,7 @@ def duplicate_module(
     new_model_patterns: ModelPatterns,
     dest_file: Optional[str] = None,
     add_copied_from: bool = True,
-    attrs_to_remove: List[str] = None,
+    attrs_to_remove: Optional[List[str]] = None,
 ):
     """
     Create a new module from an existing one and adapting all function and classes names from old patterns to new ones.
@@ -918,7 +918,7 @@ def add_model_to_main_init(
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         frameworks (`List[str]`, *optional*):
             If specified, only the models implemented in those frameworks will be added.
-        with_processsing (`bool`, *optional*, defaults to `True`):
+        with_processing (`bool`, *optional*, defaults to `True`):
             Whether the tokenizer/feature extractor/processor of the model should also be added to the init or not.
     """
     with open(TRANSFORMERS_PATH / "__init__.py", "r", encoding="utf-8") as f:

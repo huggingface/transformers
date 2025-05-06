@@ -98,7 +98,7 @@ class MambaMixer(nn.Module):
 
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)
-        # selective projection used to make dt, B and C input dependant
+        # selective projection used to make dt, B and C input dependent
         self.x_proj = nn.Linear(self.intermediate_size, self.time_step_rank + self.ssm_state_size * 2, bias=False)
         # time step projection (discretization)
         self.dt_proj = nn.Linear(self.time_step_rank, self.intermediate_size, bias=True)
@@ -301,10 +301,10 @@ class MambaMixer(nn.Module):
         else:
             scan_outputs = []
             for i in range(seq_len):
-                ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]      # [batch, intermediade_size, ssm_state]
-                scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))  # [batch, intermediade_size, 1]
+                ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]      # [batch, intermediate_size, ssm_state]
+                scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))  # [batch, intermediate_size, 1]
                 scan_outputs.append(scan_output[:, :, 0])
-            scan_output = torch.stack(scan_outputs, dim=-1)                                # [batch, seq_len, intermediade_size]
+            scan_output = torch.stack(scan_outputs, dim=-1)                                # [batch, intermediate_size, seq_len]
             scan_output = scan_output + (hidden_states * self.D[None, :, None])
             scan_output = (scan_output * self.act(gate))
 
@@ -708,7 +708,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.LongTensor] = None,
         **kwargs,
     ):
-        # Overwitten -- uses `cache_params` as opposed to `past_key_values`
+        # Overwritten -- uses `cache_params` as opposed to `past_key_values`
 
         if use_cache:
             # `cache_position` should have been initialized in `generate`

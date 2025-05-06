@@ -202,7 +202,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         self,
         image: Union["Image.Image", str],
         question: Optional[str] = None,
-        word_boxes: Tuple[str, List[float]] = None,
+        word_boxes: Optional[Tuple[str, List[float]]] = None,
         **kwargs,
     ):
         """
@@ -283,7 +283,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         padding="do_not_pad",
         doc_stride=None,
         max_seq_len=None,
-        word_boxes: Tuple[str, List[float]] = None,
+        word_boxes: Optional[Tuple[str, List[float]]] = None,
         lang=None,
         tesseract_config="",
         timeout=None,
@@ -339,7 +339,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             )
 
         if self.model_type == ModelType.VisionEncoderDecoder:
-            task_prompt = f'<s_docvqa><s_question>{input["question"]}</s_question><s_answer>'
+            task_prompt = f"<s_docvqa><s_question>{input['question']}</s_question><s_answer>"
             # Adapted from https://huggingface.co/spaces/nielsr/donut-docvqa/blob/main/app.py
             encoding = {
                 "inputs": image_features["pixel_values"],

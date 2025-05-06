@@ -118,8 +118,10 @@ class ColPaliProcessor(ProcessorMixin):
             tokens_to_add = {"additional_special_tokens": [image_token]}
             tokenizer.add_special_tokens(tokens_to_add)
             self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+            self.image_token = IMAGE_TOKEN
         else:
             self.image_token_id = tokenizer.image_token_id
+            self.image_token = tokenizer.image_token
 
         tokenizer.add_tokens(EXTRA_TOKENS)
         tokenizer.add_bos_token = False
@@ -140,11 +142,11 @@ class ColPaliProcessor(ProcessorMixin):
         wrapper around the PaliGemmaProcessor's [`~PaliGemmaProcessor.__call__`] method adapted for the ColPali model. It cannot process
         both text and images at the same time.
 
-        When preparing the the text(s), this method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's
+        When preparing the text(s), this method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's
         [`~LlamaTokenizerFast.__call__`].
-        When preparing the the image(s), this method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's
+        When preparing the image(s), this method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's
         [`~SiglipImageProcessor.__call__`].
-        Please refer to the doctsring of the above two methods for more information.
+        Please refer to the docstring of the above two methods for more information.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Iterable
 from functools import lru_cache, partial
-from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, Union
+from typing import Any, Optional, TypedDict, Union
 
 import numpy as np
 
@@ -68,6 +68,8 @@ if is_torchvision_available():
         from torchvision.transforms.v2 import functional as F
     else:
         from torchvision.transforms import functional as F
+else:
+    pil_torch_interpolation_mapping = None
 
 logger = logging.get_logger(__name__)
 
@@ -77,8 +79,8 @@ def validate_fast_preprocess_arguments(
     do_rescale: Optional[bool] = None,
     rescale_factor: Optional[float] = None,
     do_normalize: Optional[bool] = None,
-    image_mean: Optional[Union[float, List[float]]] = None,
-    image_std: Optional[Union[float, List[float]]] = None,
+    image_mean: Optional[Union[float, list[float]]] = None,
+    image_std: Optional[Union[float, list[float]]] = None,
     do_pad: Optional[bool] = None,
     size_divisibility: Optional[int] = None,
     do_center_crop: Optional[bool] = None,
@@ -128,14 +130,14 @@ def safe_squeeze(tensor: "torch.Tensor", axis: Optional[int] = None) -> "torch.T
         return tensor
 
 
-def max_across_indices(values: Iterable[Any]) -> List[Any]:
+def max_across_indices(values: Iterable[Any]) -> list[Any]:
     """
     Return the maximum value across all indices of an iterable of values.
     """
     return [max(values_i) for values_i in zip(*values)]
 
 
-def get_max_height_width(images: List["torch.Tensor"]) -> Tuple[int]:
+def get_max_height_width(images: list["torch.Tensor"]) -> tuple[int]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -147,7 +149,7 @@ def get_max_height_width(images: List["torch.Tensor"]) -> Tuple[int]:
 
 def divide_to_patches(
     image: Union[np.array, "torch.Tensor"], patch_size: int
-) -> List[Union[np.array, "torch.Tensor"]]:
+) -> list[Union[np.array, "torch.Tensor"]]:
     """
     Divides an image into patches of a specified size.
 
@@ -171,16 +173,16 @@ def divide_to_patches(
 
 class DefaultFastImageProcessorKwargs(TypedDict, total=False):
     do_resize: Optional[bool]
-    size: Optional[Dict[str, int]]
+    size: Optional[dict[str, int]]
     default_to_square: Optional[bool]
     resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]]
     do_center_crop: Optional[bool]
-    crop_size: Optional[Dict[str, int]]
+    crop_size: Optional[dict[str, int]]
     do_rescale: Optional[bool]
     rescale_factor: Optional[Union[int, float]]
     do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, List[float]]]
-    image_std: Optional[Union[float, List[float]]]
+    image_mean: Optional[Union[float, list[float]]]
+    image_std: Optional[Union[float, list[float]]]
     do_convert_rgb: Optional[bool]
     return_tensors: Optional[Union[str, TensorType]]
     data_format: Optional[ChannelDimension]
@@ -427,8 +429,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def _fuse_mean_std_and_rescale_factor(
         self,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         device: Optional["torch.device"] = None,
@@ -446,8 +448,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Union[float, List[float]],
-        image_std: Union[float, List[float]],
+        image_mean: Union[float, list[float]],
+        image_std: Union[float, list[float]],
     ) -> "torch.Tensor":
         """
         Rescale and normalize images.
@@ -471,7 +473,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def center_crop(
         self,
         image: "torch.Tensor",
-        size: Dict[str, int],
+        size: dict[str, int],
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -573,10 +575,10 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def _prepare_input_images(
         self,
         images: ImageInput,
-        do_convert_rgb: bool = None,
+        do_convert_rgb: Optional[bool] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         device: Optional["torch.device"] = None,
-    ) -> List["torch.Tensor"]:
+    ) -> list["torch.Tensor"]:
         """
         Prepare the input images for processing.
         """
@@ -599,8 +601,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
         size: Optional[SizeDict] = None,
         crop_size: Optional[SizeDict] = None,
         default_to_square: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         data_format: Optional[ChannelDimension] = None,
         **kwargs,
     ) -> dict:
@@ -689,8 +691,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
         # torch resize uses interpolation instead of resample
         resample = kwargs.pop("resample")
+
+        # Check if resample is an int before checking if it's an instance of PILImageResampling
+        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
+        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
         kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (int, PILImageResampling)) else resample
         )
 
         # Pop kwargs that are not needed in _preprocess
@@ -701,7 +707,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
@@ -710,8 +716,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
@@ -749,7 +755,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
 
 class SemanticSegmentationMixin:
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         """
         Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 

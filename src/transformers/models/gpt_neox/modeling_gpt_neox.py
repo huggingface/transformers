@@ -10,7 +10,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -21,7 +21,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -29,6 +29,7 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
@@ -305,45 +306,18 @@ class GPTNeoXRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
-    def _dynamic_frequency_update(self, position_ids, device):
-        """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
-        """
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
-
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
-            # This .to() is needed if the model has been moved to a device after being initialized (because
-            # the buffer is automatically moved, but not the original copy)
-            self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
-
     @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-
-        # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
 
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -412,11 +386,14 @@ GPT_NEOX_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length) or `BlockMask`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
+
+            If the model is configured to use flex_attention, it will attempt to convert the mask Tensor into a BlockMask,
+            but you can also pass a `BlockMask` object directly here.
 
             [What are attention masks?](../glossary#attention-mask)
 
@@ -437,20 +414,12 @@ GPT_NEOX_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+        past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
+            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
             have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
@@ -509,6 +478,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_in = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -527,15 +497,13 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -626,17 +594,16 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        output = BaseModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
-        return output if return_dict else output.to_tuple()
 
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
@@ -649,17 +616,16 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
-            if isinstance(attention_mask, BlockMask):
-                return attention_mask
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_static_cache = isinstance(past_key_values, StaticCache)
+        using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -668,9 +634,9 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             ):
                 return None
 
-        dtype, device = input_tensor.dtype, input_tensor.device
+        dtype = input_tensor.dtype
         sequence_length = input_tensor.shape[1]
-        if using_static_cache:
+        if using_compilable_cache:
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
@@ -685,7 +651,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             sequence_length=sequence_length,
             target_length=target_length,
             dtype=dtype,
-            device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
@@ -693,7 +658,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -710,7 +675,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         **kwargs,
@@ -730,8 +694,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
                 to account for the 0 padding, the part of the cache that is not filled yet.
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -743,11 +705,11 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
@@ -789,6 +751,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.embed_out = new_embeddings
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -803,7 +766,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
@@ -835,9 +797,8 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
 
         >>> prediction_logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.gpt_neox(
+        outputs: BaseModelOutputWithPast = self.gpt_neox(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -847,12 +808,11 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.embed_out(hidden_states[:, slice_indices, :])
@@ -860,10 +820,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -899,6 +855,7 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -917,17 +874,15 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutputWithPast]:
+    ) -> SequenceClassifierOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.gpt_neox(
+        outputs: BaseModelOutputWithPast = self.gpt_neox(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -937,9 +892,8 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         logits = self.score(hidden_states)
 
         batch_size = logits.shape[0]
@@ -950,7 +904,7 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
             non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1
@@ -964,10 +918,6 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
-
-        if not return_dict:
-            output = (pooled_logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
@@ -990,6 +940,7 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint="LarsJonasson/pythia-410m-deduped-sft-swedish",
@@ -1010,17 +961,15 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.gpt_neox(
+        outputs: BaseModelOutputWithPast = self.gpt_neox(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
@@ -1030,20 +979,15 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         hidden_states = self.dropout(hidden_states)
         logits = self.classifier(hidden_states)
 
         loss = None
         if labels is not None:
             loss = self.loss_function(logits, labels, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -1070,6 +1014,7 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1089,8 +1034,7 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         end_positions: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1101,9 +1045,8 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.gpt_neox(
+        outputs: BaseModelOutputWithPast = self.gpt_neox(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1111,10 +1054,9 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
@@ -1124,10 +1066,6 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         loss = None
         if start_positions is not None and end_positions is not None:
             loss = self.loss_function(start_logits, end_logits, start_positions, end_positions)
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=loss,

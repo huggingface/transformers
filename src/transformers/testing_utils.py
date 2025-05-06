@@ -33,12 +33,12 @@ import threading
 import time
 import unittest
 from collections import UserDict, defaultdict
-from collections.abc import Mapping
+from collections.abc import Generator, Iterable, Iterator, Mapping
 from dataclasses import MISSING, fields
 from functools import cache, wraps
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Optional, Union
+from typing import Any, Callable, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
@@ -70,6 +70,7 @@ from .utils import (
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
+    is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
     is_bitsandbytes_multi_backend_available,
@@ -116,6 +117,7 @@ from .utils import (
     is_pytesseract_available,
     is_pytest_available,
     is_pytorch_quantization_available,
+    is_quark_available,
     is_rjieba_available,
     is_sacremoses_available,
     is_safetensors_available,
@@ -137,12 +139,11 @@ from .utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available_on_device,
-    is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
-    is_torch_deterministic,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
+    is_torch_mlu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
@@ -200,9 +201,11 @@ if is_torch_available():
 
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
+    IS_XPU_SYSTEM = getattr(torch.version, "xpu", None) is not None
 else:
     IS_ROCM_SYSTEM = False
     IS_CUDA_SYSTEM = False
+    IS_XPU_SYSTEM = False
 
 logger = transformers_logging.get_logger(__name__)
 
@@ -237,11 +240,11 @@ def parse_int_from_env(key, default=None):
 
 
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
+_run_flaky_tests = parse_flag_from_env("RUN_FLAKY", default=True)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
-_run_third_party_device_tests = parse_flag_from_env("RUN_THIRD_PARTY_DEVICE_TESTS", default=False)
 
 
 def is_staging_test(test_case):
@@ -939,6 +942,10 @@ if is_torch_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but NPU is unavailable. Please double-check your testing environment."
             )
+        if torch_device == "mlu" and not is_torch_mlu_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but MLU is unavailable. Please double-check your testing environment."
+            )
         if torch_device == "hpu" and not is_torch_hpu_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but HPU is unavailable. Please double-check your testing environment."
@@ -953,11 +960,13 @@ if is_torch_available():
             ) from e
     elif torch.cuda.is_available():
         torch_device = "cuda"
-    elif _run_third_party_device_tests and is_torch_npu_available():
+    elif is_torch_npu_available():
         torch_device = "npu"
-    elif _run_third_party_device_tests and is_torch_hpu_available():
+    elif is_torch_mlu_available():
+        torch_device = "mlu"
+    elif is_torch_hpu_available():
         torch_device = "hpu"
-    elif _run_third_party_device_tests and is_torch_xpu_available():
+    elif is_torch_xpu_available():
         torch_device = "xpu"
     else:
         torch_device = "cpu"
@@ -1018,6 +1027,19 @@ def require_torch_large_gpu(test_case, memory: float = 20):
     )(test_case)
 
 
+def require_torch_large_accelerator(test_case, memory: float = 20):
+    """Decorator marking a test that requires an accelerator with more than `memory` GiB of memory."""
+    if torch_device != "cuda" and torch_device != "xpu":
+        return unittest.skip(reason=f"test requires a GPU or XPU with more than {memory} GiB of memory")(test_case)
+
+    torch_accelerator_module = getattr(torch, torch_device)
+
+    return unittest.skipUnless(
+        torch_accelerator_module.get_device_properties(0).total_memory / 1024**3 > memory,
+        f"test requires a GPU or XPU with more than {memory} GiB of memory",
+    )(test_case)
+
+
 def require_torch_gpu_if_bnb_not_multi_backend_enabled(test_case):
     """
     Decorator marking a test that requires a GPU if bitsandbytes multi-backend feature is not enabled.
@@ -1063,21 +1085,20 @@ def require_torch_bf16_gpu(test_case):
     )(test_case)
 
 
-def require_torch_bf16_cpu(test_case):
-    """Decorator marking a test that requires torch>=1.10, using CPU."""
-    return unittest.skipUnless(
-        is_torch_bf16_cpu_available(),
-        "test requires torch>=1.10, using CPU",
-    )(test_case)
-
-
 def require_deterministic_for_xpu(test_case):
-    if is_torch_xpu_available():
-        return unittest.skipUnless(is_torch_deterministic(), "test requires torch to use deterministic algorithms")(
-            test_case
-        )
-    else:
-        return test_case
+    @wraps(test_case)
+    def wrapper(*args, **kwargs):
+        if is_torch_xpu_available():
+            original_state = torch.are_deterministic_algorithms_enabled()
+            try:
+                torch.use_deterministic_algorithms(True)
+                return test_case(*args, **kwargs)
+            finally:
+                torch.use_deterministic_algorithms(original_state)
+        else:
+            return test_case(*args, **kwargs)
+
+    return wrapper
 
 
 def require_torch_tf32(test_case):
@@ -1278,6 +1299,13 @@ def require_auto_awq(test_case):
     return unittest.skipUnless(is_auto_awq_available(), "test requires autoawq")(test_case)
 
 
+def require_auto_round(test_case):
+    """
+    Decorator for auto_round dependency
+    """
+    return unittest.skipUnless(is_auto_round_available(), "test requires autoround")(test_case)
+
+
 def require_optimum_quanto(test_case):
     """
     Decorator for quanto dependency
@@ -1297,6 +1325,13 @@ def require_fbgemm_gpu(test_case):
     Decorator for fbgemm_gpu dependency
     """
     return unittest.skipUnless(is_fbgemm_gpu_available(), "test requires fbgemm-gpu")(test_case)
+
+
+def require_quark(test_case):
+    """
+    Decorator for quark dependency
+    """
+    return unittest.skipUnless(is_quark_available(), "test requires quark")(test_case)
 
 
 def require_flute_hadamard(test_case):
@@ -1456,14 +1491,13 @@ def get_steps_per_epoch(trainer: Trainer) -> int:
 
 
 def evaluate_side_effect_factory(
-    side_effect_values: List[Dict[str, float]],
-) -> Generator[Dict[str, float], None, None]:
+    side_effect_values: list[dict[str, float]],
+) -> Generator[dict[str, float], None, None]:
     """
     Function that returns side effects for the _evaluate method.
     Used when we're unsure of exactly how many times _evaluate will be called.
     """
-    for side_effect_value in side_effect_values:
-        yield side_effect_value
+    yield from side_effect_values
 
     while True:
         yield side_effect_values[-1]
@@ -2360,8 +2394,8 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
     # XXX: the timeout doesn't seem to make any difference here
     await asyncio.wait(
         [
-            _read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:")),
-            _read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:")),
+            asyncio.create_task(_read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:"))),
+            asyncio.create_task(_read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:"))),
         ],
         timeout=timeout,
     )
@@ -2444,7 +2478,7 @@ def nested_simplify(obj, decimals=3):
 
 
 def check_json_file_has_correct_format(file_path):
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         lines = f.readlines()
         if len(lines) == 1:
             # length can only be 1 if dict is empty
@@ -2471,7 +2505,7 @@ class SubprocessCallException(Exception):
     pass
 
 
-def run_command(command: List[str], return_stdout=False):
+def run_command(command: list[str], return_stdout=False):
     """
     Runs `command` with `subprocess.check_output` and will potentially return the `stdout`. Will also properly capture
     if an error occurred while running `command`
@@ -2524,9 +2558,11 @@ class RequestCounter:
 
     def __exit__(self, *args, **kwargs) -> None:
         assert len(self.mock.call_args_list) == len(self._extra_info)
-
         for thread_id, call in zip(self._extra_info, self.mock.call_args_list):
             if thread_id != self._thread_id:
+                continue
+            # code 307: the URL being requested by the user has moved to a temporary location
+            if call.args[-2] == 307:
                 continue
             log = call.args[0] % call.args[1:]
             for method in ("HEAD", "GET", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"):
@@ -2579,7 +2615,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
 
             return test_func_ref(*args, **kwargs)
 
-        return wrapper
+        return unittest.skipUnless(_run_flaky_tests, "test is flaky")(wrapper)
 
     return decorator
 
@@ -2629,7 +2665,7 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
 def run_first(test_case):
     """
     Decorator marking a test with order(1). When pytest-order plugin is installed, tests marked with this decorator
-    are garanteed to run first.
+    are guaranteed to run first.
 
     This is especially useful in some test settings like on a Gaudi instance where a Gaudi device can only be used by a
     single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device
@@ -2904,7 +2940,7 @@ class HfDoctestModule(Module):
                 yield DoctestItem.from_parent(self, name=test.name, runner=runner, dtest=test)
 
 
-def _device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], *args, **kwargs):
+def _device_agnostic_dispatch(device: str, dispatch_table: dict[str, Callable], *args, **kwargs):
     if device not in dispatch_table:
         return dispatch_table["default"](*args, **kwargs)
 
@@ -2920,9 +2956,21 @@ def _device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], 
 if is_torch_available():
     # Mappings from device names to callable functions to support device agnostic
     # testing.
-    BACKEND_MANUAL_SEED = {"cuda": torch.cuda.manual_seed, "cpu": torch.manual_seed, "default": torch.manual_seed}
-    BACKEND_EMPTY_CACHE = {"cuda": torch.cuda.empty_cache, "cpu": None, "default": None}
-    BACKEND_DEVICE_COUNT = {"cuda": torch.cuda.device_count, "cpu": lambda: 0, "default": lambda: 1}
+    BACKEND_MANUAL_SEED = {
+        "cuda": torch.cuda.manual_seed,
+        "cpu": torch.manual_seed,
+        "default": torch.manual_seed,
+    }
+    BACKEND_EMPTY_CACHE = {
+        "cuda": torch.cuda.empty_cache,
+        "cpu": None,
+        "default": None,
+    }
+    BACKEND_DEVICE_COUNT = {
+        "cuda": torch.cuda.device_count,
+        "cpu": lambda: 0,
+        "default": lambda: 1,
+    }
 else:
     BACKEND_MANUAL_SEED = {"default": None}
     BACKEND_EMPTY_CACHE = {"default": None}
@@ -2931,6 +2979,11 @@ else:
 if is_torch_hpu_available():
     BACKEND_MANUAL_SEED["hpu"] = torch.hpu.manual_seed
     BACKEND_DEVICE_COUNT["hpu"] = torch.hpu.device_count
+
+if is_torch_mlu_available():
+    BACKEND_EMPTY_CACHE["mlu"] = torch.mlu.empty_cache
+    BACKEND_MANUAL_SEED["mlu"] = torch.mlu.manual_seed
+    BACKEND_DEVICE_COUNT["mlu"] = torch.mlu.device_count
 
 if is_torch_npu_available():
     BACKEND_EMPTY_CACHE["npu"] = torch.npu.empty_cache
@@ -2972,6 +3025,8 @@ if is_torch_available():
 
         # Try to strip extension for later import – also verifies we are importing a
         # python file.
+        device_spec_dir, _ = os.path.split(os.path.realpath(device_spec_path))
+        sys.path.append(device_spec_dir)
         try:
             import_name = device_spec_path[: device_spec_path.index(".py")]
         except ValueError as e:
@@ -2992,7 +3047,7 @@ if is_torch_available():
 
         torch_device = device_name
 
-        def update_mapping_from_spec(device_fn_dict: Dict[str, Callable], attribute_name: str):
+        def update_mapping_from_spec(device_fn_dict: dict[str, Callable], attribute_name: str):
             try:
                 # Try to import the function directly
                 spec_fn = getattr(device_spec_module, attribute_name)
@@ -3042,6 +3097,7 @@ def cleanup(device: str, gc_collect=False):
     if gc_collect:
         gc.collect()
     backend_empty_cache(device)
+    torch._dynamo.reset()
 
 
 # Type definition of key used in `Expectations` class.
@@ -3049,7 +3105,7 @@ DeviceProperties = tuple[Union[str, None], Union[int, None]]
 
 
 @cache
-def get_device_properties(self) -> DeviceProperties:
+def get_device_properties() -> DeviceProperties:
     """
     Get environment device properties.
     """
@@ -3061,6 +3117,14 @@ def get_device_properties(self) -> DeviceProperties:
             return ("rocm", major)
         else:
             return ("cuda", major)
+    elif IS_XPU_SYSTEM:
+        import torch
+
+        # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def
+        arch = torch.xpu.get_device_capability()["architecture"]
+        gen_mask = 0x000000FF00000000
+        gen = (arch & gen_mask) >> 32
+        return ("xpu", gen)
     else:
         return (torch_device, None)
 

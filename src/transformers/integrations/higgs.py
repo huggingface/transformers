@@ -446,7 +446,7 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256
 
     device = weight.device
     dtype = weight.dtype
-    weight = weight.clone().float()
+    weight = weight.to(copy=True, dtype=torch.float32)
     # Pad to Hadamard transform size
     weight = pad_to_block(weight, [1], hadamard_size)
 
@@ -558,7 +558,7 @@ def replace_with_higgs_linear(
     """
     Public method that recursively replaces the Linear layers of the given model with HIGGS quantized layers.
     `accelerate` is needed to use this method. Returns the converted model and a boolean that indicates if the
-    conversion has been successfull or not.
+    conversion has been successful or not.
 
     Args:
         model (`torch.nn.Module`):

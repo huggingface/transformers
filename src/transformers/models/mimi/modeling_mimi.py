@@ -25,23 +25,29 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
+    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_mimi import MimiConfig
 
 
-if is_flash_attn_2_available():
+if is_flash_attn_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
+
 
 logger = logging.get_logger(__name__)
 
@@ -76,8 +82,8 @@ class MimiOutput(ModelOutput):
             have their past key value states given to this model).
     """
 
-    audio_codes: torch.LongTensor = None
-    audio_values: torch.FloatTensor = None
+    audio_codes: Optional[torch.LongTensor] = None
+    audio_values: Optional[torch.FloatTensor] = None
     encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
     decoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
 
@@ -98,7 +104,7 @@ class MimiEncoderOutput(ModelOutput):
             have their past key value states given to this model).
     """
 
-    audio_codes: torch.LongTensor = None
+    audio_codes: Optional[torch.LongTensor] = None
     encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
 
 
@@ -118,7 +124,7 @@ class MimiDecoderOutput(ModelOutput):
             have their past key value states given to this model).
     """
 
-    audio_values: torch.FloatTensor = None
+    audio_values: Optional[torch.FloatTensor] = None
     decoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
 
 
@@ -382,45 +388,18 @@ class MimiRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
-    def _dynamic_frequency_update(self, position_ids, device):
-        """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
-        """
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
-
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
-            # This .to() is needed if the model has been moved to a device after being initialized (because
-            # the buffer is automatically moved, but not the original copy)
-            self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
-
     @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-
-        # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
 
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -604,7 +583,7 @@ class MimiFlashAttention2(MimiAttention):
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
     def forward(
         self,
@@ -896,7 +875,7 @@ class MimiTransformerModel(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.LongTensor = None,
+        hidden_states: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
@@ -1062,7 +1041,7 @@ class MimiTransformerModel(nn.Module):
     # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask with Phi3->Mimi
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
@@ -1080,6 +1059,10 @@ class MimiTransformerModel(nn.Module):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -1103,7 +1086,7 @@ class MimiTransformerModel(nn.Module):
             ):
                 return None
 
-        dtype, device = input_tensor.dtype, input_tensor.device
+        dtype = input_tensor.dtype
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         # SlidingWindowCache or StaticCache
@@ -1123,7 +1106,6 @@ class MimiTransformerModel(nn.Module):
             sequence_length=sequence_length,
             target_length=target_length,
             dtype=dtype,
-            device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
             config=self.config,
@@ -1133,7 +1115,7 @@ class MimiTransformerModel(nn.Module):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1150,7 +1132,6 @@ class MimiTransformerModel(nn.Module):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         config: MimiConfig,
@@ -1169,8 +1150,6 @@ class MimiTransformerModel(nn.Module):
                 The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -1186,15 +1165,17 @@ class MimiTransformerModel(nn.Module):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
             )
-            diagonal_attend_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            if config.sliding_window is not None:
+            diagonal_attend_mask = torch.arange(target_length, device=cache_position.device) > cache_position.reshape(
+                -1, 1
+            )
+            if config.get_text_config().sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
-                    sliding_attend_mask = torch.arange(target_length, device=device) <= (
-                        cache_position.reshape(-1, 1) - config.sliding_window
+                    sliding_attend_mask = torch.arange(target_length, device=cache_position.device) <= (
+                        cache_position.reshape(-1, 1) - config.get_text_config().sliding_window
                     )
                     diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask
@@ -1316,7 +1297,7 @@ class MimiVectorQuantization(nn.Module):
 class MimiResidualVectorQuantizer(nn.Module):
     """Residual Vector Quantizer."""
 
-    def __init__(self, config: MimiConfig, num_quantizers: int = None):
+    def __init__(self, config: MimiConfig, num_quantizers: Optional[int] = None):
         super().__init__()
         self.codebook_size = config.codebook_size
         self.frame_rate = config.frame_rate
@@ -1440,31 +1421,22 @@ class MimiPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_static_cache = True
 
-    # Copied from transformers.models.encodec.modeling_encodec.EncodecPreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Conv1d):
+        elif isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LSTM):
-            for name, param in module.named_parameters():
-                if "weight" in name:
-                    nn.init.xavier_uniform_(param)
-                elif "bias" in name:
-                    nn.init.constant_(param, 0.0)
+        elif isinstance(module, MimiLayerScale):
+            module.scale.data.fill_(self.config.layer_scale_initial_scale)
 
 
 MIMI_START_DOCSTRING = r"""
@@ -1598,7 +1570,7 @@ class MimiModel(MimiPreTrainedModel):
     def encode(
         self,
         input_values: torch.Tensor,
-        padding_mask: torch.Tensor = None,
+        padding_mask: Optional[torch.Tensor] = None,
         num_quantizers: Optional[float] = None,
         encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         return_dict: Optional[bool] = None,

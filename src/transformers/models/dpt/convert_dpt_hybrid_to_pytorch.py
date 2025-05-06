@@ -119,7 +119,7 @@ def rename_key(name):
     if "refinenet" in name:
         layer_idx = int(name[len("neck.refinenet") : len("neck.refinenet") + 1])
         # tricky here: we need to map 4 to 0, 3 to 1, 2 to 2 and 1 to 3
-        name = name.replace(f"refinenet{layer_idx}", f"fusion_stage.layers.{abs(layer_idx-4)}")
+        name = name.replace(f"refinenet{layer_idx}", f"fusion_stage.layers.{abs(layer_idx - 4)}")
     if "out_conv" in name:
         name = name.replace("out_conv", "projection")
     if "resConfUnit1" in name:
@@ -226,7 +226,7 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     config, expected_shape = get_dpt_config(checkpoint_url)
     # load original state_dict from URL
     # state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
-    state_dict = torch.load(checkpoint_url, map_location="cpu")
+    state_dict = torch.load(checkpoint_url, map_location="cpu", weights_only=True)
     # remove certain keys
     remove_ignore_keys_(state_dict)
     # rename keys

@@ -698,7 +698,7 @@ class RobertaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["RobertaEmbeddings", "RobertaSelfAttention", "RobertaSdpaSelfAttention"]
     _supports_sdpa = True
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
+    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with BertLMPredictionHead->RobertaLMHead
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -714,6 +714,8 @@ class RobertaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, RobertaLMHead):
+            module.bias.data.zero_()
 
 
 ROBERTA_START_DOCSTRING = r"""
@@ -1038,7 +1040,7 @@ class RobertaForCausalLM(RobertaPreTrainedModel, GenerationMixin):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

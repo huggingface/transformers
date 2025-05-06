@@ -225,7 +225,8 @@ class ConvNextEncoder(nn.Module):
         super().__init__()
         self.stages = nn.ModuleList()
         drop_path_rates = [
-            x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
+            x.tolist()
+            for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu").split(config.depths)
         ]
         prev_chs = config.hidden_sizes[0]
         for i in range(config.num_stages):
@@ -286,9 +287,12 @@ class ConvNextPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, ConvNextLayerNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, ConvNextLayer):
+            if module.layer_scale_parameter is not None:
+                module.layer_scale_parameter.data.fill_(self.config.layer_scale_init_value)
 
 
 CONVNEXT_START_DOCSTRING = r"""
@@ -344,7 +348,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
@@ -410,7 +414,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

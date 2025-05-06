@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +14,7 @@
 """Testing suite for the PyTorch Qwen2.5-VL model."""
 
 import gc
+import tempfile
 import unittest
 
 import requests
@@ -28,12 +28,14 @@ from transformers import (
 )
 from transformers.testing_utils import (
     is_flaky,
+    require_cv2,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
     slow,
     torch_device,
 )
+from transformers.utils import is_cv2_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -44,6 +46,9 @@ from ...test_modeling_common import (
     ids_tensor,
 )
 
+
+if is_cv2_available():
+    import cv2
 
 if is_torch_available():
     import torch
@@ -189,39 +194,6 @@ class Qwen2_5_VLVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_qwen2_5_vl_model_fp16_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_grid_thw
-    ):
-        model = Qwen2_5_VLForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.half()
-        model.eval()
-        logits = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            image_grid_thw=image_grid_thw,
-            pixel_values=pixel_values.to(torch.bfloat16),
-            return_dict=True,
-        )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
-    def create_and_check_qwen2_5_vl_model_fp16_autocast_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_grid_thw
-    ):
-        config.torch_dtype = torch.float16
-        model = Qwen2_5_VLForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                image_grid_thw=image_grid_thw,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -263,7 +235,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successfull forward with no modifications
+            _ = model(**input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
             patch_size = config.vision_config.patch_size
@@ -295,6 +267,59 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
             )
+
+    def test_video_forward(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        B = self.model_tester.batch_size
+        C = config.vision_config.in_chans
+        T = config.vision_config.temporal_patch_size
+        P = config.vision_config.patch_size
+
+        input_ids = ids_tensor([B, self.model_tester.seq_length], self.model_tester.vocab_size)
+
+        F = 4
+        patch_H = self.model_tester.image_size // P
+        patch_W = self.model_tester.image_size // P
+        patch_T = F // T
+        patches_per_video = patch_T * patch_H * patch_W
+        pixel_values_videos = floats_tensor(
+            [
+                # first dim: batch_size * num_patches
+                B * patches_per_video,
+                # second dim: in_channels * temporal_patch_size * patch_size^2
+                C * T * (P**2),
+            ]
+        )
+        video_grid_thw = torch.tensor([[patch_T, patch_H, patch_W]] * B)
+
+        # sanity check
+        assert pixel_values_videos.shape[0] == video_grid_thw.prod(dim=1).sum().item()
+
+        # Insert video token sequence
+        input_ids[:, -1] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.video_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.image_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.vision_start_token_id] = self.model_tester.pad_token_id
+        input_ids[:, self.model_tester.num_image_tokens] = self.model_tester.video_token_id
+
+        insertion_point = self.model_tester.num_image_tokens
+
+        assert (B * patches_per_video) + insertion_point <= self.model_tester.seq_length
+        for b in range(B):
+            input_ids[b, insertion_point - 1] = self.model_tester.vision_start_token_id
+            input_ids[b, insertion_point : insertion_point + patches_per_video] = self.model_tester.video_token_id
+
+        for model_class in self.all_model_classes:
+            second_per_grid_ts = torch.tensor([1.0] * B, device=torch_device)
+            model = model_class(config).to(torch_device)
+            outputs = model(
+                input_ids=input_ids,
+                pixel_values_videos=pixel_values_videos,
+                video_grid_thw=video_grid_thw,
+                second_per_grid_ts=second_per_grid_ts,
+            )
+            self.assertIsNotNone(outputs)
 
     @unittest.skip(reason="Feedforward chunking is not yet supported")
     def test_feed_forward_chunking(self):
@@ -345,6 +370,10 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     @is_flaky()  # TODO (joao/raushan): Investigate why this test is flaky on this model
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         super().test_prompt_lookup_decoding_matches_greedy_search()
+
+    @unittest.skip(reason="The base class is LM only and cannot be init with XModelConfig`")
+    def test_save_load_fast_init_from_base(self):
+        pass
 
 
 @require_torch
@@ -560,6 +589,55 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to answer a wide range of questions and provide information on various topics",
         ]
 
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    @require_cv2
+    def test_small_model_integration_test_with_video(self):
+        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+        )
+
+        video_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+        messages2 = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                    },
+                    {"type": "text", "text": "What is shown in this video?"},
+                ],
+            }
+        ]
+        text = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
+
+        with tempfile.NamedTemporaryFile(suffix=".mp4") as f:
+            f.write(requests.get(video_url).content)
+            f.flush()
+            cap = cv2.VideoCapture(f.name)
+
+            frames = []
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frames.append(Image.fromarray(frame_rgb).resize((224, 224), Image.BICUBIC))
+
+            cap.release()
+
+        inputs = self.processor(text=[text], videos=[frames], return_tensors="pt").to(torch_device)
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=30)
+
+        EXPECTED_DECODED_TEXT = [
+            'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows an indoor tennis court with a person standing on one side, preparing to serve the ball. The individual is dressed in athletic attire, including',
+        ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
