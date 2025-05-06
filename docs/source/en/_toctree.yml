@@ -21,6 +21,8 @@
       title: Adding a new model to Transformers
     - local: modular_transformers
       title: Modular Transformers
+    - local: auto_docstring
+      title: Document your models
     - local: task_summary
       title: What 🤗 Transformers can do
     - local: tasks_explained
