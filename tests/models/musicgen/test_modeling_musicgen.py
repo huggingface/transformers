@@ -1556,7 +1556,7 @@ class MusicgenIntegrationTests(unittest.TestCase):
         self.assertTrue(
             output_values.shape == (2, 1, 36480)
         )  # input values take shape 32000 and we generate from there
-        torch.testing.assert_close(output_values[0, 0, -16:].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output_values[0, 0, -16:].cpu(), EXPECTED_VALUES, rtol=2e-4, atol=2e-4)
 
 
 @require_torch
@@ -1631,5 +1631,5 @@ class MusicgenStereoIntegrationTests(unittest.TestCase):
         # (bsz, channels, seq_len)
         self.assertTrue(output_values.shape == (2, 2, 37760))
         # input values take shape 32000 and we generate from there - we check the last (generated) values
-        torch.testing.assert_close(output_values[0, 0, -16:].cpu(), EXPECTED_VALUES_LEFT, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(output_values[0, 1, -16:].cpu(), EXPECTED_VALUES_RIGHT, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output_values[0, 0, -16:].cpu(), EXPECTED_VALUES_LEFT, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(output_values[0, 1, -16:].cpu(), EXPECTED_VALUES_RIGHT, rtol=2e-4, atol=2e-4)

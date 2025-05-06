@@ -593,8 +593,8 @@ class RagModel(RagPreTrainedModel):
                         context_input_ids,
                         context_attention_mask,
                         retrieved_doc_embeds,
-                        retrived_doc_input_ids,
-                        retrived_doc_attention_mask,
+                        retrieved_doc_input_ids,
+                        retrieved_doc_attention_mask,
                         retrieved_doc_ids,
                     ) = (
                         retriever_outputs["context_input_ids"],
@@ -608,10 +608,10 @@ class RagModel(RagPreTrainedModel):
                     context_input_ids = context_input_ids.to(input_ids)
                     context_attention_mask = context_attention_mask.to(input_ids)
 
-                    retrived_doc_input_ids = retrived_doc_input_ids.to(input_ids)
-                    retrived_doc_attention_mask = retrived_doc_attention_mask.to(input_ids)
+                    retrieved_doc_input_ids = retrieved_doc_input_ids.to(input_ids)
+                    retrieved_doc_attention_mask = retrieved_doc_attention_mask.to(input_ids)
                     retrieved_doc_embeds = self.ctx_encoder(
-                        retrived_doc_input_ids, attention_mask=retrived_doc_attention_mask, return_dict=True
+                        retrieved_doc_input_ids, attention_mask=retrieved_doc_attention_mask, return_dict=True
                     ).pooler_output
                     retrieved_doc_embeds = retrieved_doc_embeds.view(
                         -1, n_docs, question_encoder_last_hidden_state.shape[1]
