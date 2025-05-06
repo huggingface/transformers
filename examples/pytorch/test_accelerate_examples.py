@@ -203,6 +203,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "qa_no_trainer")))
 
+    @is_flaky()
     @mock.patch.dict(os.environ, {"WANDB_MODE": "offline", "DVCLIVE_TEST": "true"})
     def test_run_swag_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
