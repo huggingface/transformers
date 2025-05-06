@@ -145,7 +145,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MODELS: ${{ needs.get-tests.outputs.models }}
-          BODY: "This comment contains run-slow, running the specified jobs:\n\nmodels: ${{ needs.get-tests.outputs.models }}\nquantizations: ${{ needs.get-tests.outputs.quantizations }}"
+          BODY: "\n\nmodels: ${{ needs.get-tests.outputs.models }}\nquantizations: ${{ needs.get-tests.outputs.quantizations }}"
         run: |
           gh api \
             --method POST \
