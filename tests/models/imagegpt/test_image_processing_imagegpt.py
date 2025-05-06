@@ -36,6 +36,7 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import ImageGPTImageProcessor
+    from transformers import ImageGPTImageProcessorFast
 
 
 class ImageGPTImageProcessingTester:
@@ -95,6 +96,7 @@ class ImageGPTImageProcessingTester:
 @require_vision
 class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = ImageGPTImageProcessor if is_vision_available() else None
+    image_processing_class_fast = ImageGPTImageProcessorFast if is_vision_available() else None
 
     def setUp(self):
         super().setUp()

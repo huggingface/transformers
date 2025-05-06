@@ -306,3 +306,4 @@ def get_patch_output_size(image, target_resolution, input_data_format):
         new_width = min(math.ceil(original_width * scale_h), target_width)
 
     return new_height, new_width
+from .image_processing_utils_fast import BaseImageProcessorFast

@@ -21,10 +21,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from ...image_processing_utils import BaseImageProcessorFast
+from ...image_processing_utils import BaseImageProcessorFast, register_for_auto_class
 from ...image_utils import PILImageResampling
 from ...utils import logging, TensorType
-
 
 logger = logging.get_logger(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -46,6 +45,7 @@ def color_quantize(x: torch.Tensor, clusters: torch.Tensor) -> torch.Tensor:
     return torch.argmin(d, dim=1)
 
 
+@register_for_auto_class("AutoImageProcessor")
 class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["input_ids"]
 
@@ -66,7 +66,7 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
             else None
         )
         self.do_resize = do_resize
-        self.size = size or {"height": 32, "width": 32}
+        self.size = size or {"height": 256, "width": 256}
         self.resample = resample
         self.do_normalize = do_normalize
         self.do_color_quantize = do_color_quantize
@@ -84,18 +84,16 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
-        return_tensors: Optional[Union[str, "TensorType"]],
+        return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> Dict[str, torch.Tensor]:
 
-        # Resize
         if do_resize:
             images = [
                 F.interpolate(img.unsqueeze(0), size=(size["height"], size["width"]), mode="bilinear", align_corners=False)[0]
                 for img in images
             ]
 
-        # Normalize to [-1, 1]
         if do_normalize:
             images = [img * 2.0 - 1.0 for img in images]
 
@@ -105,12 +103,29 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
 
             input_ids = []
             for img in images:
-                img = img.permute(1, 2, 0).contiguous().view(-1, 3)  # (H*W, 3)
+                img = img.permute(1, 2, 0).contiguous().view(-1, 3)
                 ids = color_quantize(img, self.clusters.to(img.device))
                 input_ids.append(ids)
 
             return {"input_ids": torch.stack(input_ids)}
 
         return {"pixel_values": torch.stack(images)}
+
+    def to_dict(self):
+        output = super().to_dict()
+        output.update({
+            "clusters": self.clusters.cpu().numpy().tolist() if self.clusters is not None else None,
+            "do_resize": self.do_resize,
+            "size": self.size,
+            "resample": self.resample,
+            "do_normalize": self.do_normalize,
+            "do_color_quantize": self.do_color_quantize,
+        })
+        return output
+
+    @classmethod
+    def from_dict(cls, image_processor_dict):
+        return cls(**image_processor_dict)
+
 
 __all__ = ["ImageGPTImageProcessorFast"]
