@@ -589,7 +589,7 @@ class ImageTransformsTester(unittest.TestCase):
                 [[0, 0], [0, 1], [2, 3]],
                 [[0, 0], [0, 0], [0, 0]],
             ]
-        )
+        )[None, ...]
         # fmt: on
         self.assertTrue(
             np.allclose(
