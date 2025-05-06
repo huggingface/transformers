@@ -14,9 +14,9 @@
 
 import copy
 import unittest
+from types import SimpleNamespace
 
 from parameterized import parameterized
-from types import SimpleNamespace
 
 from transformers import set_seed
 from transformers.generation.configuration_utils import ALL_CACHE_IMPLEMENTATIONS
@@ -45,10 +45,10 @@ if is_torch_available():
         ClvpForCausalLM,
         DynamicCache,
         GenerationConfig,
-        LlamaConfig,
-        StaticCache,
-        SlidingWindowCache,
         HybridCache,
+        LlamaConfig,
+        SlidingWindowCache,
+        StaticCache,
         convert_and_export_with_cache,
     )
 
