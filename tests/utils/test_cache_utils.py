@@ -24,11 +24,11 @@ from transformers.testing_utils import (
     cleanup,
     get_gpu_count,
     is_torch_available,
+    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
     require_torch_multi_gpu,
-    require_read_token,
     slow,
     torch_device,
 )
