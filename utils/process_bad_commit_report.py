@@ -30,8 +30,6 @@ if __name__ == "__main__":
     with open("ci_results_run_models_gpu/model_job_links.json") as fp:
         model_job_links = json.load(fp)
 
-    # print(model_job_links)
-
     # TODO: extend
     team_members = [
         "ydshieh",
