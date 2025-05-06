@@ -1,9 +1,4 @@
-from typing import Optional
-
-from transformers.models.llava_next.image_processing_llava_next_fast import (
-    LlavaNextFastImageProcessorKwargs,
-    LlavaNextImageProcessorFast,
-)
+from transformers.models.llava_next.image_processing_llava_next_fast import LlavaNextImageProcessorFast
 
 from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING
 from ...image_utils import (
@@ -17,10 +12,6 @@ from ...utils import add_start_docstrings, logging
 logger = logging.get_logger(__name__)
 
 
-class LlavaOnevisionFastImageProcessorKwargs(LlavaNextFastImageProcessorKwargs):
-    vision_aspect_ratio: Optional[str]
-
-
 @add_start_docstrings(
     "Constructs a fast ConvNeXT image processor. Based on [`SiglipImageProcessor`] with incorporation of processing each video frame.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
@@ -32,8 +23,6 @@ class LlavaOnevisionFastImageProcessorKwargs(LlavaNextFastImageProcessorKwargs):
         do_pad (`bool`, *optional*):
             Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
             number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-        vision_aspect_ratio (`str`, *optional*):
-            Aspect ratio used when processong image features. The default value is "anyres_max_9".
     """,
 )
 class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
@@ -50,7 +39,6 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
     do_convert_rgb = True
     do_pad = True
     image_grid_pinpoints = [[384, 384], [384, 768], [384, 1152], [384, 1536], [384, 1920], [384, 2304], [768, 384], [768, 768], [768, 1152], [768, 1536], [768, 1920], [768, 2304], [1152, 384], [1152, 768], [1152, 1152], [1152, 1536], [1152, 1920], [1152, 2304], [1536, 384], [1536, 768], [1536, 1152], [1536, 1536], [1536, 1920], [1536, 2304], [1920, 384], [1920, 768], [1920, 1152], [1920, 1536], [1920, 1920], [1920, 2304], [2304, 384], [2304, 768], [2304, 1152], [2304, 1536], [2304, 1920], [2304, 2304]]  # fmt: skip
-    vision_aspect_ratio = "anyres_max_9"
     model_input_names = ["pixel_values_videos"]
 
 

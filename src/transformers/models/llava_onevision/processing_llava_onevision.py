@@ -70,6 +70,8 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             Special token used to denote image location.
         video_token (`str`, *optional*, defaults to `"<video>"`):
             Special token used to denote video location.
+        vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
+            Aspect ratio used when processong image features. The default value is "anyres_max_9".
     """
 
     attributes = ["image_processor", "tokenizer", "video_processor"]
@@ -79,6 +81,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         "vision_feature_select_strategy",
         "image_token",
         "video_token",
+        "vision_aspect_ratio",
     ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
@@ -94,6 +97,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         chat_template=None,
         image_token="<image>",
         video_token="<video>",
+        vision_aspect_ratio="anyres_max_9",
         **kwargs,
     ):
         self.num_image_tokens = num_image_tokens
@@ -110,6 +114,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             if getattr(tokenizer, "video_token_id", None)
             else tokenizer.convert_tokens_to_ids(self.video_token)
         )
+        self.vision_aspect_ratio = vision_aspect_ratio
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
     def __call__(
@@ -224,7 +229,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
 
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
         image_grid_pinpoints = self.image_processor.image_grid_pinpoints
-        vision_aspect_ratio = self.image_processor.vision_aspect_ratio
 
         height_best_resolution, width_best_resolution = select_best_resolution(
             [orig_height, orig_width], image_grid_pinpoints
@@ -233,7 +237,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
 
         patches_height = patches_width = int(math.sqrt(self.num_image_tokens))
         unpadded_features, newline_features = self._get_unpadded_features(
-            orig_height, orig_width, patches_height, patches_width, scale_height, scale_width, vision_aspect_ratio
+            orig_height, orig_width, patches_height, patches_width, scale_height, scale_width
         )
 
         # The base patch covers the entire image (no CLS for SigLIP)
@@ -242,9 +246,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         return num_image_tokens
 
     # Adapted from transformers.models.llava_next.processing_llava_next.LlavaNextProcessor._get_unpadded_features
-    def _get_unpadded_features(
-        self, height, width, patches_height, patches_width, scale_height, scale_width, vision_aspect_ratio
-    ):
+    def _get_unpadded_features(self, height, width, patches_height, patches_width, scale_height, scale_width):
         """
         Get number of features for a given image with height/width. LLaVA-NeXT is different from LLaVA
         because it divided each image into patches depending on its resolution. Therefore we need to calculate how many
@@ -267,7 +269,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         unpadded_features = current_height * current_width
         newline_features = current_height
 
-        max_num_patches = int(vision_aspect_ratio.strip("anyres_max_"))
+        max_num_patches = int(self.vision_aspect_ratio.strip("anyres_max_"))
         ratio = math.sqrt(current_height * current_width / (max_num_patches * patches_height**2))
         if ratio > 1.1:
             unpadded_features = int(current_height // ratio) * int(current_width // ratio)

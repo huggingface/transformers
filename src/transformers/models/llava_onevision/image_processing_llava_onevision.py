@@ -142,8 +142,6 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
             number of patches in the batch. Padding will be applied to the bottom and right with zeros.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
-        vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
-            Aspect ratio used when processong image features. The default value is "anyres_max_9".
     """
 
     model_input_names = ["pixel_values_videos"]
@@ -161,7 +159,6 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: Optional[bool] = True,
         do_convert_rgb: bool = True,
-        vision_aspect_ratio: str = "anyres_max_9",
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -221,7 +218,6 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_pad = do_pad
         self.do_convert_rgb = do_convert_rgb
-        self.vision_aspect_ratio = vision_aspect_ratio
 
     # Copied from transformers.models.llava_next.image_processing_llava_next.LlavaNextImageProcessor.pad
     def pad(
