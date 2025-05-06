@@ -1014,8 +1014,10 @@ def find_matching_model_files(check_all: bool = False):
             is_excluded = any(exclude in filename for exclude in exclude_substrings)
             if not is_excluded:
                 matching_files.append(file_path)
-    # intersect with module_diff_files
-    matching_files = sorted([file for file in matching_files if file in module_diff_files])
+    if not check_all:
+        # intersect with module_diff_files
+        matching_files = sorted([file for file in matching_files if file in module_diff_files])
+
     print("    Checking auto_docstrings in the following files:" + "\n    - " + "\n    - ".join(matching_files))
 
     return matching_files

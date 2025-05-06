@@ -191,15 +191,6 @@ class ImageProcessorArgs:
 
 
 class ModelArgs:
-    labels = {
-        "description": """
-    Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-    config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-    (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-    """,
-        "shape": "of shape `(batch_size, sequence_length)`",
-    }
-
     num_logits_to_keep = {
         "description": """
     Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
