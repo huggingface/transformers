@@ -22,12 +22,19 @@ from contextlib import contextmanager
 from typing import List, Optional, Union
 
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 
 
+class DonutImagesKwargs(ImagesKwargs, total=False):
+    random_padding: bool
+    do_thumbnail: Optional[bool]
+    do_align_long_axis: Optional[bool]
+
+
 class DonutProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: DonutImagesKwargs
     _defaults = {}
 
 
