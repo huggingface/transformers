@@ -27,6 +27,7 @@ from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -40,6 +41,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
     logging,
 )
 from ...utils.import_utils import is_triton_available
@@ -634,39 +636,87 @@ def flash_attention_forward(
     is_causal: bool = False,
     past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     use_cache: Optional[bool] = False,
+    position_ids: Optional[torch.LongTensor] = None,
+    attention_mask: Optional[torch.Tensor] = None,
     **_kwargs,
 ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
-    qkv = rotary_emb(qkv, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
-    if past_key_value is not None or use_cache:
-        raise ValueError("use_cache is not supported for Flash Attention 2 due to local layers and unpadding")
+    if is_causal:
+        query, key, value = qkv.transpose(3, 1).unbind(dim=2)
+        # Get RoPE embeddings
+        if past_key_value is not None:
+            # Generate RoPE embeddings ONLY for the new token's position
+            qkv_new = torch.stack([query, key, value], dim=2).transpose(1, 2)
+            cos, sin = module.rotary_emb(qkv_new, position_ids=position_ids)
 
-    # Flash attention logic stays exactly the same
-    convert_dtype = qkv.dtype not in (torch.float16, torch.bfloat16)
-    if convert_dtype:
-        orig_dtype = qkv.dtype
-        qkv = qkv.to(target_dtype)
-        attn = flash_attn_varlen_qkvpacked_func(
-            qkv,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
-            dropout_p=module.attention_dropout if module.training else 0.0,
+            query_new, key_new = apply_rotary_pos_emb(query, key, cos, sin)
+
+            # Concatenate with past keys (which already have correct RoPE applied)
+            past_k, past_v = past_key_value
+            key = torch.cat([past_k, key_new], dim=-2)
+            value = torch.cat([past_v, value], dim=-2)
+            query = query_new
+        else:
+            # For initial forward pass
+            cos, sin = module.rotary_emb(qkv, position_ids=position_ids)
+            query, key = apply_rotary_pos_emb(query, key, cos, sin)
+
+        # change q, k, v to fit (currently bs, nheads, seqlen, headdim)
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dim x hidden_dim
+        prev_type = query.dtype
+        saved_kv = (key, value)
+        seq_len = query.shape[2]
+        query = query.transpose(1, 2).contiguous().to(target_dtype)  # [bs, seq_len, num_heads, head_dim]
+        key = key.transpose(1, 2).contiguous().to(target_dtype)  # [bs, seq_len, num_heads, head_dim]
+        value = value.transpose(1, 2).contiguous().to(target_dtype)  # [bs, seq_len, num_heads, head_dim]
+
+        attn = _flash_attention_forward(
+            query,
+            key,
+            value,
+            attention_mask,
+            seq_len,
+            position_ids=None,  # not used
+            dropout=module.attention_dropout if module.training else 0.0,
+            is_causal=True,
+            use_top_left_mask=module._flash_attn_uses_top_left_mask,
+            sliding_window=local_attention[0],
             deterministic=module.deterministic_flash_attn,
-            window_size=local_attention,
-            causal=is_causal,
         )
-        attn = attn.to(orig_dtype)
+        attn_output = attn.reshape(bs, seq_len, -1).to(prev_type)
+
+        if use_cache:
+            outputs = (attn_output, saved_kv)
+        else:
+            outputs = (attn_output,)
     else:
-        attn = flash_attn_varlen_qkvpacked_func(
-            qkv,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
-            dropout_p=module.attention_dropout if module.training else 0.0,
-            deterministic=module.deterministic_flash_attn,
-            window_size=local_attention,
-            causal=is_causal,
-        )
+        qkv = rotary_emb(qkv, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
+        # No past key/value - use the packed function
+        if qkv.dtype not in (torch.float16, torch.bfloat16):
+            orig_dtype = qkv.dtype
+            qkv = qkv.to(target_dtype)
+            attn = flash_attn_varlen_qkvpacked_func(
+                qkv,
+                cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
+                dropout_p=module.attention_dropout if module.training else 0.0,
+                deterministic=module.deterministic_flash_attn,
+                window_size=local_attention,
+                causal=is_causal,
+            )
+            attn = attn.to(orig_dtype)
+        else:
+            attn = flash_attn_varlen_qkvpacked_func(
+                qkv,
+                cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
+                dropout_p=module.attention_dropout if module.training else 0.0,
+                deterministic=module.deterministic_flash_attn,
+                window_size=local_attention,
+                causal=is_causal,
+            )
+        outputs = (attn.view(bs, dim),)
 
-    outputs = (attn.view(bs, dim),)
     return outputs
 
 
@@ -733,16 +783,13 @@ def sdpa_attention_forward(
 
         # Combine masks with padding/local mask if present
         if final_attention_mask is not None:
-            final_attention_mask = final_attention_mask + causal_mask
+            # Use a large negative number but not extreme (avoid backwards pass instability)
+            mask_value = -10000.0  # Large enough to make softmax effectively zero but not infs
+            mask1 = (final_attention_mask < 0).float() * mask_value
+            mask2 = (causal_mask < 0).float() * mask_value
+            final_attention_mask = mask1 + mask2  # Safe to add now
         else:
             final_attention_mask = causal_mask
-
-    if final_attention_mask is not None:
-        # Replace -inf with a large negative number to avoid NaN issues
-        min_value = torch.finfo(final_attention_mask.dtype).min
-        final_attention_mask = torch.where(
-            torch.isinf(final_attention_mask), torch.full_like(final_attention_mask, min_value), final_attention_mask
-        )
 
     attn_output = (
         F.scaled_dot_product_attention(
@@ -750,8 +797,7 @@ def sdpa_attention_forward(
             key,
             value,
             dropout_p=module.attention_dropout if module.training else 0.0,
-            # convert from float to bool
-            attn_mask=(final_attention_mask >= 0) if final_attention_mask is not None else None,
+            attn_mask=final_attention_mask if final_attention_mask is not None else None,
             is_causal=False,  # attn masks handled above
         )
         .transpose(1, 2)
@@ -814,7 +860,7 @@ class ModernBertAttention(nn.Module):
                 rope_theta = config.local_rope_theta
             max_position_embeddings = config.local_attention
 
-        if config._attn_implementation == "flash_attention_2":
+        if config._attn_implementation == "flash_attention_2" and not config.is_causal:
             self.rotary_emb = ModernBertUnpaddedRotaryEmbedding(
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
@@ -824,6 +870,11 @@ class ModernBertAttention(nn.Module):
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
         self.pruned_heads = set()
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
     def forward(
         self,
@@ -836,7 +887,7 @@ class ModernBertAttention(nn.Module):
         qkv = self.Wqkv(hidden_states)
 
         bs = hidden_states.shape[0]
-        if self.config._attn_implementation == "flash_attention_2":
+        if self.config._attn_implementation == "flash_attention_2" and not self.config.is_causal:
             qkv = qkv.view(-1, 3, self.num_heads, self.head_dim)
         else:
             qkv = qkv.view(bs, -1, 3, self.num_heads, self.head_dim)
@@ -995,7 +1046,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         # Otherwise we fall back to the default SDPA -> Eager from the super() method.
         # ModernBert's FA2 implementation correctly handles non-fp16/bf16 dtypes, we don't
         # need the FA2 warning for non-fp16/bf16 dtypes so we set fp16 for the FA2 check.
-        if config._attn_implementation_internal is None and not getattr(config, "is_causal", False):
+        if config._attn_implementation_internal is None:
             config._attn_implementation_internal = "flash_attention_2"
             try:
                 return cls._check_and_enable_flash_attn_2(
@@ -1172,8 +1223,8 @@ class ModernBertModel(ModernBertPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        if use_cache and self.config._attn_implementation == "flash_attention_2":
-            raise ValueError("use_cache is not supported with flash attention 2, please switch to eager")
+        if output_attentions and self.config._attn_implementation == "flash_attention_2":
+            raise ValueError("output_attentions is not supported with flash attention 2, please switch to eager")
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         if self.config._attn_implementation == "flash_attention_2":
@@ -1211,7 +1262,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
             past_length = past_key_values[0][0].size(-2)
             attention_mask = torch.ones((batch_size, past_length + 1), device=device, dtype=attention_mask.dtype)
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if self.config._attn_implementation == "flash_attention_2" and not self.config.is_causal:
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 repad = True
                 if inputs_embeds is None:
@@ -1331,6 +1382,9 @@ class ModernBertModel(ModernBertPreTrainedModel):
         # Combine with existing mask
         sliding_window_mask = global_attention_mask.masked_fill(window_mask.logical_not(), torch.finfo(self.dtype).min)
 
+        if self.config._attn_implementation == "flash_attention_2" and self.config.is_causal:
+            return attention_mask, sliding_window_mask  # using FA utils needs basic mask for HF utils
+
         return global_attention_mask, sliding_window_mask
 
 
@@ -1403,7 +1457,8 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if self.config._attn_implementation == "flash_attention_2" and not self.config.is_causal:
+            # NOTE: causal does not use unpadding directly, but through HF utils
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 if batch_size is None and seq_len is None:
                     if inputs_embeds is not None:
@@ -1462,7 +1517,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         if labels is not None:
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size)
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if self.config._attn_implementation == "flash_attention_2" and not self.config.is_causal:
             with nullcontext() if self.config.repad_logits_with_grad or labels is None else torch.no_grad():
                 logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
 
@@ -1556,8 +1611,12 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
             nonpooled_output = self.drop(nonpooled_output)
             classifier_output = self.classifier(nonpooled_output)
             batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
-            sequence_lengths = attention_mask.sum(dim=1) - 1
-            logits = classifier_output[torch.arange(batch_size, device=classifier_output.device), sequence_lengths]
+
+            # approach that works with both left and right padding
+            non_pad_mask = (input_ids != self.config.pad_token_id).to(classifier_output.device, torch.int32)
+            token_indices = torch.arange(input_ids.shape[-1], device=classifier_output.device, dtype=torch.int32)
+            last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
+            logits = classifier_output[torch.arange(batch_size, device=classifier_output.device), last_non_pad_token]
         else:
             if self.config.classifier_pooling == "cls":
                 last_hidden_state = last_hidden_state[:, 0]
@@ -1847,12 +1906,6 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
-        repad = False
-        if self.config._attn_implementation == "flash_attention_2":
-            # NOTE: by moving thet unpadding into ModernBertModel, we lose a bit of speed from not unpadding through the head
-            # but the tradeoff is a much cleaner implementation since we can assume everything is padded here
-            repad = True
-
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1869,7 +1922,6 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            repad=repad,
         )
         last_hidden_state = outputs[0]
 
