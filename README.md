@@ -89,10 +89,10 @@ Install Transformers in your virtual environment.
 
 ```py
 # pip
-pip install transformers
+pip install "transformers[torch]"
 
 # uv
-uv pip install transformers
+uv pip install "transformers[torch]"
 ```
 
 Install Transformers from source if you want the latest changes in the library or are interested in contributing. However, the *latest* version may not be stable. Feel free to open an [issue](https://github.com/huggingface/transformers/issues) if you encounter an error.
@@ -100,7 +100,9 @@ Install Transformers from source if you want the latest changes in the library o
 ```shell
 git clone https://github.com/huggingface/transformers.git
 cd transformers
-pip install .
+pip install .[torch]
+# optionally, you can use our script to verify python version, create venv, install from source, and verify installation.
+bash scripts/install.sh "[torch]"
 ```
 
 ## Quickstart
