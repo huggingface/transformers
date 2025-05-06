@@ -1,5 +1,5 @@
 import itertools
-from typing import Optional
+from typing import Optional, Callable
 
 import torch
 import torch.nn.functional as F
@@ -152,6 +152,86 @@ class AttentionMask(torch.Tensor):
         return res
 
 
+def and_masks(*mask_mods: list[Callable]) -> Callable:
+    """Returns a mask fucntion that is the intersection of provided mask functions"""
+    if not all(callable(arg) for arg in mask_mods):
+        raise RuntimeError(f"All inputs should be callable mask_mods: {mask_mods}")
+
+    def and_mask(batch_idx, head_idx, q_idx, kv_idx):
+        result = batch_idx.new_zeros((), dtype=torch.bool)
+        for mask in mask_mods:
+            result = result & mask(batch_idx, head_idx, q_idx, kv_idx)
+        return result
+
+    return and_mask
+
+def causal_mask_mod(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+    """
+    This creates a basic lower-diagonal causal mask.
+    """
+    return kv_idx <= q_idx
+
+def sliding_window_overlay(sliding_window: int) -> Callable:
+    """
+    This is an overlay depicting a sliding window pattern. Add it on top of a causal mask for a proper sliding
+    window mask.
+    """
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        return kv_idx > q_idx - sliding_window
+    return inner_mask
+
+def chunked_overlay(chunk_size: int) -> Callable:
+    """
+    This is an overlay depicting a chuned attention pattern. Add it on top of a causal mask for a proper chunked
+    attention mask.
+    """
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        return kv_idx // chunk_size == q_idx // chunk_size
+    return inner_mask
+
+def sliding_window_causal_mask_mod(sliding_window: int) -> Callable:
+    """
+    This creates a sliding window mask.
+    """
+    return and_masks(sliding_window_overlay(sliding_window), causal_mask_mod)
+
+def chunked_causal_mask_mod(chunk_size: int) -> Callable:
+    """
+    This creates a chunked attention mask.
+    """
+    return and_masks(chunked_overlay(chunk_size), causal_mask_mod)
+
+
+def _vmap_for_qkv(
+    fn: Callable,
+):
+    """Used to vmap both score_mods and mask_mods over 4-dimensional/5-dimension inputs.
+    Mapping over the [b, hq, q_idx, kv_idx] or [b, hkv, g, q_idx, kv_idx] dimensions.
+
+    Args:
+        fn (callable): The function to vmap.
+        prefix (tuple): The prefix of the vmap. For score mod functions,
+                        this should be set to (0,). For mask_mods = ()
+        suffix (tuple): We need to add (0,) if gradOut is being mapped over,
+                        and (None,) * len(other_buffers).
+        out_dims (tuple): For forward cases, keep this as the default 0 since
+                          we are only returning 1 output. For backwards, the joint
+                          graph returns grads for B, H, Q_idx, KV_idx and other_buffers,
+                          so we set this to (0, None, None, None, None) + (None,) * len(other_buffers).
+
+    Returns:
+        callable: The vmapped function.
+    """
+    # We vmap a function 2 times, broadcasting the [q_idx, kv_idx] dimensions
+    dimensions = [
+        (None, None, None, 0),
+        (None, None, 0, None),
+    ]
+
+    for dims in dimensions:
+        fn = torch.vmap(fn, in_dims=dims, out_dims=0)
+    return fn
+
 def create_4d_causal_mask(
     batch_size: int,
     kv_length: int,
@@ -250,20 +330,15 @@ def create_4d_causal_mask(
     # but without data-dependent slicing (i.e. torch.compile friendly)
     kv_arange = torch.arange(kv_length, device=cache_position.device)
     kv_arange += kv_offset
-    reshaped_cache_position = cache_position.view(-1, 1)
 
-    # Simplest and most efficient way to obtain a causal mask
-    causal_mask = kv_arange <= reshaped_cache_position
-    # If using sliding window, add the sliding mask
     if sliding_window is not None:
-        sliding_mask_overlay = kv_arange > reshaped_cache_position - sliding_window
-        causal_mask *= sliding_mask_overlay
-    # If using chunk attention, add the chunked mask
+        causal_mask = _vmap_for_qkv(sliding_window_causal_mask_mod(sliding_window))(None, None, cache_position, kv_arange)
     elif chunk_size is not None:
-        chunked_mask_overlay = kv_arange // chunk_size == reshaped_cache_position // chunk_size
-        causal_mask *= chunked_mask_overlay
+        causal_mask = _vmap_for_qkv(chunked_causal_mask_mod(chunk_size))(None, None, cache_position, kv_arange)
+    else:
+        causal_mask = _vmap_for_qkv(causal_mask_mod)(None, None, cache_position, kv_arange)
 
-    # Make it 4D
+    # Make it 4D (this is more efficient than vmap-ing over the 4D before, as `expand` is a view, not a copy)
     causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
     return causal_mask
 
@@ -300,7 +375,7 @@ def sdpa_mask(
         kv_offset = 0
         kv_length = attention_mask.shape[-1]
         # HERE MODELS WITH HYBRID CACHE STRUCTURE SHOULD STILL ALTERNATE BETWEEN USING LOCAL ATTENTION OR NOT EVEN WITHOUT CACHE!!!!
-        # PROBABLY THE EASIEST IS TO HAVE A FUNCTION RETURNING IT BASED ON THE CONFIG???
+        # PROBABLY THE EASIEST IS TO HAVE A FUNCTION RETURNING THE PATTERN BASED ON ALL POSSIBLE CONFIG ARGS???
         sizes_and_patterns = [(kv_offset, kv_length, sliding_window, chunk_size)] * num_layers
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
