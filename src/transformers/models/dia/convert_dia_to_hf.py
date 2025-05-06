@@ -15,15 +15,16 @@
 # limitations under the License.
 
 import argparse
-
+import re
 import torch
-
-from transformers import AutoModel, DiaAudioProcessor, DiaProcessor, DiaTokenizer
+import os
+from transformers import DiaModel,  DiaProcessor, DiaTokenizer, DiaConfig
 from transformers.utils.import_utils import _is_package_available
-from huggingface_hub import hf_hub_download
+from huggingface_hub import snapshot_download
+from safetensors.torch import load_file
 
 # Provide just the list of layer keys you want to fix
-layer_keys_to_fix = [
+shape_mappings = [
     'encoder.layers.*.mlp.wi_fused.weight',
     'decoder.layers.*.cross_attention.k_proj.weight',
     'decoder.logits_dense.weight',
@@ -43,13 +44,6 @@ layer_keys_to_fix = [
     'decoder.layers.*.mlp.wi_fused.weight',
     'decoder.layers.*.cross_attention.v_proj.weight',
 ]
-
-def match_layer(pattern, layer_name):
-    """Check if a wildcard pattern (with *) matches the layer name."""
-    if '*' not in pattern:
-        return pattern == layer_name
-    prefix, suffix = pattern.split('*')
-    return layer_name.startswith(prefix) and layer_name.endswith(suffix)
 
 def reshape_or_transpose(tensor, target_tensor):
     """Try reshaping or transposing tensor to match the shape of target_tensor."""
@@ -86,20 +80,27 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
             Path to the output PyTorch model.
     """
     # Download from HF Hub if checkpoint_path is None
-    if checkpoint_path is None:
-        checkpoint_path = hf_hub_download(repo_id=repo_id, filename='*.safetensors')
-        print(f"Downloaded checkpoint from Hugging Face Hub: {checkpoint_path}")
+    checkpoint_path = snapshot_download(repo_id=checkpoint_path, allow_patterns="*.safetensors")
+    print(f"Downloaded checkpoint from Hugging Face Hub: {checkpoint_path}")
 
     with torch.device('meta'):
-        model_class = DiaModel()
-
-    state_dict = torch.load(checkpoint_path, map_location='cpu')
+        model_class = DiaModel(config=DiaConfig())
+    model_class_keys = model_class.state_dict().keys()
+    files = os.listdir(checkpoint_path)
+    for file in files:
+        if file.endswith(".safetensors"):
+            load_function = load_file
+        elif file.endswith(".pt"):
+            load_function = torch.load
+    checkpoint_path = os.path.join(checkpoint_path, files[0])
+    state_dict = load_function(checkpoint_path, 'cpu')
     converted_state_dict = {}
-
     for key, tensor in state_dict.items():
         reshaped = False
-        for pattern, (loaded_shape, target_shape) in shape_mappings.items():
-            if match_layer(pattern, key):
+
+        if re.sub(r"\d+", "*",key) in shape_mappings:
+            if key in model_class_keys:
+                target_shape = model_class.get_submodule(key).shape
                 try:
                     new_tensor, method = reshape_or_transpose(tensor, target_shape)
                     print(f"{key}: {method} from {tensor.shape} to {target_shape}")
@@ -107,7 +108,9 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
                     reshaped = True
                 except Exception as e:
                     print(f"WARNING: Could not reshape {key}: {e}")
-                break
+            else:
+                print(f"WARNING: {key} not found in model class keys, skipping reshape.")
+
         if not reshaped:
             print(f"Keeping {key} with shape {tensor.shape}")
         converted_state_dict[key] = tensor
@@ -120,7 +123,7 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # # Required parameters
-    parser.add_argument("--checkpoint_path", type=str, default=None, help="Path to the downloaded checkpoints")
+    parser.add_argument("--checkpoint_path", type=str, default="nari-labs/Dia-1.6B", help="Path to the downloaded checkpoints")
     parser.add_argument("--pytorch_dump_folder_path", default="converted_dia_ckpt", type=str, help="Path to the output PyTorch model.")
     parser.add_argument(
         "--convert_preprocessor",
