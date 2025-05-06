@@ -48,6 +48,8 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
+    from transformers.models.llava_onevision.modeling_llava_onevision import unpad_image
+
 
 if is_vision_available():
     from PIL import Image
@@ -257,6 +259,19 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
+
+    def test_unpad_image(self):
+        original_size = (400, 400)
+
+        # Test case width is padded
+        pixel_values = floats_tensor([3, 400, 601])
+        unpadded_tensor = unpad_image(pixel_values, original_size)
+        self.assertEqual(unpadded_tensor.shape[1:], original_size)
+
+        # Test case height is padded
+        pixel_values = floats_tensor([3, 503, 400])
+        unpadded_tensor = unpad_image(pixel_values, original_size)
+        self.assertEqual(unpadded_tensor.shape[1:], original_size)
 
     @parameterized.expand(
         [

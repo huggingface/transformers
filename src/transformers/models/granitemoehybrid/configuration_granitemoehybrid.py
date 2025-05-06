@@ -1,10 +1,6 @@
 # coding=utf-8
-# Copyright 2024 EleutherAI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 IBM and the HuggingFace Inc. team. All rights reserved.
 #
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""GraniteMoeShared model configuration"""
+"""GraniteMoeHybrid model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -27,11 +23,10 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class GraniteMoeSharedConfig(PretrainedConfig):
+class GraniteMoeHybridConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GraniteMoeSharedModel`]. It is used to instantiate an GraniteMoeShared
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the [ibm-research/moe-7b-1b-active-shared-experts](https://huggingface.co/ibm-research/moe-7b-1b-active-shared-experts).
+    This is the configuration class to store the configuration of a [`GraniteMoeHybridConfig`]. It is used to
+    instantiate an GraniteMoeHybrid model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -39,8 +34,8 @@ class GraniteMoeSharedConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the GraniteMoeShared model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GraniteMoeSharedModel`]
+            Vocabulary size of the GraniteMoeHybrid model. Defines the number of different tokens that
+            can be represented by the `inputs_ids` passed when calling [`GraniteMoeHybridModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -66,8 +61,8 @@ class GraniteMoeSharedConfig(PretrainedConfig):
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
+            Whether or not the model should return the last key/values attentions (not used by all models).
+            Only relevant if `config.is_decoder=True`.
         pad_token_id (`int`, *optional*):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 1):
@@ -90,33 +85,55 @@ class GraniteMoeSharedConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        embedding_multiplier (`float`, *optional*, defaults to 1.0): embedding multiplier
-        logits_scaling (`float`, *optional*, defaults to 1.0): divisor for output logits
-        residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier
-        attention_multiplier (`float`, *optional*, defaults to 1.0): attention multiplier
-        num_local_experts (`int`, *optional*, defaults to 8): total number of experts
-        num_experts_per_tok (`int`, *optional*, defaults to 2): number of experts per token
+        embedding_multiplier (`float`, *optional*, defaults to 1.0): embedding multiplier.
+        logits_scaling (`float`, *optional*, defaults to 1.0): divisor for output logits.
+        residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier.
+        attention_multiplier (`float`, *optional*, defaults to 1.0): attention multiplier.
+        num_local_experts (`int`, *optional*, defaults to 8): total number of experts.
+        num_experts_per_tok (`int`, *optional*, defaults to 2): number of experts per token.
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxiliary loss coefficient
-        shared_intermediate_size (`int`, *optional*, defaults to 0): intermediate size for shared experts. 0 implies
-            no shared experts.
-
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxialiary loss coefficient
+        shared_intermediate_size (`int`, *optional*, defaults to 1024): intermediate size for shared experts.
+        position_embedding_type (`str`, *optional*): Positional embedding
+            type to be used; defaults to None. Allowed options: `[None, "rope"]`
+        layer_types (`List`, *optional*): list of strings to be used as layer types.
+            Allowed choices: "mamba", "attention".
+        mamba_n_heads (`int`, *optional*, defaults to 128):
+            The number of mamba heads used.
+        mamba_n_groups (`int`, *optional*, defaults to 1):
+            The number of the mamba groups used.
+        mamba_d_state (`int`, *optional*, defaults to 256):
+            The dimension the mamba latent state space.
+        mamba_d_head (`int`, *optional*, defaults to `"auto"`):
+            Head embedding dimension size.
+        mamba_d_conv (`int`, *optional*, defaults to 4):
+            The size of the mamba convolution kernel.
+        mamba_expand (`int`, *optional*, defaults to 2):
+            Expanding factor (relative to hidden_size) used to determine the mamba intermediate size.
+        mamba_chunk_size (`int`, *optional*, defaults to 256):
+            The chunks in which to break the sequence when doing prefill/training.
+        mamba_conv_bias (`bool`, *optional*, defaults to `True`):
+            Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
+        mamba_proj_bias (`bool`, *optional*, defaults to `False`):
+            Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"])
+            of the mamba mixer block.
     ```python
-    >>> from transformers import GraniteMoeSharedModel, GraniteMoeSharedConfig
+    >>> from transformers import GraniteMoeHybridModel, GraniteMoeHybridConfig
 
-    >>> # Initializing a GraniteMoeShared granitemoe-3b style configuration
-    >>> configuration = GraniteMoeSharedConfig()
+    >>> # Initializing a GraniteMoeHybrid config
+    >>> configuration = GraniteMoeHybridConfig()
 
-    >>> # Initializing a model from the granitemoe-7b style configuration
-    >>> model = GraniteMoeSharedModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "granitemoeshared"
+    model_type = "granitemoehybrid"
+    attribute_map = {
+        "layers_block_type": "layer_types",
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -148,7 +165,18 @@ class GraniteMoeSharedConfig(PretrainedConfig):
         num_experts_per_tok=2,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
-        shared_intermediate_size=0,
+        shared_intermediate_size=1024,
+        position_embedding_type=None,
+        layer_types=None,
+        mamba_n_heads=128,
+        mamba_n_groups=1,
+        mamba_d_state=256,
+        mamba_d_head="auto",
+        mamba_d_conv=4,
+        mamba_expand=2,
+        mamba_chunk_size=256,
+        mamba_conv_bias=True,
+        mamba_proj_bias=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -169,22 +197,44 @@ class GraniteMoeSharedConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
-        # this model has rope embedding type, hardcoded for BC
-        self.position_embedding_type = "rope"
-
         self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-
         self.embedding_multiplier = embedding_multiplier
         self.logits_scaling = logits_scaling
         self.residual_multiplier = residual_multiplier
         self.attention_multiplier = attention_multiplier
-
+        self.attention_dropout = attention_dropout
         self.num_local_experts = num_local_experts
         self.num_experts_per_tok = num_experts_per_tok
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.shared_intermediate_size = shared_intermediate_size
+        self.position_embedding_type = position_embedding_type
+
+        mamba_intermediate = mamba_expand * hidden_size
+
+        if layer_types is not None and any(layer_type not in ["mamba", "attention"] for layer_type in layer_types):
+            raise ValueError("layer_types must be a list strings in  [`mamba` `attention`]")
+
+        if mamba_intermediate % mamba_n_heads != 0:
+            raise ValueError("mamba_n_heads must divide mamba_expand * hidden_size")
+
+        # for the mamba_v2, must satisfy the following
+        if mamba_d_head == "auto":
+            mamba_d_head = mamba_intermediate // mamba_n_heads
+
+        if mamba_d_head * mamba_n_heads != mamba_intermediate:
+            raise ValueError("The dimensions for the Mamba head state do not match the model intermediate_size")
+
+        self.mamba_n_heads = mamba_n_heads
+        self.mamba_d_head = mamba_d_head
+        self.mamba_n_groups = mamba_n_groups
+        self.mamba_d_state = mamba_d_state
+        self.mamba_d_conv = mamba_d_conv
+        self.mamba_chunk_size = mamba_chunk_size
+        self.mamba_conv_bias = mamba_conv_bias
+        self.mamba_proj_bias = mamba_proj_bias
+        self.mamba_expand = mamba_expand
+        self.layer_types = layer_types
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -194,7 +244,13 @@ class GraniteMoeSharedConfig(PretrainedConfig):
             **kwargs,
         )
 
-        rope_config_validation(self)
+        if self.position_embedding_type == "rope":
+            rope_config_validation(self)
+
+    # overwrite the function to use in `HybridMambaAttentionDynamicCache`
+    @property
+    def layers_block_type(self):
+        return self.layer_types if self.layer_types else ["mamba"] * self.num_hidden_layers
 
 
-__all__ = ["GraniteMoeSharedConfig"]
+__all__ = ["GraniteMoeHybridConfig"]
