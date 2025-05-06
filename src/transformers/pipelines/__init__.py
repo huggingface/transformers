@@ -378,6 +378,7 @@ SUPPORTED_TASKS = {
         "impl": ImageToTextPipeline,
         "tf": (TFAutoModelForVision2Seq,) if is_tf_available() else (),
         "pt": (AutoModelForVision2Seq,) if is_torch_available() else (),
+        "supported": ["vision-encoder-decoder", "blip", "git"],
         "default": {
             "model": {
                 "pt": ("ydshieh/vit-gpt2-coco-en", "5bebf1e"),
