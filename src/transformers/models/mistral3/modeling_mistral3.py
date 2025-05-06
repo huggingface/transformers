@@ -333,7 +333,7 @@ MISTRAL3_INPUTS_DOCSTRING = r"""
     MISTRAL3_START_DOCSTRING,
 )
 class Mistral3Model(Mistral3PreTrainedModel):
-    _key_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
 
     def __init__(self, config: Mistral3Config):
         super().__init__(config)
@@ -469,7 +469,7 @@ class Mistral3Model(Mistral3PreTrainedModel):
     MISTRAL3_START_DOCSTRING,
 )
 class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin):
-    _key_mapping = {
+    _checkpoint_conversion_mapping = {
         "^language_model.model": "model.language_model",
         "^vision_tower": "model.vision_tower",
         "^multi_modal_projector": "model.multi_modal_projector",

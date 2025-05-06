@@ -1785,7 +1785,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     main_input_name = "input_ids"
     model_tags = None
 
-    _key_mapping = None  # used for BC support in VLMs, not meant to be used by new models
+    _checkpoint_conversion_mapping = None  # used for BC support in VLMs, not meant to be used by new models
 
     _auto_class = None
     _no_split_modules = None
@@ -3493,6 +3493,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         module_map[name + f".{key}"] = module
             state_dict = model_to_save.state_dict()
 
+        if any(allowed_name in self.__class__.__name__.lower() for allowed_name in VLMS):
+            reverse_key_mapping = {v: k for k, v in self._checkpoint_conversion_mapping.items()}
+
+            original_state_dict = {}
+            for key, value in state_dict.items():
+                for pattern, replacement in reverse_key_mapping.items():
+                    replacement = replacement.lstrip("^")  # strip off un-needed chars and patterns
+                    replacement = re.sub(r"\(.*?\)", "", pattern)
+                    new_key, n_replace = re.subn(pattern, replacement, key)
+                    # Early exit of the loop
+                    if n_replace > 0:
+                        break
+                original_state_dict[new_key] = value
+            state_dict = original_state_dict
+
         # Translate state_dict from smp to hf if saving with smp >= 1.10
         if IS_SAGEMAKER_MP_POST_1_10:
             for smp_to_hf, _ in smp.state.module_manager.translate_functions:
@@ -4083,7 +4098,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # Load models with hardcoded key mapping on class for VLMs only,  to keep BC and standardize model
         if any(allowed_name in cls.__name__.lower() for allowed_name in VLMS):
-            key_mapping = kwargs.pop("key_mapping", cls._key_mapping)
+            key_mapping = kwargs.pop("key_mapping", cls._checkpoint_conversion_mapping)
         else:
             key_mapping = kwargs.pop("key_mapping", None)
 

@@ -147,7 +147,7 @@ FUYU_INPUTS_DOCSTRING = r"""
     FUYU_START_DOCSTRING,
 )
 class FuyuModel(FuyuPreTrainedModel):
-    _key_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
 
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
@@ -292,7 +292,7 @@ class FuyuModel(FuyuPreTrainedModel):
     FUYU_START_DOCSTRING,
 )
 class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
-    _key_mapping = {
+    _checkpoint_conversion_mapping = {
         "^language_model.model": "model.language_model",
         "^vision_embed_tokens": "model.vision_embed_tokens",
         "^language_model.lm_head": "lm_head",

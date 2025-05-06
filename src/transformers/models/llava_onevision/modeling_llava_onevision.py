@@ -423,7 +423,7 @@ class LlavaOnevisionPreTrainedModel(PreTrainedModel):
     LLAVA_ONEVISION_START_DOCSTRING,
 )
 class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
-    _key_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -761,7 +761,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
     LLAVA_ONEVISION_START_DOCSTRING,
 )
 class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, GenerationMixin):
-    _key_mapping = {
+    _checkpoint_conversion_mapping = {
         "^language_model.model": "model.language_model",
         "^vision_tower": "model.vision_tower",
         "^multi_modal_projector": "model.multi_modal_projector",

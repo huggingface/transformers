@@ -1360,7 +1360,7 @@ ARIA_START_DOCSTRING = r"""
     ARIA_START_DOCSTRING,
 )
 class AriaModel(AriaPreTrainedModel):
-    _key_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
 
     def __init__(self, config: AriaConfig):
         super().__init__(config)
@@ -1505,7 +1505,7 @@ class AriaModel(AriaPreTrainedModel):
     ARIA_START_DOCSTRING,
 )
 class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
-    _key_mapping = {
+    _checkpoint_conversion_mapping = {
         "^language_model.model": "model.language_model",
         "^vision_tower": "model.vision_tower",
         "^multi_modal_projector": "model.multi_modal_projector",

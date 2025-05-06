@@ -1973,7 +1973,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     MLLAMA_START_DOCSTRING,
 )
 class MllamaModel(MllamaPreTrainedModel):
-    _key_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
     _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
 
     def __init__(self, config: MllamaConfig):
@@ -2095,7 +2095,7 @@ class MllamaModel(MllamaPreTrainedModel):
     MLLAMA_START_DOCSTRING,
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
-    _key_mapping = {
+    _checkpoint_conversion_mapping = {
         "^language_model.model": "model.language_model",
         "^vision_model": "model.vision_model",
         "^multi_modal_projector": "model.multi_modal_projector",

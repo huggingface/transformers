@@ -1487,7 +1487,7 @@ QWEN2_5_VL_INPUTS_DOCSTRING = r"""
 
 
 class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
-    _key_mapping = {"^model": "language_model"}
+    _checkpoint_conversion_mapping = {"^model": "language_model"}
     config_class = Qwen2_5_VLConfig
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
 
@@ -1849,7 +1849,7 @@ class Qwen2_5_VLCausalLMOutputWithPast(ModelOutput):
 
 
 class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMixin):
-    _key_mapping = {
+    _checkpoint_conversion_mapping = {
         "^visual": "model.visual",
         r"^model(?!\.(language_model|visual))": "model.language_model",
     }

@@ -1779,7 +1779,7 @@ EMU3_INPUTS_DOCSTRING = r"""
 
 
 class Emu3Model(Emu3PreTrainedModel):
-    _key_mapping = {"text_model.model": "text_model"}
+    _checkpoint_conversion_mapping = {"text_model.model": "text_model"}
     _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compileable
 
     def __init__(self, config):
@@ -1893,7 +1893,7 @@ class Emu3Model(Emu3PreTrainedModel):
 
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     base_model_prefix = ""
-    _key_mapping = {
+    _checkpoint_conversion_mapping = {
         "^text_model.model": "model.text_model",
         "^vqmodel": "model.vqmodel",
         "^text_model.lm_head": "lm_head",

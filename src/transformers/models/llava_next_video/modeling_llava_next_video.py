@@ -428,7 +428,7 @@ LLAVA_NEXT_VIDEO_INPUTS_DOCSTRING = r"""
     LLAVA_NEXT_VIDEO_START_DOCSTRING,
 )
 class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
-    _key_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
 
     def __init__(
         self,
@@ -749,7 +749,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
     LLAVA_NEXT_VIDEO_START_DOCSTRING,
 )
 class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, GenerationMixin):
-    _key_mapping = {
+    _checkpoint_conversion_mapping = {
         "^language_model.model": "model.language_model",
         "^vision_tower": "model.vision_tower",
         "^multi_modal_projector": "model.multi_modal_projector",

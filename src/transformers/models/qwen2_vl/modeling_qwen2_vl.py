@@ -1442,7 +1442,7 @@ QWEN2_VL_INPUTS_DOCSTRING = r"""
 
 
 class Qwen2VLModel(Qwen2VLPreTrainedModel):
-    _key_mapping = {"^model": "language_model"}
+    _checkpoint_conversion_mapping = {"^model": "language_model"}
 
     def __init__(self, config: Qwen2VLConfig):
         super().__init__(config)
@@ -1722,7 +1722,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
 
 
 class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
-    _key_mapping = {
+    _checkpoint_conversion_mapping = {
         "^visual": "model.visual",
         r"^model(?!\.(language_model|visual))": "model.language_model",
     }

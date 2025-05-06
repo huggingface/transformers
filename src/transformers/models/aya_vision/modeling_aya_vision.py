@@ -296,7 +296,7 @@ AYA_VISION_INPUTS_DOCSTRING = r"""
     AYA_VISION_START_DOCSTRING,
 )
 class AyaVisionModel(AyaVisionPreTrainedModel):
-    _key_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
 
     def __init__(self, config: AyaVisionConfig):
         super().__init__(config)
@@ -452,7 +452,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
     AYA_VISION_START_DOCSTRING,
 )
 class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixin):
-    _key_mapping = {
+    _checkpoint_conversion_mapping = {
         "^language_model.model": "model.language_model",
         "^vision_tower": "model.vision_tower",
         "^multi_modal_projector": "model.multi_modal_projector",

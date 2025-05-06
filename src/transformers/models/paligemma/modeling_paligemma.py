@@ -246,7 +246,7 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
     PALIGEMMA_START_DOCSTRING,
 )
 class PaliGemmaModel(PaliGemmaPreTrainedModel):
-    _key_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
 
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
@@ -454,7 +454,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
     PALIGEMMA_START_DOCSTRING,
 )
 class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
-    _key_mapping = {
+    _checkpoint_conversion_mapping = {
         "^language_model.model": "model.language_model",
         "^vision_tower": "model.vision_tower",
         "^multi_modal_projector": "model.multi_modal_projector",

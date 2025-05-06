@@ -767,7 +767,7 @@ INTERNVL_INPUTS_DOCSTRING = r"""
     INTERNVL_START_DOCSTRING,
 )
 class InternVLModel(InternVLPreTrainedModel):
-    _key_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
 
     def __init__(self, config: InternVLConfig):
         super().__init__(config)
@@ -997,7 +997,7 @@ class InternVLCausalLMOutputWithPast(ModelOutput):
     INTERNVL_START_DOCSTRING,
 )
 class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin):
-    _key_mapping = {
+    _checkpoint_conversion_mapping = {
         "^language_model.model": "model.language_model",
         "^vision_tower": "model.vision_tower",
         "^multi_modal_projector": "model.multi_modal_projector",

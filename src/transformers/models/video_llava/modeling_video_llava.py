@@ -288,7 +288,7 @@ VIDEO_LLAVA_INPUTS_DOCSTRING = r"""
     VIDEO_LLAVA_START_DOCSTRING,
 )
 class VideoLlavaModel(VideoLlavaPreTrainedModel):
-    _key_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
 
     def __init__(self, config: VideoLlavaConfig):
         super().__init__(config)
@@ -494,7 +494,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
     VIDEO_LLAVA_START_DOCSTRING,
 )
 class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMixin):
-    _key_mapping = {
+    _checkpoint_conversion_mapping = {
         "^language_model.model": "model.language_model",
         "^image_tower": "model.image_tower",
         "^video_tower": "model.video_tower",

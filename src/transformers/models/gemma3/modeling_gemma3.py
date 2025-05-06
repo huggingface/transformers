@@ -1104,7 +1104,7 @@ class Gemma3MultiModalProjector(nn.Module):
     GEMMA3_START_DOCSTRING,
 )
 class Gemma3Model(Gemma3PreTrainedModel):
-    _key_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
 
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
@@ -1306,7 +1306,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
     GEMMA3_START_DOCSTRING,
 )
 class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
-    _key_mapping = {
+    _checkpoint_conversion_mapping = {
         "^language_model.model": "model.language_model",
         "^vision_tower": "model.vision_tower",
         "^multi_modal_projector": "model.multi_modal_projector",
