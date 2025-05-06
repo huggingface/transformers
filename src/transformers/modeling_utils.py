@@ -1293,7 +1293,7 @@ def _get_device_map(
                 unused_memory = torch.cuda.memory_reserved(device_name) - torch.cuda.memory_allocated(device_name)
                 inferred_max_memory[device_name] += unused_memory
             # respect the max_memory passed by the user
-            if device_name in max_memory:
+            if max_memory is not None and device_name in max_memory:
                 inferred_max_memory[device_name] = min(inferred_max_memory[device_name], max_memory[device_name])
         device_map_kwargs["max_memory"] = inferred_max_memory
 
