@@ -2477,7 +2477,7 @@ class Trainer:
             def trace_handler(p):
                 p.export_chrome_trace(os.path.join(f"{log_dir}/rank{rank}", "profiler"))
 
-            profiler = profile(
+            self.profiler = profile(
                 activities=activities,
                 schedule=prof_schedule,
                 on_trace_ready=trace_handler,
@@ -2485,7 +2485,7 @@ class Trainer:
                 profile_memory=True,
                 # **self.args.profiler_options
             )
-            profiler.start()
+            self.profiler.start()
 
 
         for epoch in range(epochs_trained, num_train_epochs):
@@ -2633,7 +2633,7 @@ class Trainer:
                         learning_rate = self._get_learning_rate()
 
                         if self.args.do_profile:
-                            profiler.step()
+                            self.profiler.step()
 
                         if not self.accelerator.optimizer_step_was_skipped:
                             # Delay optimizer scheduling until metrics are generated
@@ -2744,7 +2744,7 @@ class Trainer:
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
         if self.args.do_predict:
-            profiler.stop()
+            self.profiler.stop()
         # Wait for the checkpoint to be uploaded.
         self._finish_current_push()
 
