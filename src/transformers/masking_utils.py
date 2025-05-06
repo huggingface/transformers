@@ -338,7 +338,7 @@ def create_4d_causal_mask(
     else:
         causal_mask = _vmap_for_qkv(causal_mask_mod)(None, None, cache_position, kv_arange)
 
-    # Make it 4D (this is more efficient than vmap-ing over the 4D before, as `expand` is a view, not a copy)
+    # Make it 4D (this is more efficient than vmap-ing over the 4D, as `expand` is a view, not a copy over the batch)
     causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
     return causal_mask
 
