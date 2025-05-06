@@ -1,7 +1,6 @@
 import argparse
 import json
-from pprint import pprint
-from get_previous_daily_ci import get_workflow_run_reports, get_latest_workflow_run_reports
+from get_previous_daily_ci import get_workflow_run_reports
 
 def safe_json_loads(s):
     try:
