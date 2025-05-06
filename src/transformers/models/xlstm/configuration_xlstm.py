@@ -69,9 +69,9 @@ class xLSTMConfig(PretrainedConfig):
         vocab_size (int, optional, *optional*, defaults to 50304):
             Vocabulary size of the xLSTM model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`xLSTMModel`]. Defaults to the GPT2-NeoX tokenizer size.
-        embedding_dim (int, optional, *optional*, defaults to 4096):
+        hidden_size (int, optional, *optional*, defaults to 4096):
             Dimensionality of the embeddings or hidden states.
-        num_blocks (int, optional, *optional*, defaults to 32):
+        num_hidden_layers (int, optional, *optional*, defaults to 32):
             Number of blocks of the xLSTM model.
         num_heads (int, optional, *optional*, defaults to 8):
             Number of heads for the xLSTM Layer/Cell.
@@ -148,8 +148,8 @@ class xLSTMConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size: int = 50304,
-        embedding_dim: int = 4096,
-        num_blocks: int = 32,
+        hidden_size: int = 4096,
+        num_hidden_layers: int = 32,
         num_heads: int = 8,
         use_bias: bool = False,
         norm_reduction_force_float32: bool = True,
@@ -188,8 +188,8 @@ class xLSTMConfig(PretrainedConfig):
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.embedding_dim = embedding_dim
-        self.num_blocks = num_blocks
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
         self.num_heads = num_heads
         self.use_bias = use_bias
         self.tie_word_embeddings = tie_word_embeddings
@@ -257,8 +257,8 @@ class xLSTMConfig(PretrainedConfig):
         if external_xlstm:
             return xLSTMLargeConfig(
                 vocab_size=self.vocab_size,
-                embedding_dim=self.embedding_dim,
-                num_blocks=self.num_blocks,
+                embedding_dim=self.hidden_size,
+                num_blocks=self.num_hidden_layers,
                 num_heads=self.num_heads,
                 use_bias=self.use_bias,
                 add_out_norm=self.add_out_norm,

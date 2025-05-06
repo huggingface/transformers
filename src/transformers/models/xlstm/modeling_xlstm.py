@@ -844,9 +844,9 @@ else:
                     return_last_states = self.config.return_last_states
 
                 if self.config.mode == "train_with_padding":
-                    assert not return_last_states, (
-                        "return_last_states=True is not supported with train_with_padding mode."
-                    )
+                    assert (
+                        not return_last_states
+                    ), "return_last_states=True is not supported with train_with_padding mode."
 
                 return self._train_fn(
                     q=q,
@@ -1049,31 +1049,31 @@ else:
             self.config = config
 
             self.up_proj_dim = round_up_to_next_multiple_of(
-                config.embedding_dim * config.ffn_proj_factor,
+                config.hidden_size * config.ffn_proj_factor,
                 config.ffn_round_up_to_multiple_of,
             )
 
             if self.config.weight_mode == "single":
                 self.proj_up_gate = nn.Linear(
-                    in_features=config.embedding_dim,
+                    in_features=config.hidden_size,
                     out_features=self.up_proj_dim,
                     bias=self.config.use_bias,
                 )
                 self.proj_up = nn.Linear(
-                    in_features=config.embedding_dim,
+                    in_features=config.hidden_size,
                     out_features=self.up_proj_dim,
                     bias=self.config.use_bias,
                 )
             elif self.config.weight_mode == "fused":
                 self.proj_up_gate_z = nn.Linear(
-                    in_features=config.embedding_dim,
+                    in_features=config.hidden_size,
                     out_features=2 * self.up_proj_dim,
                     bias=self.config.use_bias,
                 )
 
             self.proj_down = nn.Linear(
                 in_features=self.up_proj_dim,
-                out_features=config.embedding_dim,
+                out_features=config.hidden_size,
                 bias=self.config.use_bias,
             )
 
@@ -1095,49 +1095,49 @@ else:
             super().__init__()
             self.config = config
 
-            self.v_dim = int(config.embedding_dim * config.v_dim_factor)
-            self.qk_dim = int(config.embedding_dim * config.qk_dim_factor)
+            self.v_dim = int(config.hidden_size * config.v_dim_factor)
+            self.qk_dim = int(config.hidden_size * config.qk_dim_factor)
 
             if self.config.weight_mode == "single":
                 self.q = nn.Linear(
-                    in_features=self.config.embedding_dim,
+                    in_features=self.config.hidden_size,
                     out_features=self.qk_dim,
                     bias=self.config.use_bias,
                 )
                 self.k = nn.Linear(
-                    in_features=self.config.embedding_dim,
+                    in_features=self.config.hidden_size,
                     out_features=self.qk_dim,
                     bias=self.config.use_bias,
                 )
                 self.v = nn.Linear(
-                    in_features=self.config.embedding_dim,
+                    in_features=self.config.hidden_size,
                     out_features=self.v_dim,
                     bias=self.config.use_bias,
                 )
 
                 self.ogate_preact = nn.Linear(
-                    in_features=self.config.embedding_dim,
+                    in_features=self.config.hidden_size,
                     out_features=self.v_dim,
                     bias=self.config.use_bias,
                 )
                 self.igate_preact = nn.Linear(
-                    in_features=self.config.embedding_dim,
+                    in_features=self.config.hidden_size,
                     out_features=self.config.num_heads,
                     bias=True,
                 )
                 self.fgate_preact = nn.Linear(
-                    in_features=self.config.embedding_dim,
+                    in_features=self.config.hidden_size,
                     out_features=self.config.num_heads,
                     bias=True,
                 )
             elif self.config.weight_mode == "fused":
                 self.qkv_opreact = nn.Linear(
-                    in_features=self.config.embedding_dim,
+                    in_features=self.config.hidden_size,
                     out_features=2 * self.qk_dim + 2 * self.v_dim,
                     bias=self.config.use_bias,
                 )
                 self.ifgate_preact = nn.Linear(
-                    in_features=self.config.embedding_dim,
+                    in_features=self.config.hidden_size,
                     out_features=2 * self.config.num_heads,
                     bias=True,
                 )
@@ -1155,7 +1155,7 @@ else:
             )
             self.out_proj = nn.Linear(
                 in_features=self.v_dim,
-                out_features=self.config.embedding_dim,
+                out_features=self.config.hidden_size,
                 bias=self.config.use_bias,
             )
 
@@ -1229,7 +1229,7 @@ else:
             super().__init__()
             self.config = config
             self.norm_mlstm = RMSNorm(
-                num_features=config.embedding_dim,
+                num_features=config.hidden_size,
                 eps=config.norm_eps,
                 use_weight=True,
                 use_bias=config.use_bias,
@@ -1237,7 +1237,7 @@ else:
             )
             self.mlstm_layer = mLSTMLayer(config)
             self.norm_ffn = RMSNorm(
-                num_features=config.embedding_dim,
+                num_features=config.hidden_size,
                 eps=config.norm_eps,
                 use_weight=True,
                 use_bias=config.use_bias,
@@ -1281,14 +1281,14 @@ class xLSTMOutput(ModelOutput):
     Class for the xLSTM model outputs
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, embedding_dim)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         cache_params (`xLSTMCache`):
             The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
             avoid providing the old `input_ids`.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, embedding_dim)`.
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
 
@@ -1314,7 +1314,7 @@ class xLSTMCausalLMOutput(ModelOutput):
             avoid providing the old `input_ids`.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, embedding_dim)`.
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
     """
@@ -1353,7 +1353,7 @@ XLSTM_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -1413,9 +1413,9 @@ class xLSTMModel(xLSTMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.embeddings = nn.Embedding(config.vocab_size, config.embedding_dim)
+        self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
 
-        self.blocks = nn.ModuleList([mLSTMBlock(config) for _ in range(config.num_blocks)])
+        self.blocks = nn.ModuleList([mLSTMBlock(config) for _ in range(config.num_hidden_layers)])
 
         self.gradient_checkpointing = False
         # actually unused, but needed in external integration
@@ -1427,17 +1427,17 @@ class xLSTMModel(xLSTMPreTrainedModel):
             config.step_kernel,
         )
 
-        self.out_norm = RMSNorm(config.embedding_dim, eps=config.norm_eps)
+        self.out_norm = RMSNorm(config.hidden_size, eps=config.norm_eps)
         # Initialize weights and apply final processing
         self.post_init()
 
     def _init_weights(self, module):
         if self is not module:
             if isinstance(module, torch.nn.Embedding):
-                small_init_method(self.config.embedding_dim)(self.embeddings.weight)
+                small_init_method(self.config.hidden_size)(self.embeddings.weight)
             return
 
-        small_init_method(self.config.embedding_dim)(self.embeddings.weight)
+        small_init_method(self.config.hidden_size)(self.embeddings.weight)
         torch.nn.init.ones_(self.out_norm.weight)
         if self.config.use_bias:
             torch.nn.init.zeros_(self.out_norm.bias)
@@ -1448,22 +1448,24 @@ class xLSTMModel(xLSTMPreTrainedModel):
             torch.nn.init.ones_(block.norm_mlstm.weight)
             torch.nn.init.zeros_(block.norm_ffn.weight)
             if self.config.weight_mode == "single":
-                small_init_method(self.config.embedding_dim)(block.ffn.proj_up.weight)
-                small_init_method(self.config.embedding_dim)(block.ffn.proj_up_gate.weight)
+                small_init_method(self.config.hidden_size)(block.ffn.proj_up.weight)
+                small_init_method(self.config.hidden_size)(block.ffn.proj_up_gate.weight)
                 if self.config.use_bias:
                     torch.nn.init.zeros_(block.ffn.proj_up.bias)
                     torch.nn.init.zeros_(block.ffn.proj_up_gate.bias)
             else:
-                small_init_method(self.config.embedding_dim)(block.ffn.proj_up_gate_z.weight)
+                small_init_method(self.config.hidden_size)(block.ffn.proj_up_gate_z.weight)
                 if self.config.use_bias:
                     torch.nn.init.zeros_(block.ffn.proj_up_gate_z.bias)
-            wang_init_method(dim=block.ffn.up_proj_dim, n_layers=self.config.num_blocks)(block.ffn.proj_down.weight)
+            wang_init_method(dim=block.ffn.up_proj_dim, n_layers=self.config.num_hidden_layers)(
+                block.ffn.proj_down.weight
+            )
             if self.config.use_bias:
                 torch.nn.init.zeros_(block.ffn.proj_down.bias)
             if self.config.weight_mode == "single":
-                small_init_method(self.config.embedding_dim)(block.mlstm_layer.q.weight)
-                small_init_method(self.config.embedding_dim)(block.mlstm_layer.k.weight)
-                small_init_method(self.config.embedding_dim)(block.mlstm_layer.v.weight)
+                small_init_method(self.config.hidden_size)(block.mlstm_layer.q.weight)
+                small_init_method(self.config.hidden_size)(block.mlstm_layer.k.weight)
+                small_init_method(self.config.hidden_size)(block.mlstm_layer.v.weight)
                 torch.nn.init.zeros_(block.mlstm_layer.ogate_preact.weight)
                 torch.nn.init.zeros_(block.mlstm_layer.igate_preact.weight)
                 torch.nn.init.zeros_(block.mlstm_layer.fgate_preact.weight)
@@ -1487,7 +1489,7 @@ class xLSTMModel(xLSTMPreTrainedModel):
                     torch.nn.init.zeros_(block.mlstm_layer.v.bias)
                     torch.nn.init.zeros_(block.mlstm_layer.ogate_preact.bias)
             elif self.config.weight_mode == "fused":
-                small_init_method(self.config.embedding_dim)(block.mlstm_layer.qkv_opreact.weight)
+                small_init_method(self.config.hidden_size)(block.mlstm_layer.qkv_opreact.weight)
                 torch.nn.init.zeros_(block.mlstm_layer.ifgate_preact.weight)
                 with torch.no_grad():
                     block.mlstm_layer.ifgate_preact.bias[: self.config.num_heads] += (
@@ -1509,7 +1511,7 @@ class xLSTMModel(xLSTMPreTrainedModel):
                     torch.nn.init.zeros_(block.mlstm_layer.qkv_opreact.bias)
 
             torch.nn.init.ones_(block.mlstm_layer.multihead_norm.weight)
-            wang_init_method(dim=self.config.embedding_dim, n_layers=self.config.num_blocks)(
+            wang_init_method(dim=self.config.hidden_size, n_layers=self.config.num_hidden_layers)(
                 block.mlstm_layer.out_proj.weight
             )
             if self.config.use_bias:
@@ -1650,7 +1652,7 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.backbone = xLSTMModel(config)
-        self.lm_head = nn.Linear(config.embedding_dim, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         # Initialize weights and apply final processing
         # self.register_load_state_dict_pre_hook(self.load_hook)
         self.post_init()
@@ -1669,7 +1671,7 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
 
     def _init_weights(self, module):
         self.backbone.apply(self.backbone._init_weights)
-        small_init_method(self.config.embedding_dim)(self.lm_head.weight)
+        small_init_method(self.config.hidden_size)(self.lm_head.weight)
 
     def prepare_inputs_for_generation(
         self,
