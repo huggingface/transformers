@@ -193,7 +193,7 @@ class DiaCrossAttention(nn.Module):
         self.num_key_value_heads = self.config.num_key_value_heads
         self.dropout = config.dropout
         self.hidden_size = config.hidden_size
-        self.head_dim = config.hidden_size // self.num_heads
+        self.head_dim = config.head_dim
         self.layer_idx = layer_idx
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
 
@@ -349,8 +349,9 @@ class DiaMLP(nn.Module):  # Modular GlmMLP
         super().__init__()
 
         self.config = config
-        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        # TODO gate_up_proj and down_proj name
+        self.wi_fused = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
+        self.wo = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
         self.activation_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
