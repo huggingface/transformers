@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_llava_onevision.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
 from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
@@ -42,6 +41,7 @@ else:
 class LlavaOnevisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     image_grid_pinpoints: Optional[List[List[int]]]
     do_pad: Optional[bool]
+    vision_aspect_ratio: Optional[str]
 
 
 @add_start_docstrings(
@@ -55,6 +55,8 @@ class LlavaOnevisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         do_pad (`bool`, *optional*):
             Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
             number of patches in the batch. Padding will be applied to the bottom and right with zeros.
+        vision_aspect_ratio (`str`, *optional*):
+            Aspect ratio used when processong image features. The default value is "anyres_max_9".
     """,
 )
 class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
