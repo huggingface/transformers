@@ -844,9 +844,9 @@ else:
                     return_last_states = self.config.return_last_states
 
                 if self.config.mode == "train_with_padding":
-                    assert (
-                        not return_last_states
-                    ), "return_last_states=True is not supported with train_with_padding mode."
+                    assert not return_last_states, (
+                        "return_last_states=True is not supported with train_with_padding mode."
+                    )
 
                 return self._train_fn(
                     q=q,
