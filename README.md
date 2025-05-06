@@ -98,7 +98,12 @@ Install Transformers from source if you want the latest changes in the library o
 ```shell
 git clone https://github.com/huggingface/transformers.git
 cd transformers
+
+# pip
 pip install .[torch]
+
+# uv
+uv pip install .[torch]
 ```
 
 ## Quickstart
