@@ -35,7 +35,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 
@@ -1255,6 +1255,7 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
