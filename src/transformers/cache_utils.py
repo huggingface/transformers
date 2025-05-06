@@ -2028,6 +2028,11 @@ class OffloadedHybridCache(HybridChunkedCache):
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ):
         super().__init__(config, max_batch_size, max_cache_len, device, dtype, layer_device_map)
+
+        unique_devices = set(layer_device_map.values())
+        if len(unique_devices) > 1:
+            raise ValueError(f"OffloadedHybridCache does not support multiple devices. Got devices: {unique_devices}")
+
         self.offload_device = torch.device(offload_device)
         # Create new CUDA stream for parallel prefetching.
         self._prefetch_stream = torch.cuda.Stream() if torch._C._get_accelerator().type == "cuda" else None
@@ -2280,6 +2285,11 @@ class OffloadedStaticCache(StaticCache):
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         super(Cache, self).__init__()
+
+        unique_devices = set(layer_device_map.values())
+        if len(unique_devices) > 1:
+            raise ValueError(f"OffloadedStaticCache does not support multiple devices. Got devices: {unique_devices}")
+
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.device = torch.device(device) if layer_device_map is None else torch.device(layer_device_map[0])
