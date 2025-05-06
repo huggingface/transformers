@@ -160,7 +160,7 @@ class DonutProcessor(ProcessorMixin):
             potential_start = re.search(r"<s_", tokens, re.IGNORECASE)
             if potential_start is None:
                 break
-            start_token = tokens[: potential_start.start()]
+            start_token = tokens[potential_start.start() :]
             if ">" not in start_token:
                 break
             start_token = start_token[: start_token.index(">") + 1]
