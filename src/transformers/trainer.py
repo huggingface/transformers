@@ -2473,13 +2473,17 @@ class Trainer:
             prof_schedule = schedule(wait=1, warmup=1, active=2, repeat=1)
             log_dir = self.args.logging_dir or self.args.output_dir
             rank = dist.get_rank() if dist.is_initialized() else 0
+
+            def trace_handler(p):
+                p.export_chrome_trace(os.path.join(f"{log_dir}/rank{rank}", "profiler"))
+
             profiler = profile(
                 activities=activities,
                 schedule=prof_schedule,
-                on_trace_ready=tensorboard_trace_handler(os.path.join(f"{log_dir}/rank{rank}", "profiler")),
+                on_trace_ready=trace_handler,
                 record_shapes=True,
                 profile_memory=True,
-                **self.args.profiler_options
+                # **self.args.profiler_options
             )
             profiler.start()
 
