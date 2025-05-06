@@ -1765,9 +1765,7 @@ class HybridCache(Cache):
         )
 
         layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2  # 2 is for BC
-        self.is_sliding = torch.tensor(
-            [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)], dtype=torch.bool
-        )
+        self.is_sliding_list = [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)]
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         global_cache_shape = (self.max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
@@ -1780,7 +1778,7 @@ class HybridCache(Cache):
                 layer_device = device
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
             # breaks when updating the cache.
-            cache_shape = sliding_cache_shape if self.is_sliding[i] else global_cache_shape
+            cache_shape = sliding_cache_shape if self.is_sliding_list[i] else global_cache_shape
             new_layer_key_cache = torch.zeros(cache_shape, dtype=self._dtype, device=layer_device)
             new_layer_value_cache = torch.zeros(cache_shape, dtype=self._dtype, device=layer_device)
             torch._dynamo.mark_static_address(new_layer_key_cache)
@@ -1801,7 +1799,7 @@ class HybridCache(Cache):
         if cache_position is None:
             raise ValueError("`cache_position` must be provided for HybridCache.")
 
-        is_sliding_layer = self.is_sliding[layer_idx].item()
+        is_sliding_layer = self.is_sliding_list[layer_idx]
 
         # These two `if` blocks are only reached in multigpu and if `layer_device_map` is not passed. They are used
         # when the cache is initialized in the forward pass (e.g. Gemma2)
