@@ -2465,7 +2465,7 @@ class Trainer:
         if args.eval_on_start:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
-        if self.args.do_profile:
+        if self.args.enable_profiler:
             from torch.profiler import profile, schedule, tensorboard_trace_handler, ProfilerActivity
             activities = [ProfilerActivity.CPU]
             if torch.cuda.is_available():
@@ -2632,7 +2632,7 @@ class Trainer:
                         # get leaning rate before update
                         learning_rate = self._get_learning_rate()
 
-                        if self.args.do_profile:
+                        if self.args.enable_profiler:
                             self.profiler.step()
 
                         if not self.accelerator.optimizer_step_was_skipped:
