@@ -70,6 +70,8 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             Special token used to denote image location.
         video_token (`str`, *optional*, defaults to `"<video>"`):
             Special token used to denote video location.
+        vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
+            Aspect ratio used when processong image features. The default value is "anyres_max_9".
     """
 
     attributes = ["image_processor", "tokenizer", "video_processor"]
@@ -79,6 +81,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         "vision_feature_select_strategy",
         "image_token",
         "video_token",
+        "vision_aspect_ratio",
     ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
@@ -94,6 +97,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         chat_template=None,
         image_token="<image>",
         video_token="<video>",
+        vision_aspect_ratio="anyres_max_9",
         **kwargs,
     ):
         self.num_image_tokens = num_image_tokens
@@ -110,6 +114,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             if getattr(tokenizer, "video_token_id", None)
             else tokenizer.convert_tokens_to_ids(self.video_token)
         )
+        self.vision_aspect_ratio = vision_aspect_ratio
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
     def __call__(
@@ -264,7 +269,8 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         unpadded_features = current_height * current_width
         newline_features = current_height
 
-        ratio = math.sqrt(current_height * current_width / (9 * patches_height**2))
+        max_num_patches = int(self.vision_aspect_ratio.strip("anyres_max_"))
+        ratio = math.sqrt(current_height * current_width / (max_num_patches * patches_height**2))
         if ratio > 1.1:
             unpadded_features = int(current_height // ratio) * int(current_width // ratio)
             newline_features = int(current_height // ratio)

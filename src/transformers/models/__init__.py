@@ -129,6 +129,7 @@ if TYPE_CHECKING:
     from .granite import *
     from .granite_speech import *
     from .granitemoe import *
+    from .granitemoehybrid import *
     from .granitemoeshared import *
     from .grounding_dino import *
     from .groupvit import *
