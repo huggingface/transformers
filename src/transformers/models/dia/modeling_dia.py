@@ -126,7 +126,7 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
         self.num_key_value_heads = self.config.num_key_value_heads or self.num_heads
         self.dropout = config.dropout
         self.hidden_size = config.hidden_size
-        self.head_dim = config.hidden_size // self.num_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // self.num_heads)
         self.layer_idx = layer_idx
 
 

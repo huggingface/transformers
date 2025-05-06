@@ -48,7 +48,7 @@ shape_mappings = [
 def reshape_or_transpose(tensor, target_tensor):
     """Try reshaping or transposing tensor to match the shape of target_tensor."""
     numel = tensor.numel()
-    target_shape = target_tensor.shape
+    target_shape = target_tensor
     target_numel = target_tensor.numel()
 
     if numel != target_numel:
@@ -85,7 +85,8 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
 
     with torch.device('meta'):
         model_class = DiaModel(config=DiaConfig())
-    model_class_keys = model_class.state_dict().keys()
+    model_dict = model_class.state_dict()
+    model_class_keys = model_dict.keys()
     files = os.listdir(checkpoint_path)
     for file in files:
         if file.endswith(".safetensors"):
@@ -95,12 +96,13 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
     checkpoint_path = os.path.join(checkpoint_path, files[0])
     state_dict = load_function(checkpoint_path, 'cpu')
     converted_state_dict = {}
+    embeddings = {}
     for key, tensor in state_dict.items():
         reshaped = False
 
         if re.sub(r"\d+", "*",key) in shape_mappings:
             if key in model_class_keys:
-                target_shape = model_class.get_submodule(key).shape
+                target_shape = model_dict[key].shape
                 try:
                     new_tensor, method = reshape_or_transpose(tensor, target_shape)
                     print(f"{key}: {method} from {tensor.shape} to {target_shape}")
@@ -110,14 +112,17 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
                     print(f"WARNING: Could not reshape {key}: {e}")
             else:
                 print(f"WARNING: {key} not found in model class keys, skipping reshape.")
-
-        if not reshaped:
-            print(f"Keeping {key} with shape {tensor.shape}")
+        elif "embeddings" in key:
+            embeddings_key = key.split(".")[0]
+            if embeddings_key in embeddings:
+                embeddings[key.rsplit(".")[0]] += tensor
+            else:
+                embeddings[embeddings_key] = tensor
         converted_state_dict[key] = tensor
-
-    print(f"Saved converted checkpoint to {output_path}")
-    model.load_state_dict(converted_state_dict)
-    return model
+    converted_state_dict.update(embeddings)
+    print(f"Saved converted checkpoint to {pytorch_dump_folder_path}")
+    model_class.load_state_dict(converted_state_dict, assign=True)
+    return model_class
 
 
 if __name__ == "__main__":
