@@ -20,8 +20,8 @@ import typing
 
 import torch
 
-from ..auto import AutoModel
 from ...processing_utils import ProcessorMixin
+from ..auto import AutoModel
 
 
 def build_delay_indices(

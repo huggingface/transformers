@@ -16,7 +16,7 @@
 
 from typing import List, Optional, Tuple
 
-from ...tokenization_utils import PreTrainedTokenizer, AddedToken
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -67,7 +67,7 @@ class DiaTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         token = chr(index - self.offset)
         return token
-    
+
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size + self.offset)}
         vocab.update(self.added_tokens_encoder)

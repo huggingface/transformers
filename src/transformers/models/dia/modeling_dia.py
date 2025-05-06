@@ -129,7 +129,6 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
         self.head_dim = getattr(config, "head_dim", config.hidden_size // self.num_heads)
         self.layer_idx = layer_idx
 
-
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -253,13 +252,9 @@ class DiaCrossAttention(nn.Module):
 class DiaEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DiaConfig, layer_idx):
         super().__init__()
-        self.pre_sa_norm = RMSNorm(
-            config.hidden_size, eps=config.norm_eps
-        )
+        self.pre_sa_norm = RMSNorm(config.hidden_size, eps=config.norm_eps)
         self.self_attention = DiaSelfAttention(config, layer_idx)
-        self.post_sa_norm = RMSNorm(
-            config.hidden_size, eps=config.norm_eps
-        )
+        self.post_sa_norm = RMSNorm(config.hidden_size, eps=config.norm_eps)
         self.mlp = DiaMLP(config)
 
     def forward(
@@ -318,15 +313,18 @@ class DiaPreTrainedModel(PreTrainedModel):
 
 
 class DiaEncoder(DiaPreTrainedModel):
-
     def __init__(self, config: DiaEncoderConfig):
         super().__init__(config)
         self.config = config
 
         self.embedding = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = nn.ModuleList([DiaEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [DiaEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.norm = RMSNorm(
-            config.hidden_size, eps=config.norm_eps, dtype=torch.float32,
+            config.hidden_size,
+            eps=config.norm_eps,
+            dtype=torch.float32,
         )
         self.rotary_embeddings = DiaRotaryEmbedding(config)
 
@@ -341,7 +339,7 @@ class DiaEncoder(DiaPreTrainedModel):
         hidden_states = self.embedding(hidden_states)
         position_embeddings = self.rotary_embeddings(hidden_states, cache_position)
         for layer in self.layers:
-            hidden_states = layer(hidden_states, cache_position,position_embeddings, past_key_values)
+            hidden_states = layer(hidden_states, cache_position, position_embeddings, past_key_values)
 
         hidden_states = self.norm(hidden_states).to(self.compute_dtype)
         return hidden_states
@@ -373,13 +371,16 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         self.self_attention = DiaSelfAttention(config, layer_idx)
         self.cross_attention = DiaCrossAttention(config, layer_idx)
         self.pre_sa_norm = RMSNorm(
-            config.hidden_size, eps=config.norm_eps,
+            config.hidden_size,
+            eps=config.norm_eps,
         )
         self.pre_ca_norm = RMSNorm(
-            config.hidden_size, eps=config.norm_eps,
+            config.hidden_size,
+            eps=config.norm_eps,
         )
         self.pre_mlp_norm = RMSNorm(
-            config.hidden_size, eps=config.norm_eps,
+            config.hidden_size,
+            eps=config.norm_eps,
         )
         self.mlp = DiaMLP(config)
 
@@ -550,9 +551,9 @@ class DiaModel(DiaPreTrainedModel):
         input_features = torch.cat([input_features, input_ids], dim=0)
 
         if cache_position is None:
-            cache_position = torch.arange(input_ids.shape[1], device=input_ids.device)[None,:]
+            cache_position = torch.arange(input_ids.shape[1], device=input_ids.device)[None, :]
 
-        if cache_position.shape[1] != 1: # prefill computes encoder kv
+        if cache_position.shape[1] != 1:  # prefill computes encoder kv
             encoder_outputs = self.encoder(
                 input_features,
                 cache_position=cache_position,

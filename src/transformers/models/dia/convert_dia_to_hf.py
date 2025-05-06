@@ -15,35 +15,39 @@
 # limitations under the License.
 
 import argparse
-import re
-import torch
 import os
-from transformers import DiaModel,  DiaProcessor, DiaTokenizer, DiaConfig
-from transformers.utils.import_utils import _is_package_available
+import re
+
+import torch
 from huggingface_hub import snapshot_download
 from safetensors.torch import load_file
 
+from transformers import DiaConfig, DiaModel, DiaProcessor
+from transformers.utils.import_utils import _is_package_available
+
+
 # Provide just the list of layer keys you want to fix
 shape_mappings = [
-    'encoder.layers.*.mlp.wi_fused.weight',
-    'decoder.layers.*.cross_attention.k_proj.weight',
-    'decoder.logits_dense.weight',
-    'encoder.layers.*.self_attention.q_proj.weight',
-    'encoder.layers.*.mlp.wo.weight',
-    'decoder.layers.*.mlp.wo.weight',
-    'decoder.layers.*.self_attention.v_proj.weight',
-    'decoder.layers.*.self_attention.o_proj.weight',
-    'encoder.embedding.weight',
-    'encoder.layers.*.self_attention.k_proj.weight',
-    'decoder.layers.*.cross_attention.q_proj.weight',
-    'decoder.layers.*.self_attention.k_proj.weight',
-    'decoder.layers.*.self_attention.q_proj.weight',
-    'encoder.layers.*.self_attention.o_proj.weight',
-    'decoder.layers.*.cross_attention.o_proj.weight',
-    'encoder.layers.*.self_attention.v_proj.weight',
-    'decoder.layers.*.mlp.wi_fused.weight',
-    'decoder.layers.*.cross_attention.v_proj.weight',
+    "encoder.layers.*.mlp.wi_fused.weight",
+    "decoder.layers.*.cross_attention.k_proj.weight",
+    "decoder.logits_dense.weight",
+    "encoder.layers.*.self_attention.q_proj.weight",
+    "encoder.layers.*.mlp.wo.weight",
+    "decoder.layers.*.mlp.wo.weight",
+    "decoder.layers.*.self_attention.v_proj.weight",
+    "decoder.layers.*.self_attention.o_proj.weight",
+    "encoder.embedding.weight",
+    "encoder.layers.*.self_attention.k_proj.weight",
+    "decoder.layers.*.cross_attention.q_proj.weight",
+    "decoder.layers.*.self_attention.k_proj.weight",
+    "decoder.layers.*.self_attention.q_proj.weight",
+    "encoder.layers.*.self_attention.o_proj.weight",
+    "decoder.layers.*.cross_attention.o_proj.weight",
+    "encoder.layers.*.self_attention.v_proj.weight",
+    "decoder.layers.*.mlp.wi_fused.weight",
+    "decoder.layers.*.cross_attention.v_proj.weight",
 ]
+
 
 def reshape_or_transpose(tensor, target_tensor):
     """Try reshaping or transposing tensor to match the shape of target_tensor."""
@@ -57,17 +61,17 @@ def reshape_or_transpose(tensor, target_tensor):
     # Direct reshape
     try:
         reshaped = tensor.view(target_shape)
-        return reshaped, 'reshaped'
+        return reshaped, "reshaped"
     except Exception:
         pass
 
     # Transpose if 2D and transpose shape fits
     if tensor.ndim == 2 and tensor.T.shape == target_shape:
-        return tensor.T, 'transposed'
+        return tensor.T, "transposed"
 
     # Flatten-reshape fallback
     reshaped = tensor.view(-1).reshape(target_shape)
-    return reshaped, 'flattened_reshape'
+    return reshaped, "flattened_reshape"
 
 
 def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
@@ -83,7 +87,7 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
     checkpoint_path = snapshot_download(repo_id=checkpoint_path, allow_patterns="*.safetensors")
     print(f"Downloaded checkpoint from Hugging Face Hub: {checkpoint_path}")
 
-    with torch.device('meta'):
+    with torch.device("meta"):
         model_class = DiaModel(config=DiaConfig())
     model_dict = model_class.state_dict()
     model_class_keys = model_dict.keys()
@@ -94,34 +98,31 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
         elif file.endswith(".pt"):
             load_function = torch.load
     checkpoint_path = os.path.join(checkpoint_path, files[0])
-    state_dict = load_function(checkpoint_path, 'cpu')
+    state_dict = load_function(checkpoint_path, "cpu")
     converted_state_dict = {}
     embeddings = {}
     for key, tensor in state_dict.items():
-        reshaped = False
-
-        if re.sub(r"\d+", "*",key) in shape_mappings:
+        if re.sub(r"\d+", "*", key) in shape_mappings:
             if key in model_class_keys:
                 target_shape = model_dict[key].shape
                 try:
                     new_tensor, method = reshape_or_transpose(tensor, target_shape)
                     print(f"{key}: {method} from {tensor.shape} to {target_shape}")
                     tensor = new_tensor
-                    reshaped = True
                 except Exception as e:
                     print(f"WARNING: Could not reshape {key}: {e}")
             else:
                 print(f"WARNING: {key} not found in model class keys, skipping reshape.")
             converted_state_dict[key] = tensor
         elif "embeddings" in key:
-            embeddings_key = key.rsplit(".",2)[0]+".embed.weight"
+            embeddings_key = key.rsplit(".", 2)[0] + ".embed.weight"
             if embeddings_key in embeddings:
                 embeddings[embeddings_key] += [tensor]
             else:
                 embeddings[embeddings_key] = [tensor]
         else:
             converted_state_dict[key] = tensor
-    embeddings = {k: torch.cat(v,dim=-1) for k, v in embeddings.items()}
+    embeddings = {k: torch.cat(v, dim=-1) for k, v in embeddings.items()}
     converted_state_dict.update(embeddings)
     print(f"Saved converted checkpoint to {pytorch_dump_folder_path}")
     model_class.load_state_dict(converted_state_dict, assign=True)
@@ -131,8 +132,12 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # # Required parameters
-    parser.add_argument("--checkpoint_path", type=str, default="nari-labs/Dia-1.6B", help="Path to the downloaded checkpoints")
-    parser.add_argument("--pytorch_dump_folder_path", default="converted_dia_ckpt", type=str, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "--checkpoint_path", type=str, default="nari-labs/Dia-1.6B", help="Path to the downloaded checkpoints"
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path", default="converted_dia_ckpt", type=str, help="Path to the output PyTorch model."
+    )
     parser.add_argument(
         "--convert_preprocessor",
         type=bool,
@@ -152,12 +157,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(e)
         else:
-            feature_extractor = DiaAudioProcessor(
-                feature_size=model.config.num_mel_bins,
-                # the rest of default parameters are the same as hardcoded in openai/dia
-            )
-            tokenizer = DiaTokenizer()
-            processor = DiaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+            processor = DiaProcessor()
             processor.save_pretrained(args.pytorch_dump_folder_path)
 
     model.save_pretrained(args.pytorch_dump_folder_path)

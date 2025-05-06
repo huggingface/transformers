@@ -97,7 +97,7 @@ class DiaDecoderConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.dropout = dropout
         self.hidden_act = hidden_act
-        self.num_channels=num_channels
+        self.num_channels = num_channels
         self.rope_min_timescale = rope_min_timescale
         self.rope_max_timescale = rope_max_timescale
         super().__init__(**kwargs)
