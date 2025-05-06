@@ -48,6 +48,8 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
+    from transformers.models.llava_onevision.modeling_llava_onevision import unpad_image
+
 
 if is_vision_available():
     from PIL import Image
@@ -258,6 +260,19 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
+    def test_unpad_image(self):
+        original_size = (400, 400)
+
+        # Test case width is padded
+        pixel_values = floats_tensor([3, 400, 601])
+        unpadded_tensor = unpad_image(pixel_values, original_size)
+        self.assertEqual(unpadded_tensor.shape[1:], original_size)
+
+        # Test case height is padded
+        pixel_values = floats_tensor([3, 503, 400])
+        unpadded_tensor = unpad_image(pixel_values, original_size)
+        self.assertEqual(unpadded_tensor.shape[1:], original_size)
+
     @parameterized.expand(
         [
             (-1,),
@@ -302,18 +317,10 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("LLaVA OneVision has dynamic control flow in unpadding")
-    def test_generate_compile_model_forward(self):
         pass
 
 

@@ -192,7 +192,7 @@ class GenerationConfig(PushToHubMixin):
             our [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`CacheConfig` or `dict`, *optional*, default to `None`):
             Arguments used in the key-value cache class can be passed in `cache_config`. Can be passed as a `Dict` and
-            it will be converted to its repsective `CacheConfig` internally.
+            it will be converted to its respective `CacheConfig` internally.
             Otherwise can be passed as a `CacheConfig` class matching the indicated `cache_implementation`.
         return_legacy_cache (`bool`, *optional*, default to `True`):
             Whether to return the legacy or new format of the cache when `DynamicCache` is used by default.
@@ -235,7 +235,7 @@ class GenerationConfig(PushToHubMixin):
             The parameter for repetition penalty. 1.0 means no penalty. See [this
             paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
         encoder_repetition_penalty (`float`, *optional*, defaults to 1.0):
-            The paramater for encoder_repetition_penalty. An exponential penalty on sequences that are not in the
+            The parameter for encoder_repetition_penalty. An exponential penalty on sequences that are not in the
             original input. 1.0 means no penalty.
         length_penalty (`float`, *optional*, defaults to 1.0):
             Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
@@ -381,10 +381,12 @@ class GenerationConfig(PushToHubMixin):
         > Parameters related to performances and compilation
 
         compile_config (CompileConfig, *optional*):
-            If using a static cache, this controls how `generate` will `compile` the forward pass for performance
-            gains.
-
-        disable_compile (`bool`, *optional*): Whether to disable the automatic compilation of the forward pass. Automatic compilation happens when specific criteria are met, including using a compileable cache. Please open an issue if you find the need to use this flag.
+            If using a compilable cache, this controls how `generate` will `compile` the forward pass for faster
+            inference.
+        disable_compile (`bool`, *optional*):
+            Whether to disable the automatic compilation of the forward pass. Automatic compilation happens when
+            specific criteria are met, including using a compilable cache. Please open an issue if you find the
+            need to use this flag.
 
         > Wild card
 
@@ -489,7 +491,7 @@ class GenerationConfig(PushToHubMixin):
         self.target_lookbehind = kwargs.pop("target_lookbehind", 10)
 
         # Performance
-        self.compile_config = kwargs.pop("compile_config", CompileConfig())
+        self.compile_config = kwargs.pop("compile_config", None)
         self.disable_compile = kwargs.pop("disable_compile", False)
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
@@ -708,7 +710,7 @@ class GenerationConfig(PushToHubMixin):
                     UserWarning,
                 )
 
-        # 3. detect incorrect paramaterization specific to advanced beam modes
+        # 3. detect incorrect parameterization specific to advanced beam modes
         else:
             # constrained beam search
             if self.constraints is not None or self.force_words_ids is not None:
@@ -811,9 +813,10 @@ class GenerationConfig(PushToHubMixin):
             self.watermarking_config.validate()
 
         # 7. performances arguments
-        if not isinstance(self.compile_config, CompileConfig):
+        if self.compile_config is not None and not isinstance(self.compile_config, CompileConfig):
             raise ValueError(
-                f"You provided `compile_config` as an instance of {type(self.compile_config)}, but it must be an instance of `CompileConfig`."
+                f"You provided `compile_config` as an instance of {type(self.compile_config)}, but it must be an "
+                "instance of `CompileConfig`."
             )
 
         # 8. other incorrect combinations

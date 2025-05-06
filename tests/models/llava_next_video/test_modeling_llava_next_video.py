@@ -47,6 +47,8 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
+    from transformers.models.llava_next_video.modeling_llava_next_video import unpad_image
+
 
 if is_vision_available():
     from PIL import Image
@@ -302,6 +304,19 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
             image_sizes = torch.cat([image_sizes, image_sizes], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
 
+    def test_unpad_image(self):
+        original_size = (400, 400)
+
+        # Test case width is padded
+        pixel_values = floats_tensor([3, 400, 601])
+        unpadded_tensor = unpad_image(pixel_values, original_size)
+        self.assertEqual(unpadded_tensor.shape[1:], original_size)
+
+        # Test case height is padded
+        pixel_values = floats_tensor([3, 503, 400])
+        unpadded_tensor = unpad_image(pixel_values, original_size)
+        self.assertEqual(unpadded_tensor.shape[1:], original_size)
+
     @parameterized.expand(
         [
             (-1,),
@@ -354,10 +369,6 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("LLaVA Next Video has dynamic control flow in unpadding")
-    def test_generate_compile_model_forward(self):
         pass
 
 
