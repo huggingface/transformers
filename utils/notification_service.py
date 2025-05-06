@@ -22,7 +22,7 @@ import os
 import re
 import sys
 import time
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import requests
 from get_ci_error_statistics import get_jobs
@@ -920,6 +920,13 @@ def prepare_reports(title, header, reports, to_truncate=True):
     return report
 
 
+def pop_default(l: list[Any], i: int, default: Any) -> Any:
+    try:
+        return l.pop(i)
+    except IndexError:
+        return default
+
+
 if __name__ == "__main__":
     SLACK_REPORT_CHANNEL_ID = os.environ["SLACK_REPORT_CHANNEL"]
 
@@ -1070,12 +1077,19 @@ if __name__ == "__main__":
     unclassified_model_failures = []
 
     for model in model_results.keys():
-        for artifact_path in available_artifacts[f"{report_name_prefix}_{model}_test_reports"].paths:
-            artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
+        for artifact_path_dict in available_artifacts[f"{report_name_prefix}_{model}_test_reports"].paths:
+            path = artifact_path_dict["path"]
+            artifact_gpu = artifact_path_dict["gpu"]
+
+            if path not in artifact_name_to_job_map:
+                # Mismatch between available artifacts and reported jobs on github. It happens.
+                continue
+
+            artifact = retrieve_artifact(path, artifact_gpu)
             if "stats" in artifact:
                 # Link to the GitHub Action job
-                job = artifact_name_to_job_map[artifact_path["path"]]
-                model_results[model]["job_link"][artifact_path["gpu"]] = job["html_url"]
+                job = artifact_name_to_job_map[path]
+                model_results[model]["job_link"][artifact_gpu] = job["html_url"]
                 failed, success, time_spent = handle_test_results(artifact["stats"])
                 model_results[model]["success"] += success
                 model_results[model]["time_spent"] += time_spent[1:-1] + ", "
@@ -1092,39 +1106,38 @@ if __name__ == "__main__":
                         line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 
-                        if artifact_path["gpu"] not in model_results[model]["failures"]:
-                            model_results[model]["failures"][artifact_path["gpu"]] = []
+                        if artifact_gpu not in model_results[model]["failures"]:
+                            model_results[model]["failures"][artifact_gpu] = []
 
-                        model_results[model]["failures"][artifact_path["gpu"]].append(
-                            {"line": line, "trace": stacktraces.pop(0)}
-                        )
+                        trace = pop_default(stacktraces, 0, "Cannot retrieve error message.")
+                        model_results[model]["failures"][artifact_gpu].append({"line": line, "trace": trace})
 
                         if re.search("test_modeling_tf_", line):
-                            model_results[model]["failed"]["TensorFlow"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["TensorFlow"][artifact_gpu] += 1
 
                         elif re.search("test_modeling_flax_", line):
-                            model_results[model]["failed"]["Flax"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["Flax"][artifact_gpu] += 1
 
                         elif re.search("test_modeling", line):
-                            model_results[model]["failed"]["PyTorch"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["PyTorch"][artifact_gpu] += 1
 
                         elif re.search("test_tokenization", line):
-                            model_results[model]["failed"]["Tokenizers"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["Tokenizers"][artifact_gpu] += 1
 
                         elif re.search("test_pipelines", line):
-                            model_results[model]["failed"]["Pipelines"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["Pipelines"][artifact_gpu] += 1
 
                         elif re.search("test_trainer", line):
-                            model_results[model]["failed"]["Trainer"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["Trainer"][artifact_gpu] += 1
 
                         elif re.search("onnx", line):
-                            model_results[model]["failed"]["ONNX"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["ONNX"][artifact_gpu] += 1
 
                         elif re.search("auto", line):
-                            model_results[model]["failed"]["Auto"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["Auto"][artifact_gpu] += 1
 
                         else:
-                            model_results[model]["failed"]["Unclassified"][artifact_path["gpu"]] += 1
+                            model_results[model]["failed"]["Unclassified"][artifact_gpu] += 1
                             unclassified_model_failures.append(line)
 
     # Additional runs
@@ -1179,16 +1192,19 @@ if __name__ == "__main__":
             additional_results[key]["error"] = True
             continue
 
-        for artifact_path in available_artifacts[additional_files[key]].paths:
-            # Link to the GitHub Action job
-            job = artifact_name_to_job_map[artifact_path["path"]]
-            additional_results[key]["job_link"][artifact_path["gpu"]] = job["html_url"]
+        for artifact_path_dict in available_artifacts[additional_files[key]].paths:
+            path = artifact_path_dict["path"]
+            artifact_gpu = artifact_path_dict["gpu"]
 
-            artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
+            # Link to the GitHub Action job
+            job = artifact_name_to_job_map[path]
+            additional_results[key]["job_link"][artifact_gpu] = job["html_url"]
+
+            artifact = retrieve_artifact(path, artifact_gpu)
             stacktraces = handle_stacktraces(artifact["failures_line"])
 
             failed, success, time_spent = handle_test_results(artifact["stats"])
-            additional_results[key]["failed"][artifact_path["gpu"] or "unclassified"] += failed
+            additional_results[key]["failed"][artifact_gpu or "unclassified"] += failed
             additional_results[key]["success"] += success
             additional_results[key]["time_spent"] += time_spent[1:-1] + ", "
 
@@ -1206,12 +1222,11 @@ if __name__ == "__main__":
                         line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 
-                        if artifact_path["gpu"] not in additional_results[key]["failures"]:
-                            additional_results[key]["failures"][artifact_path["gpu"]] = []
+                        if artifact_gpu not in additional_results[key]["failures"]:
+                            additional_results[key]["failures"][artifact_gpu] = []
 
-                        additional_results[key]["failures"][artifact_path["gpu"]].append(
-                            {"line": line, "trace": stacktraces.pop(0)}
-                        )
+                        trace = pop_default(stacktraces, 0, "Cannot retrieve error message.")
+                        additional_results[key]["failures"][artifact_gpu].append({"line": line, "trace": trace})
 
     # Let's only check the warning for the model testing job. Currently, the job `run_extract_warnings` is only run
     # when `inputs.job` (in the workflow file) is `run_models_gpu`. The reason is: otherwise we need to save several
