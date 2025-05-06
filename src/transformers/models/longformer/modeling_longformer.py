@@ -1588,7 +1588,8 @@ class LongformerModel(LongformerPreTrainedModel):
         >>> outputs = model(input_ids, attention_mask=attention_mask, global_attention_mask=global_attention_mask)
         >>> sequence_output = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output
-        ```"""
+        ```
+        """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1710,31 +1711,32 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
-            Mask filling example:
+        Example Mask filling:
 
-            ```python
-            >>> from transformers import AutoTokenizer, LongformerForMaskedLM
+        ```python
+        >>> from transformers import AutoTokenizer, LongformerForMaskedLM
 
-            >>> tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
-            >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
-            ```
+        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
+        >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
+        ```
 
-            Let's try a very long input.
+        Let's try a very long input.
 
-            ```python
-            >>> TXT = (
-            ...     "My friends are <mask> but they eat too many carbs."
-            ...     + " That's why I decide not to eat with them." * 300
-            ... )
-            >>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
-            >>> logits = model(input_ids).logits
+        ```python
+        >>> TXT = (
+        ...     "My friends are <mask> but they eat too many carbs."
+        ...     + " That's why I decide not to eat with them." * 300
+        ... )
+        >>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
+        >>> logits = model(input_ids).logits
 
-            >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            >>> probs = logits[0, masked_index].softmax(dim=0)
-            >>> values, predictions = probs.topk(5)
+        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+        >>> probs = logits[0, masked_index].softmax(dim=0)
+        >>> values, predictions = probs.topk(5)
 
-            >>> tokenizer.decode(predictions).split()
-            ['healthy', 'skinny', 'thin', 'good', 'vegetarian']
+        >>> tokenizer.decode(predictions).split()
+        ['healthy', 'skinny', 'thin', 'good', 'vegetarian']
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
