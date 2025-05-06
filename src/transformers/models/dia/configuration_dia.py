@@ -111,24 +111,14 @@ class DiaConfig(PretrainedConfig):
         self,
         encoder_config=None,
         decoder_config=None,
-        src_vocab_size=128,
-        tgt_vocab_size=1028,
-        dropout=0.0,
         norm_eps=1e-5,
-        weight_dtype="float32",
-
         is_encoder_decoder=True,
         pad_token_id=0,
         **kwargs,
     ):
         self.encoder_config = encoder_config if encoder_config is not None else DiaEncoderConfig()
         self.decoder_config = decoder_config if encoder_config is not None else DiaDecoderConfig()
-        self.src_vocab_size = src_vocab_size
-        self.tgt_vocab_size = tgt_vocab_size
-        self.dropout = dropout
         self.norm_eps = norm_eps
-        self.weight_dtype = weight_dtype
-
         super().__init__(
             pad_token_id=pad_token_id,
             is_encoder_decoder=is_encoder_decoder,

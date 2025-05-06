@@ -112,13 +112,16 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
                     print(f"WARNING: Could not reshape {key}: {e}")
             else:
                 print(f"WARNING: {key} not found in model class keys, skipping reshape.")
+            converted_state_dict[key] = tensor
         elif "embeddings" in key:
-            embeddings_key = key.split(".")[0]
+            embeddings_key = key.rsplit(".",2)[0]+".embed.weight"
             if embeddings_key in embeddings:
-                embeddings[key.rsplit(".")[0]] += tensor
+                embeddings[embeddings_key] += [tensor]
             else:
-                embeddings[embeddings_key] = tensor
-        converted_state_dict[key] = tensor
+                embeddings[embeddings_key] = [tensor]
+        else:
+            converted_state_dict[key] = tensor
+    embeddings = {k: torch.cat(v,dim=-1) for k, v in embeddings.items()}
     converted_state_dict.update(embeddings)
     print(f"Saved converted checkpoint to {pytorch_dump_folder_path}")
     model_class.load_state_dict(converted_state_dict, assign=True)
