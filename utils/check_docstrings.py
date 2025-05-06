@@ -48,7 +48,7 @@ from check_repo import ignore_undocumented
 from git import Repo
 
 from transformers.utils import direct_transformers_import
-from transformers.utils.args_doc import ModelArgs, parse_docstring, set_min_indent
+from transformers.utils.args_doc import ImageProcessorArgs, ModelArgs, parse_docstring, set_min_indent, source_args_doc
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
@@ -986,7 +986,7 @@ def find_matching_model_files():
     Returns:
         List of file paths.
     """
-    full_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/mod**")
+    full_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/modeling_**")
     exclude_substrings = ["modeling_tf_", "modeling_flax_"]
     matching_files = []
     potential_files = glob.glob(full_glob_pattern)
@@ -1091,7 +1091,7 @@ def generate_new_docstring_for_signature(
         args_docstring_dict.update(parsed_docstring)
     # Fill missing args
     for arg in args_in_signature:
-        if arg not in args_docstring_dict and arg not in ModelArgs.__dict__:
+        if arg not in args_docstring_dict and arg not in source_args_doc([ModelArgs, ImageProcessorArgs]):
             args_docstring_dict[arg] = {
                 "type": "<fill_type>",
                 "optional": False,

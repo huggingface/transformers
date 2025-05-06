@@ -1,27 +1,13 @@
 from transformers.models.llava_next.image_processing_llava_next_fast import LlavaNextImageProcessorFast
 
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    PILImageResampling,
-)
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(
-    custom_intro="""
-    image_grid_pinpoints (`List[List[int]]`, *optional*):
-            A list of possible resolutions to use for processing high resolution images. The best resolution is selected
-            based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
-            method. Not used for processing videos.
-        do_pad (`bool`, *optional*):
-            Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-            number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-    """
-)
+@auto_docstring
 class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN

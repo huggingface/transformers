@@ -781,7 +781,7 @@ class Data2VecVisionPreTrainedModel(PreTrainedModel):
 class Data2VecVisionModel(Data2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False) -> None:
         r"""
-        add_pooling_layer (bool, *optional*, defaults to `True`):
+        add_pooling_layer (bool, *optional*, defaults to `False`):
             Whether to add a pooling layer
         """
         super().__init__(config)

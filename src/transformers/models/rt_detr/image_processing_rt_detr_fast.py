@@ -12,6 +12,7 @@ from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     SizeDict,
+    auto_docstring,
     get_image_size_for_max_height_width,
     get_max_height_width,
     safe_squeeze,
@@ -31,7 +32,6 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -401,20 +401,6 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             Data format of the annotations. One of "coco_detection" or "coco_panoptic".
         masks_path (`str` or `pathlib.Path`, *optional*):
             Path to the directory containing the segmentation masks.
-
-            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
-                List of annotations associated with the image or batch of images. If annotation is for object
-                detection, the annotations should be a dictionary with the following keys:
-                - "image_id" (`int`): The image id.
-                - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
-                    dictionary. An image can have no annotations, in which case the list should be empty.
-                If annotation is for segmentation, the annotations should be a dictionary with the following keys:
-                - "image_id" (`int`): The image id.
-                - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
-                    An image can have no segments, in which case the list should be empty.
-                - "file_name" (`str`): The file name of the image.
-            masks_path (`str` or `pathlib.Path`, *optional*):
-                Path to the directory containing the segmentation masks.
         """
         return super().preprocess(images, annotations=annotations, masks_path=masks_path, **kwargs)
 

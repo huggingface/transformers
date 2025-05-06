@@ -25,13 +25,7 @@ from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    is_timm_available,
-    logging,
-    requires_backends,
-)
+from ...utils import ModelOutput, auto_docstring, is_timm_available, logging, requires_backends
 from ...utils.backbone_utils import load_backbone
 from .configuration_conditional_detr import ConditionalDetrConfig
 
@@ -1026,8 +1020,9 @@ class MLP(nn.Module):
         return x
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrPreTrainedModel with Detr->ConditionalDetr
 @auto_docstring
+
+# Copied from transformers.models.detr.modeling_detr.DetrPreTrainedModel with Detr->ConditionalDetr
 class ConditionalDetrPreTrainedModel(PreTrainedModel):
     config_class = ConditionalDetrConfig
     base_model_prefix = "model"

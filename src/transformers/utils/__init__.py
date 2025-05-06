@@ -30,6 +30,7 @@ from .args_doc import (
     auto_docstring,
     parse_docstring,
     set_min_indent,
+    source_args_doc,
 )
 from .backbone_utils import BackboneConfigMixin, BackboneMixin
 from .chat_template_utils import DocstringParsingException, TypeHintParsingException, get_json_schema

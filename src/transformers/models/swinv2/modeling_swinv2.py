@@ -989,10 +989,10 @@ class Swinv2PreTrainedModel(PreTrainedModel):
 class Swinv2Model(Swinv2PreTrainedModel):
     def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
         r"""
-        add_pooling_layer (bool, *optional*, defaults to `True`):
-            Whether to add a pooling layer
-        use_mask_token (<fill_type>):
-            <fill_docstring>
+        add_pooling_layer (`bool`, *optional*, defaults to `True`):
+            Whether or not to apply pooling layer.
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+            Whether or not to create and apply mask tokens in the embedding layer.
         """
         super().__init__(config)
         self.config = config
