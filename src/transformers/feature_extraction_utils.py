@@ -29,8 +29,6 @@ from .utils import (
     FEATURE_EXTRACTOR_NAME,
     PushToHubMixin,
     TensorType,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     download_url,
@@ -550,16 +548,6 @@ class FeatureExtractionMixin(PushToHubMixin):
             logger.info(
                 f"loading configuration file {feature_extractor_file} from cache at {resolved_feature_extractor_file}"
             )
-
-        if not is_local:
-            if "auto_map" in feature_extractor_dict:
-                feature_extractor_dict["auto_map"] = add_model_info_to_auto_map(
-                    feature_extractor_dict["auto_map"], pretrained_model_name_or_path
-                )
-            if "custom_pipelines" in feature_extractor_dict:
-                feature_extractor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                    feature_extractor_dict["custom_pipelines"], pretrained_model_name_or_path
-                )
 
         return feature_extractor_dict, kwargs
 

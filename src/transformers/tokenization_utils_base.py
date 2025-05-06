@@ -43,8 +43,6 @@ from .utils import (
     PushToHubMixin,
     TensorType,
     add_end_docstrings,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     download_url,
@@ -2116,13 +2114,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 # For backward compatibility with odl format.
                 if isinstance(init_kwargs["auto_map"], (tuple, list)):
                     init_kwargs["auto_map"] = {"AutoTokenizer": init_kwargs["auto_map"]}
-                init_kwargs["auto_map"] = add_model_info_to_auto_map(
-                    init_kwargs["auto_map"], pretrained_model_name_or_path
-                )
-            if "custom_pipelines" in init_kwargs:
-                init_kwargs["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                    init_kwargs["custom_pipelines"], pretrained_model_name_or_path
-                )
 
         if config_tokenizer_class is None:
             # Matt: This entire block is only used to decide if the tokenizer class matches the class in the repo.

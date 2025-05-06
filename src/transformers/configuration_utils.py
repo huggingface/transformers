@@ -28,7 +28,6 @@ from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
-    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     download_url,
@@ -695,11 +694,6 @@ class PretrainedConfig(PushToHubMixin):
             logger.info(f"loading configuration file {resolved_config_file}")
         else:
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
-
-        if "custom_pipelines" in config_dict and not is_local:
-            config_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                config_dict["custom_pipelines"], pretrained_model_name_or_path
-            )
 
         # timm models are not saved with the model_type in the config file
         if "model_type" not in config_dict and is_timm_config_dict(config_dict):

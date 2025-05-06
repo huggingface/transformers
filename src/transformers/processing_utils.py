@@ -54,8 +54,6 @@ from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     direct_transformers_import,
@@ -937,16 +935,6 @@ class ProcessorMixin(PushToHubMixin):
 
         if "chat_template" in kwargs:
             processor_dict["chat_template"] = kwargs.pop("chat_template")
-
-        if not is_local:
-            if "auto_map" in processor_dict:
-                processor_dict["auto_map"] = add_model_info_to_auto_map(
-                    processor_dict["auto_map"], pretrained_model_name_or_path
-                )
-            if "custom_pipelines" in processor_dict:
-                processor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                    processor_dict["custom_pipelines"], pretrained_model_name_or_path
-                )
 
         return processor_dict, kwargs
 
