@@ -94,7 +94,7 @@ def _sliding_cache_update_logic(
 
     # Sliding window logic for generation phase or prefill < window
     slicing = torch.arange(max_cache_len, device=value_states.device)
-    current_seq_len = cache_position[-1] + 1 # Use last position to determine current length
+    current_seq_len = cache_position[-1] + 1  # Use last position to determine current length
     should_shift = current_seq_len > max_cache_len
     indices = (slicing + should_shift.int()) % max_cache_len
 
@@ -1481,7 +1481,7 @@ class SlidingWindowCache(StaticCache):
             key_states,
             value_states,
             cache_position,
-            self.max_cache_len, # Pass the window size
+            self.max_cache_len,
         )
 
     def update(
@@ -1496,7 +1496,7 @@ class SlidingWindowCache(StaticCache):
         cache_position = cache_kwargs.get("cache_position")
 
         if cache_position is None:
-             raise ValueError("`cache_position` must be provided for SlidingWindowCache.")
+            raise ValueError("`cache_position` must be provided for SlidingWindowCache.")
 
         # Ensure correct dtype
         key_states = key_states.to(self.key_cache[layer_idx].dtype)
@@ -1803,7 +1803,7 @@ class HybridCache(Cache):
 
         is_sliding_layer = self.is_sliding[layer_idx].item()
 
-       # These two `if` blocks are only reached in multigpu and if `layer_device_map` is not passed. They are used
+        # These two `if` blocks are only reached in multigpu and if `layer_device_map` is not passed. They are used
         # when the cache is initialized in the forward pass (e.g. Gemma2)
         if self.key_cache[layer_idx].device != key_states.device:
             self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device)
@@ -1817,13 +1817,15 @@ class HybridCache(Cache):
 
         if is_sliding_layer:
             return _sliding_cache_update_logic(
-                k_cache, v_cache, key_states, value_states, cache_position, 
-                k_cache.shape[2] # Use actual cache dim as max cache len
+                k_cache,
+                v_cache,
+                key_states,
+                value_states,
+                cache_position,
+                k_cache.shape[2],  # Use actual cache dim as max cache len
             )
         else:
-            return _static_cache_update_logic(
-                k_cache, v_cache, key_states, value_states, cache_position
-            )
+            return _static_cache_update_logic(k_cache, v_cache, key_states, value_states, cache_position)
 
     def get_max_cache_shape(self) -> Optional[int]:
         return self.max_cache_len
