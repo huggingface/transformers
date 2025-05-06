@@ -384,6 +384,10 @@ def get_causal_mask(
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
 ):
+    # It means the masks were already prepared outside the `forward`, e.g. by `generate` when compiling
+    if isinstance(attention_mask, list):
+        return attention_mask
+
     batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
     num_layers = config.num_hidden_layers
 

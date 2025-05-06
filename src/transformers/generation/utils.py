@@ -37,6 +37,7 @@ from ..cache_utils import (
     OffloadedHybridCache,
     QuantizedCacheConfig,
 )
+from ..masking_utils import get_causal_mask
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import (
     check_python_requirements,
@@ -649,12 +650,15 @@ class GenerationMixin:
                 causal_mask_creation_function = getattr(
                     decoder, "_prepare_4d_causal_attention_mask_with_cache_position", None
                 )
+            
+            # If it's not defined, it means the model uses the new general mask API
             if causal_mask_creation_function is None:  # can't be found
-                logger.warning_once(
-                    f"{self.__class__.__name__} has no `_prepare_4d_causal_attention_mask_with_cache_position` method "
-                    "defined in its base modeling class. Compiled forward passes will be sub-optimal. If you're "
-                    "writing code, see Llama for an example implementation. If you're a user, please report this "
-                    "issue on GitHub."
+                attention_mask = get_causal_mask(
+                    self.config,
+                    torch.empty(model_inputs[input_ids_key].shape[0], dtype=self.dtype),  # we only need batch size and dtype here
+                    attention_mask,
+                    cache_position,
+                    past_key_values
                 )
             else:
                 attention_mask = causal_mask_creation_function(
