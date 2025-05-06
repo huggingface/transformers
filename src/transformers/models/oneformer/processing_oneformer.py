@@ -120,9 +120,7 @@ class OneFormerProcessor(ProcessorMixin):
         task_inputs: Optional[List[Literal["semantic", "instance", "panoptic"]]] = None,
     ) -> None:
         if task_inputs is None or images is None:
-            raise ValueError(
-                f"You have to specify both images and task_inputs. Found {images} and {task_inputs}."
-            )
+            raise ValueError(f"You have to specify both images and task_inputs. Found {images} and {task_inputs}.")
 
     def __call__(
         self,
@@ -134,9 +132,7 @@ class OneFormerProcessor(ProcessorMixin):
         # https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
         # This behavior is only needed for backward compatibility and will be removed in future versions.
         *args,
-        text: Union[
-            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
-        ] = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[OneFormerProcessorKwargs],
@@ -179,16 +175,12 @@ class OneFormerProcessor(ProcessorMixin):
             **self.prepare_and_validate_optional_call_args(*args),
         )
         task_inputs = output_kwargs["images_kwargs"].pop("task_inputs", None)
-        segmentation_maps = output_kwargs["images_kwargs"].pop(
-            "segmentation_maps", None
-        )
+        segmentation_maps = output_kwargs["images_kwargs"].pop("segmentation_maps", None)
         if isinstance(task_inputs, str):
             task_inputs = [task_inputs]
         self._validate_input_types(images, task_inputs)
 
-        encoded_inputs = self.image_processor(
-            images, task_inputs, segmentation_maps, **output_kwargs["images_kwargs"]
-        )
+        encoded_inputs = self.image_processor(images, task_inputs, segmentation_maps, **output_kwargs["images_kwargs"])
 
         task_token_inputs = []
         for task in task_inputs:
@@ -230,9 +222,7 @@ class OneFormerProcessor(ProcessorMixin):
             task_inputs = [task_inputs]
         self._validate_input_types(images, task_inputs)
 
-        encoded_inputs = self.image_processor.encode_inputs(
-            images, task_inputs, segmentation_maps, **kwargs
-        )
+        encoded_inputs = self.image_processor.encode_inputs(images, task_inputs, segmentation_maps, **kwargs)
 
         task_token_inputs = []
         for task in task_inputs:
