@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     require_torch_gpu,
     require_torch_multi_gpu,
+    require_read_token,
     slow,
     torch_device,
 )
@@ -522,6 +523,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
     @require_torch_multi_gpu
     @slow
+    @require_read_token
     def test_static_cache_multi_gpu(self):
         """Regression test for #35164: static cache with multi-gpu"""
 
