@@ -156,13 +156,14 @@ class DonutProcessor(ProcessorMixin):
         output = {}
 
         while tokens:
+            # We want r"<s_(.*?)>" but without ReDOS risk, so do it manually in two parts
             potential_start = re.search(r"<s_", tokens, re.IGNORECASE)
             if potential_start is None:
                 break
-            potential_end = re.search(r">", tokens[potential_start.end() :], re.IGNORECASE)
-            if potential_end is None:
+            start_token = tokens[: potential_start.start()]
+            if ">" not in start_token:
                 break
-            start_token = tokens[potential_start.start() : potential_start.end() + potential_end.end()]
+            start_token = start_token[: start_token.index(">") + 1]
             key = start_token[len("<s_") : -len(">")]
             key_escaped = re.escape(key)
 
