@@ -209,6 +209,24 @@ class MyModel(PreTrainedModel):
 
 ---
 
+### Usage with [modular files](./modular_transformers)
+
+When working with modular files, follow these guidelines for applying the `@auto_docstring` decorator:
+
+- **For standalone models in modular files:**
+  Apply the `@auto_docstring` decorator just as you would in regular modeling files.
+
+- **For models inheriting from other library models:**
+  - When inheriting from a parent model, decorators (including `@auto_docstring`) are automatically carried over to the generated modeling file without needing to add them in your modular file.
+  - If you need to modify the `@auto_docstring` behavior, apply the customized decorator in your modular file, making sure to *include all other decorators* that were present on the original function/class.
+
+  > **Warning**: When overriding any decorator in a modular file, you must include ALL decorators that were applied to that function/class in the parent model. If you only override some decorators, the others won't be included in the generated modeling file.
+
+
+**Note**: The `check_auto_docstrings` tool doesn't check modular files directly, but it will check (and modify when using `--fix_and_overwrite`) the generated modeling files. If issues are found in the generated files, you'll need to update your modular files accordingly.
+
+---
+
 ## ✅ Checking Your Docstrings with `check_auto_docstrings`
 
 The library includes a utility script to validate docstrings. This check is typically run during Continuous Integration (CI).

@@ -29,12 +29,7 @@ from transformers.models.llava.modeling_llava import (
 from transformers.models.sam.modeling_sam import SamMLPBlock, SamVisionAttention, SamVisionEncoder, SamVisionLayer
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-    is_vision_available,
-    logging,
-)
+from ...utils import auto_docstring, can_return_tuple, is_vision_available, logging
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModelForCausalLM
 
 

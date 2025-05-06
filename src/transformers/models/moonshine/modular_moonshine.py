@@ -823,7 +823,6 @@ class MoonshineDecoder(LlamaModel):
         )
 
 
-@auto_docstring
 class MoonshineModel(WhisperModel):
     @can_return_tuple
     @auto_docstring

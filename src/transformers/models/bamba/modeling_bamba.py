@@ -1038,13 +1038,6 @@ class BambaPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class BambaModel(BambaPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`BambaDecoderLayer`]
-
-    Args:
-        config: BambaConfig
-    """
-
     def __init__(self, config: BambaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1310,6 +1303,7 @@ class BambaModel(BambaPreTrainedModel):
         return mamba_mask
 
 
+@auto_docstring
 class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}

@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple, Union
 from transformers.models.detr.image_processing_detr_fast import DetrFastImageProcessorKwargs, DetrImageProcessorFast
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, auto_docstring, get_max_height_width
+from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, get_max_height_width
 from ...image_transforms import center_to_corners_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -130,7 +130,6 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
 
         BaseImageProcessorFast.__init__(**kwargs)
 
-    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,

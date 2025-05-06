@@ -2137,7 +2137,6 @@ class Qwen2MLP(Qwen2_5_VLMLP):
     pass
 
 
-@auto_docstring
 class Qwen2_5OmniThinkerTextModel(Qwen2_5_VLModel):
     config_class = Qwen2_5OmniTextConfig
     _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
@@ -2493,7 +2492,6 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
     thinker_reply_part: torch.FloatTensor = None
 
 
-@auto_docstring
 class Qwen2_5OmniTalkerModel(Qwen2_5_VLModel):
     config_class = Qwen2_5OmniTalkerConfig
     _no_split_modules = ["Qwen2_5OmniTalkerDecoderLayer"]

@@ -36,7 +36,7 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import LossKwargs, auto_docstring, logging
+from ...utils import LossKwargs, logging
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
@@ -305,7 +305,6 @@ class CohereModel(LlamaModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
-@auto_docstring
 class CohereForCausalLM(LlamaForCausalLM):
     def __init__(self, config):
         super().__init__(config)
@@ -313,7 +312,6 @@ class CohereForCausalLM(LlamaForCausalLM):
         self.logit_scale = config.logit_scale
         self.tie_word_embeddings = config.tie_word_embeddings
 
-    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

@@ -12,7 +12,6 @@ from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     SizeDict,
-    auto_docstring,
     get_image_size_for_max_height_width,
     get_max_height_width,
     safe_squeeze,
@@ -32,6 +31,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,

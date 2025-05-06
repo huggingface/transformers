@@ -675,13 +675,9 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-WAV2VEC2_BERT_START_DOCSTRING = None
-
-
 Wav2Vec2BertBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
-@auto_docstring
 class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
     def __init__(self, config: Wav2Vec2BertConfig):
         Wav2Vec2BertPreTrainedModel.__init__(config)
@@ -709,7 +705,6 @@ class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")
 
-    @auto_docstring
     def forward(
         self,
         input_features: Optional[torch.Tensor],
@@ -768,11 +763,6 @@ class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    Wav2Vec2Bert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
-    """
-)
 class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
     def __init__(self, config, target_lang: Optional[str] = None):
         r"""
@@ -786,7 +776,6 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")
 
-    @auto_docstring
     def forward(
         self,
         input_features: Optional[torch.Tensor],
@@ -865,12 +854,6 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    Wav2Vec2Bert Model with a sequence classification head on top (a linear layer over the pooled output) for
-    tasks like SUPERB Keyword Spotting.
-    """
-)
 class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
     def __init__(self, config):
         super().__init__(config)
@@ -889,8 +872,6 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
         for param in self.wav2vec2_bert.parameters():
             param.requires_grad = False
 
-    @auto_docstring
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.forward with Wav2Vec2->Wav2Vec2Bert,wav2vec2->wav2vec2_bert,WAV_2_VEC_2->WAV2VEC2_BERT, input_values->input_features
     def forward(
         self,
         input_features: Optional[torch.Tensor],
@@ -959,7 +940,6 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
         )
 
 
-@auto_docstring
 class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClassification):
     def __init__(self, config):
         super().__init__(config)
@@ -967,8 +947,6 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClas
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")
 
-    @auto_docstring
-    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForAudioFrameClassification.forward with wav2vec2_conformer->wav2vec2_bert, input_values->input_features
     def forward(
         self,
         input_features: Optional[torch.Tensor],
@@ -1028,11 +1006,6 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClas
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    Wav2Vec2Bert Model with an XVector feature extraction head on top for tasks like Speaker Verification.
-    """
-)
 class Wav2Vec2BertForXVector(Wav2Vec2ConformerForXVector):
     def __init__(self, config):
         super().__init__(config)
@@ -1040,8 +1013,6 @@ class Wav2Vec2BertForXVector(Wav2Vec2ConformerForXVector):
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")
 
-    @auto_docstring
-    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForXVector.forward with wav2vec2_conformer->wav2vec2_bert, input_values->input_features
     def forward(
         self,
         input_features: Optional[torch.Tensor],

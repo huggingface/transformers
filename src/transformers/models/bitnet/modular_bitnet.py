@@ -22,7 +22,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
+from ...utils import logging
 from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -118,13 +118,11 @@ class BitNetModel(LlamaModel):
     pass
 
 
-@auto_docstring
 class BitNetForCausalLM(LlamaForCausalLM):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = None
     _pp_plan = None
 
-    @auto_docstring
     def forward(
         self,
         **super_kwargs,

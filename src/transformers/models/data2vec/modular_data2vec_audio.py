@@ -6,7 +6,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Adapter,
     Wav2Vec2Encoder,
@@ -164,7 +163,6 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
 Data2VecAudioBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
-@auto_docstring
 class Data2VecAudioModel(Data2VecAudioPreTrainedModel, Wav2Vec2Model):
     def __init__(self, config: Data2VecAudioConfig):
         Data2VecAudioPreTrainedModel.__init__(config)
@@ -193,16 +191,10 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel, Wav2Vec2Model):
         """
         self.feature_extractor._freeze_parameters()
 
-    @auto_docstring
     def forward(self, **super_kwargs):
         return super().forward(**super_kwargs)
 
 
-@auto_docstring(
-    custom_intro="""
-    Data2VecAudio Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
-    """
-)
 class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel, Wav2Vec2ForCTC):
     def __init__(self, config):
         Data2VecAudioPreTrainedModel.__init__(config)
@@ -231,39 +223,20 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel, Wav2Vec2ForCTC):
     def tie_weights(self):
         raise AttributeError("Not needed for Data2VecAudio")
 
-    @auto_docstring
     def forward(self, **super_kwargs):
         return super().forward(**super_kwargs)
 
 
-@auto_docstring(
-    custom_intro="""
-    Data2VecAudio Model with a sequence classification head on top (a linear layer over the pooled output) for tasks
-    like SUPERB Keyword Spotting.
-    """
-)
 class Data2VecAudioForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        return super().forward(**super_kwargs)
+    pass
 
 
-@auto_docstring
 class Data2VecAudioForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        return super().forward(**super_kwargs)
+    pass
 
 
-@auto_docstring(
-    custom_intro="""
-    Data2VecAudio Model with an XVector feature extraction head on top for tasks like Speaker Verification.
-    """
-)
 class Data2VecAudioForXVector(Wav2Vec2ForXVector):
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        return super().forward(**super_kwargs)
+    pass
 
 
 __all__ = [

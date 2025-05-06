@@ -84,11 +84,7 @@ class AyaVisionMultiModalProjector(nn.Module):
         return image_features
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Aya Vision Model outputting raw hidden-states without any specific head on top.
-    """
-)
+@auto_docstring
 class AyaVisionPreTrainedModel(PreTrainedModel):
     config_class = AyaVisionConfig
     base_model_prefix = "model"
@@ -159,7 +155,7 @@ class AyaVisionCausalLMOutputWithPast(ModelOutput):
 
 @auto_docstring(
     custom_intro="""
-    The AyaVision model which consists of a vision backbone and a language model.
+    The AYA_VISION model which consists of a vision backbone and a language model.
     """
 )
 class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixin):

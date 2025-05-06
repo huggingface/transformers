@@ -1968,6 +1968,7 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         return causal_mask
 
 
+@auto_docstring
 class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}

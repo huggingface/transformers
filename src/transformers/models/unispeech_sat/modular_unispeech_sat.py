@@ -213,7 +213,6 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
 UniSpeechSatBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
-@auto_docstring
 class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
     def __init__(self, config: UniSpeechSatConfig):
         UniSpeechSatPreTrainedModel.__init__(config)
@@ -237,7 +236,6 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for UniSpeechSat")
 
-    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -420,47 +418,20 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    UniSpeechSat Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
-    """
-)
 class UniSpeechSatForCTC(Wav2Vec2ForCTC):
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        return super().forward(**super_kwargs)
-
-
-@auto_docstring(
-    custom_intro="""
-    UniSpeechSat Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB Keyword Spotting.
-    """
-)
-class UniSpeechSatForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
-
-
-@auto_docstring
-class UniSpeechSatForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
-
-
-@auto_docstring(
-    custom_intro="""
-    UniSpeechSat Model with an XVector feature extraction head on top for tasks like Speaker Verification.
-    """
-)
-class UniSpeechSatForXVector(Wav2Vec2ForXVector):
     pass
 
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
+
+class UniSpeechSatForSequenceClassification(Wav2Vec2ForSequenceClassification):
+    pass
+
+
+class UniSpeechSatForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
+    pass
+
+
+class UniSpeechSatForXVector(Wav2Vec2ForXVector):
+    pass
 
 
 __all__ = [

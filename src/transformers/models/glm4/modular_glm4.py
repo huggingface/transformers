@@ -22,7 +22,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, logging
+from ...utils import LossKwargs, logging
 from ..glm.modeling_glm import GlmAttention, GlmForCausalLM, GlmForSequenceClassification, GlmForTokenClassification
 from ..phi3.modeling_phi3 import Phi3MLP
 from .configuration_glm4 import Glm4Config
@@ -103,9 +103,7 @@ class Glm4Attention(GlmAttention):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
-@auto_docstring
 class Glm4ForCausalLM(GlmForCausalLM):
-    @auto_docstring
     def forward(
         self,
         **super_kwargs: Unpack[KwargsForCausalLM],

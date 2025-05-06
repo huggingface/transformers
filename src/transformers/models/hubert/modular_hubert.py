@@ -177,7 +177,6 @@ class HubertPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-@auto_docstring
 class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
     def __init__(self, config: HubertConfig):
         super().__init__(config)
@@ -204,7 +203,6 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Hubert")
 
-    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -278,31 +276,12 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    Hubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
-    """
-)
 class HubertForCTC(Wav2Vec2ForCTC):
     pass
 
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
 
-
-@auto_docstring(
-    custom_intro="""
-    Hubert Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB Keyword Spotting.
-    """
-)
 class HubertForSequenceClassification(Wav2Vec2ForSequenceClassification):
     pass
-
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
 
 
 __all__ = ["HubertForCTC", "HubertForSequenceClassification", "HubertModel", "HubertPreTrainedModel"]

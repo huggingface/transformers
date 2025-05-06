@@ -9,7 +9,7 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_outputs import BaseModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import logging
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2FeatureProjection,
     Wav2Vec2FeedForward,
@@ -574,54 +574,24 @@ class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
 WavLMBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
-@auto_docstring
 class WavLMModel(Wav2Vec2Model):
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        return super().forward(**super_kwargs)
-
-
-@auto_docstring(
-    custom_intro="""
-    WavLM Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
-    """
-)
-class WavLMForCTC(Wav2Vec2ForCTC):
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
-
-
-@auto_docstring(
-    custom_intro="""
-    WavLM Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB Keyword Spotting.
-    """
-)
-class WavLMForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
-
-
-@auto_docstring
-class WavLMForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
-
-
-@auto_docstring(
-    custom_intro="""
-    WavLM Model with an XVector feature extraction head on top for tasks like Speaker Verification.
-    """
-)
-class WavLMForXVector(Wav2Vec2ForXVector):
     pass
 
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
+
+class WavLMForCTC(Wav2Vec2ForCTC):
+    pass
+
+
+class WavLMForSequenceClassification(Wav2Vec2ForSequenceClassification):
+    pass
+
+
+class WavLMForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
+    pass
+
+
+class WavLMForXVector(Wav2Vec2ForXVector):
+    pass
 
 
 __all__ = [

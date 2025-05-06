@@ -20,7 +20,7 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import logging
 from ..bamba.configuration_bamba import BambaConfig
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated, HybridMambaAttentionDynamicCache
 from ..granitemoeshared.modeling_granitemoeshared import (
@@ -156,11 +156,6 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare GraniteMoeHybrid Model outputting raw hidden-states without any specific head on top.
-    """
-)
 class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     config_class = GraniteMoeHybridConfig
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
@@ -181,7 +176,6 @@ class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-@auto_docstring
 class GraniteMoeHybridModel(GraniteMoeSharedModel):
     def __init__(self, config: GraniteMoeHybridConfig):
         super().__init__(config)
@@ -189,8 +183,6 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             [GraniteMoeHybridDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,

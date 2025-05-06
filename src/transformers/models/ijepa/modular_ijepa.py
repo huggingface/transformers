@@ -119,7 +119,6 @@ class IJepaPreTrainedModel(PreTrainedModel):
                 module.mask_token.data.zero_()
 
 
-@auto_docstring
 class IJepaModel(IJepaPreTrainedModel, ViTModel):
     def __init__(self, config: IJepaConfig, add_pooling_layer: bool = False, use_mask_token: bool = False):
         r"""

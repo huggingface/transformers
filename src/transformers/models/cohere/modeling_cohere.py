@@ -671,6 +671,7 @@ class CohereForCausalLM(CoherePreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

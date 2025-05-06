@@ -885,11 +885,6 @@ class Emu3TextModel(LlamaModel, Emu3PreTrainedModel):
             [Emu3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
-    @can_return_tuple
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
-
 
 class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
     config_class = Emu3TextConfig
@@ -898,8 +893,6 @@ class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = Emu3TextModel(config)
 
-    @can_return_tuple
-    @auto_docstring
     def forward(**super_kwargs):
         r"""
         Example:

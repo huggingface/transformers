@@ -660,7 +660,6 @@ WAV2VEC2_CONFORMER_START_DOCSTRING = None  # will be automatically redefined
 Wav2Vec2ConformerBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
-@auto_docstring
 class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel, Wav2Vec2Model):
     def __init__(self, config: Wav2Vec2ConformerConfig):
         Wav2Vec2ConformerPreTrainedModel.__init__(config)
@@ -682,16 +681,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel, Wav2Vec2Model):
     def freeze_feature_extractor(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
 
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        return super().forward(**super_kwargs)
 
-
-@auto_docstring(
-    custom_intro="""
-    Wav2Vec2Conformer Model with a quantizer and `VQ` head on top.
-    """
-)
 class Wav2Vec2ConformerForPreTraining(Wav2Vec2ForPreTraining):
     def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
@@ -699,16 +689,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ForPreTraining):
     def freeze_feature_extractor(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
 
-    @auto_docstring
-    def forward(self, **super_kwargs) -> Union[Tuple, Wav2Vec2ConformerForPreTrainingOutput]:
-        return super().forward(**super_kwargs)
 
-
-@auto_docstring(
-    custom_intro="""
-    Wav2Vec2Conformer Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
-    """
-)
 class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
     def __init__(self, config, target_lang: Optional[str] = None):
         r"""
@@ -728,17 +709,7 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
     def freeze_base_model(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
 
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        return super().forward(**super_kwargs)
 
-
-@auto_docstring(
-    custom_intro="""
-    Wav2Vec2Conformer Model with a sequence classification head on top (a linear layer over the pooled output) for
-    tasks like SUPERB Keyword Spotting.
-    """
-)
 class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ForSequenceClassification):
     def __init__(self, config):
         super().__init__(config)
@@ -746,12 +717,7 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ForSequenceClassificati
     def freeze_feature_extractor(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
 
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        return super().forward(**super_kwargs)
 
-
-@auto_docstring
 class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
     def __init__(self, config):
         super().__init__(config)
@@ -759,26 +725,13 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ForAudioFrameClassifi
     def freeze_feature_extractor(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
 
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        return super().forward(**super_kwargs)
 
-
-@auto_docstring(
-    custom_intro="""
-    Wav2Vec2Conformer Model with an XVector feature extraction head on top for tasks like Speaker Verification.
-    """
-)
 class Wav2Vec2ConformerForXVector(Wav2Vec2ForXVector):
     def __init__(self, config):
         super().__init__(config)
 
     def freeze_feature_extractor(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
-
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        return super().forward(**super_kwargs)
 
 
 __all__ = [

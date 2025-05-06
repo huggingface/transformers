@@ -596,10 +596,10 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
 
         return vision_features
 
-    @auto_docstring
     def forward(**super_kwargs):
         r"""
         Example:
+
         ```python
         >>> import torch
         >>> from transformers import AutoProcessor, AutoModelForImageTextToText

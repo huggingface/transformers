@@ -234,7 +234,6 @@ class PromptDepthAnythingNeck(DepthAnythingNeck):
     """
 )
 class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -254,7 +253,7 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
 
         Example:
 
-         ```python
+        ```python
         >>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
         >>> import torch
         >>> import numpy as np

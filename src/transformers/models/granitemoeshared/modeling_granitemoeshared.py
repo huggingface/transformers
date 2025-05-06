@@ -508,11 +508,7 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare GraniteMoeShared Model outputting raw hidden-states without any specific head on top.
-    """
-)
+@auto_docstring
 class GraniteMoeSharedPreTrainedModel(PreTrainedModel):
     config_class = GraniteMoeSharedConfig
     base_model_prefix = "model"

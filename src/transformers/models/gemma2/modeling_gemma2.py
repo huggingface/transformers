@@ -681,6 +681,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

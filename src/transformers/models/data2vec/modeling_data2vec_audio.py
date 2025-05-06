@@ -1217,8 +1217,8 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Data2VecAudio Model with a sequence classification head on top (a linear layer over the pooled output) for tasks
-    like SUPERB Keyword Spotting.
+    Data2VecAudio Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
+    SUPERB Keyword Spotting.
     """
 )
 class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):

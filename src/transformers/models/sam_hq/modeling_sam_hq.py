@@ -1147,7 +1147,7 @@ class SamHQPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The vision model from SAM-HQ without any head or projection on top.
+    The vision model from SamHQ without any head or projection on top.
     """
 )
 class SamHQVisionModel(SamHQPreTrainedModel):

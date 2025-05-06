@@ -20,7 +20,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...utils import auto_docstring, logging
+from ...utils import logging
 from ..granitemoe.modeling_granitemoe import (
     GraniteMoeDecoderLayer,
     GraniteMoeForCausalLM,
@@ -149,17 +149,11 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare GraniteMoeShared Model outputting raw hidden-states without any specific head on top.
-    """
-)
 class GraniteMoeSharedPreTrainedModel(GraniteMoePreTrainedModel):
     config_class = GraniteMoeSharedConfig
     _no_split_modules = ["GraniteMoeSharedDecoderLayer"]
 
 
-@auto_docstring
 class GraniteMoeSharedModel(GraniteMoeModel):
     def __init__(self, config: GraniteMoeSharedConfig):
         super().__init__(config)

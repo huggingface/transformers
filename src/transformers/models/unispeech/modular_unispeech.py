@@ -203,7 +203,6 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
 UniSpeechBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
-@auto_docstring
 class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
     def __init__(self, config: UniSpeechConfig):
         UniSpeechPreTrainedModel.__init__(config)
@@ -228,7 +227,6 @@ class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for UniSpeech")
 
-    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -420,27 +418,12 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    UniSpeech Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
-    """
-)
 class UniSpeechForCTC(Wav2Vec2ForCTC):
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
+    pass
 
 
-@auto_docstring(
-    custom_intro="""
-    UniSpeech Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB Keyword Spotting.
-    """
-)
 class UniSpeechForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
+    pass
 
 
 __all__ = [

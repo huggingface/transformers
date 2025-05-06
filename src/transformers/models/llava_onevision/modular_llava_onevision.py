@@ -1,13 +1,12 @@
 from transformers.models.llava_next.image_processing_llava_next_fast import LlavaNextImageProcessorFast
 
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from ...utils import auto_docstring, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring
 class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN

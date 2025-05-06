@@ -26,7 +26,7 @@ from transformers.models.llava.modeling_llava import (
 )
 
 from ...activations import ACT2FN
-from ...utils import auto_docstring, logging
+from ...utils import logging
 from .configuration_aya_vision import AyaVisionConfig
 
 
@@ -83,11 +83,6 @@ class AyaVisionMultiModalProjector(nn.Module):
         return image_features
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare Aya Vision Model outputting raw hidden-states without any specific head on top.
-    """
-)
 class AyaVisionPreTrainedModel(LlavaPreTrainedModel):
     _supports_quantized_cache = False
     _supports_static_cache = False
@@ -112,11 +107,6 @@ class AyaVisionCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
 
 
-@auto_docstring(
-    custom_intro="""
-    The AyaVision model which consists of a vision backbone and a language model.
-    """
-)
 class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
     def tie_weights(self):
         return self.language_model.tie_weights()
@@ -128,7 +118,6 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
-    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

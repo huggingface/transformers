@@ -562,7 +562,11 @@ class MLCDPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The vision model from M_L_C_D without any head or projection on top.
+    """
+)
 class MLCDVisionModel(MLCDPreTrainedModel):
     config_class = MLCDVisionConfig
     main_input_name = "pixel_values"

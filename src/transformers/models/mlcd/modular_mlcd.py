@@ -492,7 +492,6 @@ class MLCDPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-@auto_docstring
 class MLCDVisionModel(CLIPVisionModel):
     @auto_docstring
     def forward(

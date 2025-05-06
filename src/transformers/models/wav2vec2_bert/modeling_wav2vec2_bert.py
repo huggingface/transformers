@@ -1171,8 +1171,8 @@ class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Wav2Vec2Bert Model with a sequence classification head on top (a linear layer over the pooled output) for
-    tasks like SUPERB Keyword Spotting.
+    Wav2Vec2Bert Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
+    SUPERB Keyword Spotting.
     """
 )
 class Wav2Vec2BertForSequenceClassification(Wav2Vec2BertPreTrainedModel):

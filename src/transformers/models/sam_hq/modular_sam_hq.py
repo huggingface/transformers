@@ -425,11 +425,6 @@ class SamHQPreTrainedModel(SamPreTrainedModel):
                 module.pos_embed.data.zero_()
 
 
-@auto_docstring(
-    custom_intro="""
-    The vision model from SAM-HQ without any head or projection on top.
-    """
-)
 class SamHQVisionModel(SamVisionModel):
     pass
 
