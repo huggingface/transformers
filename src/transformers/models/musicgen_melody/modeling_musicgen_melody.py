@@ -140,9 +140,7 @@ class MusicgenMelodySinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.weights = nn.Parameter(emb_weights)
-        self.weights.requires_grad = False
-        self.weights.detach_()
+        self.register_buffer("weights", emb_weights, persistent=False)
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int):
@@ -677,11 +675,6 @@ class MusicgenMelodyPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, MusicgenMelodySinusoidalPositionalEmbedding):
-            weights = module.get_embedding(*module.weights.shape)
-            weights = nn.Parameter(weights, requires_grad=False)
-            weights.detach_()
-            module.weights = weights
 
 
 MUSICGEN_MELODY_START_DOCSTRING = r"""
