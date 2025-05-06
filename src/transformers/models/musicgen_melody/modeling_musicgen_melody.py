@@ -92,7 +92,7 @@ class MusicgenMelodyOutputWithPast(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-            Sequence of conditional hidden-states representing the concatenation of the projeted text encoder output and the projeted audio encoder output.
+            Sequence of conditional hidden-states representing the concatenation of the projected text encoder output and the projected audio encoder output.
             Used as a conditional signal.
     """
 
@@ -140,9 +140,7 @@ class MusicgenMelodySinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.weights = nn.Parameter(emb_weights)
-        self.weights.requires_grad = False
-        self.weights.detach_()
+        self.register_buffer("weights", emb_weights, persistent=False)
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int):
@@ -677,11 +675,6 @@ class MusicgenMelodyPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, MusicgenMelodySinusoidalPositionalEmbedding):
-            weights = module.get_embedding(*module.weights.shape)
-            weights = nn.Parameter(weights, requires_grad=False)
-            weights.detach_()
-            module.weights = weights
 
 
 MUSICGEN_MELODY_START_DOCSTRING = r"""
@@ -757,8 +750,8 @@ MUSICGEN_MELODY_INPUTS_DOCSTRING = r"""
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-            Sequence of conditional hidden-states representing the concatenation of the projeted text encoder output and the projeted audio encoder output.
-            Used as a conditional signal and will thus be concatenated to the projeted `decoder_input_ids`.
+            Sequence of conditional hidden-states representing the concatenation of the projected text encoder output and the projected audio encoder output.
+            Used as a conditional signal and will thus be concatenated to the projected `decoder_input_ids`.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
@@ -818,7 +811,7 @@ MUSICGEN_MELODY_DECODER_INPUTS_DOCSTRING = r"""
             [What are attention masks?](../glossary#attention-mask)
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states representing the concatenation of the text encoder output and the processed audio encoder output.
-            Used as a conditional signal and will thus be concatenated to the projeted `decoder_input_ids`.
+            Used as a conditional signal and will thus be concatenated to the projected `decoder_input_ids`.
         encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
             Mask to avoid performing attention on conditional hidden states. Mask values
             selected in `[0, 1]`:
@@ -1522,7 +1515,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
         # 7. determine generation mode
         generation_mode = generation_config.get_generation_mode()
 
-        # 8. prepare batched CFG externally (to enable coexistance with the unbatched CFG)
+        # 8. prepare batched CFG externally (to enable coexistence with the unbatched CFG)
         if generation_config.guidance_scale is not None and generation_config.guidance_scale > 1:
             logits_processor.append(ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale))
             generation_config.guidance_scale = None
@@ -1693,7 +1686,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         return self.text_encoder
 
     def get_encoder(self):
-        # get the text encoder to compute the conditionning hidden-states for generation
+        # get the text encoder to compute the conditioning hidden-states for generation
         return self.get_text_encoder()
 
     def get_decoder(self):
@@ -1917,7 +1910,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         input_features: Optional[torch.FloatTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -2310,7 +2303,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
     # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForConditionalGeneration._get_decoder_start_token_id
     def _get_decoder_start_token_id(
-        self, decoder_start_token_id: Union[int, List[int]] = None, bos_token_id: Optional[int] = None
+        self, decoder_start_token_id: Optional[Union[int, List[int]]] = None, bos_token_id: Optional[int] = None
     ) -> int:
         decoder_start_token_id = (
             decoder_start_token_id
@@ -2478,7 +2471,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         # 7. determine generation mode
         generation_mode = generation_config.get_generation_mode()
 
-        # 8. prepare batched CFG externally (to enable coexistance with the unbatched CFG)
+        # 8. prepare batched CFG externally (to enable coexistence with the unbatched CFG)
         if generation_config.guidance_scale is not None and generation_config.guidance_scale > 1:
             logits_processor.append(ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale))
             generation_config.guidance_scale = None

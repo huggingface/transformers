@@ -119,6 +119,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "albert",
     "bart",
     "bert",
+    "bitnet",
     "blenderbot",
     "blenderbot-small",
     "bloom",
