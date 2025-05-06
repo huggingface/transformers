@@ -1411,4 +1411,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     check_auto_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
-    # check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
+    check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)

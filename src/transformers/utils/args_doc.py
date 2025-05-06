@@ -881,7 +881,6 @@ def get_checkpoint_from_config_class(config_class):
     # config_source = inspect.getsource(config_class)
     config_source = config_class.__doc__
     checkpoints = _re_checkpoint.findall(config_source)
-
     # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
     # For example, `('google-bert/bert-base-uncased', 'https://huggingface.co/google-bert/bert-base-uncased')`
     for ckpt_name, ckpt_link in checkpoints:
