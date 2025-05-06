@@ -59,8 +59,8 @@ class DiaRotaryEmbedding(nn.Module):
     def __init__(self, config: DiaConfig, device=None):
         super().__init__()
         self.embedding_dims = config.hidden_size
-        self.min_timescale = config.min_timescale
-        self.max_timescale = config.max_timescale
+        self.min_timescale = config.rope_min_timescale
+        self.max_timescale = config.rope_max_timescale
 
         half_embedding_dim = self.embedding_dims // 2
         fraction = (2.0 * torch.arange(0, half_embedding_dim)) / self.embedding_dims
@@ -189,11 +189,11 @@ class DiaCrossAttention(nn.Module):
     ):
         super().__init__()
         self.config = config
-        self.num_heads = self.config.num_attention_heads
-        self.num_key_value_heads = self.config.num_key_value_heads
+        self.num_heads = self.config.cross_num_attention_heads
+        self.num_key_value_heads = self.config.cross_num_key_value_heads
         self.dropout = config.dropout
         self.hidden_size = config.hidden_size
-        self.head_dim = config.head_dim
+        self.head_dim = config.cross_head_dim
         self.layer_idx = layer_idx
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
 

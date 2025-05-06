@@ -20,7 +20,7 @@ import typing
 
 import torch
 
-from ...modeling_utils import AutoModel
+from ..auto import AutoModel
 from ...processing_utils import ProcessorMixin
 
 

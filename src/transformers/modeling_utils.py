@@ -702,8 +702,7 @@ def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor
         module.load_state_dict({param_type: tensor}, strict=False, assign=True)
         return None
     except RuntimeError as e:
-        
-        pass
+        return f"parameter {re.sub(r"\d+", ".*.", param_name)} has shape {tensor.shape} but the model has {module.state_dict()[param_type].shape}. " \
             
 
 @torch.no_grad()
@@ -746,7 +745,7 @@ def _load_state_dict_into_meta_model(
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
     
-    errors = []
+    errors = set()
     for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:
             continue
@@ -818,7 +817,7 @@ def _load_state_dict_into_meta_model(
 
                 error = _load_parameter_into_model(model, param_name, param.to(param_device))
                 if error is not None:   
-                    errors.append(error)
+                    errors.add(error)
 
             else:
                 hf_quantizer.create_quantized_param(
@@ -5052,7 +5051,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if len(unexpected_keys) > 0:
             archs = [] if model.config.architectures is None else model.config.architectures
             warner = logger.warning if model.__class__.__name__ in archs else logger.info
-            warner(
+            logger.warning(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
                 f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
                 f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
