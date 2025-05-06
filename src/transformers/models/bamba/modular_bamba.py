@@ -893,6 +893,10 @@ class BambaModel(BambaPreTrainedModel):
                 raise ValueError(
                     "position_ids must also be specified when (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k, seq_idx) are provided for padding-free training."
                 )
+            if attention_mask is not None:
+                raise ValueError(
+                    "attention_mask must be None when providing (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k, seq_idx, position_ids) for padding-free training."
+                )
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
