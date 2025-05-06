@@ -314,7 +314,7 @@ device = "cuda"
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
 model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
-model.eval()
+model.train()
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
 # ensure the audio is 24kHz
