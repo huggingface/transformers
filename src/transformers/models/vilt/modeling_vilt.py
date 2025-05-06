@@ -624,8 +624,8 @@ class ViltModel(ViltPreTrainedModel):
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
-        image_token_type_idx (<fill_type>):
-            <fill_docstring>
+        image_token_type_idx (`int`, *optional*):
+            - The token type ids for images.
 
         Examples:
 

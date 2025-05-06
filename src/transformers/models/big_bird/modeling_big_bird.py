@@ -2860,7 +2860,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        question_lengths: Optional[torch.Tensor] = None,
+        question_lengths: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
@@ -2872,8 +2872,8 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[BigBirdForQuestionAnsweringModelOutput, Tuple[torch.FloatTensor]]:
         r"""
-        question_lengths (<fill_type>):
-            <fill_docstring>
+        question_lengths (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
+            The lengths of the questions in the batch.
 
         Example:
 

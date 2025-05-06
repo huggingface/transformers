@@ -27,12 +27,7 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_blip import BlipConfig, BlipTextConfig, BlipVisionConfig
 from .modeling_blip_text import BlipTextLMHeadModel, BlipTextModel
 
@@ -1394,8 +1389,8 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BlipTextVisionModelOutput]:
         r"""
-        use_itm_head (<fill_type>):
-            <fill_docstring>
+        use_itm_head (`bool`, *optional*, defaults to `True`):
+            Whether or not to use the image-text matching head.
 
         Examples:
 

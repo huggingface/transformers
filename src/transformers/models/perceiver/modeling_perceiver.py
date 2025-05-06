@@ -31,12 +31,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_perceiver import PerceiverConfig
 
 
@@ -643,17 +638,17 @@ class PerceiverModel(PerceiverPreTrainedModel):
     def __init__(
         self,
         config,
-        decoder=None,
+        decoder: Optional["PerceiverAbstractDecoder"] = None,
         input_preprocessor: PreprocessorType = None,
         output_postprocessor: PostprocessorType = None,
     ):
         r"""
-        decoder (<fill_type>):
-            <fill_docstring>
-        input_preprocessor (<fill_type>):
-            <fill_docstring>
-        output_postprocessor (<fill_type>):
-            <fill_docstring>
+        decoder (`PerceiverDecoder`, *optional*):
+            Decoder module that transforms latent representations into task predictions.
+        input_preprocessor (`PreprocessorType`, *optional*):
+            Preprocessor that encodes raw inputs into tensors for the model.
+        output_postprocessor (`PostprocessorType`, *optional*):
+            Postprocessor that transforms model outputs into final predictions.
         """
         super().__init__(config)
         self.config = config
@@ -698,8 +693,9 @@ class PerceiverModel(PerceiverPreTrainedModel):
         r"""
         inputs (`torch.FloatTensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
-        subsampled_output_points (<fill_type>):
-            <fill_docstring>
+        subsampled_output_points (`Dict[str, torch.Tensor]`, *optional*):
+            Dictionary of tensors used as queries for the decoder. The decoder maps these queries to the latent
+            representation of the model. Used for subsampled decoding, e.g. when only decoding certain image patches.
 
         Examples:
 
@@ -1859,8 +1855,9 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        subsampled_output_points (<fill_type>):
-            <fill_docstring>
+        subsampled_output_points (`Dict[str, torch.Tensor]`, *optional*):
+            Dictionary of tensors used as queries for the decoder. The decoder maps these queries to the latent
+            representation of the model. Used for subsampled decoding, e.g. when only decoding certain image patches.
 
         Examples:
 

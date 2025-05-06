@@ -33,10 +33,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_layoutlm import LayoutLMConfig
 
 
@@ -1175,8 +1172,8 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
 class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
     def __init__(self, config, has_visual_segment_embedding=True):
         r"""
-        has_visual_segment_embedding (<fill_type>):
-            <fill_docstring>
+        has_visual_segment_embedding (`bool`, *optional*, defaults to `True`):
+            Whether or not to add visual segment embeddings.
         """
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1207,8 +1204,11 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
-        bbox (<fill_type>):
-            <fill_docstring>
+        bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
+            Bounding boxes of each input sequence tokens. Selected in the range `[0,
+            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
+            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
+            y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
 
         Example:
 

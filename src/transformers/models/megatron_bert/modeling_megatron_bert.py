@@ -906,8 +906,8 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
 
     def __init__(self, config, add_binary_head=True):
         r"""
-        add_binary_head (<fill_type>):
-            <fill_docstring>
+        add_binary_head (`bool`, *optional*, defaults to `True`):
+            Whether or not to add a binary head.
         """
         super().__init__(config)
 

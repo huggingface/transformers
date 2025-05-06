@@ -712,8 +712,10 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ForPreTraining):
 class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
     def __init__(self, config, target_lang: Optional[str] = None):
         r"""
-        target_lang (<fill_type>):
-            <fill_docstring>
+        target_lang (`str`, *optional*):
+            Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
+            adapter.<lang>.bin. Only relevant when using an instance of [`UniSpeechSatForCTC`] with adapters. Uses 'eng' by
+            default.
         """
         super().__init__(config)
 

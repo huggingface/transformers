@@ -1047,14 +1047,18 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels in `[0, ...,
             config.vocab_size]`
-        attack_attention_mask (<fill_type>):
-            <fill_docstring>
-        attack_token_type_ids (<fill_type>):
-            <fill_docstring>
-        labels_attention_mask (<fill_type>):
-            <fill_docstring>
-        labels_token_type_ids (<fill_type>):
-            <fill_docstring>
+        attack_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices for the attack sample. Mask values selected in
+            `[0, 1]`: `1` for tokens that are NOT MASKED, `0` for MASKED tokens.
+        attack_token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Segment token indices to indicate different portions of the attack inputs. Indices are selected in `[0, 1]`:
+            `0` corresponds to a sentence A token, `1` corresponds to a sentence B token.
+        labels_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices for the label sample. Mask values selected in
+            `[0, 1]`: `1` for tokens that are NOT MASKED, `0` for MASKED tokens.
+        labels_token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Segment token indices to indicate different portions of the label inputs. Indices are selected in `[0, 1]`:
+            `0` corresponds to a sentence A token, `1` corresponds to a sentence B token.
 
         Example:
 

@@ -49,10 +49,7 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig
@@ -1167,8 +1164,6 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
-
-        Returns:
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1585,12 +1580,12 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
         decoder: Optional[MusicgenForCausalLM] = None,
     ):
         r"""
-        text_encoder (<fill_type>):
-            <fill_docstring>
-        audio_encoder (<fill_type>):
-            <fill_docstring>
-        decoder (<fill_type>):
-            <fill_docstring>
+        text_encoder (`PreTrainedModel`, *optional*):
+            The text encoder model that encodes text into hidden states for conditioning.
+        audio_encoder (`PreTrainedModel`, *optional*):
+            The audio encoder model that encodes audio into hidden states for conditioning.
+        decoder (`MusicgenForCausalLM`, *optional*):
+            The decoder model that generates audio tokens based on conditioning signals.
         """
         if config is None and (text_encoder is None or audio_encoder is None or decoder is None):
             raise ValueError(
@@ -1959,8 +1954,13 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
-        padding_mask (<fill_type>):
-            <fill_docstring>
+        padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
 
         Examples:
         ```python

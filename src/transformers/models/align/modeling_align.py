@@ -1412,8 +1412,8 @@ class AlignModel(AlignPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, AlignOutput]:
         r"""
-        return_loss (<fill_type>):
-            <fill_docstring>
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
 
         Examples:
 

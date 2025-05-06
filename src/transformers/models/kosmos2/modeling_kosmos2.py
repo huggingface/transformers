@@ -32,12 +32,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2VisionConfig
 
 
@@ -1370,8 +1365,8 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        image_embeds (<fill_type>):
-            <fill_docstring>
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
         """
         return self.model(
             input_ids=input_ids,
@@ -1459,8 +1454,8 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        image_embeds (<fill_type>):
-            <fill_docstring>
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1660,8 +1655,8 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
 
             - 1 for places where to put the image features,
             - 0 for places that are not for image features (i.e. for text tokens).
-        image_embeds (<fill_type>):
-            <fill_docstring>
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
 
         Examples:
 
@@ -1811,8 +1806,8 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        image_embeds (<fill_type>):
-            <fill_docstring>
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
 
         Examples:
 

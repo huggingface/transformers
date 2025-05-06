@@ -907,8 +907,8 @@ class HieraModel(HieraPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-        noise (<fill_type>):
-            <fill_docstring>
+        noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*):
+            Mainly used for testing purposes to control randomness and maintain the reproducibility
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1204,8 +1204,8 @@ class HieraForPreTraining(HieraPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, HieraForPreTrainingOutput]:
         r"""
-        noise (<fill_type>):
-            <fill_docstring>
+        noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*):
+            Mainly used for testing purposes to control randomness and maintain the reproducibility
 
         Examples:
         ```python

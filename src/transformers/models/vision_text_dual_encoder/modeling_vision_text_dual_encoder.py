@@ -20,10 +20,7 @@ import torch
 from torch import nn
 
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..clip.modeling_clip import CLIPOutput, CLIPVisionConfig, CLIPVisionModel
@@ -59,10 +56,10 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         text_model: Optional[PreTrainedModel] = None,
     ):
         r"""
-        vision_model (<fill_type>):
-            <fill_docstring>
-        text_model (<fill_type>):
-            <fill_docstring>
+        vision_model (`PreTrainedModel`):
+            The vision model to use.
+        text_model (`PreTrainedModel`):
+            The text model to use.
         """
         if config is None and (vision_model is None or text_model is None):
             raise ValueError("Either a configuration or an vision and a text model has to be provided")

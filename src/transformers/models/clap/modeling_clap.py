@@ -1949,8 +1949,9 @@ class ClapModel(ClapPreTrainedModel):
             retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
-        is_longer (<fill_type>):
-            <fill_docstring>
+        is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
+            Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
+            the features.
 
         Examples:
 

@@ -92,7 +92,7 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
         trimaps: list["torch.Tensor"],
         **kwargs: Unpack[VitMatteFastImageProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         trimaps (`list[torch.Tensor]`):
             The trimaps to preprocess.
         """

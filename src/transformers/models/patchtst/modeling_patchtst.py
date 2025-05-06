@@ -1513,12 +1513,12 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
     """
 )
 class PatchTSTPredictionHead(nn.Module):
-    def __init__(self, config: PatchTSTConfig, num_patches, distribution_output=None):
+    def __init__(self, config: PatchTSTConfig, num_patches: int, distribution_output=None):
         r"""
-        num_patches (<fill_type>):
-            <fill_docstring>
-        distribution_output (<fill_type>):
-            <fill_docstring>
+        num_patches (`int`):
+            The number of patches in the input sequence.
+        distribution_output (`DistributionOutput`, *optional*):
+            The distribution output layer for probabilistic forecasting. If None, a linear output layer is used.
         """
         super().__init__()
 

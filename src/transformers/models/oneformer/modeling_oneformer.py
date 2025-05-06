@@ -2896,8 +2896,8 @@ class OneFormerModel(OneFormerPreTrainedModel):
         task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
             for details.
-        text_inputs (<fill_type>):
-            <fill_docstring>
+        text_inputs (`List[torch.Tensor]`, *optional*):
+            Tensor fof shape `(num_queries, sequence_length)` to be fed to a model
 
         Example:
 
@@ -3089,8 +3089,8 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         class_labels (`List[torch.LongTensor]`, *optional*):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
-        output_auxiliary_logits (<fill_type>):
-            <fill_docstring>
+        output_auxiliary_logits (`bool`, *optional*):
+            Whether or not to output auxiliary logits.
 
         Example:
 

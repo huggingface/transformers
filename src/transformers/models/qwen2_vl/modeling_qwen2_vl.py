@@ -972,8 +972,8 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
     @auto_docstring
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         r"""
-        grid_thw (<fill_type>):
-            <fill_docstring>
+        grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+            The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
         """
         hidden_states = self.patch_embed(hidden_states)
         rotary_pos_emb = self.rot_pos_emb(grid_thw)

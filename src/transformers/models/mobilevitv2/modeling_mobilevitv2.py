@@ -599,8 +599,9 @@ class MobileViTV2PreTrainedModel(PreTrainedModel):
 class MobileViTV2Model(MobileViTV2PreTrainedModel):
     def __init__(self, config: MobileViTV2Config, expand_output: bool = True):
         r"""
-        expand_output (<fill_type>):
-            <fill_docstring>
+        expand_output (`bool`, *optional*, defaults to `True`):
+            Whether to expand the output of the model. If `True`, the model will output pooled features in addition to
+            hidden states. If `False`, only the hidden states will be returned.
         """
         super().__init__(config)
         self.config = config

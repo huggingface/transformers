@@ -27,18 +27,10 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...modeling_outputs import (
-    BaseModelOutput,
-    ModelOutput,
-    SampleTSPredictionOutput,
-    Seq2SeqTSPredictionOutput,
-)
+from ...modeling_outputs import BaseModelOutput, ModelOutput, SampleTSPredictionOutput, Seq2SeqTSPredictionOutput
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_autoformer import AutoformerConfig
 
 
@@ -1802,8 +1794,14 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        future_observed_mask (<fill_type>):
-            <fill_docstring>
+        future_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`, *optional*):
+            Boolean mask to indicate which `future_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
+
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+
+            This mask is used to filter out missing values for the final loss calculation.
 
         Examples:
 

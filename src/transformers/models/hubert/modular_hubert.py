@@ -215,8 +215,9 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
-        mask_time_indices (<fill_type>):
-            <fill_docstring>
+        mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
+            masked extracted features in *config.proj_codevector_dim* space.
 
         Example:
 

@@ -396,8 +396,8 @@ class XGLMPreTrainedModel(PreTrainedModel):
 class XGLMModel(XGLMPreTrainedModel):
     def __init__(self, config: XGLMConfig, embed_tokens: Optional[nn.Embedding] = None):
         r"""
-        embed_tokens (<fill_type>):
-            <fill_docstring>
+        embed_tokens (`nn.Embedding`, *optional*):
+            output embeddings
         """
         super().__init__(config)
         self.dropout = config.dropout

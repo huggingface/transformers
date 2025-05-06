@@ -27,12 +27,7 @@ from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_clipseg import CLIPSegConfig, CLIPSegTextConfig, CLIPSegVisionConfig
 
 
@@ -1278,10 +1273,11 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        conditional_pixel_values (<fill_type>):
-            <fill_docstring>
-        conditional_embeddings (<fill_type>):
-            <fill_docstring>
+        conditional_pixel_values (`torch.FloatTensor`, *optional*):
+            The pixel values of the conditional images.
+        conditional_embeddings (`torch.FloatTensor` of shape `(batch_size, config.projection_dim)`, *optional*):
+            The conditional embeddings for the query images. If provided, the model will use this instead of computing
+            the embeddings from the conditional_pixel_values.
 
         Examples:
 

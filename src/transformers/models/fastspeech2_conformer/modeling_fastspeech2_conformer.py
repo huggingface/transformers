@@ -1448,16 +1448,18 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
             layer.remove_weight_norm()
         nn.utils.remove_weight_norm(self.conv_post)
 
-    def forward(self, spectrogram: torch.FloatTensor) -> torch.FloatTensor:
-        r"""
+    @auto_docstring(
+        custom_intro="""
         Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch
         of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a single, un-batched speech
         waveform.
-
-        Args:
-            spectrogram (`torch.FloatTensor`):
-                Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
-                config.model_in_dim)`, or un-batched and of shape `(sequence_length, config.model_in_dim)`.
+        """
+    )
+    def forward(self, spectrogram: torch.FloatTensor) -> torch.FloatTensor:
+        r"""
+        spectrogram (`torch.FloatTensor`):
+            Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
+            config.model_in_dim)`, or un-batched and of shape `(sequence_length, config.model_in_dim)`.
 
         Returns:
             `torch.FloatTensor`: Tensor containing the speech waveform. If the input spectrogram is batched, will be of

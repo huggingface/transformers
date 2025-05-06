@@ -632,12 +632,10 @@ class DacModel(DacPreTrainedModel):
         return_dict: Optional[bool] = None,
     ):
         r"""
-        input_values (`torch.Tensor` of shape `(batch_size, 1, time_steps)`).
-            Audio data to encode,
+        input_values (`torch.Tensor` of shape `(batch_size, 1, time_steps)`):
+            Audio data to encode.
         n_quantizers (`int`, *optional*):
             Number of quantizers to use. If `None`, all quantizers are used. Default is `None`.
-        n_quantizers (<fill_type>):
-            <fill_docstring>
 
         Examples:
 

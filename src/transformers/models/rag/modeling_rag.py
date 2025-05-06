@@ -386,12 +386,12 @@ class RagModel(RagPreTrainedModel):
         **kwargs,
     ):
         r"""
-        question_encoder (<fill_type>):
-            <fill_docstring>
-        generator (<fill_type>):
-            <fill_docstring>
-        retriever (<fill_type>):
-            <fill_docstring>
+        question_encoder (`PreTrainedModel`, *optional*):
+            The model responsible for encoding the question into hidden states for retrieval.
+        generator (`PreTrainedModel`, *optional*):
+            The model responsible for generating text based on retrieved documents.
+        retriever (`RagRetriever`, *optional*):
+            The component responsible for retrieving documents from a knowledge base given the encoded question.
         """
         assert config is not None or (question_encoder is not None and generator is not None), (
             "Either a configuration or an question_encoder and a generator has to be provided."
@@ -481,8 +481,8 @@ class RagModel(RagPreTrainedModel):
         output_retrieved (`bool`, *optional*):
             Whether or not to return the `retrieved_doc_embeds`, `retrieved_doc_ids`, `context_input_ids` and
             `context_attention_mask`. See returned tensors for more detail.
-        n_docs (<fill_type>):
-            <fill_docstring>
+        n_docs (`int`, *optional*):
+            The number of documents to retrieve.
 
         Example:
 
@@ -674,12 +674,12 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         **kwargs,
     ):
         r"""
-        question_encoder (<fill_type>):
-            <fill_docstring>
-        generator (<fill_type>):
-            <fill_docstring>
-        retriever (<fill_type>):
-            <fill_docstring>
+        question_encoder (`PreTrainedModel`, *optional*):
+            The model responsible for encoding the question into hidden states for retrieval.
+        generator (`PreTrainedModel`, *optional*):
+            The model responsible for generating text based on retrieved documents.
+        retriever (`RagRetriever`, *optional*):
+            The component responsible for retrieving documents from a knowledge base given the encoded question.
         """
         assert config is not None or (question_encoder is not None and generator is not None), (
             "Either a configuration or an encoder and a generator has to be provided."
@@ -765,8 +765,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `torch.Tensor.sum`
             operation.
-        n_docs (<fill_type>):
-            <fill_docstring>
+        n_docs (`int`, *optional*):
+            The number of documents to retrieve.
 
         Example:
 
@@ -1111,12 +1111,12 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         r"""
-        question_encoder (<fill_type>):
-            <fill_docstring>
-        generator (<fill_type>):
-            <fill_docstring>
-        retriever (<fill_type>):
-            <fill_docstring>
+        question_encoder (`PreTrainedModel`, *optional*):
+            The model responsible for encoding the question into hidden states for retrieval.
+        generator (`PreTrainedModel`, *optional*):
+            The model responsible for generating text based on retrieved documents.
+        retriever (`RagRetriever`, *optional*):
+            The component responsible for retrieving documents from a knowledge base given the encoded question.
         """
         assert config is not None or (question_encoder is not None and generator is not None), (
             "Either a configuration or an encoder and a generator has to be provided."
@@ -1275,8 +1275,8 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `torch.Tensor.sum`
             operation.
-        n_docs (<fill_type>):
-            <fill_docstring>
+        n_docs (`int`, *optional*):
+            The number of documents to retrieve.
 
         Example:
 

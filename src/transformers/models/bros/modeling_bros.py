@@ -1029,10 +1029,10 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        initial_token_labels (<fill_type>):
-            <fill_docstring>
-        subsequent_token_labels (<fill_type>):
-            <fill_docstring>
+        initial_token_labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for the initial token classification.
+        subsequent_token_labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for the subsequent token classification.
 
         Examples:
 

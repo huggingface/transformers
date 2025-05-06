@@ -1166,8 +1166,9 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Wav2Vec2ConformerBaseModelOutput]:
         r"""
-        mask_time_indices (<fill_type>):
-            <fill_docstring>
+        mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
+            masked extracted features in *config.proj_codevector_dim* space.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1437,8 +1438,10 @@ _HIDDEN_STATES_START_POSITION = 2
 class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
     def __init__(self, config, target_lang: Optional[str] = None):
         r"""
-        target_lang (<fill_type>):
-            <fill_docstring>
+        target_lang (`str`, *optional*):
+            Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
+            adapter.<lang>.bin. Only relevant when using an instance of [`UniSpeechSatForCTC`] with adapters. Uses 'eng' by
+            default.
         """
         super().__init__(config)
 

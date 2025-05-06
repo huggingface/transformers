@@ -2308,8 +2308,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         class_labels (`List[torch.LongTensor]`, *optional*):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
-        output_auxiliary_logits (<fill_type>):
-            <fill_docstring>
+        output_auxiliary_logits (`bool`, *optional*):
+            Whether or not to output auxiliary logits.
 
         Examples:
 

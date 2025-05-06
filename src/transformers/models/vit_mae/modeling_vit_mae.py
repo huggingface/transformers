@@ -28,12 +28,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_vit_mae import ViTMAEConfig
 
 
@@ -697,8 +692,8 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         interpolate_pos_encoding (`bool`, *optional*, default `False`):
             Whether to interpolate the pre-trained position encodings. This is mainly used to use the model on higher
             resolution images.
-        noise (<fill_type>):
-            <fill_docstring>
+        noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mainly used for testing purposes to control randomness and maintain the reproducibility
 
         Examples:
 
@@ -1059,8 +1054,8 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         interpolate_pos_encoding (`bool`, *optional*, default `False`):
             Whether to interpolate the pre-trained position encodings. This is mainly used to use the model on higher
             resolution images.
-        noise (<fill_type>):
-            <fill_docstring>
+        noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mainly used for testing purposes to control randomness and maintain the reproducibility
 
         Examples:
 

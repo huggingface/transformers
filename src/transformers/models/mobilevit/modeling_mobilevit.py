@@ -645,8 +645,9 @@ class MobileViTPreTrainedModel(PreTrainedModel):
 class MobileViTModel(MobileViTPreTrainedModel):
     def __init__(self, config: MobileViTConfig, expand_output: bool = True):
         r"""
-        expand_output (<fill_type>):
-            <fill_docstring>
+        expand_output (`bool`, *optional*, defaults to `True`):
+            Whether to expand the output of the model using a 1x1 convolution. If `True`, the model will apply an additional
+            1x1 convolution to expand the output channels from `config.neck_hidden_sizes[5]` to `config.neck_hidden_sizes[6]`.
         """
         super().__init__(config)
         self.config = config

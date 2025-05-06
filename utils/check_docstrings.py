@@ -979,24 +979,46 @@ def _find_sig_line(lines, line_end):
     return sig_line_end
 
 
-def find_matching_model_files():
+def find_matching_model_files(check_all: bool = False):
     """
     Find all model files in the transformers repo that should be checked for @auto_docstring,
     excluding files with certain substrings.
     Returns:
         List of file paths.
     """
-    full_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/modeling_**")
+    module_diff_files = None
+    if not check_all:
+        module_diff_files = set()
+        repo = Repo(PATH_TO_REPO)
+        # Diff from index to unstaged files
+        for modified_file_diff in repo.index.diff(None):
+            if modified_file_diff.a_path.startswith("src/transformers"):
+                module_diff_files.add(os.path.join(PATH_TO_REPO, modified_file_diff.a_path))
+        # Diff from index to `main`
+        for modified_file_diff in repo.index.diff(repo.refs.main.commit):
+            if modified_file_diff.a_path.startswith("src/transformers"):
+                module_diff_files.add(os.path.join(PATH_TO_REPO, modified_file_diff.a_path))
+        # quick escape route: if there are no module files in the diff, skip this check
+        if len(module_diff_files) == 0:
+            return None
+
+    modeling_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/modeling_**")
+    potential_files = glob.glob(modeling_glob_pattern)
+    image_processing_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/image_processing_*_fast.py")
+    potential_files += glob.glob(image_processing_glob_pattern)
     exclude_substrings = ["modeling_tf_", "modeling_flax_"]
     matching_files = []
-    potential_files = glob.glob(full_glob_pattern)
     for file_path in potential_files:
         if os.path.isfile(file_path):
             filename = os.path.basename(file_path)
             is_excluded = any(exclude in filename for exclude in exclude_substrings)
             if not is_excluded:
                 matching_files.append(file_path)
-    return sorted(matching_files)
+    # intersect with module_diff_files
+    matching_files = sorted([file for file in matching_files if file in module_diff_files])
+    print("    Checking auto_docstrings in the following files:" + "\n    - " + "\n    - ".join(matching_files))
+
+    return matching_files
 
 
 def find_files_with_auto_docstring(matching_files, decorator="@auto_docstring"):
@@ -1027,12 +1049,12 @@ def find_files_with_auto_docstring(matching_files, decorator="@auto_docstring"):
     return auto_docstrings_files
 
 
-def get_auto_docstring_candidate_lines(lines, decorator="@auto_docstring"):
+def get_auto_docstring_candidate_lines(lines):
     """
     For a file's lines, find the start and end line indices of all @auto_docstring candidates.
     Returns two lists: starts and ends.
     """
-    line_numbers = [i for i, line in enumerate(lines) if decorator in line]
+    line_numbers = [i for i, line in enumerate(lines) if "@auto_docstring" in line]
     line_starts_candidates = []
     line_ends_candidates = []
     for line_number in line_numbers:
@@ -1069,6 +1091,9 @@ def generate_new_docstring_for_signature(
         new_docstring, sig_end_line, docstring_end (last docstring line index)
     """
     # Extract and clean signature
+    missing_docstring_args = []
+    fill_docstring_args = []
+
     signature_content = lines[sig_start_line:sig_end_line]
     signature_content = [line.split("#")[0] for line in signature_content]
     signature_content = "".join(signature_content)
@@ -1092,6 +1117,7 @@ def generate_new_docstring_for_signature(
     # Fill missing args
     for arg in args_in_signature:
         if arg not in args_docstring_dict and arg not in source_args_doc([ModelArgs, ImageProcessorArgs]):
+            missing_docstring_args.append(arg)
             args_docstring_dict[arg] = {
                 "type": "<fill_type>",
                 "optional": False,
@@ -1107,6 +1133,8 @@ def generate_new_docstring_for_signature(
         for arg in args_docstring_dict:
             additional_info = args_docstring_dict[arg]["additional_info"] or ""
             custom_arg_description = args_docstring_dict[arg]["description"]
+            if "<fill_docstring>" in custom_arg_description and arg not in missing_docstring_args:
+                fill_docstring_args.append(arg)
             if custom_arg_description.endswith('"""'):
                 custom_arg_description = "\n".join(custom_arg_description.split("\n")[:-1])
             new_docstring += f"{arg} ({args_docstring_dict[arg]['type']}{additional_info}):{custom_arg_description}\n"
@@ -1119,7 +1147,7 @@ def generate_new_docstring_for_signature(
         if close_docstring:
             new_docstring += '"""'
         new_docstring = set_min_indent(new_docstring, 8)
-    return new_docstring, sig_end_line, docstring_end
+    return new_docstring, sig_end_line, docstring_end, missing_docstring_args, fill_docstring_args
 
 
 def generate_new_docstring_for_function(lines, current_line_end):
@@ -1151,38 +1179,66 @@ def generate_new_docstring_for_class(lines, current_line_end):
         elif lines[init_method_line].startswith("class "):
             break
     if not found_init_method:
-        return "", None, None, None
+        return "", None, None, None, [], []
     init_method_sig_line_end = _find_sig_line(lines, init_method_line)
     docstring_line = init_method_sig_line_end if '"""' in lines[init_method_sig_line_end] else None
-    new_docstring, _, init_method_docstring_end = generate_new_docstring_for_signature(
-        lines,
+    new_docstring, _, init_method_docstring_end, missing_docstring_args, fill_docstring_args = (
+        generate_new_docstring_for_signature(
+            lines,
+            init_method_line,
+            init_method_sig_line_end,
+            docstring_line,
+            arg_indent="",
+        )
+    )
+    return (
+        new_docstring,
         init_method_line,
         init_method_sig_line_end,
-        docstring_line,
-        arg_indent="",
+        init_method_docstring_end,
+        missing_docstring_args,
+        fill_docstring_args,
     )
-    return new_docstring, init_method_line, init_method_sig_line_end, init_method_docstring_end
 
 
-def update_file_with_new_docstrings(candidate_file, lines, line_starts_candidates, line_ends_candidates):
+def update_file_with_new_docstrings(
+    candidate_file, lines, line_starts_candidates, line_ends_candidates, overwrite=False
+):
     """
     For a given file, update the docstrings for all @auto_docstring candidates and write the new content.
     """
     content_base_file_new_lines = lines[: line_ends_candidates[0]]
     current_line_end = line_ends_candidates[0]
     index = 1
+    missing_docstring_args_warnings = []
+    fill_docstring_args_warnings = []
     while index <= len(line_starts_candidates):
         new_docstring = ""
         found_init_method = False
         # Function
         if "    def" in lines[current_line_end]:
-            new_docstring, sig_line_end, docstring_end = generate_new_docstring_for_function(lines, current_line_end)
+            new_docstring, sig_line_end, docstring_end, missing_docstring_args, fill_docstring_args = (
+                generate_new_docstring_for_function(lines, current_line_end)
+            )
         # Class
         elif "class " in lines[current_line_end]:
-            new_docstring, init_method_line, init_method_sig_line_end, init_method_docstring_end = (
-                generate_new_docstring_for_class(lines, current_line_end)
-            )
+            (
+                new_docstring,
+                init_method_line,
+                init_method_sig_line_end,
+                init_method_docstring_end,
+                missing_docstring_args,
+                fill_docstring_args,
+            ) = generate_new_docstring_for_class(lines, current_line_end)
             found_init_method = init_method_line is not None
+        # Add warnings if needed
+        if missing_docstring_args:
+            for arg in missing_docstring_args:
+                missing_docstring_args_warnings.append(f"    - {arg} line {current_line_end}")
+        if fill_docstring_args:
+            for arg in fill_docstring_args:
+                fill_docstring_args_warnings.append(f"    - {arg} line {current_line_end}")
+
         # Write new lines
         if index >= len(line_ends_candidates) or line_ends_candidates[index] > current_line_end:
             if "    def" in lines[current_line_end]:
@@ -1207,10 +1263,14 @@ def update_file_with_new_docstrings(candidate_file, lines, line_starts_candidate
                 content_base_file_new_lines += lines[current_line_end:]
             if index < len(line_ends_candidates):
                 current_line_end = line_ends_candidates[index]
+
         index += 1
     content_base_file_new = "\n".join(content_base_file_new_lines)
-    with open(candidate_file, "w", encoding="utf-8") as f:
-        f.write(content_base_file_new)
+    if overwrite:
+        with open(candidate_file, "w", encoding="utf-8") as f:
+            f.write(content_base_file_new)
+
+    return missing_docstring_args_warnings, fill_docstring_args_warnings
 
 
 def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
@@ -1220,7 +1280,9 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
     generating new docstrings, and updating files as needed.
     """
     # 1. Find all model files to check
-    matching_files = find_matching_model_files()
+    matching_files = find_matching_model_files(check_all)
+    if matching_files is None:
+        return
     # 2. Find files that contain the @auto_docstring decorator
     auto_docstrings_files = find_files_with_auto_docstring(matching_files)
     # 3. For each file, update docstrings for all candidates
@@ -1228,7 +1290,21 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
         with open(candidate_file, "r", encoding="utf-8") as f:
             lines = f.read().split("\n")
         line_starts_candidates, line_ends_candidates = get_auto_docstring_candidate_lines(lines)
-        update_file_with_new_docstrings(candidate_file, lines, line_starts_candidates, line_ends_candidates)
+        missing_docstring_args_warnings, fill_docstring_args_warnings = update_file_with_new_docstrings(
+            candidate_file, lines, line_starts_candidates, line_ends_candidates, overwrite=overwrite
+        )
+        if missing_docstring_args_warnings:
+            if not overwrite:
+                print(
+                    "Some docstrings are missing. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to generate the docstring templates where needed."
+                )
+            print(f"🚨 Missing docstring for the following arguments in {candidate_file}:")
+            for warning in missing_docstring_args_warnings:
+                print(warning)
+        if fill_docstring_args_warnings:
+            print(f"🚨 Docstring needs to be filled for the following arguments in {candidate_file}:")
+            for warning in fill_docstring_args_warnings:
+                print(warning)
 
 
 def check_docstrings(overwrite: bool = False, check_all: bool = False):
@@ -1335,4 +1411,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     check_auto_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
-    check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
+    # check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)

@@ -1487,13 +1487,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
             return output_ids
 
 
-@auto_docstring(
-    custom_intro="""
-    text_encoder (`Optional[PreTrainedModel]`, *optional*): Text encoder.
-        audio_encoder (`Optional[PreTrainedModel]`, *optional*): Audio code decoder.
-        decoder (`Optional[MusicgenMelodyForCausalLM]`, *optional*): MusicGen Melody decoder used to generate audio codes.
-    """
-)
+@auto_docstring
 class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
     config_class = MusicgenMelodyConfig
     main_input_name = "input_ids"
@@ -1509,12 +1503,12 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         decoder: Optional[MusicgenMelodyForCausalLM] = None,
     ):
         r"""
-        text_encoder (<fill_type>):
-            <fill_docstring>
-        audio_encoder (<fill_type>):
-            <fill_docstring>
-        decoder (<fill_type>):
-            <fill_docstring>
+        text_encoder (`PreTrainedModel`, *optional*):
+            The text encoder model that encodes text into hidden states for conditioning.
+        audio_encoder (`PreTrainedModel`, *optional*):
+            The audio encoder model that encodes audio into hidden states for conditioning.
+        decoder (`MusicgenForCausalLM`, *optional*):
+            The decoder model that generates audio tokens based on conditioning signals.
         """
         if config is None and None in (text_encoder, audio_encoder, decoder):
             raise ValueError(

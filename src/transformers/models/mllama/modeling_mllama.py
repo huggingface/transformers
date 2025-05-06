@@ -29,11 +29,7 @@ from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...utils import (
-    auto_docstring,
-    is_torch_flex_attn_available,
-    logging,
-)
+from ...utils import auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_mllama import MllamaConfig, MllamaTextConfig, MllamaVisionConfig
 
 
@@ -1477,8 +1473,15 @@ class MllamaTextModel(MllamaPreTrainedModel):
             For each text token (in seq_length):
             - 1 indicates the token **should attend** to the corresponding image tile
             - 0 indicates the token **should not attend** to the corresponding image tile
-        full_text_row_masked_out_mask (<fill_type>):
-            <fill_docstring>
+        full_text_row_masked_out_mask (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
+            A tuple containing two tensors that mask out rows in the cross-attention mechanism:
+            - The first tensor has shape `(batch_size, 1, seq_length, 1)` and contains values of 0 or 1.
+              A value of 0 indicates that the corresponding text token's entire row in the cross-attention
+              matrix should be masked out (all image tokens ignored).
+            - The second tensor has the same shape and is used internally to apply the masking during
+              the forward pass of cross-attention layers.
+            This mask is derived from the cross_attention_mask and is used to handle cases where a text token
+            should not attend to any image token.
 
         Example:
 
@@ -1686,8 +1689,15 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        full_text_row_masked_out_mask (<fill_type>):
-            <fill_docstring>
+        full_text_row_masked_out_mask (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
+            A tuple containing two tensors that mask out rows in the cross-attention mechanism:
+            - The first tensor has shape `(batch_size, 1, seq_length, 1)` and contains values of 0 or 1.
+              A value of 0 indicates that the corresponding text token's entire row in the cross-attention
+              matrix should be masked out (all image tokens ignored).
+            - The second tensor has the same shape and is used internally to apply the masking during
+              the forward pass of cross-attention layers.
+            This mask is derived from the cross_attention_mask and is used to handle cases where a text token
+            should not attend to any image token.
 
         Example:
 

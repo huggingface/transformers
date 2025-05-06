@@ -43,6 +43,13 @@ UNROLL_KWARGS_CLASSES = {
     "ImageProcessorFast",
 }
 
+HARDCODED_CONFIG_FOR_MODELS = {
+    "openai": "OpenAIGPTConfig",
+    "x-clip": "XCLIPConfig",
+    "kosmos2": "Kosmos2Config",
+    "donut": "DonutSwinConfig",
+    "esmfold": "EsmConfig",
+}
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
 
@@ -754,7 +761,9 @@ def parse_docstring(docstring, max_indent_level=0):
             shape = parse_shape(additional_info)
             default = parse_default(additional_info)
             param_description = match.group(4).strip()
-            param_description = equalize_indent(f"\n{param_description}\n", 4)
+            # set first line of param_description to 4 spaces:
+            param_description = re.sub(r"^", " " * 4, param_description, 1)
+            param_description = f"\n{param_description}"
             params[param_name] = {
                 "type": param_type,
                 "description": param_description,
@@ -945,8 +954,13 @@ def _get_model_info(func, parent_class):
                 PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
             )[model_name_lowercase]
         except KeyError:
-            config_class = "ModelConfig"
-            print(f"🚨 Config not found for {model_name_lowercase}, will use `ModelConfig` in the docs")
+            if model_name_lowercase in HARDCODED_CONFIG_FOR_MODELS:
+                config_class = HARDCODED_CONFIG_FOR_MODELS[model_name_lowercase]
+            else:
+                config_class = "ModelConfig"
+                print(
+                    f"🚨 Config not found for {model_name_lowercase}. You can manually add it to HARDCODED_CONFIG_FOR_MODELS in utils/args_doc.py"
+                )
 
     return model_name_lowercase, class_name, config_class
 
@@ -1328,8 +1342,18 @@ def _process_example_section(
             try:
                 checkpoint_example = get_checkpoint_from_config_class(CONFIG_MAPPING[model_name_lowercase])
             except KeyError:
-                # skip example if no checkpoint found
-                checkpoint_example = None
+                # For models with inconsistent lowercase model name
+                if model_name_lowercase in HARDCODED_CONFIG_FOR_MODELS:
+                    CONFIG_MAPPING_NAMES = auto_module.configuration_auto.CONFIG_MAPPING_NAMES
+                    config_class_name = HARDCODED_CONFIG_FOR_MODELS[model_name_lowercase]
+                    if config_class_name in CONFIG_MAPPING_NAMES.values():
+                        model_name_for_auto_config = [
+                            k for k, v in CONFIG_MAPPING_NAMES.items() if v == config_class_name
+                        ][0]
+                        if model_name_for_auto_config in CONFIG_MAPPING:
+                            checkpoint_example = get_checkpoint_from_config_class(
+                                CONFIG_MAPPING[model_name_for_auto_config]
+                            )
 
         # Add example based on model task
         if model_task is not None:

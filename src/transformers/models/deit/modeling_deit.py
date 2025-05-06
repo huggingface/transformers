@@ -478,8 +478,8 @@ class DeiTModel(DeiTPreTrainedModel):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
-        use_mask_token (<fill_type>):
-            <fill_docstring>
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+            Whether to use a mask token for masked image modeling.
         """
         super().__init__(config)
         self.config = config

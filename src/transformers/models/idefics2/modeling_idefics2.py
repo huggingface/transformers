@@ -549,8 +549,8 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
-        patch_attention_mask (<fill_type>):
-            <fill_docstring>
+        patch_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_patches_height, num_patches_width)`, *optional*):
+            The attention mask for the patches.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -834,8 +834,8 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
         attention_mask: torch.Tensor,
     ) -> torch.Tensor:
         r"""
-        context (<fill_type>):
-            <fill_docstring>
+        context (`torch.FloatTensor` of shape `(batch, seq_len, embed_dim)`):
+            Input to the layer.
         """
         # seq embed -> bsz seq embed
         latents = self.latents.unsqueeze(0).expand((context.shape[0], *self.latents.size()))

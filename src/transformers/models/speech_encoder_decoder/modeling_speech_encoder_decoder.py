@@ -76,10 +76,10 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         decoder: Optional[PreTrainedModel] = None,
     ):
         r"""
-        encoder (<fill_type>):
-            <fill_docstring>
-        decoder (<fill_type>):
-            <fill_docstring>
+        encoder (`PreTrainedModel`, *optional*):
+            The encoder model to use.
+        decoder (`PreTrainedModel`, *optional*):
+            The decoder model to use.
         """
         if config is None and (encoder is None or decoder is None):
             raise ValueError("Either a configuration or an encoder and a decoder has to be provided.")

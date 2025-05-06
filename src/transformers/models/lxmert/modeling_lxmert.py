@@ -26,11 +26,7 @@ from torch.nn import CrossEntropyLoss, SmoothL1Loss
 
 from ...activations import ACT2FN, gelu
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_lxmert import LxmertConfig
 
 
@@ -1139,8 +1135,6 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             - 1 indicates that the sentence does match the image.
         ans (`Torch.Tensor` of shape `(batch_size)`, *optional*):
             a one hot representation hof the correct answer *optional*
-
-        Returns:
         """
 
         if "masked_lm_labels" in kwargs:

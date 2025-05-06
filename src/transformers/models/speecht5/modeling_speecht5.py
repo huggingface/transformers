@@ -36,10 +36,7 @@ from ...modeling_outputs import (
     Seq2SeqSpectrogramOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
 
 
@@ -1975,10 +1972,10 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         decoder: Optional[nn.Module] = None,
     ):
         r"""
-        encoder (<fill_type>):
-            <fill_docstring>
-        decoder (<fill_type>):
-            <fill_docstring>
+        encoder (`PreTrainedModel`, *optional*):
+            The encoder model to use.
+        decoder (`PreTrainedModel`, *optional*):
+            The decoder model to use.
         """
         super().__init__(config)
         self.config = config
@@ -2055,8 +2052,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
             - 0 indicates the head is **masked**.
         speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
             Tensor containing the speaker embeddings.
-
-        Returns:
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2555,8 +2550,8 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             Float values of target mel spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
             computation. Spectrograms can be obtained using [`SpeechT5Processor`]. See [`SpeechT5Processor.__call__`]
             for details.
-        stop_labels (<fill_type>):
-            <fill_docstring>
+        stop_labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Binary tensor indicating the position of the stop token in the sequence.
 
         Example:
 
@@ -2905,8 +2900,8 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         labels (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`, *optional*):
             Float values of target mel spectrogram. Spectrograms can be obtained using [`SpeechT5Processor`]. See
             [`SpeechT5Processor.__call__`] for details.
-        stop_labels (<fill_type>):
-            <fill_docstring>
+        stop_labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Binary tensor indicating the position of the stop token in the sequence.
 
         Example:
 
@@ -3209,16 +3204,18 @@ class SpeechT5HifiGan(PreTrainedModel):
             layer.remove_weight_norm()
         nn.utils.remove_weight_norm(self.conv_post)
 
-    def forward(self, spectrogram: torch.FloatTensor) -> torch.FloatTensor:
-        r"""
+    @auto_docstring(
+        custom_intro="""
         Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch
         of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a single, un-batched speech
         waveform.
-
-        Args:
-            spectrogram (`torch.FloatTensor`):
-                Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
-                config.model_in_dim)`, or un-batched and of shape `(sequence_length, config.model_in_dim)`.
+        """
+    )
+    def forward(self, spectrogram: torch.FloatTensor) -> torch.FloatTensor:
+        r"""
+        spectrogram (`torch.FloatTensor`):
+            Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
+            config.model_in_dim)`, or un-batched and of shape `(sequence_length, config.model_in_dim)`.
 
         Returns:
             `torch.FloatTensor`: Tensor containing the speech waveform. If the input spectrogram is batched, will be of

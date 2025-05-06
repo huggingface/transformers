@@ -32,12 +32,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import (
-    auto_docstring,
-    is_detectron2_available,
-    logging,
-    requires_backends,
-)
+from ...utils import auto_docstring, is_detectron2_available, logging, requires_backends
 from .configuration_layoutlmv2 import LayoutLMv2Config
 
 
@@ -1241,8 +1236,8 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
     def __init__(self, config, has_visual_segment_embedding=True):
         r"""
-        has_visual_segment_embedding (<fill_type>):
-            <fill_docstring>
+        has_visual_segment_embedding (`bool`, *optional*, defaults to `True`):
+            Whether or not to add visual segment embeddings.
         """
         super().__init__(config)
         self.num_labels = config.num_labels

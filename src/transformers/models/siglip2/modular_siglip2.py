@@ -245,8 +245,8 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
         output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
-        spatial_shapes (<fill_type>):
-            <fill_docstring>
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -324,10 +324,10 @@ class Siglip2VisionModel(SiglipVisionModel):
         output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
-        pixel_attention_mask (<fill_type>):
-            <fill_docstring>
-        spatial_shapes (<fill_type>):
-            <fill_docstring>
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
 
         Examples:
 
@@ -368,10 +368,10 @@ class Siglip2Model(SiglipModel):
         output_hidden_states: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
-        pixel_attention_mask (<fill_type>):
-            <fill_docstring>
-        spatial_shapes (<fill_type>):
-            <fill_docstring>
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
 
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
@@ -429,10 +429,10 @@ class Siglip2Model(SiglipModel):
         output_hidden_states: Optional[bool] = None,
     ) -> Siglip2Output:
         r"""
-        pixel_attention_mask (<fill_type>):
-            <fill_docstring>
-        spatial_shapes (<fill_type>):
-            <fill_docstring>
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
 
@@ -532,10 +532,10 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
         output_hidden_states: Optional[bool] = None,
     ) -> ImageClassifierOutput:
         r"""
-        pixel_attention_mask (<fill_type>):
-            <fill_docstring>
-        spatial_shapes (<fill_type>):
-            <fill_docstring>
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

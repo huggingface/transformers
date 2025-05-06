@@ -1009,8 +1009,9 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
             into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_features`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2BertProcessor.__call__`] for details.
-        mask_time_indices (<fill_type>):
-            <fill_docstring>
+        mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
+            masked extracted features in *config.proj_codevector_dim* space.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1062,8 +1063,10 @@ _HIDDEN_STATES_START_POSITION = 2
 class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
     def __init__(self, config, target_lang: Optional[str] = None):
         r"""
-        target_lang (<fill_type>):
-            <fill_docstring>
+        target_lang (`str`, *optional*):
+            Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
+            adapter.<lang>.bin. Only relevant when using an instance of [`UniSpeechSatForCTC`] with adapters. Uses 'eng' by
+            default.
         """
         super().__init__(config)
 

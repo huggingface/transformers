@@ -26,11 +26,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import auto_docstring, logging, torch_int
 from .configuration_vit_msn import ViTMSNConfig
 
 
@@ -481,8 +477,8 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
 class ViTMSNModel(ViTMSNPreTrainedModel):
     def __init__(self, config: ViTMSNConfig, use_mask_token: bool = False):
         r"""
-        use_mask_token (<fill_type>):
-            <fill_docstring>
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+            Whether to use a mask token for masked image modeling.
         """
         super().__init__(config)
         self.config = config
