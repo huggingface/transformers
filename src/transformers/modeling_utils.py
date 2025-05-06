@@ -698,8 +698,13 @@ def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor
     """Cast a single parameter `param_name` into the `model`, with value `tensor`."""
     module, param_type = get_module_from_name(model, param_name)
     # This will check potential shape mismatch if skipped before
-    module.load_state_dict({param_type: tensor}, strict=False, assign=True)
-
+    try:
+        module.load_state_dict({param_type: tensor}, strict=False, assign=True)
+        return None
+    except RuntimeError as e:
+        
+        pass
+            
 
 @torch.no_grad()
 def _load_state_dict_into_meta_model(
@@ -740,7 +745,8 @@ def _load_state_dict_into_meta_model(
     file_pointer = None
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
-
+    
+    errors = []
     for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:
             continue
@@ -810,7 +816,9 @@ def _load_state_dict_into_meta_model(
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
 
-                _load_parameter_into_model(model, param_name, param.to(param_device))
+                error = _load_parameter_into_model(model, param_name, param.to(param_device))
+                if error is not None:   
+                    errors.append(error)
 
             else:
                 hf_quantizer.create_quantized_param(
@@ -834,7 +842,7 @@ def _load_state_dict_into_meta_model(
     if file_pointer is not None:
         file_pointer.__exit__(None, None, None)
 
-    return disk_offload_index, cpu_offload_index
+    return disk_offload_index, cpu_offload_index, errors
 
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
@@ -4590,7 +4598,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 device_map_kwargs["offload_buffers"] = True
 
             if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
-                dispatch_model(model, **device_map_kwargs)
+                try:
+                    dispatch_model(model, **device_map_kwargs)
+                except RuntimeError as e:
+                    error_msgs += [str(e)]
 
         if hf_quantizer is not None:
             hf_quantizer.postprocess_model(model, config=config)
@@ -4950,7 +4961,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 error_msgs += _load_state_dict_into_zero3_model(model_to_load, state_dict)
             # Skip it with fsdp on ranks other than 0
             elif not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
-                disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
+                disk_offload_index, cpu_offload_index, errors = _load_state_dict_into_meta_model(
                     model_to_load,
                     state_dict,
                     shard_file,
@@ -4967,6 +4978,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     unexpected_keys=unexpected_keys,
                     device_mesh=device_mesh,
                 )
+                error_msgs += errors
 
             # force memory release if loading multiple shards, to avoid having 2 state dicts in memory in next loop
             del state_dict

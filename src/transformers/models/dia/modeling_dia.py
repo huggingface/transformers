@@ -227,11 +227,9 @@ class DiaCrossAttention(nn.Module):
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, cache_position=cache_position
                 )
-        elif cache_position[0] != 0:  # not prefill, make it compile compatible
-            key_states, value_states = (
-                past_key_value.key_cache[self.layer_idx],
-                past_key_value.value_cache[self.layer_idx],
-            )
+        elif cache_position[0].shape != 0:  # not prefill, make it compile compatible
+            key_states = past_key_value.key_cache[self.layer_idx]
+            value_states = past_key_value.value_cache[self.layer_idx]
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -334,6 +332,8 @@ class DiaEncoder(DiaPreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         past_key_values: Optional[Cache] = None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
     ) -> torch.Tensor:
         hidden_states = self.embedding(hidden_states)
 
@@ -411,7 +411,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         if encoder_hidden_states is not None:
             residual = hidden_states
             hidden_states = self.pre_ca_norm(hidden_states).to(self.compute_dtype)
-            hidden_states, cross_attn_weights = self.encoder_attn(
+            hidden_states, cross_attn_weights = self.cross_attention(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=attention_mask,
@@ -499,12 +499,12 @@ class DiaModel(DiaPreTrainedModel):
         self,
         input_features: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Union[EncoderDecoderCache, Tuple[torch.FloatTensor]]] = None,
-        decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
-        decoder_position_ids: Optional[Tuple[torch.LongTensor]] = None,
+        inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
+        position_ids: Optional[Tuple[torch.LongTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -537,26 +537,34 @@ class DiaModel(DiaPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if encoder_outputs is None:
+        if input_features is None:
+            input_features = torch.zeros_like(input_ids)
+        input_features = torch.cat([input_features, input_ids], dim=0)
+
+        if cache_position is None:
+            cache_position = torch.arange(input_ids.shape[1], device=input_ids.device)[None,:]
+
+        if cache_position.shape[1] != 1: # prefill computes encoder kv
             encoder_outputs = self.encoder(
                 input_features,
+                cache_position=cache_position,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
             )
+        else:
+            encoder_outputs = None
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
+            input_ids=input_ids,
             attention_mask=decoder_attention_mask,
-            encoder_hidden_states=encoder_outputs[0],
+            encoder_hidden_states=encoder_outputs,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             position_ids=decoder_position_ids,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
         )
 
