@@ -59,11 +59,11 @@ if __name__ == "__main__":
 
 
     result = {}
-    for key, val in b_unique_failures.items():
-        if args.operation == '|' and key not in a_unique_failures.keys():
+    for key, val in a_unique_failures.items():
+        if args.operation == '|' and key not in b_unique_failures.keys():
             result[key] = val
 
-        if args.operation == '&' and key in a_unique_failures.keys():
+        if args.operation == '&' and key in b_unique_failures.keys():
             result[key] = val
 
 
