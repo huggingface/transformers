@@ -70,6 +70,7 @@ if TYPE_CHECKING:
     from .cpmant import *
     from .ctrl import *
     from .cvt import *
+    from .d_fine import *
     from .dab_detr import *
     from .dac import *
     from .data2vec import *
@@ -128,11 +129,13 @@ if TYPE_CHECKING:
     from .granite import *
     from .granite_speech import *
     from .granitemoe import *
+    from .granitemoehybrid import *
     from .granitemoeshared import *
     from .grounding_dino import *
     from .groupvit import *
     from .helium import *
     from .herbert import *
+    from .hgnet_v2 import *
     from .hiera import *
     from .hubert import *
     from .ibert import *
