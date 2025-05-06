@@ -52,7 +52,7 @@ class DFineConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`DFineModel`]. It is used to instantiate a D-FINE
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of D-FINE-X-COCO "[ustc-community/dfine_x_coco"](https://huggingface.co/ustc-community/dfine_x_coco").
+    defaults will yield a similar configuration to that of D-FINE-X-COCO "[ustc-community/dfine-xlarge-coco"](https://huggingface.co/ustc-community/dfine-xlarge-coco").
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
@@ -922,8 +922,8 @@ class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = load_image(url)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("ustc-community/dfine_x_coco")
-        >>> model = DFineForObjectDetection.from_pretrained("ustc-community/dfine_x_coco")
+        >>> image_processor = AutoImageProcessor.from_pretrained("ustc-community/dfine-xlarge-coco")
+        >>> model = DFineForObjectDetection.from_pretrained("ustc-community/dfine-xlarge-coco")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")
