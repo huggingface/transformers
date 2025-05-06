@@ -1238,23 +1238,43 @@ class BambaForCausalLM(LlamaForCausalLM):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        out = super().forward(
-            input_ids,
-            attention_mask,
-            position_ids,
-            past_key_values,
-            inputs_embeds,
-            labels,
-            use_cache,
-            output_attentions,
-            output_hidden_states,
-            cache_position,
-            logits_to_keep,
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs: BaseModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            cache_position=cache_position,
             **kwargs,
         )
-        if self.zloss_coeff > 0:
-            out.loss = out.loss + self.zloss_coeff * out.logits.logsumexp(dim=-1).to(dtype=out.loss.dtype).pow(2).mean()
-        return out
+
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            if self.zloss_coeff > 0:
+                loss = loss + self.zloss_coeff * logits.logsumexp(dim=-1).to(dtype=loss.dtype).pow(2).mean()
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
     def prepare_inputs_for_generation(
         self,
