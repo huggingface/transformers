@@ -361,8 +361,9 @@ def sdpa_mask(
     ```
 
     """
+    q_length = cache_position.shape[0]
     # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
-    if allow_is_causal_skip and _ignore_causal_mask_sdpa(attention_mask, query_length, kv_length, window, chunk):
+    if allow_is_causal_skip and _ignore_causal_mask_sdpa(attention_mask, q_length, kv_length, sliding_window, chunk_size):
         return None
 
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
