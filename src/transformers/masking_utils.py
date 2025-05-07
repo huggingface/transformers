@@ -501,7 +501,7 @@ ALL_MASK_CREATION_FUNCTIONS = {
     "sdpa": sdpa_mask,
     "eager": eager_mask,
     "flash_attention_2": flash_attention_mask,
-    "flex": flex_attention_mask,
+    "flex_attention": flex_attention_mask,
 }
 
 
