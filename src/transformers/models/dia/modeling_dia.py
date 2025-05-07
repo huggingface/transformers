@@ -41,20 +41,14 @@ _CONFIG_FOR_DOC = "DiaConfig"
 _CHECKPOINT_FOR_DOC = "nari-labs/Dia-1.6B"
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
 
 def apply_rotary_pos_emb(tensor, position_embeddings, unsqueeze_dim=1):
-    cos = position_embeddings[0].unsqueeze(unsqueeze_dim)
-    sin = position_embeddings[1].unsqueeze(unsqueeze_dim)
+    cos = position_embeddings[0]
+    sin = position_embeddings[1]
     first_half, second_half = torch.chunk(tensor.to(torch.float32), 2, dim=-1)
     first_part = first_half * cos - second_half * sin
     second_part = second_half * cos + first_half * sin
-    return torch.cat((first_part, second_part), dim=-1)
+    return torch.cat((first_part.to(tensor.dtype), second_part.to(tensor.dtype)), dim=-1)
 
 
 class DiaRotaryEmbedding(nn.Module):
@@ -66,18 +60,19 @@ class DiaRotaryEmbedding(nn.Module):
 
         half_embedding_dim = self.embedding_dims // 2
         fraction = (2.0 * torch.arange(0, half_embedding_dim)) / self.embedding_dims
-        inv_freqs = 1 / (self.min_timescale * (self.max_timescale / self.min_timescale) ** fraction).to(torch.float32)
-        self.register_buffer("inv_freqs", inv_freqs, persistent=False)
+        freqs = (self.min_timescale * (self.max_timescale / self.min_timescale) ** fraction).to(torch.float32)
+        self.register_buffer("freqs", freqs, persistent=False)
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        expanded_timescale = self.inv_freqs[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (expanded_timescale * position_ids_expanded.float()).transpose(1, 2)
-            cos, sin = freqs.cos(), freqs.sin()
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        position_ids_expanded = position_ids[:, :, None, None].float().repeat(x.shape[0], 1, 1, 1)
+        half_embedding_dim = self.embedding_dims // 2
+        fraction = (2.0 * torch.arange(0, half_embedding_dim)) / self.embedding_dims
+        freqs = (self.min_timescale * (self.max_timescale / self.min_timescale) ** fraction).to(torch.float32)
+
+        full_freqs = (position_ids_expanded.float() /freqs.to(position_ids_expanded.device))
+        cos, sin = full_freqs.cos(), full_freqs.sin()
+        return cos, sin
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -130,7 +125,7 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
         self.hidden_size = config.hidden_size
         self.head_dim = getattr(config, "head_dim", config.hidden_size // self.num_heads)
         self.layer_idx = layer_idx
-        self.scaling = self.head_dim**-0.5
+        self.scaling = 1
         self.is_causal = is_causal
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -149,12 +144,12 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        key_states = self.k_proj(hidden_states).view(hidden_shape)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        query_states = apply_rotary_pos_emb(query_states, position_embeddings)
-        key_states = apply_rotary_pos_emb(key_states, position_embeddings)
+        query_states = apply_rotary_pos_emb(query_states, position_embeddings, -2).transpose(1, 2)
+        key_states = apply_rotary_pos_emb(key_states, position_embeddings, -2).transpose(1, 2)
 
         if past_key_value is not None:
             key_states, value_states = past_key_value.update(
@@ -346,12 +341,12 @@ class DiaEncoder(DiaPreTrainedModel):
         hidden_states = self.embedding(audio_codes)
         position_embeddings = self.rotary_embeddings(hidden_states, cache_position)
         _attention_mask = torch.ones((audio_codes.shape[0], 1, hidden_states.shape[1], hidden_states.shape[1]), device=hidden_states.device)
-        attention_mask = 1-(_attention_mask.long() & attention_mask[:,None,None,:])
+        _attention_mask = (_attention_mask.long() & attention_mask[:,None,None,:]) ^ attention_mask[:,None,:,None]
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states=hidden_states, 
                 cache_position=cache_position, 
-                attention_mask=attention_mask,
+                attention_mask=_attention_mask,
                 position_embeddings=position_embeddings, 
                 past_key_values=past_key_values
             )

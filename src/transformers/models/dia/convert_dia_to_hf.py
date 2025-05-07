@@ -49,7 +49,7 @@ shape_mappings = [
 ]
 
 
-def reshape_or_transpose(tensor, target_tensor):
+def reshape_or_transpose(tensor, target_tensor, key):
     """Try reshaping or transposing tensor to match the shape of target_tensor."""
     numel = tensor.numel()
     target_shape = target_tensor
@@ -60,7 +60,13 @@ def reshape_or_transpose(tensor, target_tensor):
 
     # Direct reshape
     try:
-        reshaped = tensor.view(target_shape)
+        if "o_proj" in key:
+            reshaped = tensor.reshape(target_shape[1], target_shape[0]).T
+        elif tensor.shape[0] != target_shape[0] and tensor.shape[-1] != target_shape[-1]:
+            reshaped = tensor.permute(1,2,0).view(target_shape)
+        else:
+            reshaped = tensor.view(target_shape)
+        
         return reshaped, "reshaped"
     except Exception:
         pass
@@ -106,7 +112,7 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
             if key in model_class_keys:
                 target_shape = model_dict[key].shape
                 try:
-                    new_tensor, method = reshape_or_transpose(tensor, target_shape)
+                    new_tensor, method = reshape_or_transpose(tensor, target_shape, key)
                     print(f"{key}: {method} from {tensor.shape} to {target_shape}")
                     tensor = new_tensor
                 except Exception as e:
@@ -160,4 +166,4 @@ if __name__ == "__main__":
             processor = DiaProcessor( DacFeatureExtractor(), DiaTokenizer())
             processor.save_pretrained(args.pytorch_dump_folder_path)
 
-    model.push_to_hub("ArthurZ/Dia-1.6B")
+    model.save_pretrained("ArthurZ/Dia-1.6B")
