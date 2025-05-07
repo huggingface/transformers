@@ -323,7 +323,7 @@ Custom decoding methods enable specialized generation behavior such as the follo
 - handle special tokens with custom logic;
 - enhanced input preparation for advanced models;
 
-[`~GenerationMixin.generate`] supports custom decoding methods through the `recipe` argument which loads custom generation recipes from the Hub. This means anyone can create and share their custom generation method without requiring users to install additional Python packages.
+[`~GenerationMixin.generate`] supports custom decoding methods through the `custom_generate` argument which loads custom generation recipes from the Hub. This means anyone can create and share their custom generation method without requiring users to install additional Python packages.
 
 <!-- TODO before merging: 1) better repo name (use a `generate-community` org?) 2) prettify the repo -->
 ```py
@@ -333,7 +333,7 @@ tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct", device_map="auto")
 
 inputs = tokenizer(["The quick brown"], return_tensors="pt").to(model.device)
-gen_out = model.generate(**inputs, recipe="joaogante/test_generate_from_hub")  # minimal greedy decoding
+gen_out = model.generate(**inputs, custom_generate="joaogante/test_generate_from_hub")  # minimal greedy decoding
 print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
 'The quick brown fox jumps over a lazy dog, and the dog is a type of animal. Is'
 ```
@@ -343,12 +343,12 @@ You should read the `README.md` file of a custom generation strategy to see what
 Consider the Hub repository [joaogante/test_generate_from_hub](https://huggingface.co/joaogante/test_generate_from_hub) as an example. The `README.md` states that it has an additional input argument, `left_padding`, which adds a number of padding tokens before the prompt.
 
 ```py
-gen_out = model.generate(**inputs, recipe="joaogante/test_generate_from_hub", left_padding=5)
+gen_out = model.generate(**inputs, custom_generate="joaogante/test_generate_from_hub", left_padding=5)
 print(tokenizer.batch_decode(gen_out)[0])
 '<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>The quick brown fox jumps over the lazy dog.\n\nThe sentence "The quick'
 ```
 
-If the recipe has pinned Python requirements that your environment doesn't meet, you'll get an exception about missing requirements. For instance, [joaogante/test_generate_from_hub_2](https://huggingface.co/joaogante/test_generate_from_hub_2) has an impossible set of requirements defined in its `requirements.txt`, and you'll see the error message below if you try to run it.
+If the custom method has pinned Python requirements that your environment doesn't meet, you'll get an exception about missing requirements. For instance, [joaogante/test_generate_from_hub_2](https://huggingface.co/joaogante/test_generate_from_hub_2) has an impossible set of requirements defined in its `requirements.txt`, and you'll see the error message below if you try to run it.
 
 ```
 ValueError: Missing requirements for joaogante/test_generate_from_hub_2:
@@ -370,7 +370,7 @@ To create a new decoding method, you need to create a new [**Model**](https://hu
 
 This is the core of your decoding method. It *must* contain a [`~GenerationMixin.generate`] method, and this method *must* contain a `model` argument as its first argument. `model` is the model instance, which means you have access to all attributes and methods in the model, including the ones defined in [`GenerationMixin`] (like the base `generate` method).
 
-Under the hood, when the base [`~GenerationMixin.generate`] method is called with a `recipe` argument, it first checks its Python requirements, then locates the custom `generate` method in `generate.py`, and finally calls the custom `generate`. All received arguments and `model` are forwarded to the custom `generate` method.
+Under the hood, when the base [`~GenerationMixin.generate`] method is called with a `custom_generate` argument, it first checks its Python requirements, then locates the custom `generate` method in `generate.py`, and finally calls the custom `generate`. All received arguments and `model` are forwarded to the custom `generate` method.
 
 This means your `generate` can have a mix of original and custom arguments (as well as a different output type) as shown below.
 

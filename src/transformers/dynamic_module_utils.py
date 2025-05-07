@@ -385,7 +385,7 @@ def get_cached_module_file(
             new_files.append(module_file)
 
     except OSError:
-        logger.error(f"Could not locate the {module_file} inside {pretrained_model_name_or_path}.")
+        logger.info(f"Could not locate the {module_file} inside {pretrained_model_name_or_path}.")
         raise
 
     # Check we have all the requirements in our environment
@@ -712,7 +712,7 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
     return trust_remote_code
 
 
-def check_python_requirements(path_or_repo_id, **kwargs):
+def check_python_requirements(path_or_repo_id, requirements_file="requirements.txt", **kwargs):
     """
     Tries to locate a `requirements.txt` file in a local folder and repo, and confirms that the environment has all the
     python dependencies installed.
@@ -727,7 +727,7 @@ def check_python_requirements(path_or_repo_id, **kwargs):
     """
     missing_requirements = []  # tuple of (requirement, delimiter, version, installed_version)
     try:
-        requirements = cached_file(path_or_repo_id=path_or_repo_id, filename="requirements.txt", **kwargs)
+        requirements = cached_file(path_or_repo_id=path_or_repo_id, filename=requirements_file, **kwargs)
         with open(requirements, "r") as f:
             requirements = f.readlines()
 

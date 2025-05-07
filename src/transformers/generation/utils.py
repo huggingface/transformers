@@ -377,6 +377,21 @@ class GenerationMixin:
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
 
+    def load_custom_generate(
+        self, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]] = None, **kwargs
+    ) -> Callable:
+        """
+        Loads and returns a custom generate function, given a repo name or local path (`pretrained_model_name_or_path`).
+        """
+        check_python_requirements(
+            pretrained_model_name_or_path, requirements_file="custom_generate/requirements.txt", **kwargs
+        )
+        module = get_cached_module_file(
+            pretrained_model_name_or_path, module_file="custom_generate/generate.py", **kwargs
+        )
+        custom_generate_function = get_class_in_module("generate", module)
+        return custom_generate_function
+
     def _cache_dependant_input_preparation(
         self,
         input_ids: torch.LongTensor,
@@ -2159,7 +2174,7 @@ class GenerationMixin:
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
         use_model_defaults: Optional[bool] = None,
-        recipe: Optional[str] = None,
+        custom_generate: Optional[str] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
@@ -2229,9 +2244,9 @@ class GenerationMixin:
                 generation configuration (`model.generation_config`), as opposed to the global defaults
                 (`GenerationConfig()`). If unset, models saved starting from `v4.50` will consider this flag to be
                 `True`.
-            recipe (`str`, *optional*):
+            custom_generate (`str`, *optional*):
                 A string containing the name of a huggingface.co repository. If provided, the custom `generate`
-                function defined in that reposity's `generate/generate.py` file will be executed instead of the
+                function defined in that reposity's `custom_generate/generate.py` file will be executed instead of the
                 standard `generate` method. Note that the logic is for generation is entirely defined in that
                 repository, and the return type may be different from the standard `generate` method.
             kwargs (`Dict[str, Any]`, *optional*):
@@ -2256,7 +2271,7 @@ class GenerationMixin:
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
         # 0. If requested, load an arbitrary generation recipe from the Hub and run it instead
-        if recipe is not None:
+        if custom_generate is not None:
             # Get all `generate` arguments in a single variable. Custom functions are responsible for handling them:
             # they receive the same inputs as `generate`, only with `model` instead of `self`. They can access to
             # methods from `GenerationMixin` through `model`.
@@ -2264,9 +2279,7 @@ class GenerationMixin:
             generate_arguments = {key: value for key, value in locals().items() if key not in global_keys_to_exclude}
             generate_arguments.update(kwargs)
 
-            check_python_requirements(recipe, **kwargs)
-            module = get_cached_module_file(recipe, module_file="generate/generate.py", **kwargs)
-            custom_generate_function = get_class_in_module("generate", module)
+            custom_generate_function = self.load_custom_generate(custom_generate, **kwargs)
             return custom_generate_function(model=self, **generate_arguments)
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
