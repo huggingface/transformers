@@ -47,11 +47,12 @@ class DiaTokenizer(PreTrainedTokenizer):
         pad_token: Optional[str] = AddedToken("<pad>"),
         unk_token: Optional[str] = AddedToken("<pad>"),
         max_length: Optional[int] = 1024,
+        offset: int = 0,
         **kwargs,
     ):
         self._utf_vocab_size = 2**8  # utf is 8 bits
         self._added_tokens_decoder = {0: pad_token, 1: AddedToken("[S1]"), 2: AddedToken("[S2]")}
-        self.offset = len(self._added_tokens_decoder)
+        self.offset = offset
         super().__init__(
             unk_token=unk_token,
             pad_token=pad_token,
