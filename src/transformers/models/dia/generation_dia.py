@@ -102,8 +102,9 @@ class DiaGenerationMixin(GenerationMixin):
             start_time = time.time()
 
         dec_step = len(input_ids)
+        cache_position = None
         while dec_step < max_tokens:
-            decoder_outputs = self(input_ids=input_ids, attention_mask=attention_mask, input_audio_codes=audio_prompt)[0]
+            decoder_outputs = self(input_ids=input_ids, attention_mask=attention_mask, cache_position=cache_position, input_audio_codes=audio_prompt)[0]
             uncond_logits_CxV, cond_logits_CxV = torch.split(decoder_outputs, 2, 0)
 
             logits_CxV = cond_logits_CxV + cfg_scale * (cond_logits_CxV - uncond_logits_CxV)
@@ -131,7 +132,7 @@ class DiaGenerationMixin(GenerationMixin):
 
             bos_countdown = max(0, bos_countdown - 1)
             input_ids = pred_C
-            cache_position = torch.tensor(dec_step + 1, device=input_ids.device).unsqueeze(0)
+            cache_position = torch.tensor([dec_step + 1], device=input_ids.device).unsqueeze(0)
 
             if eos_countdown == 0:
                 break

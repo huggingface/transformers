@@ -97,8 +97,8 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    key_states = repeat_kv(key, query.shape[1] // key_states.shape[1]) 
-    value_states = repeat_kv(value, query.shape[1] // key_states.shape[1]) 
+    key_states = repeat_kv(key, query.shape[1] // key.shape[1]) 
+    value_states = repeat_kv(value, query.shape[1] // key.shape[1]) 
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
@@ -195,8 +195,8 @@ class DiaCrossAttention(nn.Module):
         self.layer_idx = layer_idx
         self.scaling = self.head_dim ** -0.5
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.hidden_size, bias=False)
+        self.v_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.hidden_size, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
         self.num_key_value_heads = 16
 
@@ -222,8 +222,9 @@ class DiaCrossAttention(nn.Module):
         query_states = apply_rotary_pos_emb(query_states, position_embeddings, -2).transpose(1, 2)
         
         if cross_attention_states is not None:
-            key_states = self.k_proj(hidden_states).view(hidden_shape)
-            value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+            cross_shape = (*cross_attention_states.shape[:-1], -1, self.head_dim)
+            key_states = self.k_proj(cross_attention_states).view(cross_shape)
+            value_states = self.v_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
             key_states = apply_rotary_pos_emb(key_states, position_embeddings, -2).transpose(1, 2)
             if past_key_value is not None:
                 key_states, value_states = past_key_value.update(
@@ -242,7 +243,7 @@ class DiaCrossAttention(nn.Module):
             query_states,
             key_states,
             value_states,
-            None, # None for now
+            attention_mask, # None for now
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.attention_dropout,
             **kwargs,
@@ -499,7 +500,7 @@ class DiaDecoder(DiaPreTrainedModel):
         hidden_states = self.embeddings(audio_codes)
         cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)[None, :]
         position_embeddings = self.rotary_embeddings(hidden_states, cache_position)
-        attention_mask = torch.tril(torch.ones(attention_mask.shape[1],attention_mask.shape[1])[None,None,:,:]).to(attention_mask.device)
+        attention_mask = 1 - (attention_mask[:,None,None,:])
         for i, layer in enumerate(self.layers):
             hidden_states = layer(
                 hidden_states,
