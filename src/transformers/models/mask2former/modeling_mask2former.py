@@ -2359,7 +2359,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         return sum(loss_dict.values())
 
     def get_auxiliary_logits(self, classes: torch.Tensor, output_masks: torch.Tensor):
-        auxiliary_logits: List[Dict(str, Tensor)] = []
+        auxiliary_logits: List[Dict[str, Tensor]] = []
 
         for aux_binary_masks, aux_classes in zip(output_masks[:-1], classes[:-1]):
             auxiliary_logits.append({"masks_queries_logits": aux_binary_masks, "class_queries_logits": aux_classes})

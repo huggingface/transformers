@@ -1111,7 +1111,7 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
         )
         return model_inputs
 
-    def _get_initial_cache_position(self, input_ids, model_kwargs):
+    def _get_initial_cache_position(self, seq_length, device, model_kwargs):
         """
         Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length.
         Since gpt bigcode is special, the method is overridden here, other models use it from `generation.utils.py`.
@@ -1125,8 +1125,8 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
         if "inputs_embeds" in model_kwargs:
             cur_len = model_kwargs["inputs_embeds"].shape[1]
         else:
-            cur_len = input_ids.shape[-1]
-        model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device)
+            cur_len = seq_length
+        model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=device)
         return model_kwargs
 
     @add_start_docstrings_to_model_forward(GPT_BIGCODE_INPUTS_DOCSTRING)
