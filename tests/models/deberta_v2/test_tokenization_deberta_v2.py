@@ -173,25 +173,6 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(rust_tokens, tokens_target)
 
-    def test_rust_and_python_full_tokenizers(self):
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
-
-        sequence = "I was born in 92000, and this is falsé!"
-
-        tokens = tokenizer.convert_ids_to_tokens(tokenizer.encode(sequence, add_special_tokens=False))
-        rust_tokens = rust_tokenizer.convert_ids_to_tokens(rust_tokenizer.encode(sequence, add_special_tokens=False))
-        self.assertListEqual(tokens, rust_tokens)
-
-        ids = tokenizer.encode(sequence, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        rust_tokenizer = self.get_rust_tokenizer()
-        ids = tokenizer.encode(sequence)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
-
     def test_full_tokenizer(self):
         sequence = "This is a test"
         ids_target = [13, 1, 4398, 25, 21, 1289]

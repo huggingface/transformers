@@ -106,7 +106,7 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
-    def test_rust_and_python_full_tokenizers(self):
+    def test_lower_case(self):
         if not self.test_rust_tokenizer:
             self.skipTest(reason="test_rust_tokenizer is set to False")
 
@@ -117,19 +117,6 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Testing tokenization
         tokens = tokenizer.tokenize(sequence, add_prefix_space=True)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, rust_tokens)
-
-        # Testing conversion to ids without special tokens
-        ids = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=True)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        # Testing conversion to ids with special tokens
-        rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
-        ids = tokenizer.encode(sequence, add_prefix_space=True)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
 
         # Testing the unknown token
         input_tokens = tokens + [rust_tokenizer.unk_token]
