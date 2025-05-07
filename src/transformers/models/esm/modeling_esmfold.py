@@ -2019,6 +2019,7 @@ class EsmFoldingTrunk(nn.Module):
 )
 class EsmForProteinFolding(EsmPreTrainedModel):
     _no_split_modules = ["EsmFoldStructureModule", "EsmFoldTriangularSelfAttentionBlock"]
+    _supports_flash_attn_2 = False
 
     def __init__(self, config):
         super().__init__(config)
@@ -2090,6 +2091,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         masking_pattern: Optional[torch.Tensor] = None,
         num_recycles: Optional[int] = None,
+        output_hidden_states: Optional[bool] = False,
     ) -> EsmForProteinFoldingOutput:
         r"""
         Returns:

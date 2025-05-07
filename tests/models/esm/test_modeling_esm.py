@@ -59,6 +59,7 @@ class EsmModelTester:
         num_labels=3,
         num_choices=4,
         scope=None,
+        position_embedding_type="rotary",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -82,6 +83,7 @@ class EsmModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.scope = scope
+        self.position_embedding_type = position_embedding_type
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -116,6 +118,7 @@ class EsmModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
+            position_embedding_type=self.position_embedding_type,
         )
 
     def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
