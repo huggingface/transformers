@@ -662,7 +662,7 @@ class TokenizerTesterMixin:
         class_rows = [row for row in dataset if row["TestClass"] == self.__class__.__name__]
 
         if not class_rows:
-            self.skipTest(reason=f"No test data for available")
+            self.skipTest(reason=f"No test data available")
 
         for row in class_rows:
             expected_tokens = row["tokens"]  # Convert from JSON string
@@ -670,7 +670,7 @@ class TokenizerTesterMixin:
             expected_special = row["encoded_special"]
             params = {k: v for k, v in row["params"].items() if v is not None}
             params_encode = {k: v for k, v in row["params_encode"].items() if v is not None}
-            sequence = params_encode.pop("text", sequence)
+            sequence = params_encode.pop("text", row["sequence"])
 
             rust_tokenizer = self.get_rust_tokenizer(**params)
 
