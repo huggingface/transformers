@@ -481,7 +481,7 @@ def flex_attention_mask(
         padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
         mask_mod = and_masks(mask_mod, padding_mask_mod(padding_mask))
 
-    # Add the offsets on top
+    # Add the offsets on top (because flex interface only allows length, not start and end indices)
     mask_mod = add_offsets_to_mask_mod(mask_mod, q_offset, kv_offset)
 
     # Finally create the block mask
