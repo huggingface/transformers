@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from transformers.models.llava_next.modeling_llava_next import (

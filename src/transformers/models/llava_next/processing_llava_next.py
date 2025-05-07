@@ -16,6 +16,7 @@
 Processor class for LLaVa-NeXT.
 """
 
+import math
 from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -207,13 +208,13 @@ class LlavaNextProcessor(ProcessorMixin):
         original_aspect_ratio = width / height
         current_aspect_ratio = current_width / current_height
         if original_aspect_ratio > current_aspect_ratio:
-            new_height = int(round(height * (current_width / width), 7))
-            padding = (current_height - new_height) // 2
-            current_height -= padding * 2
+            scale_factor = current_width / width
+            new_height = min(math.ceil(height * scale_factor), current_height)
+            current_height = new_height
         else:
-            new_width = int(round(width * (current_height / height), 7))
-            padding = (current_width - new_width) // 2
-            current_width -= padding * 2
+            scale_factor = current_height / height
+            new_width = min(math.ceil(width * scale_factor), current_width)
+            current_width = new_width
 
         unpadded_features = current_height * current_width
         newline_features = current_height

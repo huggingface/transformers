@@ -17,6 +17,8 @@ import shutil
 import tempfile
 import unittest
 
+import torch
+
 from transformers import AutoProcessor, LlamaTokenizerFast, LlavaNextVideoProcessor
 from transformers.testing_utils import require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -51,6 +53,10 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
 
+    def setUp(self):
+        super().setUp()
+        self.processor = self.processor_class.from_pretrained(self.tmpdirname)
+
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
@@ -59,6 +65,10 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def get_video_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     @classmethod
     def prepare_processor_dict(cls):
@@ -71,16 +81,36 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_chat_template_is_saved
     def test_chat_template_is_saved(self):
-        processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
-        processor_dict_loaded = json.loads(processor_loaded.to_json_string())
+        processor_dict_loaded = json.loads(self.processor.to_json_string())
         # chat templates aren't serialized to json in processors
         self.assertFalse("chat_template" in processor_dict_loaded.keys())
 
         # they have to be saved as separate file and loaded back from that file
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
-        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
+        self.assertTrue(self.processor.chat_template == processor_dict.get("chat_template", None))
 
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+    def test_image_token_filling(self):
+        self.processor.patch_size = 14
+        self.processor.vision_feature_select_strategy = "default"
+        # Important to check with non square image
+        image = torch.randint(0, 2, (3, 501, 322))
+        expected_image_tokens = 680
+        image_token_index = self.processor.image_token_id
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            },
+        ]
+        inputs = self.processor(
+            text=[self.processor.apply_chat_template(messages)],
+            images=[image],
+            return_tensors="pt",
+        )
+        image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
+        self.assertEqual(expected_image_tokens, image_tokens)

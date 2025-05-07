@@ -20,7 +20,6 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -38,8 +37,6 @@ from .configuration_llava_onevision import LlavaOnevisionConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "LlavaNextConfig"
 
 
 # Copied from transformers.models.llava_next.modeling_llava_next.get_anyres_image_grid_shape
