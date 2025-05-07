@@ -46,6 +46,10 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token
 
+    def setUp(self):
+        super().setUp()
+        self.processor = self.processor_class.from_pretrained(self.tmpdirname)
+
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
@@ -65,15 +69,14 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }  # fmt: skip
 
     def test_chat_template_is_saved(self):
-        processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
-        processor_dict_loaded = json.loads(processor_loaded.to_json_string())
+        processor_dict_loaded = json.loads(self.processor.to_json_string())
         # chat templates aren't serialized to json in processors
         self.assertFalse("chat_template" in processor_dict_loaded.keys())
 
         # they have to be saved as separate file and loaded back from that file
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
-        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
+        self.assertTrue(self.processor.chat_template == processor_dict.get("chat_template", None))
 
     def test_can_load_various_tokenizers(self):
         for checkpoint in ["Intel/llava-gemma-2b", "llava-hf/llava-1.5-7b-hf"]:
