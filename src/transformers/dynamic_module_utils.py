@@ -419,7 +419,8 @@ def get_cached_module_file(
         # benefit of versioning.
         submodule_path = submodule_path / commit_hash
         full_submodule = full_submodule + os.path.sep + commit_hash
-        create_dynamic_module(full_submodule)
+        full_submodule_module_file_path = os.path.join(full_submodule, module_file)
+        create_dynamic_module(Path(full_submodule_module_file_path).parent)
 
         if not (submodule_path / module_file).exists():
             shutil.copy(resolved_module_file, submodule_path / module_file)

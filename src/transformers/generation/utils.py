@@ -2231,9 +2231,9 @@ class GenerationMixin:
                 `True`.
             recipe (`str`, *optional*):
                 A string containing the name of a huggingface.co repository. If provided, the custom `generate`
-                function defined in that reposity's `generate.py` file will be executed instead of the standard
-                `generate` method. Note that the logic is for generation is entirely defined in that repository, and
-                the return type may be different from the standard `generate` method.
+                function defined in that reposity's `generate/generate.py` file will be executed instead of the
+                standard `generate` method. Note that the logic is for generation is entirely defined in that
+                repository, and the return type may be different from the standard `generate` method.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -2265,7 +2265,7 @@ class GenerationMixin:
             generate_arguments.update(kwargs)
 
             check_python_requirements(recipe, **kwargs)
-            module = get_cached_module_file(recipe, module_file="generate.py", **kwargs)
+            module = get_cached_module_file(recipe, module_file="generate/generate.py", **kwargs)
             custom_generate_function = get_class_in_module("generate", module)
             return custom_generate_function(model=self, **generate_arguments)
 
