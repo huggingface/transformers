@@ -4607,7 +4607,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 "subfolder": subfolder,
                 **kwargs,
             }
-
             # Load generation config
             try:
                 model.generation_config = GenerationConfig.from_pretrained(
@@ -4621,12 +4620,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     "Generation config file not found, using a generation config created from the model config."
                 )
                 pass
-            # Load custom generate function, and override `generate` if it exists
-            try:
-                custom_generate = model.load_custom_generate(pretrained_model_name_or_path, **repo_loading_kwargs)
-                model.generate = functools.partial(custom_generate, model=model)
-            except OSError:
-                pass
+            # Load custom generate function (and override `generate`) if it exists
+            if hasattr(model, "load_custom_generate"):
+                try:
+                    custom_generate = model.load_custom_generate(pretrained_model_name_or_path, **repo_loading_kwargs)
+                    model.generate = functools.partial(custom_generate, model=model)
+                except OSError:
+                    pass
 
         # Dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
         # harm performances)
