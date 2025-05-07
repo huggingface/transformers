@@ -16,6 +16,8 @@
 
 from typing import List, Optional, Tuple, Union
 
+import numpy as np
+
 from transformers.models.perception_lm.image_transform import get_image_transform
 
 from ...image_processing_utils import (
@@ -34,6 +36,7 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
+    VideoInput,
     PILImageResampling,
     SizeDict,
     get_image_size,
@@ -89,10 +92,17 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
             max_num_tiles=kwargs.get("max_num_tiles", 36),
             normalize_img=kwargs.get("normalize_img", True),
         )
+        self.video_transform = get_image_transform(
+            vision_input_type="vanilla",
+            image_res=kwargs.get("image_res", 448),
+            max_num_tiles=kwargs.get("max_frame_tiles", 1),
+            normalize_img=kwargs.get("normalize_img", True),
+        )
 
     def to_dict(self):
         dictionary = super().to_dict()
         dictionary["image_transform"] = self.image_transform.to_dict()
+        dictionary["video_transform"] = self.video_transform.to_dict()
         return dictionary
 
     @add_start_docstrings(
@@ -109,20 +119,29 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: List["torch.Tensor"],
+        videos: List["torch.Tensor"],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]
     ) -> BatchFeature:
         # Group images by size for batched transformation
         del kwargs
-        grouped_images, grouped_images_index = group_images_by_shape(images)
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            stacked_images, _ = self.image_transform(stacked_images)
-            print("stacked_images shape: ", stacked_images.shape)
-            processed_images_grouped[shape] = stacked_images
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        if images:
+            grouped_images, grouped_images_index = group_images_by_shape(images)
+            processed_images_grouped = {}
+            for shape, stacked_images in grouped_images.items():
+                stacked_images, _ = self.image_transform(stacked_images)
+                print("stacked_images shape: ", stacked_images.shape)
+                processed_images_grouped[shape] = stacked_images
+            processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+            processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
+            return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        elif videos:
+            videos = [torch.from_numpy(np.array(v)).flatten(0, 1).permute(0, 3, 1, 2) for v in videos]
+            processed_videos = [self.video_transform(v)[0].squeeze(1) for v in videos]
+            processed_videos = torch.stack(processed_videos, dim=0) if return_tensors else processed_videos
+            return BatchFeature(data={"pixel_values": processed_videos}, tensor_type=return_tensors)
+        else:
+            return BatchFeature(data={"pixel_values": None}, tensor_type=return_tensors)
 
 
 __all__ = ["PerceptionLMImageProcessorFast"]
