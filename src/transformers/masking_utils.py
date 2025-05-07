@@ -525,14 +525,11 @@ def get_causal_masks(
     # HERE WE SHOULD EXTRACT ALL WAYS TO GET SLIDING_WINDOW/CHUNK SIZE IN THE CONFIG IF WE DON'T USE CACHE (OTHERWISE IT'S EMBEDDED
     # IN THE CACHE ALREADY)
     sliding_window = getattr(config, "sliding_window", None)
-    chunked_size = getattr(config, "attention_chunk_size", None)
-
+    chunk_size = getattr(config, "attention_chunk_size", None)
 
     if sliding_window is not None and chunk_size is not None:
         raise ValueError("`sliding_window` and `chunk_size` are mutually exclusive for mask creation")
 
-
-    query_length = cache_position.shape[0] if cache_position is not None else attention_mask.shape[-1]
     if past_key_values is not None:
         sizes_and_patterns, layer_to_mask_mapping = past_key_values.get_mask_size_and_pattern(cache_position, num_layers)
     else:
@@ -558,9 +555,11 @@ def get_causal_masks(
             kv_offset=kv_offset,
             attention_mask=attention_mask,
             sliding_window=sliding_window,
-            chunk_size=chunked_size,
-            **kwargs,
+            chunk_size=chunk_size,
+            # Additional kwargs for eager
+            dtype=dtype,
         )
+        masks.append(causal_mask)
 
     mask_per_layers = [masks[layer_to_mask_mapping[i]] for i in range(num_layers)]
     return mask_per_layers
