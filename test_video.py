@@ -3,19 +3,19 @@ import torch
 from transformers import AutoProcessor
 from transformers import PerceptionLMForConditionalGeneration
 
-processor = AutoProcessor.from_pretrained("/checkpoint/vision_encoder/smhu/debug/plm_hf_1b", use_fast=True)
+processor = AutoProcessor.from_pretrained("/checkpoint/vision_encoder/smhu/debug/plm_hf_3b")
 print(type(processor))
 
-model = PerceptionLMForConditionalGeneration.from_pretrained("/checkpoint/vision_encoder/smhu/debug/plm_hf_1b").to(torch.bfloat16).to("cuda")
+model = PerceptionLMForConditionalGeneration.from_pretrained("/checkpoint/vision_encoder/smhu/debug/plm_hf_3b").to(torch.bfloat16).to("cuda")
 conversation = [
     {
         "role": "user",
         "content": [
             {
-                "type": "image",
-                "url": "/home/smhu/code/occhi/apps/plm/dummy_datasets/image/images/14496_0.PNG",
+                "type": "video",
+                "url": "/home/smhu/code/occhi/apps/plm/dummy_datasets/video/videos/GUWR5TyiY-M_000012_000022.mp4",
             },
-            {"type": "text", "text": "Describe the bar plot in the image."},
+            {"type": "text", "text": "Can you describe the video in detail?"},
         ],
     }
 ]
@@ -26,9 +26,12 @@ print(model.config)
 inputs = processor.apply_chat_template(
     conversation,
     add_generation_prompt=True,
+    num_frames=32,
+    # video_fps=1,
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
+    video_load_backend="decord",
 )
 inputs = inputs.to(model.device)
 # torch.save(inputs['pixel_values'], "/checkpoint/vision_encoder/smhu/debug/0/pixel_values_dump_0.pt")
