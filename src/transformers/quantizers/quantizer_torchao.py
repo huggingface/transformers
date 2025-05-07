@@ -185,7 +185,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
-        if self.quantization_config.include_embedding:
+        if self.quantization_config.include_input_output_embeddings:
             input_emb = model.get_input_embeddings()
             input_emb_names = [name for name, module in model.named_modules() if id(module) == id(input_emb)]
             output_emb = model.get_output_embeddings()
@@ -217,7 +217,7 @@ class TorchAoHfQuantizer(HfQuantizer):
             # we only quantize the weight of nn.Linear and nn.Embedding
             module, tensor_name = get_module_from_name(model, param_name)
             _QUANTIZABLE = [torch.nn.Linear]
-            if self.quantization_config.include_embedding:
+            if self.quantization_config.include_input_output_embeddings:
                 _QUANTIZABLE.append(torch.nn.Embedding)
             return isinstance(module, tuple(_QUANTIZABLE)) and (tensor_name == "weight")
 
