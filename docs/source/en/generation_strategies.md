@@ -323,7 +323,10 @@ Custom decoding methods enable specialized generation behavior such as the follo
 - handle special tokens with custom logic;
 - enhanced input preparation for advanced models;
 
-[`~GenerationMixin.generate`] supports custom decoding methods through the `custom_generate` argument which loads custom generation recipes from the Hub. This means anyone can create and share their custom generation method without requiring users to install additional Python packages.
+We enable custom decoding methods through model repos, assuming a specific file structure (see below). [ADD TAG]
+
+
+[`~GenerationMixin.generate`] supports custom decoding methods through the `custom_generate` argument which loads custom generation methods from the Hub. This means anyone can create and share their custom generation method without requiring users to install additional Python packages.
 
 <!-- TODO before merging: 1) better repo name (use a `generate-community` org?) 2) prettify the repo -->
 ```py
@@ -333,25 +336,28 @@ tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct", device_map="auto")
 
 inputs = tokenizer(["The quick brown"], return_tensors="pt").to(model.device)
-gen_out = model.generate(**inputs, custom_generate="joaogante/test_generate_from_hub")  # minimal greedy decoding
+# `joaogante/test_generate_from_hub_model` holds a minimal greedy decoding implementation.
+# It also prints a custom message at run time.
+gen_out = model.generate(**inputs, custom_generate="joaogante/test_generate_from_hub_model")
+# you should now see the custom message, "✨ using a custom generation method ✨"
 print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
 'The quick brown fox jumps over a lazy dog, and the dog is a type of animal. Is'
 ```
 
-You should read the `README.md` file of a custom generation strategy to see what the new arguments and output type differences are, if they exist. Otherwise, you can assume it works like the base [`~GenerationMixin.generate`] method.
+You should read the `README.md` file of the repo containing the custom generation strategy to see what the new arguments and output type differences are, if they exist. Otherwise, you can assume it works like the base [`~GenerationMixin.generate`] method.
 
-Consider the Hub repository [joaogante/test_generate_from_hub](https://huggingface.co/joaogante/test_generate_from_hub) as an example. The `README.md` states that it has an additional input argument, `left_padding`, which adds a number of padding tokens before the prompt.
+Consider the Hub repository [joaogante/test_generate_from_hub_model](https://huggingface.co/joaogante/test_generate_from_hub_model) as an example. The `README.md` states that it has an additional input argument, `left_padding`, which adds a number of padding tokens before the prompt.
 
 ```py
-gen_out = model.generate(**inputs, custom_generate="joaogante/test_generate_from_hub", left_padding=5)
+gen_out = model.generate(**inputs, custom_generate="joaogante/test_generate_from_hub_model", left_padding=5)
 print(tokenizer.batch_decode(gen_out)[0])
 '<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>The quick brown fox jumps over the lazy dog.\n\nThe sentence "The quick'
 ```
 
-If the custom method has pinned Python requirements that your environment doesn't meet, you'll get an exception about missing requirements. For instance, [joaogante/test_generate_from_hub_2](https://huggingface.co/joaogante/test_generate_from_hub_2) has an impossible set of requirements defined in its `requirements.txt`, and you'll see the error message below if you try to run it.
+If the custom method has pinned Python requirements that your environment doesn't meet, you'll get an exception about missing requirements. For instance, [joaogante/test_generate_from_hub_bad_requirements](https://huggingface.co/joaogante/test_generate_from_hub_bad_requirements) has an impossible set of requirements defined in its `custom_generate/requirements.txt` file, and you'll see the error message below if you try to run it.
 
 ```
-ValueError: Missing requirements for joaogante/test_generate_from_hub_2:
+ValueError: Missing requirements for joaogante/test_generate_from_hub_bad_requirements:
 foo (installed: None)
 bar==0.0.0 (installed: None)
 torch>=99.0 (installed: 2.6.0+cu126)
@@ -362,9 +368,10 @@ Updating your Python requirements accordingly will remove this error message.
 ### Creating a custom decoding method
 
 To create a new decoding method, you need to create a new [**Model**](https://huggingface.co/new) repository and push a few files into it.
-1. `generate.py`, which contains all the logic for your custom decoding method.
-2. `README.md`, you should document any new arguments or output type differences of your custom method here.
-3. `requirements.txt`, used to add new Python requirements and/or lock specific versions to correctly use a technique.
+1. The model you've designed your decoding method with. This will be the reference model to try out your decoding method, and your technique will *not* be limited to this model.
+2. `custom_generate/generate.py`, which contains all the logic for your custom decoding method.
+4. `custom_generate/requirements.txt`, used to add new Python requirements and/or lock specific versions to correctly use a technique.
+3. `README.md`, where you should document any new arguments or output type differences of your custom method here.
 
 #### generate.py
 
@@ -423,6 +430,7 @@ Some more recommended practices are listed below to help users get familiar with
 #### requirements.txt
 
 Specify additional Python requirements in a `requirements.txt` file for your decoding method if they're not present in Transformers. These are checked at runtime and an exception will be thrown if they're missing.
+
 ## Resources
 
 Read the [How to generate text: using different decoding methods for language generation with Transformers](https://huggingface.co/blog/how-to-generate) blog post for an explanation of how common decoding strategies work.
