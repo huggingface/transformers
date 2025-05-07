@@ -191,46 +191,51 @@ def chunked_overlay(chunk_size: int) -> Callable:
 
 def sliding_window_causal_mask_mod(sliding_window: int) -> Callable:
     """
-    This creates a sliding window mask.
+    This return the mask_mod function to create a sliding window mask.
     """
     return and_masks(sliding_window_overlay(sliding_window), causal_mask_mod)
 
 def chunked_causal_mask_mod(chunk_size: int) -> Callable:
     """
-    This creates a chunked attention mask.
+    This return the mask_mod function to create a chunked attention mask.
     """
     return and_masks(chunked_overlay(chunk_size), causal_mask_mod)
 
 
-def _vmap_for_q_idx_kv_idx(
-    fn: Callable,
-):
-    """Used to vmap both score_mods and mask_mods over 4-dimensional/5-dimension inputs.
-    Mapping over the [b, hq, q_idx, kv_idx] or [b, hkv, g, q_idx, kv_idx] dimensions.
+def padding_mask_mod(attention_mask_2d: torch.Tensor) -> Callable:
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        # The 2d mask may be smaller than the kv_length, so instead of 0-padding we try/except
+        return attention_mask_2d.index_select(1, kv_idx).index_select(0, batch_idx).squeeze()
+        try:
+            # return attention_mask_2d[batch_idx, kv_idx]
+            return attention_mask_2d.index_select(1, kv_idx).index_select(0, batch_idx).squeeze()
+        except (IndexError, RuntimeError):
+            # This is False as a Tensor
+            return q_idx.new_zeros((), dtype=torch.bool)
+    return inner_mask
+
+
+def _vmap_for_q_idx_kv_idx(mask_mod: Callable) -> Callable:
+    """
+    Used to vmap our mask_mods over the q_idx and kv_idx dimensions of the inputs.
 
     Args:
-        fn (callable): The function to vmap.
-        prefix (tuple): The prefix of the vmap. For score mod functions,
-                        this should be set to (0,). For mask_mods = ()
-        suffix (tuple): We need to add (0,) if gradOut is being mapped over,
-                        and (None,) * len(other_buffers).
-        out_dims (tuple): For forward cases, keep this as the default 0 since
-                          we are only returning 1 output. For backwards, the joint
-                          graph returns grads for B, H, Q_idx, KV_idx and other_buffers,
-                          so we set this to (0, None, None, None, None) + (None,) * len(other_buffers).
+        mask_mod (`Callable`):
+            The mask_mod to vmap.
 
     Returns:
-        callable: The vmapped function.
+        Callable: The vmapped function.
     """
-    # We vmap a function 2 times, broadcasting the [q_idx, kv_idx] dimensions
+    # We vmap the function 3 times, broadcasting the [q_idx, kv_idx] dimensions
     dimensions = [
         (None, None, None, 0),
         (None, None, 0, None),
     ]
 
     for dims in dimensions:
-        fn = torch.vmap(fn, in_dims=dims, out_dims=0)
-    return fn
+        mask_mod = torch.vmap(mask_mod, in_dims=dims, out_dims=0)
+    return mask_mod
+
 
 def create_4d_causal_mask(
     batch_size: int,
@@ -331,14 +336,20 @@ def create_4d_causal_mask(
     kv_arange = torch.arange(kv_length, device=cache_position.device)
     kv_arange += kv_offset
 
+    # Sliding window mask
     if sliding_window is not None:
-        causal_mask = _vmap_for_q_idx_kv_idx(sliding_window_causal_mask_mod(sliding_window))(None, None, cache_position, kv_arange)
+        mask_mod = sliding_window_causal_mask_mod(sliding_window)
+    # CHunked attention mask
     elif chunk_size is not None:
-        causal_mask = _vmap_for_q_idx_kv_idx(chunked_causal_mask_mod(chunk_size))(None, None, cache_position, kv_arange)
+        mask_mod = chunked_causal_mask_mod(chunk_size)
+    # Simple causal mask
     else:
-        causal_mask = _vmap_for_q_idx_kv_idx(causal_mask_mod)(None, None, cache_position, kv_arange)
+        mask_mod = causal_mask_mod
 
-    # Make it 4D (this is more efficient than vmap-ing over the 4D, as `expand` is a view, not a copy over the batch dim)
+    # This creates the 4D mask easily. Note that we do not vmap over the batch_idx dimension with the 2d padding mask
+    # as well, as vmap seems to necesarily copy the mask passed to `padding_mask_mod` for each index over all dimensions,
+    # blowing up the memory
+    causal_mask = _vmap_for_q_idx_kv_idx(mask_mod)(None, None, cache_position, kv_arange)
     causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
     return causal_mask
 
@@ -370,27 +381,22 @@ def sdpa_mask(
 ) -> Optional[torch.Tensor]:
     query_length = cache_position.shape[0] if cache_position is not None else attention_mask.shape[-1]
     if past_key_values is not None:
-        sizes_and_patterns = past_key_values.get_mask_size_and_pattern(cache_position, num_layers)
+        sizes_and_patterns, layer_to_mask_mapping = past_key_values.get_mask_size_and_pattern(cache_position, num_layers)
     else:
         kv_offset = 0
         kv_length = attention_mask.shape[-1]
         # HERE MODELS WITH HYBRID CACHE STRUCTURE SHOULD STILL ALTERNATE BETWEEN USING LOCAL ATTENTION OR NOT EVEN WITHOUT CACHE!!!!
         # PROBABLY THE EASIEST IS TO HAVE A FUNCTION RETURNING THE PATTERN BASED ON ALL POSSIBLE CONFIG ARGS???
         sizes_and_patterns = [(kv_offset, kv_length, sliding_window, chunk_size)] * num_layers
+        layer_to_mask_mapping = [0] * num_layers
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
     if attention_mask is not None:
         attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
 
-    unique_mask_sizes_and_patterns = list(set(sizes_and_patterns))
-    layer_to_mask_mapping = {
-        idx: unique_mask_sizes_and_patterns.index(size_and_pattern)
-        for idx, size_and_pattern in enumerate(sizes_and_patterns)
-    }
-
     # We now create all the masks
     masks = []
-    for kv_offset, kv_length, window, chunk in unique_mask_sizes_and_patterns:
+    for kv_offset, kv_length, window, chunk in sizes_and_patterns:
         # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
         if allow_is_causal_skip and _ignore_causal_mask_sdpa(attention_mask, query_length, kv_length, window, chunk):
             masks.append(None)
@@ -401,9 +407,9 @@ def sdpa_mask(
             # Offset the padding mask as well
             # Equivalent to: `local_padding_mask = attention_mask[:, kv_offset : kv_offset + kv_length]`,
             # but without data-dependent slicing (i.e. torch.compile friendly)
-            mask_indexes = torch.arange(min(kv_length, attention_mask.shape[-1]), device=cache_position.device)
-            mask_indexes += kv_offset
-            local_padding_mask = attention_mask[:, mask_indexes]
+            mask_indices = torch.arange(min(kv_length, attention_mask.shape[-1]), device=cache_position.device)
+            mask_indices += kv_offset
+            local_padding_mask = attention_mask[:, mask_indices]
             # It may be smaller, in which case we pad with 0s to indicate the entries should not take part in the attention
             if (padding_length := kv_length - local_padding_mask.shape[-1]) > 0:
                 local_padding_mask = torch.nn.functional.pad(local_padding_mask, (0, padding_length))
@@ -444,6 +450,87 @@ def eager_mask(
 
     return masks, layer_to_mask_mapping
 
+
+def flex_attention_mask(
+    attention_mask_2d: torch.Tensor,
+    attention_chunk_size: Optional[int] = None,
+    query_length=None,
+    key_length=None,
+    offsets= None,
+) -> "BlockMask":
+    """
+    Create a block causal document mask for a batch of sequences, both packed and unpacked.
+    Create Block causal logic and passing it into :func:`torch.nn.attention.flex_attention.create_block_mask`.
+    The resultant BlockMask is a compressed representation of the full block causal
+    mask. BlockMask is essential for performant computation of flex attention.
+    See: https://pytorch.org/blog/flexattention/
+
+    Args:
+        attention_mask_2d (torch.Tensor): Attention mask for packed and padded sequences
+        of shape (batch_size, total_seq_len). e.g.
+
+        For unpacked sequence:
+        [[1, 1, 1, 1, 0, 0, 0],
+         [1, 1, 1, 1, 1, 0, 0]]
+
+        For packed sequence:
+        [[1, 1, 1, 2, 2, 2, 0],
+         [1, 1, 2, 2, 2, 3, 3]]
+
+    Returns:
+        BlockMask
+    """
+    batch_size, total_seq_len = attention_mask_2d.shape
+    if not key_length:
+        key_length = total_seq_len
+    if not query_length:
+        query_length = total_seq_len
+    attention_mask_2d = torch.nn.functional.pad(attention_mask_2d, value=0, pad=(0, key_length))
+    device = attention_mask_2d.device
+    document_ids = attention_mask_2d.clone()
+
+    if attention_chunk_size is not None:
+        # we create an arange, then we just // by chunk size to get [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3]
+        document_ids = (document_ids.fill_(1).cumsum(-1) - 1) // (attention_chunk_size)
+
+    # Instead of passing a tensor mask, flex attention requires a mask_mod function
+    # that determines which elements of QK^T should be included in the attention
+    # computation prior to the softmax. For sample packing, we need both the
+    # logic for both causal mask and document mask. See PyTorch's official
+    # blog post for more details: https://pytorch.org/blog/flexattention/#mask-mods
+    def causal_mask_mod(batch_idx, head_idx, q_idx, kv_idx):
+        """
+        Defines the logic of a block causal mask by combining both a standard causal mask
+        and a block diagonal document mask.
+
+        See :func:`~torchtune.modules.attention_utils.create_block_causal_mask`
+        for an illustration.
+        """
+        causal_mask = q_idx >= kv_idx  # not valid when decoding
+        document_mask = document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
+        padding_mask = attention_mask_2d[batch_idx, q_idx] > 0
+        final_mask = causal_mask & padding_mask & document_mask
+        return final_mask
+
+    if offsets is not None:
+        q_offset = offsets[0]
+        kv_offset = offsets[1]
+
+        def mask_mod(batch_idx, head_idx, q_idx, kv_idx):
+            offset_q = q_idx + q_offset
+            offset_kv = kv_idx + kv_offset
+            return causal_mask_mod(batch_idx, head_idx, offset_q, offset_kv)
+    else:
+        mask_mod = causal_mask_mod
+    return create_block_causal_mask_flex(
+        mask_mod=mask_mod,
+        B=batch_size,
+        H=None,  # attention head
+        Q_LEN=query_length,
+        KV_LEN=key_length,
+        device=device,
+        _compile=True,
+    )
 
 ALL_MASK_CREATION_FUNCTIONS = {
     "sdpa": sdpa_mask,

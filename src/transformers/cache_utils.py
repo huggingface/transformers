@@ -196,15 +196,17 @@ class Cache:
         else:
             return None
 
-    def get_mask_size_and_pattern(self, cache_position: torch.Tensor, num_layers: int) -> list[tuple]:
+    def get_mask_size_and_pattern(self, cache_position: torch.Tensor, num_layers: int) -> tuple[list[tuple], list[int]]:
         """
-        Return a list of tuples (kv_offset, kv_length, sliding_window, chunk_size) for each layers in the cache.
-        The masks are then prepared according to the given lengths (kv_offset, kv_length) and patterns (sliding_window, chunk_size).
+        Return a list of tuples (kv_offset, kv_length, sliding_window, chunk_size), corresponding to all unique mask pattern we may need,
+        as well as a mapping of indices from the pattern to each layers in the cache.
+        The masks are then prepared according to the given lengths (kv_offset, kv_length) and patterns (sliding_window, chunk_size), and
+        mapped back to the corresponding layers to be easily indexed in the modleing code (in case of different patterns par layers).
         """
         query_length = cache_position.shape[0]
         past_seen_tokens = self.get_seq_length()
         kv_length = query_length + past_seen_tokens
-        return [(0, kv_length, None, None)] * num_layers
+        return [(0, kv_length, None, None)], [0] * num_layers
 
 
 @dataclass
@@ -1400,13 +1402,15 @@ class StaticCache(Cache):
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
 
-    def get_mask_size_and_pattern(self, cache_position: torch.Tensor, num_layers: int) -> list[tuple]:
+    def get_mask_size_and_pattern(self, cache_position: torch.Tensor, num_layers: int) -> tuple[list[tuple], list[int]]:
         """
-        Return a list of tuples (kv_offset, kv_length, sliding_window, chunk_size) for each layers in the cache.
-        The masks are then prepared according to the given lengths (kv_offset, kv_length) and patterns (sliding_window, chunk_size).
+        Return a list of tuples (kv_offset, kv_length, sliding_window, chunk_size), corresponding to all unique mask pattern we may need,
+        as well as a mapping of indices from the pattern to each layers in the cache.
+        The masks are then prepared according to the given lengths (kv_offset, kv_length) and patterns (sliding_window, chunk_size), and
+        mapped back to the corresponding layers to be easily indexed in the modleing code (in case of different patterns par layers).
         """
         kv_length = self.get_max_cache_shape()
-        return [(0, kv_length, None, None)] * num_layers
+        return [(0, kv_length, None, None)], [0] * num_layers
 
 
 class SlidingWindowCache(StaticCache):
@@ -1528,10 +1532,12 @@ class SlidingWindowCache(StaticCache):
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
 
-    def get_mask_size_and_pattern(self, cache_position: torch.Tensor, num_layers: int) -> list[tuple]:
+    def get_mask_size_and_pattern(self, cache_position: torch.Tensor, num_layers: int) -> tuple[list[tuple], list[int]]:
         """
-        Return a list of tuples (kv_offset, kv_length, sliding_window, chunk_size) for each layers in the cache.
-        The masks are then prepared according to the given lengths (kv_offset, kv_length) and patterns (sliding_window, chunk_size).
+        Return a list of tuples (kv_offset, kv_length, sliding_window, chunk_size), corresponding to all unique mask pattern we may need,
+        as well as a mapping of indices from the pattern to each layers in the cache.
+        The masks are then prepared according to the given lengths (kv_offset, kv_length) and patterns (sliding_window, chunk_size), and
+        mapped back to the corresponding layers to be easily indexed in the modleing code (in case of different patterns par layers).
         """
         query_length = cache_position.shape[0]
         first_cache_position = cache_position[0]
@@ -1539,7 +1545,7 @@ class SlidingWindowCache(StaticCache):
         kv_offset = torch.clamp(first_cache_position - self.sliding_window + 1, min=0)
         # This is not general (see HybridChunkedCache for the whole general case), but it's what the cache returns
         kv_length = max(query_length, self.get_max_cache_shape())
-        return [(kv_offset, kv_length, self.sliding_window, None)] * num_layers
+        return [(kv_offset, kv_length, self.sliding_window, None)], [0] * num_layers
 
 
 class EncoderDecoderCache(Cache):
@@ -1876,10 +1882,12 @@ class HybridCache(Cache):
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
 
-    def get_mask_size_and_pattern(self, cache_position: torch.Tensor, num_layers: int) -> list[tuple]:
+    def get_mask_size_and_pattern(self, cache_position: torch.Tensor, num_layers: int) -> tuple[list[tuple], list[int]]:
         """
-        Return a list of tuples (kv_offset, kv_length, sliding_window, chunk_size) for each layers in the cache.
-        The masks are then prepared according to the given lengths (kv_offset, kv_length) and patterns (sliding_window, chunk_size).
+        Return a list of tuples (kv_offset, kv_length, sliding_window, chunk_size), corresponding to all unique mask pattern we may need,
+        as well as a mapping of indices from the pattern to each layers in the cache.
+        The masks are then prepared according to the given lengths (kv_offset, kv_length) and patterns (sliding_window, chunk_size), and
+        mapped back to the corresponding layers to be easily indexed in the modleing code (in case of different patterns par layers).
         """
         query_length = cache_position.shape[0]
         first_cache_position = cache_position[0]
@@ -1891,17 +1899,14 @@ class HybridCache(Cache):
         full_mask_kv_offset = 0
         full_mask_kv_length = self.get_max_cache_shape()
 
-        # In this case, we only need to use a single mask everywhere
-        if local_mask_kv_length == full_mask_kv_length:
-            sizes_and_patterns = [(full_mask_kv_offset, full_mask_kv_length, None, None)] * len(self.is_sliding)
-        else:
-            sizes_and_patterns = [
-                (local_mask_kv_offset, local_mask_kv_length, self.sliding_window, None)
-                if is_sliding
-                else (full_mask_kv_offset, full_mask_kv_length, None, None)
-                for is_sliding in self.is_sliding
-            ]
-        return sizes_and_patterns
+        sizes_and_patterns = [(full_mask_kv_offset, full_mask_kv_length, None, None)]
+        layer_mapping = [0] * len(self.is_sliding)
+        # Only in this case, do we need to add another mask with sliding pattern
+        if local_mask_kv_length != full_mask_kv_length:
+            sizes_and_patterns.append((local_mask_kv_offset, local_mask_kv_length, self.sliding_window, None))
+            layer_mapping = [1 if is_sliding else 0 for is_sliding in self.is_sliding]
+
+        return sizes_and_patterns, layer_mapping
 
 
 class HybridChunkedCache(Cache):
@@ -2098,10 +2103,12 @@ class HybridChunkedCache(Cache):
             self.value_cache[layer_idx].zero_()
         self.cumulative_length = [0 for _ in range(len(self.cumulative_length))]
 
-    def get_mask_size_and_pattern(self, cache_position: torch.Tensor, num_layers: int) -> list[tuple]:
+    def get_mask_size_and_pattern(self, cache_position: torch.Tensor, num_layers: int) -> tuple[list[tuple], list[int]]:
         """
-        Return a list of tuples (kv_offset, kv_length, sliding_window, chunk_size) for each layers in the cache.
-        The masks are then prepared according to the given lengths (kv_offset, kv_length) and patterns (sliding_window, chunk_size).
+        Return a list of tuples (kv_offset, kv_length, sliding_window, chunk_size), corresponding to all unique mask pattern we may need,
+        as well as a mapping of indices from the pattern to each layers in the cache.
+        The masks are then prepared according to the given lengths (kv_offset, kv_length) and patterns (sliding_window, chunk_size), and
+        mapped back to the corresponding layers to be easily indexed in the modleing code (in case of different patterns par layers).
         """
         query_length = cache_position.shape[0]
         first_cache_position = cache_position[0]
@@ -2120,19 +2127,16 @@ class HybridChunkedCache(Cache):
 
         full_mask_kv_offset = 0
         full_mask_kv_length = self.get_max_cache_shape()
-
-        # In this case, we only need to use a single mask everywhere
-        if local_mask_kv_length == full_mask_kv_length:
-            sizes_and_patterns = [(full_mask_kv_offset, full_mask_kv_length, None, None)] * len(self.is_sliding)
-        else:
+    
+        sizes_and_patterns = [(full_mask_kv_offset, full_mask_kv_length, None, None)]
+        layer_mapping = [0] * len(self.is_sliding)
+        # Only in this case, do we need to add another mask with chunked pattern
+        if local_mask_kv_length != full_mask_kv_length:
             # Here, sliding_window is actually chunk_size
-            sizes_and_patterns = [
-                (local_mask_kv_offset, local_mask_kv_length, None, self.sliding_window)
-                if is_sliding
-                else (full_mask_kv_offset, full_mask_kv_length, None, None)
-                for is_sliding in self.is_sliding
-            ]
-        return sizes_and_patterns
+            sizes_and_patterns.append((local_mask_kv_offset, local_mask_kv_length, None, self.sliding_window))
+            layer_mapping = [1 if is_sliding else 0 for is_sliding in self.is_sliding]
+
+        return sizes_and_patterns, layer_mapping
 
 
 class OffloadedHybridCache(HybridChunkedCache):
