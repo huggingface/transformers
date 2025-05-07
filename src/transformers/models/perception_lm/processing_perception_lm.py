@@ -19,7 +19,7 @@ Processor class for PerceptionLM.
 from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, get_image_size, to_numpy_array
+from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
@@ -81,7 +81,7 @@ class PerceptionLMProcessor(ProcessorMixin):
         patch_size=None,
         vision_feature_select_strategy=None,
         chat_template=None,
-        image_token="<|image|>",  # set the default and let users change if they have peculiar special tokens in rare cases
+        image_token="<|image|>", 
         num_additional_image_tokens=0,
         pooling_ratio=2,
         **kwargs,
@@ -103,7 +103,7 @@ class PerceptionLMProcessor(ProcessorMixin):
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         audio=None,
-        videos=None,
+        videos: VideoInput = None,
         **kwargs: Unpack[PerceptionLMProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -148,9 +148,10 @@ class PerceptionLMProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        if images is not None:
+        if images is not None or videos is not None:
             print("image_processor class", self.image_processor.__class__)
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+            images = [] if images is None else images
+            image_inputs = self.image_processor(images=images, videos=videos, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
 

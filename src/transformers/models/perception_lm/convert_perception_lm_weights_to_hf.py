@@ -33,11 +33,15 @@ from transformers.models.perception_lm.configuration_perception_lm import (
     PerceptionLMConfig,
     PerceptionEncoderConfig,
 )
-from transformers.models.perception_lm.image_processing_perception_lm_fast import PerceptionLMImageProcessorFast
+from transformers.models.perception_lm.image_processing_perception_lm_fast import (
+    PerceptionLMImageProcessorFast,
+)
 from transformers.models.perception_lm.modeling_perception_lm import (
     PerceptionLMForConditionalGeneration,
 )
-from transformers.models.perception_lm.processing_perception_lm import PerceptionLMProcessor
+from transformers.models.perception_lm.processing_perception_lm import (
+    PerceptionLMProcessor,
+)
 
 
 try:
@@ -253,9 +257,9 @@ def write_model(
                     f"layers.{layer_i}.ffn_norm.weight"
                 ],
             }
-            state_dict[f"language_model.model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = (
-                inv_freq
-            )
+            state_dict[
+                f"language_model.model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"
+            ] = inv_freq
             for k, v in state_dict.items():
                 index_dict["weight_map"][k] = filename
                 param_count += v.numel()
@@ -308,7 +312,10 @@ def write_model(
         )
 
         bos_token_id = tokenizer.convert_tokens_to_ids("<|begin_of_text|>")
-        eos_token_id = [tokenizer.convert_tokens_to_ids(t) for t in ["<|end_of_text|>", "<|eot_id|>"]]
+        eos_token_id = [
+            tokenizer.convert_tokens_to_ids(t)
+            for t in ["<|end_of_text|>", "<|eot_id|>"]
+        ]
 
         use_scaled_rope = model_params["use_scaled_rope"]
         if use_scaled_rope:
@@ -409,7 +416,7 @@ class Llama3Converter(TikTokenConverter):
             "{{- '<|eot_id|>' }}"
             "{%- for message in messages %}"
             "{{- '<|start_header_id|>' + message['role'] + '<|end_header_id|>\\n\\n' }}"
-            "{%- for content in message['content'] | selectattr('type', 'equalto', 'image') %}"
+            "{%- for content in message['content'] | selectattr('type', 'in', ['image', 'video']) %}"
             "{{ '<|image|>' }}"
             "{%- endfor %}"
             "{%- for content in message['content'] | selectattr('type', 'equalto', 'text') %}"
@@ -485,15 +492,15 @@ def write_tokenizer(
         "processor_class": "PerceptionLMProcessor",
     }
 
-    preprocessor_config = {
+    image_preprocessor_config = {
         "image_processor_type": "PerceptionLMImageProcessorFast",
         "vision_input_type": params["data"]["vision_input_type"],
         "image_res": params["model"]["vision_model"]["image_size"],
         "max_num_tiles": params["data"]["max_num_tiles"],
+        "max_frame_tiles": 1,
         "normalize_img": True,
     }
-
-    image_preprocessor = PerceptionLMImageProcessorFast(**preprocessor_config)
+    image_preprocessor = PerceptionLMImageProcessorFast(**image_preprocessor_config)
     processor = PerceptionLMProcessor(
         image_processor=image_preprocessor,
         tokenizer=tokenizer,
