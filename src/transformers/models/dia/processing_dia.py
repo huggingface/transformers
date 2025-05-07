@@ -208,7 +208,9 @@ class DiaProcessor(ProcessorMixin):
 
     def __init__(self, feature_extractor, tokenizer, audio_model=None):
         super().__init__(feature_extractor, tokenizer)
-        self.audio_tokenizer = AutoModel.from_pretrained(audio_model)
+        if audio_model is not None:
+            self.audio_tokenizer = AutoModel.from_pretrained(audio_model)
+
 
     def _prepare_audio_prompt(self, audio_prompt: torch.Tensor | None) -> tuple[torch.Tensor, int]:
         num_channels = self.channels

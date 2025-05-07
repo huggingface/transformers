@@ -116,6 +116,10 @@ class DiaConfig(PretrainedConfig):
         pad_token_id=0,
         **kwargs,
     ):
+        if isinstance(encoder_config, dict):
+            encoder_config = DiaEncoderConfig(**encoder_config)
+        if isinstance(decoder_config, dict):
+            decoder_config = DiaDecoderConfig(**decoder_config)
         self.encoder_config = encoder_config if encoder_config is not None else DiaEncoderConfig()
         self.decoder_config = decoder_config if encoder_config is not None else DiaDecoderConfig()
         self.norm_eps = norm_eps

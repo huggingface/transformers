@@ -22,7 +22,7 @@ import torch
 from huggingface_hub import snapshot_download
 from safetensors.torch import load_file
 
-from transformers import DiaConfig, DiaModel, DiaProcessor
+from transformers import DiaConfig, DiaModel, DiaProcessor, DacFeatureExtractor, DiaTokenizer
 from transformers.utils.import_utils import _is_package_available
 
 
@@ -141,7 +141,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--convert_preprocessor",
         type=bool,
-        default=False,
+        default=True,
         help="Whether or not the preprocessor (tokenizer + feature extractor) should be converted along with the model.",
     )
     args = parser.parse_args()
@@ -157,7 +157,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(e)
         else:
-            processor = DiaProcessor()
+            processor = DiaProcessor( DacFeatureExtractor(), DiaTokenizer())
             processor.save_pretrained(args.pytorch_dump_folder_path)
 
-    model.save_pretrained(args.pytorch_dump_folder_path)
+    model.push_to_hub("ArthurZ/Dia-1.6B")
