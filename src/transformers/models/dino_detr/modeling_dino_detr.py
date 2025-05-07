@@ -2679,14 +2679,30 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
             loss, loss_dict, auxiliary_outputs = self.loss_function(
-                outputs_class[-1],
-                labels,
-                self.device,
-                outputs_coord_list[-1],
-                denoising_meta,
-                self.config,
-                outputs_class,
-                outputs_coord_list,
+                logits=outputs_class[-1],
+                labels=labels,
+                device=self.device,
+                pred_boxes=outputs_coord_list[-1],
+                dn_meta=denoising_meta,
+                outputs_class=outputs_class,
+                outputs_coord=outputs_coord_list,
+                class_cost=self.config.class_cost,
+                bbox_cost=self.config.bbox_cost,
+                giou_cost=self.config.giou_cost,
+                num_labels=self.config.num_labels,
+                focal_alpha=self.config.focal_alpha,
+                auxiliary_loss=self.config.auxiliary_loss,
+                cls_loss_coefficient=self.config.cls_loss_coefficient,
+                bbox_loss_coefficient=self.config.bbox_loss_coefficient,
+                giou_loss_coefficient=self.config.giou_loss_coefficient,
+                mask_loss_coefficient=self.config.mask_loss_coefficient,
+                use_dn=self.config.use_dn,
+                use_masks=self.config.use_masks,
+                dice_loss_coefficient=self.config.dice_loss_coefficient,
+                num_decoder_layers=self.config.num_decoder_layers,
+                two_stage_type=self.config.two_stage_type,
+                no_interm_box_loss=self.config.no_interm_box_loss,
+                interm_loss_coef=self.config.interm_loss_coef,
             )
 
         # Remove?
