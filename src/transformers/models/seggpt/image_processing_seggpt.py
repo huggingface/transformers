@@ -540,11 +540,15 @@ class SegGptImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None, num_labels: Optional[int] = None
+        self,
+        outputs,
+        target_sizes: Optional[List[Tuple[int, int]]] = None,
+        num_labels: Optional[int] = None,
+        class_proba: Optional[bool] = False,
     ):
         """
-        Converts the output of [`SegGptImageSegmentationOutput`] into segmentation maps. Only supports
-        PyTorch.
+        Converts the output of [`SegGptImageSegmentationOutput`] into segmentation maps or probability maps.
+        Only supports PyTorch.
 
         Args:
             outputs ([`SegGptImageSegmentationOutput`]):
@@ -553,13 +557,20 @@ class SegGptImageProcessor(BaseImageProcessor):
                 List of length (batch_size), where each list item (`Tuple[int, int]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
             num_labels (`int`, *optional*):
-                Number of classes in the segmentation task (excluding the background). If specified, a palette will be
-                built, assuming that class_idx 0 is the background, to map prediction masks from RGB values to class
-                indices. This value should be the same used when preprocessing inputs.
+                Number of classes in the segmentation task (excluding the background). If specified when
+                `class_proba=False`, a palette will be built, assuming that class_idx 0 is the background, to map
+                prediction masks from RGB values to class indices. This value should be the same used when
+                preprocessing inputs. Ignored if `class_proba=True`.
+            class_proba (`bool`, *optional*, defaults to `False`):
+                Whether to return class probabilities or segmentation maps. If True, returns raw masks after potential
+                resizing and denormalization (shape [N, C, H, W]). If False, returns segmentation maps with class
+                indices (shape [N, H, W]).
+
         Returns:
-            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
-            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
-            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`. If `class_proba` is `False`, each
+            item is a semantic segmentation map of shape (height, width) corresponding to the target_sizes entry (if
+            `target_sizes` is specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+            If `class_proba` is `True`, each item is a probability map of shape (num_channels, height, width).
         """
         requires_backends(self, ["torch"])
         # batch_size x num_channels x 2*height x width
@@ -580,39 +591,47 @@ class SegGptImageProcessor(BaseImageProcessor):
         masks = masks.permute(0, 3, 1, 2)
 
         # Clip to match with palette if specified
+        # This is done before resizing if class_proba is True to return probabilities in the expected range
         masks = torch.clip(masks * 255, 0, 255)
 
-        semantic_segmentation = []
-        palette_tensor = None
-        palette = self.get_palette(num_labels) if num_labels is not None else None
-        if palette is not None:
-            palette_tensor = torch.tensor(palette).to(device=masks.device, dtype=torch.float)
-            _, num_channels, _, _ = masks.shape
-            palette_tensor = palette_tensor.view(1, 1, num_labels + 1, num_channels)
+        processed_outputs = []
 
         for idx, mask in enumerate(masks):
+            # Resize if target_sizes is provided
             if target_sizes is not None:
+                target_size = target_sizes[idx]
                 mask = torch.nn.functional.interpolate(
                     mask.unsqueeze(0),
-                    size=target_sizes[idx],
-                    mode="nearest",
+                    size=target_size,
+                    mode="nearest-exact" if class_proba else "nearest", # Use nearest-exact for probabilities
                 )[0]
 
-            if num_labels is not None:
+            # If class_proba is True, return the resized, denormalized mask directly
+            if class_proba:
+                processed_outputs.append(mask)
+                continue
+
+            # Otherwise, convert RGB mask to class indices using palette or channel mean
+            palette_tensor = None
+            palette = self.get_palette(num_labels) if num_labels is not None else None
+            if palette is not None:
+                palette_tensor = torch.tensor(palette).to(device=mask.device, dtype=torch.float)
+                _, num_channels, _, _ = mask.unsqueeze(0).shape # Add batch dim temporarily
+                palette_tensor = palette_tensor.view(1, 1, num_labels + 1, num_channels)
+
                 channels, height, width = mask.shape
                 dist = mask.permute(1, 2, 0).view(height, width, 1, channels)
                 dist = dist - palette_tensor
                 dist = torch.pow(dist, 2)
                 dist = torch.sum(dist, dim=-1)
                 pred = dist.argmin(dim=-1)
-
             else:
                 # If no palette is specified SegGpt will try to paint using the mask class idx as RGB
                 pred = mask.mean(dim=0).int()
 
-            semantic_segmentation.append(pred)
+            processed_outputs.append(pred)
 
-        return semantic_segmentation
+        return processed_outputs
 
 
 __all__ = ["SegGptImageProcessor"]
