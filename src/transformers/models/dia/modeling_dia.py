@@ -97,8 +97,8 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    key_states = repeat_kv(key, query.shape[1] // module.num_key_value_heads)
-    value_states = repeat_kv(value, query.shape[1] // module.num_key_value_heads)
+    key_states = repeat_kv(key, query.shape[1] // key_states.shape[1]) 
+    value_states = repeat_kv(value, query.shape[1] // key_states.shape[1]) 
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
@@ -216,12 +216,15 @@ class DiaCrossAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        query_states = apply_rotary_pos_emb(query_states, position_embeddings)
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+
+
+        query_states = apply_rotary_pos_emb(query_states, position_embeddings, -2).transpose(1, 2)
+        
         if cross_attention_states is not None:
-            key_states = (cross_attention_states @ self.k_proj.weight ).view((*cross_attention_states.shape[:-1],-1, self.head_dim)).transpose(1, 2)
-            value_states = (cross_attention_states @ self.v_proj.weight ).view((*cross_attention_states.shape[:-1],-1, self.head_dim)).transpose(1, 2)
-            key_states = apply_rotary_pos_emb(key_states, cross_position_embeddings)
+            key_states = self.k_proj(hidden_states).view(hidden_shape)
+            value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+            key_states = apply_rotary_pos_emb(key_states, position_embeddings, -2).transpose(1, 2)
             if past_key_value is not None:
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, cache_position=cache_position
@@ -411,7 +414,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
 
         hidden_states, self_attn_weights = self.self_attention(
             hidden_states=normed_states,
-            attention_mask=attention_mask,
+            attention_mask=attention_mask[:,:,:hidden_states.shape[1],:hidden_states.shape[1]],
             position_embeddings=position_embeddings,
             past_key_values=past_key_values,
             cache_position=cache_position,
