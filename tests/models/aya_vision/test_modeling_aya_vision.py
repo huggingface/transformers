@@ -324,7 +324,7 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
 
-# @require_read_token
+@require_read_token
 @require_torch
 class AyaVisionIntegrationTest(unittest.TestCase):
     def setUp(self):
@@ -393,7 +393,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
         print("decoded_output", decoded_output)
-        
+
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit sky,\nNature's quiet song.",
