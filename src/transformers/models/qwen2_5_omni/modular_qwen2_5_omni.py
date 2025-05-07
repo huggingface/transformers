@@ -33,8 +33,8 @@ from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLAttention,
     Qwen2_5_VLMLP,
-    Qwen2_5_VLModel,
     Qwen2_5_VLPreTrainedModel,
+    Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionBlock,
     Qwen2RMSNorm,
 )
@@ -2165,7 +2165,7 @@ QWEN2_5OMNI_START_DOCSTRING = r"""
     "The bare Qwen2.5OmniThinker Model outputting raw hidden-states without any specific head on top.",
     QWEN2_5OMNI_START_DOCSTRING.format(config_class="Qwen2_5OmniTextConfig"),
 )
-class Qwen2_5OmniThinkerTextModel(Qwen2_5_VLModel):
+class Qwen2_5OmniThinkerTextModel(Qwen2_5_VLTextModel):
     config_class = Qwen2_5OmniTextConfig
     _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
 
@@ -2591,7 +2591,7 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
     "The bare Qwen2.5OmniTalker Model outputting raw hidden-states without any specific head on top.",
     QWEN2_5OMNI_START_DOCSTRING.format(config_class="Qwen2_5OmniTalkerConfig"),
 )
-class Qwen2_5OmniTalkerModel(Qwen2_5_VLModel):
+class Qwen2_5OmniTalkerModel(Qwen2_5_VLTextModel):
     config_class = Qwen2_5OmniTalkerConfig
     _no_split_modules = ["Qwen2_5OmniTalkerDecoderLayer"]
 

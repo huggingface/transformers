@@ -156,6 +156,8 @@ IGNORE_NON_TESTED = (
         "Llama4VisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Emu3VQVAE",  # Building part of bigger (tested) model
         "Emu3TextModel",  # Building part of bigger (tested) model
+        "Qwen2VLTextModel",  # Building part of bigger (tested) model
+        "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
         "TimesFmModel",  # Building part of bigger (tested) model
