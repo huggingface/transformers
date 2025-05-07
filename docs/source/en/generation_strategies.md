@@ -323,7 +323,7 @@ Custom decoding methods enable specialized generation behavior such as the follo
 - handle special tokens with custom logic;
 - enhanced input preparation for advanced models;
 
-To that end, we enable `generate` to load custom generation recipes from the Hub through its `recipe` argument. This means anyone can create and share their own advanced generation method which, from a user perspective, requires no additional python packages.
+[`~GenerationMixin.generate`] supports custom decoding methods through the `recipe` argument which loads custom generation recipes from the Hub. This means anyone can create and share their custom generation method without requiring users to install additional Python packages.
 
 <!-- TODO before merging: 1) better repo name (use a `generate-community` org?) 2) prettify the repo -->
 ```py
@@ -338,11 +338,9 @@ print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
 'The quick brown fox jumps over a lazy dog, and the dog is a type of animal. Is'
 ```
 
-### Using a custom decoding method
+You should read the `README.md` file of a custom generation strategy to see what the new arguments and output type differences are, if they exist. Otherwise, you can assume it works like the base [`~GenerationMixin.generate`] method.
 
-After you've identified a custom generation recipe on the Hub that you'd like to try, the first thing you should do is to read its README page. When creating a recipe (see below), we recommend their creators to document new arguments and output type differences, if any of these exist. Reasonably, you should assume everything works like the base `generate` unless documented.
-
-Let's consider the Hub repository [`joaogante/test_generate_from_hub`](https://huggingface.co/joaogante/test_generate_from_hub). We can see in its README that it has an additional input argument, `left_padding`, which is an optional integer that will add that number of pad tokens before the prompt. Let's try it out!
+Consider the Hub repository [joaogante/test_generate_from_hub](https://huggingface.co/joaogante/test_generate_from_hub) as an example. The `README.md` states that it has an additional input argument, `left_padding`, which adds a number of padding tokens before the prompt.
 
 ```py
 gen_out = model.generate(**inputs, recipe="joaogante/test_generate_from_hub", left_padding=5)
@@ -350,7 +348,7 @@ print(tokenizer.batch_decode(gen_out)[0])
 '<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>The quick brown fox jumps over the lazy dog.\n\nThe sentence "The quick'
 ```
 
-If the recipe has pinned python requirements and your environment doesn't fulfill them, you'll get an exception about missing requirements. For instance, [`joaogante/test_generate_from_hub_2`](https://huggingface.co/joaogante/test_generate_from_hub_2) has an impossible set of requirements defined in its `requirements.txt`, and you'll see something like this if you try to run it:
+If the recipe has pinned Python requirements that your environment doesn't meet, you'll get an exception about missing requirements. For instance, [joaogante/test_generate_from_hub_2](https://huggingface.co/joaogante/test_generate_from_hub_2) has an impossible set of requirements defined in its `requirements.txt`, and you'll see the error message below if you try to run it.
 
 ```
 ValueError: Missing requirements for joaogante/test_generate_from_hub_2:
@@ -359,24 +357,22 @@ bar==0.0.0 (installed: None)
 torch>=99.0 (installed: 2.6.0+cu126)
 ```
 
-Updating your python requirements accordingly will remove this error message.
+Updating your Python requirements accordingly will remove this error message.
 
 ### Creating a custom decoding method
 
-To create a new decoding method, you need to create a new "Model" repository and push a few files into it:
-1. (required) `generate.py`, which contains all the logic for your custom decoding method.
-2. (optional) `README.md`, the front page on the Hub to your custom generation method;
-3. (optional) `requirements.txt`, to add new python requirements and/or lock specific versions for correct utilization of the technique.
-
-Let's dive at each file, and have a look at their requirements and best practices.
+To create a new decoding method, you need to create a new [**Model**](https://huggingface.co/new) repository and push a few files into it.
+1. `generate.py`, which contains all the logic for your custom decoding method.
+2. `README.md`, you should document any new arguments or output type differences of your custom method here.
+3. `requirements.txt`, used to add new Python requirements and/or lock specific versions to correctly use a technique.
 
 #### generate.py
 
-This is the core of your decoding method. It *must* contain a `generate` method, and this method *must* contain a `model` argument as its first argument. `model` is the model instance, which means you have access to all attributes and methods in the model, including the ones defined in `GenerationMixin` (like the original `generate` method).
+This is the core of your decoding method. It *must* contain a [`~GenerationMixin.generate`] method, and this method *must* contain a `model` argument as its first argument. `model` is the model instance, which means you have access to all attributes and methods in the model, including the ones defined in [`GenerationMixin`] (like the base `generate` method).
 
-Under the hood, when the original `generate` method is called with a `recipe` argument, it will first check its requirements (if they exist, see below), then locate the custom `generate` method in `generate.py`, and finally calls the custom `generate`, forwarding all received arguments to it (plus `model`). This means your `generate` can have a mix of orginal and custom arguments, as well as a different output type -- the world is your oyster!
+Under the hood, when the base [`~GenerationMixin.generate`] method is called with a `recipe` argument, it first checks its Python requirements, then locates the custom `generate` method in `generate.py`, and finally calls the custom `generate`. All received arguments and `model` are forwarded to the custom `generate` method.
 
-Here is an example of a `generate.py` file that mixes original and custom arguments:
+This means your `generate` can have a mix of original and custom arguments (as well as a different output type) as shown below.
 
 ```py
 import torch
@@ -410,24 +406,23 @@ def generate(model, input_ids, generation_config, left_padding=None, **kwargs):
     return input_ids
 ```
 
-Recommended practices:
-- The original `generate` has extensive logic for validation and input preparation. Feel free to reuse them;
-- If you use any private method/attribute in `model`, pin the `transformers` version you're using in the requirements;
+Follow the recommended practices below to ensure your custom method works as expected.
+- Feel free to reuse the logic for validation and input preparation in the original [`~GenerationMixin.generate`].
+- Pin the Transformers version in the requirements if you use any private method/attribute in `model`.
 - Consider adding model validation, input validation, or even a separate test file to help users sanity-check your code in their environment.
 
 #### README.md
 
-As the front page of your decoding method, this is where other users get to know it. In addition to a description of the method, we heavily recommend documenting any input and/or output differences to the original `generate`. That way, users can focus on what's new, and rely on `transformers` docs for generic implementation details.
+The `README.md` describes the decoding method to other users. In addition to a description of the method, we heavily recommend documenting any input and/or output differences to the original [`~GenerationMixin.generate`]. This way, users can focus on what's new, and rely on Transformers docs for generic implementation details.
 
-Recommended pratices:
-- Document input and output differences in `generate`;
-- Add self-contained examples to enable quick experimentation;
-- Describe additional soft-requirements (e.g. if the technique only works well with a certain family of models).
+Some more recommended practices are listed below to help users get familiar with your decoding method.
+- Document input and output differences in [`~GenerationMixin.generate`].
+- Add self-contained examples to enable quick experimentation.
+- Describe soft-requirements such as if the method only works well with a certain family of models.
 
 #### requirements.txt
 
-If your decoding method has python requirements that are not present in the original `transformers` package, you can specify then in a `requirements.txt` file (just like you would in a python project). These will be checked at runtime, and an exception will be thrown if they are not honored.
-
+Specify additional Python requirements in a `requirements.txt` file for your decoding method if they're not present in Transformers. These are checked at runtime and an exception will be thrown if they're missing.
 ## Resources
 
 Read the [How to generate text: using different decoding methods for language generation with Transformers](https://huggingface.co/blog/how-to-generate) blog post for an explanation of how common decoding strategies work.
