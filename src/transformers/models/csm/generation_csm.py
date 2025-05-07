@@ -476,7 +476,7 @@ class CsmGenerationMixin(GenerationMixin):
                     if eos_idxs.numel() != 0:
                         cutoff_idx = eos_idxs.min()
                     else:
-                        cutoff_idx = audio_codes_batch.shape[1]
+                        cutoff_idx = audio_codes_batch.shape[0]
 
                     audio_codes_batch = audio_codes_batch[:cutoff_idx]
                     codec_decode_output = self.codec_model.decode(audio_codes_batch.transpose(0, 1).unsqueeze(0))
