@@ -1,5 +1,5 @@
 import itertools
-from typing import Optional, Callable, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -179,8 +179,10 @@ def sliding_window_overlay(sliding_window: int) -> Callable:
     This is an overlay depicting a sliding window pattern. Add it on top of a causal mask for a proper sliding
     window mask.
     """
+
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         return kv_idx > q_idx - sliding_window
+
     return inner_mask
 
 
@@ -189,8 +191,10 @@ def chunked_overlay(chunk_size: int) -> Callable:
     This is an overlay depicting a chuned attention pattern. Add it on top of a causal mask for a proper chunked
     attention mask.
     """
+
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         return kv_idx // chunk_size == q_idx // chunk_size
+
     return inner_mask
 
 
@@ -214,6 +218,7 @@ def padding_mask_mod(padding_mask: torch.Tensor) -> Callable:
         # we cannot pad it here in the mask_mod as we don't know the final size, and we cannot try/except, as it is not
         # vectorizable on accelerator devices
         return padding_mask[batch_idx, kv_idx]
+
     return inner_mask
 
 
@@ -222,8 +227,10 @@ def add_offsets_to_mask_mod(mask_mod: Callable, q_offset: int, kv_offset: int) -
     This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
     not start and end indices.
     """
+
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         return mask_mod(batch_idx, head_idx, q_idx + q_offset, kv_idx + kv_offset)
+
     return inner_mask
 
 
@@ -249,7 +256,9 @@ def _vmap_for_q_idx_kv_idx(mask_mod: Callable) -> Callable:
     return mask_mod
 
 
-def prepare_padding_mask(attention_mask: Optional[torch.Tensor], kv_length: int, kv_offset: int) -> Optional[torch.Tensor]:
+def prepare_padding_mask(
+    attention_mask: Optional[torch.Tensor], kv_length: int, kv_offset: int, _slice: bool = True
+) -> Optional[torch.Tensor]:
     """
     From the 2D attention mask, prepare the correct padding mask to use by potentially padding the mask, and slicing
     according to the `kv_offset`.
@@ -259,11 +268,13 @@ def prepare_padding_mask(attention_mask: Optional[torch.Tensor], kv_length: int,
         # Pad it if necesary
         if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
             local_padding_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
-        # Equivalent to: `local_padding_mask = attention_mask[:, kv_offset : kv_offset + kv_length]`,
-        # but without data-dependent slicing (i.e. torch.compile friendly)
-        mask_indices = torch.arange(kv_length, device=local_padding_mask.device)
-        mask_indices += kv_offset
-        local_padding_mask = local_padding_mask[:, mask_indices]
+        # For flex, we should not slice them, only use an offset
+        if _slice:
+            # Equivalent to: `local_padding_mask = attention_mask[:, kv_offset : kv_offset + kv_length]`,
+            # but without data-dependent slicing (i.e. torch.compile friendly)
+            mask_indices = torch.arange(kv_length, device=local_padding_mask.device)
+            mask_indices += kv_offset
+            local_padding_mask = local_padding_mask[:, mask_indices]
     return local_padding_mask
 
 
@@ -272,7 +283,7 @@ def sdpa_mask(
     cache_position: torch.Tensor,
     kv_length: int,
     kv_offset: int = 0,
-    attention_mask = None,
+    attention_mask: Optional[torch.Tensor] = None,
     sliding_window: Optional[int] = None,
     chunk_size: Optional[int] = None,
     allow_is_causal_skip: bool = True,
@@ -363,7 +374,9 @@ def sdpa_mask(
     """
     q_length = cache_position.shape[0]
     # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
-    if allow_is_causal_skip and _ignore_causal_mask_sdpa(attention_mask, q_length, kv_length, sliding_window, chunk_size):
+    if allow_is_causal_skip and _ignore_causal_mask_sdpa(
+        attention_mask, q_length, kv_length, sliding_window, chunk_size
+    ):
         return None
 
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
@@ -399,7 +412,7 @@ def eager_mask(
     cache_position: torch.Tensor,
     kv_length: int,
     kv_offset: int = 0,
-    attention_mask = None,
+    attention_mask: Optional[torch.Tensor] = None,
     sliding_window: Optional[int] = None,
     chunk_size: Optional[int] = None,
     dtype: torch.dtype = torch.float32,
@@ -442,7 +455,7 @@ def flex_attention_mask(
     cache_position: torch.Tensor,
     kv_length: int,
     kv_offset: int = 0,
-    attention_mask = None,
+    attention_mask: Optional[torch.Tensor] = None,
     sliding_window: Optional[int] = None,
     chunk_size: Optional[int] = None,
     **kwargs,
@@ -483,7 +496,7 @@ def flex_attention_mask(
 
     # Potentially add the padding 2D mask
     if attention_mask is not None:
-        padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
+        padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset, _slice=False)
         mask_mod = and_masks(mask_mod, padding_mask_mod(padding_mask))
 
     # Add the offsets on top (because flex interface only allows length, not start and end indices)
@@ -532,7 +545,9 @@ def get_causal_masks(
         raise ValueError("`sliding_window` and `chunk_size` are mutually exclusive for mask creation")
 
     if past_key_values is not None:
-        sizes_and_patterns, layer_to_mask_mapping = past_key_values.get_mask_size_and_pattern(cache_position, num_layers)
+        sizes_and_patterns, layer_to_mask_mapping = past_key_values.get_mask_size_and_pattern(
+            cache_position, num_layers
+        )
     else:
         kv_offset = 0
         kv_length = attention_mask.shape[-1]
