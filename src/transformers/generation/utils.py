@@ -37,7 +37,7 @@ from ..cache_utils import (
     OffloadedHybridCache,
     QuantizedCacheConfig,
 )
-from ..masking_utils import get_causal_mask
+from ..masking_utils import get_causal_masks
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import (
     check_python_requirements,
@@ -653,7 +653,7 @@ class GenerationMixin:
             
             # If it's not defined, it means the model uses the new general mask API
             if causal_mask_creation_function is None:  # can't be found
-                attention_mask = get_causal_mask(
+                attention_mask = get_causal_masks(
                     self.config,
                     torch.empty(model_inputs[input_ids_key].shape[0], dtype=self.dtype),  # we only need batch size and dtype here
                     attention_mask,

@@ -401,9 +401,9 @@ class MistralModel(MistralPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        from ...masking_utils import get_causal_mask
+        from ...masking_utils import get_causal_masks
 
-        causal_mask = get_causal_mask(
+        causal_mask = get_causal_masks(
             self.config,
             inputs_embeds,
             attention_mask,
