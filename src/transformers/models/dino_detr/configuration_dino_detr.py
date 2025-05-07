@@ -106,7 +106,6 @@ class DinoDetrConfig(PretrainedConfig):
         two_stage_learn_wh (`bool`, *optional*, defaults to `False`): Whether to learn the width and height in the two-stage process.
         num_classes (`int`, *optional*, defaults to 91): The number of object classes the model can predict.
         dn_labelbook_size (`int`, *optional*, defaults to 91): The size of the label book for denoising training.
-        fix_refpoints_hw (`int`, *optional*, defaults to -1): Whether to fix the height and width of reference points.
         dn_number (`int`, *optional*, defaults to 100): The number of denoising queries.
         dn_box_noise_scale (`float`, *optional*, defaults to 0.4): The scale of noise added to bounding boxes during denoising training.
         dn_label_noise_ratio (`float`, *optional*, defaults to 0.5): The ratio of noise added to labels during denoising training.
@@ -217,7 +216,6 @@ class DinoDetrConfig(PretrainedConfig):
         two_stage_learn_wh=False,
         num_classes=91,
         dn_labelbook_size=91,
-        fix_refpoints_hw=-1,
         dn_number=100,
         dn_box_noise_scale=0.4,
         dn_label_noise_ratio=0.5,
@@ -329,10 +327,6 @@ class DinoDetrConfig(PretrainedConfig):
             if two_stage_class_embed_share:
                 assert dec_pred_class_embed_share and dec_pred_bbox_embed_share
         assert decoder_sa_type in ["sa", "ca_label", "ca_content"]
-        if fix_refpoints_hw > 0:
-            assert random_refpoints_xy
-        elif int(fix_refpoints_hw) == -2:
-            assert random_refpoints_xy
         assert query_dim in [2, 4], "Query_dim should be 2/4 but {}".format(query_dim)
         if use_timm_backbone and backbone_kwargs is not None:
             assert backbone_kwargs["in_chans"] == num_channels
@@ -414,7 +408,6 @@ class DinoDetrConfig(PretrainedConfig):
         self.dn_labelbook_size = dn_labelbook_size
         self.query_dim = query_dim
         self.random_refpoints_xy = random_refpoints_xy
-        self.fix_refpoints_hw = fix_refpoints_hw
         self.num_patterns = num_patterns
         self.dn_number = dn_number
         self.dn_box_noise_scale = dn_box_noise_scale
