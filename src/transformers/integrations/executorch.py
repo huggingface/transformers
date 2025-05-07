@@ -516,7 +516,7 @@ def convert_and_export_with_cache(
                     "Dynamic shapes spec will be ignored by convert_and_export_with_cache for torch < 2.6.0."
                 )
             if strict is not None:
-                logging.warning("The strict flag will be ingored by convert_and_export_with_cache for torch < 2.6.0.")
+                logging.warning("The strict flag will be ignored by convert_and_export_with_cache for torch < 2.6.0.")
             # We have to keep this path for BC.
             #
             # Due to issue https://github.com/pytorch/pytorch/issues/128394, we need to switch to use an internal
