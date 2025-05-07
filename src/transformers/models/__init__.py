@@ -274,6 +274,7 @@ if TYPE_CHECKING:
     from .squeezebert import *
     from .stablelm import *
     from .starcoder2 import *
+    from .style_text_to_speech_2 import *
     from .superglue import *
     from .superpoint import *
     from .swiftformer import *

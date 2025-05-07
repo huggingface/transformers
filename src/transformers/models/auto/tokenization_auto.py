@@ -71,6 +71,7 @@ else:
             ("aria", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("aya_vision", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
             ("bark", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("style_text_to_speech_2", ("StyleTextToSpeech2Tokenizer", "StyleTextToSpeech2TokenizerFast" if is_tokenizers_available() else None)),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
             (
                 "barthez",
