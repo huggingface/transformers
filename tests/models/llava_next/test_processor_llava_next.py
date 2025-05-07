@@ -19,7 +19,7 @@ import unittest
 
 import torch
 
-from transformers import LlamaTokenizerFast, LlavaNextProcessor
+from transformers import AutoProcessor, LlamaTokenizerFast, LlavaNextProcessor
 from transformers.testing_utils import (
     require_vision,
 )
@@ -48,10 +48,6 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token
 
-    def setUp(self):
-        super().setUp()
-        self.processor = self.processor_class.from_pretrained(self.tmpdirname)
-
     def get_tokenizer(self, **kwargs):
         return LlavaNextProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
@@ -72,22 +68,24 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_chat_template_is_saved
     def test_chat_template_is_saved(self):
-        processor_dict_loaded = json.loads(self.processor.to_json_string())
+        processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
+        processor_dict_loaded = json.loads(processor_loaded.to_json_string())
         # chat templates aren't serialized to json in processors
         self.assertFalse("chat_template" in processor_dict_loaded.keys())
 
         # they have to be saved as separate file and loaded back from that file
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
-        self.assertTrue(self.processor.chat_template == processor_dict.get("chat_template", None))
+        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
     def test_image_token_filling(self):
-        self.processor.patch_size = 14
-        self.processor.vision_feature_select_strategy = "default"
+        processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-vicuna-7b-hf")
+        processor.patch_size = 14
+        processor.vision_feature_select_strategy = "default"
         # Important to check with non square image
-        image = torch.randint(0, 2, (3, 501, 322))
-        expected_image_tokens = 680
-        image_token_index = self.processor.image_token_id
+        image = torch.randint(0, 2, (3, 500, 316))
+        expected_image_tokens = 1526
+        image_token_index = processor.image_token_id
 
         messages = [
             {
@@ -98,8 +96,8 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 ],
             },
         ]
-        inputs = self.processor(
-            text=[self.processor.apply_chat_template(messages)],
+        inputs = processor(
+            text=[processor.apply_chat_template(messages)],
             images=[image],
             return_tensors="pt",
         )

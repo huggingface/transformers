@@ -58,10 +58,6 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
 
-    def setUp(self):
-        super().setUp()
-        self.processor = self.processor_class.from_pretrained(self.tmpdirname)
-
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
@@ -85,23 +81,25 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_chat_template_is_saved
     def test_chat_template_is_saved(self):
-        processor_dict_loaded = json.loads(self.processor.to_json_string())
+        processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
+        processor_dict_loaded = json.loads(processor_loaded.to_json_string())
         # chat templates aren't serialized to json in processors
         self.assertFalse("chat_template" in processor_dict_loaded.keys())
 
         # they have to be saved as separate file and loaded back from that file
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
-        self.assertTrue(self.processor.chat_template == processor_dict.get("chat_template", None))
+        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
     def test_image_token_filling(self):
-        self.processor.patch_size = 14
-        self.processor.vision_feature_select_strategy = "default"
-        self.processor.num_image_tokens = 256
+        processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
+        processor.patch_size = 14
+        processor.vision_feature_select_strategy = "default"
+        processor.num_image_tokens = 729
         # Important to check with non square image
-        image = torch.randint(0, 2, (3, 501, 322))
-        expected_image_tokens = 680
-        image_token_index = self.processor.image_token_id
+        image = torch.randint(0, 2, (3, 500, 316))
+        expected_image_tokens = 1932
+        image_token_index = processor.image_token_id
 
         messages = [
             {
@@ -112,8 +110,8 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 ],
             },
         ]
-        inputs = self.processor(
-            text=[self.processor.apply_chat_template(messages)],
+        inputs = processor(
+            text=[processor.apply_chat_template(messages)],
             images=[image],
             return_tensors="pt",
         )
