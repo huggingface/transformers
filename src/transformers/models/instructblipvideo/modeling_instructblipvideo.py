@@ -1351,7 +1351,10 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # step 1: forward the images through the vision encoder,
-        # to get image embeddings of shape (batch_size, seq_len, hidden_size)
+        # we process in a batched way, later unbatch it back (video has frames=4 always)
+        batch_size, frames, channel, height, width = pixel_values.shape
+        pixel_values = pixel_values.reshape(batch_size * frames, channel, height, width)
+
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -1367,8 +1370,12 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
         # difference with BLIP-2 here: we also feed the instruction prompt to the Q-Former
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
         query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
+
         if qformer_attention_mask is None:
             qformer_attention_mask = torch.ones_like(qformer_input_ids)
+
+        qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
+        qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
         query_outputs = self.qformer(
             input_ids=qformer_input_ids,
@@ -1384,11 +1391,14 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
 
         # step 3: use the language model, conditioned on the query outputs and the prompt
         language_model_inputs = self.language_projection(query_output)
+
+        # unbatch inputs back, each video-frame gets `num_query_tokens` seq length
+        language_model_inputs = language_model_inputs.reshape(batch_size, self.config.num_query_tokens * frames, -1)
         inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
-        special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+        special_image_mask = (input_ids == self.config.video_token_id).unsqueeze(-1).expand_as(inputs_embeds)
         inputs_embeds[special_image_mask] = language_model_inputs.flatten()
 
         if self.config.use_decoder_only_language_model:

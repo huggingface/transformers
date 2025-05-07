@@ -160,6 +160,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("imagegpt", "ImageGPTModel"),
         ("informer", "InformerModel"),
         ("instructblip", "InstructBlipModel"),
+        ("instructblipvideo", "InstructBlipVideoModel"),
         ("internvl", "InternVLModel"),
         ("internvl_vision", "InternVLVisionModel"),
         ("jamba", "JambaModel"),
