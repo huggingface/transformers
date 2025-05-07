@@ -1835,5 +1835,6 @@ __all__ = [
     "InstructBlipVideoVisionModel",
     "InstructBlipVideoPreTrainedModel",
     "InstructBlipVideoQFormerModel",
+    "InstructBlipVideoModel",
     "InstructBlipVideoForConditionalGeneration",
 ]
