@@ -18,7 +18,6 @@ import numpy as np
 
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
-from ...generation import GenerationMixin
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_transforms import PaddingMode, convert_to_rgb, pad, resize, to_channel_dimension_format
 from ...image_utils import (
