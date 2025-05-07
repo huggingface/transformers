@@ -114,6 +114,7 @@ class DiaConfig(PretrainedConfig):
         norm_eps=1e-5,
         is_encoder_decoder=True,
         pad_token_id=0,
+        delay_pattern=None,
         **kwargs,
     ):
         if isinstance(encoder_config, dict):
@@ -123,6 +124,7 @@ class DiaConfig(PretrainedConfig):
         self.encoder_config = encoder_config if encoder_config is not None else DiaEncoderConfig()
         self.decoder_config = decoder_config if encoder_config is not None else DiaDecoderConfig()
         self.norm_eps = norm_eps
+        self.delay_pattern = delay_pattern if delay_pattern is not None else [0, 8, 9, 10, 11, 12, 13, 14, 15]
         super().__init__(
             pad_token_id=pad_token_id,
             is_encoder_decoder=is_encoder_decoder,

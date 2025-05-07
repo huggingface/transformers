@@ -33,7 +33,7 @@ from ...utils import (
     logging,
 )
 from .configuration_dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
-
+from .generation_dia import DiaGenerationMixin
 
 logger = logging.get_logger(__name__)
 
@@ -243,13 +243,13 @@ class DiaCrossAttention(nn.Module):
             query_states,
             key_states,
             value_states,
-            attention_mask,
+            None, # None for now
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.attention_dropout,
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(2, 21, -1).contiguous()
+        attn_output = attn_output.reshape((*input_shape, -1)).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -336,6 +336,7 @@ class DiaEncoder(DiaPreTrainedModel):
     def forward(
         self,
         audio_codes: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None, # TODO can the auudio codes be "padded"?
         cache_position: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
@@ -513,7 +514,7 @@ class DiaDecoder(DiaPreTrainedModel):
         return last_hidden_states.to(torch.float32)
 
 
-class DiaModel(DiaPreTrainedModel):
+class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
     def __init__(self, config: DiaConfig):
         super().__init__(config)
         self.encoder = DiaEncoder(config.encoder_config)
