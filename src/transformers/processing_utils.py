@@ -41,6 +41,7 @@ from .image_utils import (
     load_image,
     load_video,
 )
+from .utils.chat_template_utils import render_jinja_template
 
 
 if is_vision_available():
@@ -1426,6 +1427,14 @@ class ProcessorMixin(PushToHubMixin):
                 # It's a template string, render it directly
                 chat_template = chat_template
 
+        if kwargs.get("continue_final_message", False):
+            if kwargs.get("add_generation_prompt", False):
+                raise ValueError(
+                    "continue_final_message and add_generation_prompt are not compatible. Use continue_final_message when you want the model to continue the final message, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
+                )
+            if kwargs.get("return_assistant_tokens_mask", False):
+                raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
+
         # Fill sets of kwargs that should be used by different parts of template
         processed_kwargs = {
             "mm_load_kwargs": {},
@@ -1534,12 +1543,11 @@ class ProcessorMixin(PushToHubMixin):
                 **processed_kwargs["mm_load_kwargs"],
             )
 
-        prompt = self.tokenizer.apply_chat_template(
-            conversations,
+        prompt, generation_indices = render_jinja_template(
+            conversations=conversations,
             chat_template=chat_template,
-            tokenize=False,
-            return_dict=False,
-            **processed_kwargs["template_kwargs"],
+            **processed_kwargs["template_kwargs"],  # different flags such as `return_assistant_mask`
+            **self.tokenizer.special_tokens_map,  # tokenizer special tokens are used by some templates
         )
 
         if not is_batched:
@@ -1564,6 +1572,22 @@ class ProcessorMixin(PushToHubMixin):
                 **kwargs,
             )
             if return_dict:
+                if processed_kwargs["template_kwargs"].get("return_assistant_tokens_mask", False):
+                    assistant_masks = []
+                    input_ids = out["input_ids"]
+                    for i in range(len(input_ids)):
+                        current_mask = [0] * len(input_ids[i])
+                        for assistant_start_char, assistant_end_char in generation_indices[i]:
+                            start_token = out.char_to_token(i, assistant_start_char)
+                            end_token = out.char_to_token(i, assistant_end_char - 1)
+                            if start_token is None:
+                                # start_token is out of bounds maybe due to truncation.
+                                break
+                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
+                                current_mask[token_id] = 1
+                        assistant_masks.append(current_mask)
+                    out["assistant_masks"] = assistant_masks
+                    out.convert_to_tensors(tensor_type=kwargs.get("return_tensors", None))
                 return out
             else:
                 return out["input_ids"]
