@@ -21,7 +21,6 @@ from typing import Any, Callable, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
@@ -40,6 +39,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
     replace_return_docstrings,
     torch_int,
@@ -1379,6 +1379,7 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
         if hasattr(self.language_model, "_hf_hook"):
             self.language_model._hf_hook.io_same_device = True  # For `generate` compatibility
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(INSTRUCTBLIP_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1394,6 +1395,7 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         use_cache: Optional[bool] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, InstructBlipForConditionalGenerationModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1446,6 +1448,7 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 use_cache=use_cache,
+                **kwargs,
             )
         else:
             outputs = self.language_model(
@@ -1457,10 +1460,8 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 use_cache=use_cache,
+                **kwargs,
             )
-
-        if not return_dict:
-            return (vision_outputs, query_outputs, outputs)
 
         return InstructBlipForConditionalGenerationModelOutput(
             vision_outputs=vision_outputs,
@@ -1558,6 +1559,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         if hasattr(self.language_model, "_hf_hook"):
             self.language_model._hf_hook.io_same_device = True  # For `generate` compatibility
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(INSTRUCTBLIP_INPUTS_DOCSTRING)
     @replace_return_docstrings(
         output_type=InstructBlipForConditionalGenerationModelOutput, config_class=InstructBlipVisionConfig
@@ -1693,18 +1695,11 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             )
             logits = outputs.logits if return_dict else outputs[0]
             loss = None
-            # we compute the loss here since we need to take into account the sequence length of the query embeds
             if labels is not None:
-                labels = labels.to(logits.device)
-                logits = logits[:, -labels.size(1) :, :]
-                # Shift so that tokens < n predict n
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous().to(logits.device)
+                loss = self.loss_function(
+                    logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+                )
 
-                # Flatten the tokens
-                loss_fct = CrossEntropyLoss(reduction="mean")
-
-                loss = loss_fct(shift_logits.view(-1, self.config.text_config.vocab_size), shift_labels.view(-1))
         else:
             outputs = self.language_model(
                 inputs_embeds=inputs_embeds,
@@ -1720,10 +1715,6 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             )
             loss = outputs.loss if return_dict else outputs[0]
             logits = outputs.logits if return_dict else outputs[1]
-
-        if not return_dict:
-            output = (logits, vision_outputs, query_outputs, outputs)
-            return ((loss,) + output) if loss is not None else output
 
         return InstructBlipForConditionalGenerationModelOutput(
             loss=loss,

@@ -29,6 +29,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
 )
 from .configuration_pixtral import PixtralVisionConfig
@@ -501,6 +502,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_conv
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(PIXTRAL_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -538,17 +540,15 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             [p.shape[-2] * p.shape[-1] for p in patch_embeds_list], patch_embeds
         )
 
-        out = self.transformer(
+        return self.transformer(
             patch_embeds,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
-            return_dict=return_dict,
+            return_dict=True,
             **kwargs,
         )
-
-        return out
 
 
 __all__ = ["PixtralVisionModel", "PixtralPreTrainedModel"]

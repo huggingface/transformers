@@ -32,6 +32,7 @@ from transformers.models.llava_next.modeling_llava_next import (
 )
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings_to_model_forward,
@@ -380,7 +381,7 @@ class LlavaNextVideoModel(LlavaNextModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **lm_kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, LlavaNextVideoModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -465,10 +466,10 @@ class LlavaNextVideoModel(LlavaNextModel):
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
-            **lm_kwargs,
+            **kwargs,
         )
 
-        output = LlavaNextVideoModelOutputWithPast(
+        return LlavaNextVideoModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
@@ -476,7 +477,6 @@ class LlavaNextVideoModel(LlavaNextModel):
             image_hidden_states=image_features if pixel_values is not None else None,
             video_hidden_states=video_features if pixel_values_videos is not None else None,
         )
-        return output if return_dict else output.to_tuple()
 
 
 LLAVA_NEXT_VIDEO_INPUTS_DOCSTRING = r"""
@@ -686,7 +686,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
             image_sizes=image_sizes,
             **kwargs,
@@ -699,7 +699,9 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return LlavaNextVideoCausalLMOutputWithPast(
             loss=loss,

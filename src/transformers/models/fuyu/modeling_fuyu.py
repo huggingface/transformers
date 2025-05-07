@@ -30,6 +30,7 @@ from ...utils import (
     LossKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
     replace_return_docstrings,
 )
@@ -338,6 +339,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model.get_decoder()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -407,7 +409,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
-            return_dict=return_dict,
+            return_dict=True,
             # don't pass kwargs because Persimmon-backbone doesn't accept FA2 kwargs yet, TODO: raushan
         )
 
@@ -421,10 +423,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             loss = self.loss_function(
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,

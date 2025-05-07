@@ -287,9 +287,6 @@ VIDEO_LLAVA_INPUTS_DOCSTRING = r"""
 """
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 @add_start_docstrings(
     """The VideoLlava model which consists of a vision backbone and a language model without language modeling head.""",
     VIDEO_LLAVA_START_DOCSTRING,
@@ -394,6 +391,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
 
         return video_features, num_frames
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(VIDEO_LLAVA_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -411,7 +409,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **lm_kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, VideoLlavaModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -482,10 +480,10 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
-            **lm_kwargs,
+            **kwargs,
         )
 
-        output = VideoLlavaModelOutputWithPast(
+        return VideoLlavaModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
@@ -493,7 +491,9 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             image_hidden_states=image_features if pixel_values_images is not None else None,
             video_hidden_states=video_features if pixel_values_videos is not None else None,
         )
-        return output if return_dict else output.to_tuple()
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @add_start_docstrings(
@@ -688,7 +688,9 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_siz, **kwargs
+            )
 
         return VideoLlavaCausalLMOutputWithPast(
             loss=loss,

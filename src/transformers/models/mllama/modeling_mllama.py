@@ -1848,6 +1848,7 @@ class MllamaModel(MllamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(MLLAMA_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1866,6 +1867,7 @@ class MllamaModel(MllamaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1928,15 +1930,15 @@ class MllamaModel(MllamaPreTrainedModel):
             output_attentions=output_attentions,
             return_dict=True,
             cache_position=cache_position,
+            **kwargs,
         )
 
-        output = BaseModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-        return output if return_dict else output.to_tuple()
 
 
 @add_start_docstrings(

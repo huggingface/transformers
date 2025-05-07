@@ -834,18 +834,6 @@ class PretrainedConfig(PushToHubMixin):
                     # Needs to be set even if it's not in the diff
                     diff["model_type"] = value["model_type"]
 
-                # Do not serialize keys that are deleted from base config
-                if "_attn_implementation_internal" in diff:
-                    del diff["_attn_implementation_internal"]
-                if "_attn_implementation_autoset" in diff:
-                    del diff["_attn_implementation_autoset"]
-                if "base_model_tp_plan" in diff:
-                    del diff["base_model_tp_plan"]
-                if "base_model_pp_plan" in diff:
-                    del diff["base_model_pp_plan"]
-                if "_name_or_path" in diff:
-                    del diff["_name_or_path"]
-
                 serializable_config_dict[key] = diff
             elif (
                 key not in default_config_dict

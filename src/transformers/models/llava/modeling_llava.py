@@ -268,9 +268,6 @@ LLAVA_INPUTS_DOCSTRING = r"""
 """
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 @add_start_docstrings(
     """The Llava model which consists of a vision backbone and a language model, without a language modeling head.""",
     LLAVA_START_DOCSTRING,
@@ -338,6 +335,7 @@ class LlavaModel(LlavaPreTrainedModel):
         image_features = self.multi_modal_projector(selected_image_feature)
         return image_features
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(LLAVA_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -355,7 +353,7 @@ class LlavaModel(LlavaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         image_sizes: torch.Tensor = None,
-        **lm_kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, LlavaModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -414,17 +412,19 @@ class LlavaModel(LlavaPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
-            **lm_kwargs,
+            **kwargs,
         )
 
-        output = LlavaModelOutputWithPast(
+        return LlavaModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
-        return output if return_dict else output.to_tuple()
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @add_start_docstrings(
@@ -570,7 +570,9 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return LlavaCausalLMOutputWithPast(
             loss=loss,
