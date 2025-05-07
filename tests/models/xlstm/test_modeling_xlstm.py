@@ -50,10 +50,10 @@ class xLSTMModelTester:
         is_training=True,
         use_labels=True,
         vocab_size=99,
-        embedding_dim=128,
+        hidden_size=128,
         qk_dim_factor=0.5,
         v_dim_factor=1.0,
-        num_blocks=2,
+        num_hidden_layers=2,
         max_position_embeddings=512,
         type_vocab_size=16,
         type_sequence_label_size=2,
@@ -72,8 +72,8 @@ class xLSTMModelTester:
         self.is_training = is_training
         self.use_labels = use_labels
         self.vocab_size = vocab_size
-        self.embedding_dim = embedding_dim
-        self.num_blocks = num_blocks
+        self.num_hidden_layers = num_hidden_layers
+        self.hidden_size = hidden_size
         self.qk_dim_factor = qk_dim_factor
         self.v_dim_factor = v_dim_factor
         self.max_position_embeddings = max_position_embeddings
@@ -90,14 +90,14 @@ class xLSTMModelTester:
         self.step_kernel = step_kernel
         self.tie_word_embeddings = tie_word_embeddings
 
-        self.num_hidden_layers = self.num_blocks
-        self.hidden_size = self.embedding_dim
+        # self.num_hidden_layers = self.num_blocks
+        # self.hidden_size = self.embedding_dim
 
     def get_large_model_config(self):
         cfg = xLSTMConfig.from_pretrained("NX-AI/xLSTM-7b")
         # this is needed for compatibility with generic tests
-        cfg.hidden_size = cfg.embedding_dim
-        cfg.num_hidden_layers = cfg.num_blocks
+        # cfg.hidden_size = cfg.embedding_dim
+        # cfg.num_hidden_layers = cfg.num_blocks
         return cfg
 
     def prepare_config_and_inputs(self, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False):
@@ -126,8 +126,8 @@ class xLSTMModelTester:
         cfg = xLSTMConfig(
             num_heads=self.num_heads,
             vocab_size=self.vocab_size,
-            embedding_dim=self.embedding_dim,
-            num_blocks=self.num_blocks,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
             qk_dim_factor=self.qk_dim_factor,
             v_dim_factor=self.v_dim_factor,
             n_positions=self.max_position_embeddings,
@@ -142,8 +142,8 @@ class xLSTMModelTester:
             tie_word_embeddings=self.tie_word_embeddings,
         )
         # this is needed for compatibility with generic tests
-        cfg.hidden_size = cfg.embedding_dim
-        cfg.num_hidden_layers = cfg.num_blocks
+        # cfg.hidden_size = cfg.embedding_dim
+        # cfg.num_hidden_layers = cfg.num_blocks
         return cfg
 
     def prepare_config_and_inputs_for_common(self):
@@ -183,7 +183,7 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def setUp(self):
         self.model_tester = xLSTMModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=xLSTMConfig, n_embd=37, common_properties=["embedding_dim", "num_blocks"]
+            self, config_class=xLSTMConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
     def test_initialization(self):
@@ -386,12 +386,12 @@ class xLSTMIntegrationTest(unittest.TestCase):
 
         B, T, D = 4, 512, 768
         dtype = torch.bfloat16
-        config = xLSTMConfig(num_heads=24, head_dim=64, embedding_dim=768, expand=2, n_groups=1)
+        config = xLSTMConfig(num_heads=24, head_dim=64, hidden_size=768, expand=2, n_groups=1)
 
         torch.manual_seed(42)
         with torch.amp.autocast(device_type="cuda", dtype=dtype):
             with torch.no_grad():
-                block = mLSTMBlock(config, layer_idx=0).to("cuda")
+                block = mLSTMBlock(config.to_xlstm_block_config(), layer_idx=0).to("cuda")
                 hidden_states = torch.rand(size=(B, T, D), dtype=dtype, device="cuda")
 
                 block.train()
