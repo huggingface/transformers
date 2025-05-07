@@ -1097,10 +1097,10 @@ class AriaTextModel(AriaTextPreTrainedModel):
         return causal_mask
 
 
-_CONFIG_FOR_TEXT_DOC = "AriaTextConfig"
-
-
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
+_CONFIG_FOR_TEXT_DOC = "AriaTextConfig"
 
 
 class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):

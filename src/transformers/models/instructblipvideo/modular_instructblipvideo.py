@@ -37,7 +37,7 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...processing_utils import Unpack
-from ...utils import add_start_docstrings_to_model_forward, can_return_tuple, logging
+from ...utils import add_start_docstrings_to_model_forward, can_return_tuple, logging, replace_return_docstrings
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -301,6 +301,10 @@ class InstructBlipVideoModel(InstructBlipModel):
 
 class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGeneration):
     @can_return_tuple
+    @add_start_docstrings_to_model_forward(INSTRUCTBLIPVIDEO_INPUTS_DOCSTRING)
+    @replace_return_docstrings(
+        output_type=InstructBlipVideoForConditionalGenerationModelOutput, config_class=InstructBlipVideoConfig
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
