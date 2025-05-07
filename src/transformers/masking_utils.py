@@ -263,7 +263,7 @@ def prepare_padding_mask(attention_mask: Optional[torch.Tensor], kv_length: int,
     return local_padding_mask
 
 
-def create_4d_causal_mask(
+def sdpa_mask(
     batch_size: int,
     cache_position: torch.Tensor,
     kv_length: int,
@@ -271,7 +271,9 @@ def create_4d_causal_mask(
     attention_mask = None,
     sliding_window: Optional[int] = None,
     chunk_size: Optional[int] = None,
-) -> torch.Tensor:
+    allow_is_causal_skip: bool = True,
+    **kwargs,
+) -> Optional[torch.Tensor]:
     """
     Create a 4D boolean mask of shape `(batch_size, 1, query_length, kv_length)` where a value of True indicates that
     the element should take part in the attention computation, and False that it should not.
@@ -355,8 +357,9 @@ def create_4d_causal_mask(
     ```
 
     """
-    if sliding_window is not None and chunk_size is not None:
-        raise ValueError("`sliding_window` and `chunk_size` are mutually exclusive for mask creation")
+    # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
+    if allow_is_causal_skip and _ignore_causal_mask_sdpa(attention_mask, query_length, kv_length, window, chunk):
+        return None
     
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
     # but without data-dependent slicing (i.e. torch.compile friendly)
@@ -386,6 +389,35 @@ def create_4d_causal_mask(
     return causal_mask
 
 
+def eager_mask(
+    batch_size: int,
+    cache_position: torch.Tensor,
+    kv_length: int,
+    kv_offset: int = 0,
+    attention_mask = None,
+    sliding_window: Optional[int] = None,
+    chunk_size: Optional[int] = None,
+    dtype: torch.dtype,
+    **kwargs,
+) -> torch.Tensor:
+    # The masks for eager attention are simply boolean mask from sdpa, casted to 0 and -inf
+    mask = sdpa_mask(
+        batch_size=batch_size,
+        cache_position=cache_position,
+        kv_length=kv_length,
+        kv_offset=kv_offset,
+        attention_mask=attention_mask,
+        sliding_window=sliding_window,
+        chunk_size=chunk_size,
+        allow_is_causal_skip=False,
+        **kwargs,
+    )
+    min_dtype = torch.finfo(dtype).min
+    # we need 0s where the tokens should be taken into account, and -inf otherwise
+    mask = torch.where(mask == 1, torch.tensor(0.0, device=mask.device, dtype=dtype), min_dtype)
+    return mask
+
+
 def flash_attention_mask(attention_mask: Optional[torch.Tensor], **kwargs):
     """
     Create the attention mask necesary to use FA2. Since FA2 is un-padded by definition, here we simply return
@@ -400,83 +432,15 @@ def flash_attention_mask(attention_mask: Optional[torch.Tensor], **kwargs):
     return None
 
 
-def sdpa_mask(
-    attention_mask: Optional[torch.Tensor],
-    cache_position: torch.Tensor,
-    past_key_values: Optional[Cache],
-    batch_size: int,
-    num_layers: int,
-    sliding_window: Optional[int] = None,
-    chunk_size: Optional[int] = None,
-    allow_is_causal_skip: bool = True,
-    **kwargs,
-) -> Optional[torch.Tensor]:
-    query_length = cache_position.shape[0] if cache_position is not None else attention_mask.shape[-1]
-    if past_key_values is not None:
-        sizes_and_patterns, layer_to_mask_mapping = past_key_values.get_mask_size_and_pattern(cache_position, num_layers)
-    else:
-        kv_offset = 0
-        kv_length = attention_mask.shape[-1]
-        # HERE MODELS WITH HYBRID CACHE STRUCTURE SHOULD STILL ALTERNATE BETWEEN USING LOCAL ATTENTION OR NOT EVEN WITHOUT CACHE!!!!
-        # PROBABLY THE EASIEST IS TO HAVE A FUNCTION RETURNING THE PATTERN BASED ON ALL POSSIBLE CONFIG ARGS???
-        sizes_and_patterns = [(kv_offset, kv_length, sliding_window, chunk_size)] * num_layers
-        layer_to_mask_mapping = [0] * num_layers
-
-    # Move the mask to correct device, and potentially switch dtype for efficiency
-    if attention_mask is not None:
-        attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
-
-    # We now create all the masks
-    masks = []
-    for kv_offset, kv_length, window, chunk in sizes_and_patterns:
-        # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
-        if allow_is_causal_skip and _ignore_causal_mask_sdpa(attention_mask, query_length, kv_length, window, chunk):
-            masks.append(None)
-            continue
-        causal_mask = create_4d_causal_mask(batch_size, cache_position, kv_length, kv_offset, attention_mask, window, chunk)
-        
-
-        masks.append(causal_mask)
-
-    return masks, layer_to_mask_mapping
-
-
-def eager_mask(
-    attention_mask: Optional[torch.Tensor],
-    cache_position: torch.Tensor,
-    past_key_values: Optional[Cache],
-    batch_size: int,
-    num_layers: int,
-    dtype: torch.dtype,
-    sliding_window: Optional[int] = None,
-    chunk_size: Optional[int] = None,
-    **kwargs,
-):
-    masks, layer_to_mask_mapping = sdpa_mask(
-        attention_mask,
-        cache_position,
-        past_key_values,
-        batch_size,
-        num_layers,
-        sliding_window,
-        chunk_size,
-        allow_is_causal_skip=False,
-    )
-    min_dtype = torch.finfo(dtype).min
-    # Loop over them instead of comprehension to avoid keeping the 2 full lists in memory at once
-    for i, mask in enumerate(masks):
-        # we need 0s where the tokens should be taken into account, and -inf otherwise
-        masks[i] = torch.where(mask == 1, torch.tensor(0.0, device=mask.device, dtype=dtype), min_dtype)
-
-    return masks, layer_to_mask_mapping
-
-
 def flex_attention_mask(
-    attention_mask_2d: torch.Tensor,
-    attention_chunk_size: Optional[int] = None,
-    query_length=None,
-    key_length=None,
-    offsets= None,
+    batch_size: int,
+    cache_position: torch.Tensor,
+    kv_length: int,
+    kv_offset: int = 0,
+    attention_mask = None,
+    sliding_window: Optional[int] = None,
+    chunk_size: Optional[int] = None,
+    **kwargs,
 ) -> "BlockMask":
     """
     Create a block causal document mask for a batch of sequences, both packed and unpacked.
@@ -500,98 +464,101 @@ def flex_attention_mask(
     Returns:
         BlockMask
     """
-    batch_size, total_seq_len = attention_mask_2d.shape
-    if not key_length:
-        key_length = total_seq_len
-    if not query_length:
-        query_length = total_seq_len
-    attention_mask_2d = torch.nn.functional.pad(attention_mask_2d, value=0, pad=(0, key_length))
-    device = attention_mask_2d.device
-    document_ids = attention_mask_2d.clone()
+    q_length, q_offset = cache_position.shape[0], cache_position[0]
 
-    if attention_chunk_size is not None:
-        # we create an arange, then we just // by chunk size to get [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3]
-        document_ids = (document_ids.fill_(1).cumsum(-1) - 1) // (attention_chunk_size)
-
-    # Instead of passing a tensor mask, flex attention requires a mask_mod function
-    # that determines which elements of QK^T should be included in the attention
-    # computation prior to the softmax. For sample packing, we need both the
-    # logic for both causal mask and document mask. See PyTorch's official
-    # blog post for more details: https://pytorch.org/blog/flexattention/#mask-mods
-    def causal_mask_mod(batch_idx, head_idx, q_idx, kv_idx):
-        """
-        Defines the logic of a block causal mask by combining both a standard causal mask
-        and a block diagonal document mask.
-
-        See :func:`~torchtune.modules.attention_utils.create_block_causal_mask`
-        for an illustration.
-        """
-        causal_mask = q_idx >= kv_idx  # not valid when decoding
-        document_mask = document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
-        padding_mask = attention_mask_2d[batch_idx, q_idx] > 0
-        final_mask = causal_mask & padding_mask & document_mask
-        return final_mask
-
-    if offsets is not None:
-        q_offset = offsets[0]
-        kv_offset = offsets[1]
-
-        def mask_mod(batch_idx, head_idx, q_idx, kv_idx):
-            offset_q = q_idx + q_offset
-            offset_kv = kv_idx + kv_offset
-            return causal_mask_mod(batch_idx, head_idx, offset_q, offset_kv)
+    # Sliding window mask
+    if sliding_window is not None:
+        mask_mod = sliding_window_causal_mask_mod(sliding_window)
+    # CHunked attention mask
+    elif chunk_size is not None:
+        mask_mod = chunked_causal_mask_mod(chunk_size)
+    # Simple causal mask
     else:
         mask_mod = causal_mask_mod
-    return create_block_causal_mask_flex(
+
+    # Potentially add the padding 2D mask
+    if attention_mask is not None:
+        padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
+        mask_mod = and_masks(mask_mod, padding_mask_mod(padding_mask))
+
+    # Add the offsets on top
+    mask_mod = add_offsets_to_mask_mod(mask_mod, q_offset, kv_offset)
+
+    # Finally create the block mask
+    block_mask = create_block_mask(
         mask_mod=mask_mod,
         B=batch_size,
-        H=None,  # attention head
-        Q_LEN=query_length,
-        KV_LEN=key_length,
-        device=device,
+        H=None,
+        Q_LEN=q_length,
+        KV_LEN=kv_length,
+        device=cache_position.device,
         _compile=True,
     )
+    return block_mask
+
 
 ALL_MASK_CREATION_FUNCTIONS = {
     "sdpa": sdpa_mask,
     "eager": eager_mask,
     "flash_attention_2": flash_attention_mask,
+    "flex": flex_attention_mask,
 }
 
 
-def get_causal_mask(
+def get_causal_masks(
     config: PretrainedConfig,
     input_embeds: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
-):
-    # It means the masks were already prepared outside the `forward`, e.g. by `generate` when compiling
+) -> list[Union[torch.Tensor, "BlockMask"]]:
+    # It means the masks were already prepared outside the `forward`, e.g. by `generate` when compiling - return immediately
     if isinstance(attention_mask, list):
         return attention_mask
 
     batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
     num_layers = config.num_hidden_layers
-
     # HERE WE SHOULD EXTRACT ALL WAYS TO GET SLIDING_WINDOW/CHUNK SIZE IN THE CONFIG IF WE DON'T USE CACHE (OTHERWISE IT'S EMBEDDED
     # IN THE CACHE ALREADY)
     sliding_window = getattr(config, "sliding_window", None)
+    chunked_size = getattr(config, "attention_chunk_size", None)
 
+
+    if sliding_window is not None and chunk_size is not None:
+        raise ValueError("`sliding_window` and `chunk_size` are mutually exclusive for mask creation")
+
+
+    query_length = cache_position.shape[0] if cache_position is not None else attention_mask.shape[-1]
+    if past_key_values is not None:
+        sizes_and_patterns, layer_to_mask_mapping = past_key_values.get_mask_size_and_pattern(cache_position, num_layers)
+    else:
+        kv_offset = 0
+        kv_length = attention_mask.shape[-1]
+        # HERE MODELS WITH HYBRID CACHE STRUCTURE SHOULD STILL ALTERNATE BETWEEN USING LOCAL ATTENTION OR NOT EVEN WITHOUT CACHE!!!!
+        # PROBABLY THE EASIEST IS TO HAVE A FUNCTION RETURNING THE PATTERN BASED ON ALL POSSIBLE CONFIG ARGS???
+        sizes_and_patterns = [(kv_offset, kv_length, sliding_window, chunk_size)] * num_layers
+        layer_to_mask_mapping = [0] * num_layers
+
+    # Move the mask to correct device, and potentially switch dtype for efficiency
+    if attention_mask is not None:
+        attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
+
+    # We now create all the masks
+    masks = []
     mask_interface = ALL_MASK_CREATION_FUNCTIONS[config._attn_implementation]
-    masks, layer_to_mask_mapping = mask_interface(
-        attention_mask=attention_mask,
-        cache_position=cache_position,
-        past_key_values=past_key_values,
-        batch_size=batch_size,
-        num_layers=num_layers,
-        dtype=dtype,
-        # USE THE ONE EXTRACTED FROM CONFIG ABOVE
-        sliding_window=sliding_window,
-        chunk_size=None,
-    )
+    for kv_offset, kv_length, window, chunk in sizes_and_patterns:
+        causal_mask = mask_interface(
+            batch_size=batch_size,
+            cache_position=cache_position,
+            kv_length=kv_length,
+            kv_offset=kv_offset,
+            attention_mask=attention_mask,
+            sliding_window=sliding_window,
+            chunk_size=chunked_size,
+            **kwargs,
+        )
 
     mask_per_layers = [masks[layer_to_mask_mapping[i]] for i in range(num_layers)]
-
     return mask_per_layers
 
 
