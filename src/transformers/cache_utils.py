@@ -2279,7 +2279,7 @@ class xLSTMCache:
                 torch.zeros([max_batch_size, config.num_heads, config.qk_head_dim], dtype=dtype, device=device),
                 torch.zeros([max_batch_size, config.num_heads, 1], dtype=dtype, device=device),
             )
-            for layer in range(config.num_blocks)
+            for layer in range(config.num_hidden_layers)
         }
 
     def reset(self):
