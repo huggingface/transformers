@@ -1,5 +1,5 @@
 import itertools
-from typing import Optional, Callable
+from typing import Optional, Callable, Union
 
 import torch
 import torch.nn.functional as F
