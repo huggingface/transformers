@@ -1785,7 +1785,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     main_input_name = "input_ids"
     model_tags = None
 
-    _checkpoint_conversion_mapping = None  # used for BC support in VLMs, not meant to be used by new models
+    _checkpoint_conversion_mapping = {}  # used for BC support in VLMs, not meant to be used by new models
 
     _auto_class = None
     _no_split_modules = None
@@ -3501,11 +3501,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 for pattern, replacement in reverse_key_mapping.items():
                     replacement = replacement.lstrip("^")  # strip off un-needed chars and patterns
                     replacement = re.sub(r"\(.*?\)", "", pattern)
-                    new_key, n_replace = re.subn(pattern, replacement, key)
+                    key, n_replace = re.subn(pattern, replacement, key)
                     # Early exit of the loop
                     if n_replace > 0:
                         break
-                original_state_dict[new_key] = value
+                original_state_dict[key] = value
             state_dict = original_state_dict
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
