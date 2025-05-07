@@ -3,7 +3,7 @@ from typing import Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
-from torch.nn.attention.flex_attention import create_block_mask
+from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 
 from .cache_utils import Cache
 from .configuration_utils import PretrainedConfig
