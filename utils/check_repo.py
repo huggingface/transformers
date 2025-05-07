@@ -159,6 +159,9 @@ IGNORE_NON_TESTED = (
         "InternVLVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
         "TimesFmModel",  # Building part of bigger (tested) model
+        "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
+        "CsmDepthDecoderModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
+        "CsmBackboneModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
     ]
 )
 
@@ -368,6 +371,10 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen2_5OmniToken2WavModel",  # Building part of a bigger model
     "Qwen2_5OmniToken2WavBigVGANModel",  # Building part of a bigger model
     "Qwen2_5OmniToken2WavDiTModel",  # Building part of a bigger model
+    "CsmBackboneModel",  # Building part of a bigger model
+    "CsmDepthDecoderModel",  # Building part of a bigger model
+    "CsmDepthDecoderForCausalLM",  # Building part of a bigger model
+    "CsmForConditionalGeneration",  # Building part of a bigger model
 ]
 
 # DO NOT edit this list!

@@ -1058,7 +1058,7 @@ class ProcessorMixin(PushToHubMixin):
             # update defaults with arguments from tokenizer init
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
                 # init with tokenizer init kwargs if necessary
-                if modality_key in tokenizer_init_kwargs:
+                if tokenizer_init_kwargs is not None and modality_key in tokenizer_init_kwargs:
                     value = (
                         getattr(self.tokenizer, modality_key)
                         if hasattr(self.tokenizer, modality_key)
