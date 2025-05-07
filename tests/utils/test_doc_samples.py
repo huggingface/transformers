@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019-present, the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,7 @@ import logging
 import os
 import unittest
 from pathlib import Path
-from typing import List, Union
+from typing import Union
 
 import transformers
 from transformers.testing_utils import require_tf, require_torch, slow
@@ -35,8 +34,8 @@ class TestCodeExamples(unittest.TestCase):
         self,
         directory: Path,
         identifier: Union[str, None] = None,
-        ignore_files: Union[List[str], None] = None,
-        n_identifier: Union[str, List[str], None] = None,
+        ignore_files: Union[list[str], None] = None,
+        n_identifier: Union[str, list[str], None] = None,
         only_modules: bool = True,
     ):
         """
@@ -56,7 +55,7 @@ class TestCodeExamples(unittest.TestCase):
             files = [file for file in files if identifier in file]
 
         if n_identifier is not None:
-            if isinstance(n_identifier, List):
+            if isinstance(n_identifier, list):
                 for n_ in n_identifier:
                     files = [file for file in files if n_ not in file]
             else:

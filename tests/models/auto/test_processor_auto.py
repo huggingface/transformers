@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -107,7 +106,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                     json.dump(config_dict, fp)
 
             # drop `processor_class` in tokenizer config
-            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE), "r") as f:
+            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE)) as f:
                 config_dict = json.load(f)
                 config_dict.pop("processor_class")
 
@@ -130,7 +129,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
             if os.path.isfile(os.path.join(tmpdirname, PROCESSOR_NAME)):
                 # drop `processor_class` in processor
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME), "r") as f:
+                with open(os.path.join(tmpdirname, PROCESSOR_NAME)) as f:
                     config_dict = json.load(f)
                     config_dict.pop("processor_class")
 
@@ -138,7 +137,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                     f.write(json.dumps(config_dict))
 
             # drop `processor_class` in tokenizer
-            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE), "r") as f:
+            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE)) as f:
                 config_dict = json.load(f)
                 config_dict.pop("processor_class")
 
@@ -161,7 +160,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
             if os.path.isfile(os.path.join(tmpdirname, PROCESSOR_NAME)):
                 # drop `processor_class` in processor
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME), "r") as f:
+                with open(os.path.join(tmpdirname, PROCESSOR_NAME)) as f:
                     config_dict = json.load(f)
                     config_dict.pop("processor_class")
 
@@ -169,7 +168,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                     f.write(json.dumps(config_dict))
 
             # drop `processor_class` in feature extractor
-            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "r") as f:
+            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME)) as f:
                 config_dict = json.load(f)
                 config_dict.pop("processor_class")
 
