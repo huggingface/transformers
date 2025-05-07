@@ -189,7 +189,7 @@ class BambaConfig(PretrainedConfig):
         self.mamba_chunk_size = mamba_chunk_size
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
-        self.zloss_coeff = z_loss_coefficient
+        self.z_loss_coefficient = z_loss_coefficient
 
         super().__init__(
             pad_token_id=pad_token_id,

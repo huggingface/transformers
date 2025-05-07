@@ -1184,7 +1184,7 @@ class BambaModel(BambaPreTrainedModel):
 class BambaForCausalLM(LlamaForCausalLM):
     def __init__(self, config):
         super().__init__(config)
-        self.zloss_coeff = config.zloss_coeff
+        self.z_loss_coefficient = config.z_loss_coefficient
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1265,10 +1265,10 @@ class BambaForCausalLM(LlamaForCausalLM):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-            if self.zloss_coeff > 0:
+            if self.z_loss_coefficient > 0:
                 # Type-match loss, but avoid upcasting large logits tensor until after it's been reduced on dim -1
                 z_loss = logits.logsumexp(dim=-1).to(dtype=loss.dtype).pow(2).mean()
-                loss = loss + self.zloss_coeff * z_loss
+                loss = loss + self.z_loss_coefficient * z_loss
 
         return CausalLMOutputWithPast(
             loss=loss,
