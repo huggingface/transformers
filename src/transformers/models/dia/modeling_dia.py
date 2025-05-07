@@ -496,7 +496,10 @@ class DiaDecoder(DiaPreTrainedModel):
         self.logits_dense = nn.Linear(config.hidden_size, (self.num_channels * self.vocab_size), bias=False)
 
     def forward(self, audio_codes: torch.Tensor, encoder_hidden_states, cache_position, attention_mask, past_key_values, output_attentions, output_hidden_states) -> torch.Tensor:
-        cross_position_embeddings = self.rotary_embeddings(encoder_hidden_states, cache_position)
+        if encoder_hidden_states is not None:
+            cross_position_embeddings = self.rotary_embeddings(encoder_hidden_states, cache_position)
+        else:
+            cross_position_embeddings = None
         hidden_states = self.embeddings(audio_codes)
         cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)[None, :]
         position_embeddings = self.rotary_embeddings(hidden_states, cache_position)

@@ -103,6 +103,7 @@ class DiaGenerationMixin(GenerationMixin):
 
         dec_step = len(input_ids)
         cache_position = None
+        generated_codes = []
         while dec_step < max_tokens:
             decoder_outputs = self(input_ids=input_ids, attention_mask=attention_mask, cache_position=cache_position, input_audio_codes=audio_prompt)[0]
             uncond_logits_CxV, cond_logits_CxV = torch.split(decoder_outputs, 2, 0)
@@ -116,7 +117,7 @@ class DiaGenerationMixin(GenerationMixin):
                 temperature=0,
                 top_p=top_p,
                 cfg_filter_top_k=cfg_filter_top_k,
-            )
+            ).clone()
             if not eos_detected and all(pred_C[:,0] == audio_eos_value) or dec_step == max_tokens - max_delay_pattern - 1:
                 eos_detected = True
                 eos_countdown = max_delay_pattern
@@ -125,12 +126,13 @@ class DiaGenerationMixin(GenerationMixin):
                 step_after_eos = max_delay_pattern - eos_countdown
                 for i, d in enumerate(delay_pattern):
                     if step_after_eos == d:
-                        pred_C[i] = audio_eos_value
+                        pred_C[:, i] = audio_eos_value
                     elif step_after_eos > d:
-                        pred_C[i] = audio_pad_value
+                        pred_C[:,i] = audio_pad_value
                 eos_countdown -= 1
 
             bos_countdown = max(0, bos_countdown - 1)
+            generated_codes += [pred_C]
             input_ids = pred_C
             cache_position = torch.tensor([dec_step + 1], device=input_ids.device).unsqueeze(0)
 
@@ -139,4 +141,4 @@ class DiaGenerationMixin(GenerationMixin):
 
             dec_step += 1
 
-        return generated_codes
+        return input_ids
