@@ -332,7 +332,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
             return_dict=True,
             cache_position=cache_position,
             image_sizes=image_sizes,
-            **lm_kwargs,
+            **kwargs,
         )
 
         hidden_states = outputs[0]

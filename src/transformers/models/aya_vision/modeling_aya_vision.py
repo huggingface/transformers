@@ -294,7 +294,6 @@ AYA_VISION_INPUTS_DOCSTRING = r"""
             the complete sequence length.
 """
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 @add_start_docstrings(
     """The AyaVision model which consists of a vision backbone and a language model, without a language modeling head.""",
@@ -380,7 +379,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         image_sizes: torch.Tensor = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **lm_kwargs,
     ) -> Union[Tuple, AyaVisionModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -439,7 +438,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
-            **kwargs,
+            **lm_kwargs,
         )
 
         output = AyaVisionModelOutputWithPast(
@@ -450,6 +449,9 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
             image_hidden_states=image_features if pixel_values is not None else None,
         )
         return output if return_dict else output.to_tuple()
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @add_start_docstrings(
@@ -593,6 +595,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
+            image_sizes=image_sizes,
             **kwargs,
         )
 

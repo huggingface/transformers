@@ -2079,7 +2079,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config.text_config.vocab_size, **loss_kwargs)
+            loss = self.loss_function(logits, labels, self.config.text_config.vocab_size, **kwargs)
 
         return CausalLMOutputWithPast(
             loss=loss,

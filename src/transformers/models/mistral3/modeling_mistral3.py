@@ -255,9 +255,6 @@ class Mistral3PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 MISTRAL3_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -471,6 +468,9 @@ class Mistral3Model(Mistral3PreTrainedModel):
         return output if return_dict else output.to_tuple()
 
 
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
 @add_start_docstrings(
     """The MISTRAL3 model which consists of a vision backbone and a language model.""",
     MISTRAL3_START_DOCSTRING,
@@ -592,7 +592,7 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
             return_dict=True,
             cache_position=cache_position,
             image_sizes=image_sizes,
-            **lm_kwargs,
+            **kwargs,
         )
 
         hidden_states = outputs[0]

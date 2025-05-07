@@ -643,9 +643,6 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
                 module.pos_embed.data.zero_()
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 GOT_OCR2_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -819,6 +816,9 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
         return output if return_dict else output.to_tuple()
 
 
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
 @add_start_docstrings(
     """The GOT_OCR2 model which consists of a vision backbone and a language model.""",
     GOT_OCR2_START_DOCSTRING,
@@ -945,6 +945,7 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 

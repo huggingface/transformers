@@ -30,12 +30,9 @@ from torch import nn
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
 from ...utils import (
-    LossKwargs,
     add_start_docstrings,
     can_return_tuple,
     is_torchdynamo_compiling,
@@ -393,9 +390,6 @@ LLAVA_ONEVISION_INPUTS_DOCSTRING = r"""
 """
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAVA_ONEVISION_START_DOCSTRING,
@@ -411,6 +405,7 @@ class LlavaOnevisionPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_quantized_cache = True
     _supports_static_cache = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
@@ -830,7 +825,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **lm_kwargs,
     ) -> Union[Tuple, LlavaOnevisionCausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -915,7 +910,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             return_dict=True,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
-            **kwargs,
+            **lm_kwargs,
         )
 
         hidden_states = outputs[0]

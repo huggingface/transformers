@@ -426,8 +426,6 @@ LLAVA_NEXT_VIDEO_INPUTS_DOCSTRING = r"""
             the complete sequence length.
 """
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
 
 @add_start_docstrings(
     """The Llava-Next model which consists of a vision backbone and a language model without language modeling head.""",
@@ -748,6 +746,9 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         video_features = self.multi_modal_projector(video_features)
         video_features = torch.split(video_features, frames, dim=0)
         return video_features
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @add_start_docstrings(
