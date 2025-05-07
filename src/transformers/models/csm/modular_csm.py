@@ -705,7 +705,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         self,
         input_ids: Optional[torch.Tensor] = None,
         input_values: Optional[torch.Tensor] = None,
-        input_values_mask: Optional[torch.Tensor] = None,
+        input_values_cutoffs: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
     ) -> Optional[torch.Tensor]:
         """
@@ -719,24 +719,34 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
                 The input ids to embed.
             input_values (`torch.Tensor` of shape `(batch_size, channels, audio_sequence_length)`):
                 The audio input values to embed.
-            input_values_mask (`torch.Tensor` of shape `(batch_size, audio_sequence_length)`):
-                The mask for the input values.
+            input_values_cutoffs (`torch.Tensor` of shape `(batch_size, max_num_audio)`):
+                The cutoffs of the audio input values relative to its batch index, padded with -1 when no audio.
         """
         inputs_embeds = self.embed_text_tokens(input_ids)
 
         if input_values is not None:
+            # infer input_values_mask
+            input_values_cutoffs = nn.functional.pad(input_values_cutoffs, (1, 0))
+            audio_lengths = input_values_cutoffs[input_values_cutoffs >= 0].diff()
+            audio_lengths = audio_lengths[audio_lengths > 0]
+            input_values_mask = torch.arange(input_values_cutoffs.max(), device=input_values.device).expand(
+                len(audio_lengths), -1
+            )
+            input_values_mask = input_values_mask < audio_lengths.unsqueeze(1)
+
             # =======================================
             # TODO: @eustlb, this should be batched !!!
             # but requires making sure batched inference of the codec model works as intended
-            audio_batch_list = [
-                input_values_batch[:, : input_values_mask_batch.sum(-1)]
-                for input_values_batch, input_values_mask_batch in zip(input_values, input_values_mask)
-            ]
             audio_tokens_list = []
-            for audio_batch in audio_batch_list:
-                codec_outputs = self.codec_model.encode(audio_batch.unsqueeze(0))
-                codebook_ids = codec_outputs.audio_codes.transpose(1, -1)
-                audio_tokens_list.append(codebook_ids[0])
+            for batch_input_values, batch_input_values_cutoffs in zip(input_values, input_values_cutoffs):
+                batch_input_values_cutoffs = batch_input_values_cutoffs[batch_input_values_cutoffs >= 0]
+                for i in range(batch_input_values_cutoffs.shape[0] - 1):
+                    start_idx = batch_input_values_cutoffs[i]
+                    end_idx = batch_input_values_cutoffs[i + 1]
+                    audio_batch = batch_input_values[..., start_idx:end_idx]
+                    codec_outputs = self.codec_model.encode(audio_batch.unsqueeze(0))
+                    codebook_ids = codec_outputs.audio_codes.transpose(1, -1)
+                    audio_tokens_list.append(codebook_ids[0])
 
             max_audio_frames = max(el.shape[0] for el in audio_tokens_list)
             batched_audio_token_ids = torch.stack(
@@ -793,7 +803,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
             merged_inputs = self._merge_input_ids_with_input_values(
                 input_ids=input_ids,
                 input_values=kwargs.get("input_values"),
-                input_values_mask=kwargs.get("input_values_mask"),
+                input_values_cutoffs=kwargs.get("input_values_cutoffs"),
                 labels=kwargs.get("labels"),
             )
             model_inputs.update(
@@ -810,7 +820,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         input_ids: torch.LongTensor = None,
         input_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        input_values_mask: Optional[torch.Tensor] = None,
+        input_values_cutoffs: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -823,6 +833,12 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CsmOutputWithPast]:
         r"""
+            input_values_cutoffs (`torch.Tensor` of shape `(batch_size, max_num_audio)`, *optional*):
+                Specify the end positions of audio segments within each batch entry, relative to the concatenated audio input.
+                If a batch entry has fewer segments than the maximum, it is padded with -1. For example, in a batch of 2 sequences
+                where the first contains 2 audio segments of length l1, and the second contains 1 audio segment of length l2,
+                the input_values_cutoffs would be: [[l1, 2 * l1], [l2, -1]].
+
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should be in `[config.audio_token_id, -100, -101]`.
                 Requires targeted `input_values` to be provided as audio tokens will be infered from it using the `codec_model`.
@@ -883,7 +899,9 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         )
 
         if input_ids is not None and input_ids.ndim == 2:
-            merged_inputs = self._merge_input_ids_with_input_values(input_ids, input_values, input_values_mask, labels)
+            merged_inputs = self._merge_input_ids_with_input_values(
+                input_ids, input_values, input_values_cutoffs, labels
+            )
             inputs_embeds = merged_inputs["inputs_embeds"]
             labels = merged_inputs["labels"]
             input_ids = None

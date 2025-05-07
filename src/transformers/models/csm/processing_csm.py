@@ -17,6 +17,8 @@ import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+import numpy as np
+
 from ...utils import is_soundfile_available, is_torch_available
 
 
@@ -301,15 +303,45 @@ class CsmProcessor(ProcessorMixin):
 
             text = expanded_text
 
-        data = {}
         encoding = self.tokenizer(text, **text_kwargs)
+        data = {}
         data.update(encoding)
 
         if audio is not None:
             audio_kwargs.pop("return_attention_mask", None)  # not supported by the feature extractor
-            audio_inputs = self.feature_extractor(audio, **audio_kwargs)
-            audio_inputs["input_values_mask"] = audio_inputs.pop("padding_mask")
+
+            concatenated_audio, input_values_cutoffs = [], []
+            offset = 0
+            for n_audio in n_audio_in_text:
+                if n_audio == 0:
+                    concatenated_audio.append(np.zeros(0))
+                    input_values_cutoffs.append(torch.tensor([-1]))
+                else:
+                    concatenated_audio.append(
+                        np.concatenate(
+                            [
+                                el.cpu().numpy() if isinstance(el, torch.Tensor) else el
+                                for el in audio[offset : offset + n_audio]
+                            ],
+                            axis=-1,
+                        )
+                    )
+                    input_values_cutoffs.append(
+                        torch.tensor([el.shape[-1] for el in audio[offset : offset + n_audio]]).cumsum(dim=-1)
+                    )
+                    offset += n_audio
+
+            audio_inputs = self.feature_extractor(concatenated_audio, **audio_kwargs)
+            audio_inputs.pop("padding_mask", None)  # not applicable here
             data.update(audio_inputs)
+
+            # pad and stack the audio cut idxs
+            max_len = max(cut_idxs.shape[-1] for cut_idxs in input_values_cutoffs)
+            input_values_cutoffs = [
+                torch.nn.functional.pad(cut_idxs, (0, max_len - cut_idxs.shape[-1]), value=-1)
+                for cut_idxs in input_values_cutoffs
+            ]
+            data["input_values_cutoffs"] = torch.stack(input_values_cutoffs, dim=0)
 
         if output_labels:
             audio_frame_idxs = (data["input_ids"] == self.audio_token_id).nonzero()

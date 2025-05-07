@@ -339,7 +339,7 @@ class CsmGenerationMixin(GenerationMixin):
         self,
         input_ids: Optional[torch.Tensor] = None,
         input_values: Optional[torch.Tensor] = None,
-        input_values_mask: Optional[torch.Tensor] = None,
+        input_values_cutoffs: Optional[torch.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
@@ -366,9 +366,14 @@ class CsmGenerationMixin(GenerationMixin):
         Parameters:
             inputs_ids (`torch.Tensor` of shape (batch_size, seq_length), *optional*):
                 The sequence used as a prompt for the backbone model.
-            input_values (`torch.Tensor` of shape (batch_size, audio_sequence_length), *optional*):
-                The batched audio input values that will be encoded into codebook tokens using the codec model and
-                and merged with the text input ids provided in `input_ids`.
+            input_values (`torch.Tensor` of shape (batch_size, channels, max_concatenated_audio_length), *optional*):
+                The batched audio input values, where each batch entry contains the concatenation of all audio segments for that entry.
+                These values will be encoded into codebook tokens using the codec model and merged with the text input ids provided in `input_ids`.
+            input_values_cutoffs (`torch.Tensor` of shape (batch_size, max_num_audio), *optional*):
+                Specify the end positions of audio segments within each batch entry, relative to the concatenated audio input.
+                If a batch entry has fewer segments than the maximum, it is padded with -1. For example, in a batch of 2 sequences
+                where the first contains 2 audio segments of length l1, and the second contains 1 audio segment of length l2,
+                the input_values_cutoffs would be: [[l1, 2 * l1], [l2, -1]].
             generation_config ([`~generation.GenerationConfig`], *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
                 passed to generate matching the attributes of `generation_config` will override them. If
@@ -446,7 +451,7 @@ class CsmGenerationMixin(GenerationMixin):
         generate_output = super().generate(
             input_ids=input_ids,
             input_values=input_values,
-            input_values_mask=input_values_mask,
+            input_values_cutoffs=input_values_cutoffs,
             generation_config=generation_config,
             logits_processor=logits_processor,
             stopping_criteria=stopping_criteria,
