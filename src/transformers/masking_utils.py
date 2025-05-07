@@ -158,7 +158,7 @@ def and_masks(*mask_mods: list[Callable]) -> Callable:
         raise RuntimeError(f"All inputs should be callable mask_mods: {mask_mods}")
 
     def and_mask(batch_idx, head_idx, q_idx, kv_idx):
-        result = batch_idx.new_zeros((), dtype=torch.bool)
+        result = q_idx.new_ones((), dtype=torch.bool)
         for mask in mask_mods:
             result = result & mask(batch_idx, head_idx, q_idx, kv_idx)
         return result
