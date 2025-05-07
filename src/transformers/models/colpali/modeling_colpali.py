@@ -175,8 +175,8 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         self.vocab_size = config.vlm_config.text_config.vocab_size
 
         vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
-        if vlm.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"vlm.language_model.{k}" for k in vlm.language_model._tied_weights_keys]
+        if vlm._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"vlm.{k}" for k in vlm._tied_weights_keys]
         self.vlm = vlm
 
         self.embedding_dim = self.config.embedding_dim
@@ -246,25 +246,25 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         )
 
     def get_input_embeddings(self):
-        return self.vlm.language_model.get_input_embeddings()
+        return self.vlm.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.vlm.language_model.set_input_embeddings(value)
+        self.vlm.set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.vlm.language_model.get_output_embeddings()
+        return self.vlm.get_output_embeddings()
 
     def set_output_embeddings(self, new_embeddings):
-        self.vlm.language_model.set_output_embeddings(new_embeddings)
+        self.vlm.set_output_embeddings(new_embeddings)
 
     def set_decoder(self, decoder):
-        self.vlm.language_model.set_decoder(decoder)
+        self.vlm.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.vlm.language_model.get_decoder()
+        return self.vlm.get_decoder()
 
     def tie_weights(self):
-        return self.vlm.language_model.tie_weights()
+        return self.vlm.tie_weights()
 
     def resize_token_embeddings(
         self,
@@ -272,7 +272,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         pad_to_multiple_of: Optional[int] = None,
         mean_resizing: bool = True,
     ) -> nn.Embedding:
-        model_embeds = self.vlm.language_model.resize_token_embeddings(
+        model_embeds = self.vlm.resize_token_embeddings(
             new_num_tokens=new_num_tokens,
             pad_to_multiple_of=pad_to_multiple_of,
             mean_resizing=mean_resizing,

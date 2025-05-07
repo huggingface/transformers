@@ -2056,7 +2056,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
                 if is_padding_right:
                     raise ValueError(
                         "You are attempting to perform batched generation with padding_side='right'"
-                        " this may lead to unexpected behaviour for Flash Attention version of Qwen25OmniThinkerText. Make sure to "
+                        " this may lead to unexpected behaviour for Flash Attention version of Qwen25OmniThinker. Make sure to "
                         " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                     )
             if attention_mask is not None and 0.0 in attention_mask:
@@ -2156,7 +2156,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
                 Batch size.
-            config (`Qwen25OmniThinkerTextConfig`):
+            config (`Qwen25OmniThinkerConfig`):
                 The model's configuration class
             past_key_values (`Cache`):
                 The cache class that is being used currently to generate
@@ -2772,7 +2772,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
                 if is_padding_right:
                     raise ValueError(
                         "You are attempting to perform batched generation with padding_side='right'"
-                        " this may lead to unexpected behaviour for Flash Attention version of Qwen25OmniTalker. Make sure to "
+                        " this may lead to unexpected behaviour for Flash Attention version of Qwen2_5Omni. Make sure to "
                         " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                     )
             if attention_mask is not None and 0.0 in attention_mask:
@@ -2872,7 +2872,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
                 Batch size.
-            config (`Qwen25OmniTalkerConfig`):
+            config (`Qwen2_5OmniConfig`):
                 The model's configuration class
             past_key_values (`Cache`):
                 The cache class that is being used currently to generate

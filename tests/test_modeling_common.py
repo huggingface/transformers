@@ -3494,8 +3494,8 @@ class ModelTesterMixin:
                 vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)][0]
                 language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)][0]
 
-                vision_model_sdpa = getattr(model, vision_model_name)
-                language_model_sdpa = getattr(model, language_model_name)
+                vision_model_sdpa = getattr(model_sdpa, vision_model_name)
+                language_model_sdpa = getattr(model_sdpa, language_model_name)
                 text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
                 vision_attn = "sdpa" if vision_model_sdpa._supports_sdpa else "eager"
 
@@ -4489,7 +4489,8 @@ class ModelTesterMixin:
     @require_torch_gpu
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
-            if not model_class._supports_flex_attn:
+            # TODO: raushan, fix for composite models after making VLMs support new attn API
+            if not model_class._supports_flex_attn or self._is_composite:
                 self.skipTest(reason="This model does not support flex attention")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config._attn_implementation = "flex_attention"

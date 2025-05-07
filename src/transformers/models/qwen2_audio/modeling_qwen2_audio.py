@@ -799,27 +799,21 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
             raise ValueError(f"{padding_side} is not `left` or `right`.")
         self._padding_side = padding_side
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_input_embeddings
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_input_embeddings
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_output_embeddings
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.language_model.set_output_embeddings(new_embeddings)
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_decoder
     def set_decoder(self, decoder):
         self.language_model.set_decoder(decoder)
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_decoder
     def get_decoder(self):
         return self.language_model.get_decoder()
 

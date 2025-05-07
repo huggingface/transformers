@@ -21,6 +21,7 @@ import requests
 from transformers import (
     AriaConfig,
     AriaForConditionalGeneration,
+    AriaModel,
     AriaTextConfig,
     AutoProcessor,
     AutoTokenizer,
@@ -175,7 +176,7 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     Model tester for `AriaForConditionalGeneration`.
     """
 
-    all_model_classes = (AriaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (AriaModel, AriaForConditionalGeneration) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
     _is_composite = True
@@ -279,6 +280,18 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
 
     @unittest.skip(reason="Dynamic control flow due to MoE")
     def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
+    def test_disk_offload_safetensors(self):
         pass
 
 
