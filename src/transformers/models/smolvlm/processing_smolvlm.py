@@ -335,7 +335,7 @@ class SmolVLMProcessor(ProcessorMixin):
         Used within `apply_chat_template` when a model has special way to process conversation history. For example,
         video models might want to specify in the prompt the duration of video or which frame indices at which timestamps
         were sampled. This information cannot be accessed before the video is loaded.
-        For most models it is a no-op, must be overriden by model processors which require special processing.
+        For most models it is a no-op, must be overridden by model processors which require special processing.
         Args:
             conversation (`List[Dict, str, str]`):
                 The conversation to process. Always comes in batched format.
