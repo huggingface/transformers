@@ -25,49 +25,75 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+
+def _sample_next_token(
+    logits_BCxV: torch.Tensor,
+    temperature: float,
+    top_p: float,
+    cfg_filter_top_k: int | None = None,
+) -> torch.Tensor:
+    if temperature == 0.0:
+        return torch.argmax(logits_BCxV, dim=-1)
+
+    logits_BCxV = logits_BCxV / temperature
+    if cfg_filter_top_k is not None:
+        _, top_k_indices_BCxV = torch.topk(logits_BCxV, k=cfg_filter_top_k, dim=-1)
+        mask = torch.ones_like(logits_BCxV, dtype=torch.bool)
+        mask.scatter_(dim=-1, index=top_k_indices_BCxV, value=False)
+        logits_BCxV = logits_BCxV.masked_fill(mask, -torch.inf)
+
+    if top_p < 1.0:
+        probs_BCxV = torch.softmax(logits_BCxV, dim=-1)
+        sorted_probs_BCxV, sorted_indices_BCxV = torch.sort(probs_BCxV, dim=-1, descending=True)
+        cumulative_probs_BCxV = torch.cumsum(sorted_probs_BCxV, dim=-1)
+
+        sorted_indices_to_remove_BCxV = cumulative_probs_BCxV > top_p
+        sorted_indices_to_remove_BCxV[..., 1:] = sorted_indices_to_remove_BCxV[..., :-1].clone()
+        sorted_indices_to_remove_BCxV[..., 0] = 0
+
+        indices_to_remove_BCxV = torch.zeros_like(sorted_indices_to_remove_BCxV)
+        indices_to_remove_BCxV.scatter_(dim=-1, index=sorted_indices_BCxV, src=sorted_indices_to_remove_BCxV)
+        logits_BCxV = logits_BCxV.masked_fill(indices_to_remove_BCxV, -torch.inf)
+
+    final_probs_BCxV = torch.softmax(logits_BCxV, dim=-1)
+
+    sampled_indices_BC = torch.multinomial(final_probs_BCxV, num_samples=1)
+    sampled_indices_C = sampled_indices_BC.squeeze(-1)
+    return sampled_indices_C
+
 class DiaGenerationMixin(GenerationMixin):
     @torch.inference_mode()
     def generate(
         self,
-        text: str,
+        input_ids: str,
+        attention_mask: torch.Tensor | None = None,
         max_tokens: int | None = None,
-        cfg_scale: float = 3.0,
         temperature: float = 1.3,
         top_p: float = 0.95,
-        use_torch_compile: bool = False,
+        cfg_scale=3,
         cfg_filter_top_k: int = 35,
+        use_torch_compile: bool = False,
         audio_prompt: str | torch.Tensor | None = None,
         audio_prompt_path: str | None = None,
-        use_cfg_filter: bool | None = None,
         verbose: bool = False,
     ) -> np.ndarray:
-        audio_eos_value = self.config.data.audio_eos_value
-        audio_pad_value = self.config.data.audio_pad_value
-        delay_pattern = self.config.data.delay_pattern
-        max_tokens = self.config.data.audio_length if max_tokens is None else max_tokens
+        audio_eos_value = self.generation_config.eos_token_id
+        audio_pad_value = self.generation_config.pad_token_id
+        delay_pattern = self.config.delay_pattern
+        max_tokens = self.generation_config.max_new_tokens or 20
         max_delay_pattern = max(delay_pattern)
-        self.model.eval()
-
-        if audio_prompt_path:
-            print("Warning: audio_prompt_path is deprecated. Use audio_prompt instead.")
-            audio_prompt = audio_prompt_path
-        if use_cfg_filter is not None:
-            print("Warning: use_cfg_filter is deprecated.")
 
         if verbose:
             total_start_time = time.time()
-
-        dec_state, dec_output = self._prepare_generation(text, audio_prompt, verbose)
-        dec_step = dec_output.prefill_step - 1
 
         bos_countdown = max_delay_pattern
         eos_detected = False
         eos_countdown = -1
 
         if use_torch_compile:  # TODO only compile decoding steps?
-            step_fn = torch.compile(self._decoder_step, mode="default")
+            step_fn = torch.compile(self.__call__, mode="default")
         else:
-            step_fn = self._decoder_step
+            step_fn = self.__call__
 
         if verbose:
             print("generate: starting generation loop")
@@ -75,19 +101,22 @@ class DiaGenerationMixin(GenerationMixin):
                 print("generate: by using use_torch_compile=True, the first step would take long")
             start_time = time.time()
 
+        dec_step = len(input_ids)
         while dec_step < max_tokens:
-            dec_state.prepare_step(dec_step)
-            tokens_Bx1xC = dec_output.get_tokens_at(dec_step).unsqueeze(0).expand(2, -1, -1)
-            pred_C = step_fn(
-                tokens_Bx1xC,
-                dec_state,
-                cfg_scale,
-                temperature,
-                top_p,
-                cfg_filter_top_k,
-            )
+            decoder_outputs = self(input_ids=input_ids, attention_mask=attention_mask, input_audio_codes=audio_prompt)[0]
+            uncond_logits_CxV, cond_logits_CxV = torch.split(decoder_outputs, 2, 0)
 
-            if (not eos_detected and pred_C[0] == audio_eos_value) or dec_step == max_tokens - max_delay_pattern - 1:
+            logits_CxV = cond_logits_CxV + cfg_scale * (cond_logits_CxV - uncond_logits_CxV)
+            logits_CxV[:, audio_eos_value + 1 :] = -torch.inf
+            logits_CxV[1:, audio_eos_value:] = -torch.inf
+
+            pred_C = _sample_next_token(
+                logits_CxV,
+                temperature=0,
+                top_p=top_p,
+                cfg_filter_top_k=cfg_filter_top_k,
+            )
+            if not eos_detected and all(pred_C[:,0] == audio_eos_value) or dec_step == max_tokens - max_delay_pattern - 1:
                 eos_detected = True
                 eos_countdown = max_delay_pattern
 
@@ -101,28 +130,12 @@ class DiaGenerationMixin(GenerationMixin):
                 eos_countdown -= 1
 
             bos_countdown = max(0, bos_countdown - 1)
-            dec_output.update_one(pred_C, dec_step + 1, bos_countdown > 0)
+            input_ids = pred_C
+            cache_position = torch.tensor(dec_step + 1, device=input_ids.device).unsqueeze(0)
 
             if eos_countdown == 0:
                 break
 
             dec_step += 1
-            if verbose and dec_step % 86 == 0:
-                duration = time.time() - start_time
-                print(
-                    f"generate step {dec_step}: speed={86 / duration:.3f} tokens/s, realtime factor={1 / duration:.3f}x"
-                )
-                start_time = time.time()
-
-        if dec_output.prefill_step >= dec_step + 1:
-            print("Warning: Nothing generated")
-            return None
-
-        generated_codes = dec_output.generated_tokens[dec_output.prefill_step : dec_step + 1, :]
-
-        if verbose:
-            total_step = dec_step + 1 - dec_output.prefill_step
-            total_duration = time.time() - total_start_time
-            print(f"generate: total step={total_step}, total duration={total_duration:.3f}s")
 
         return generated_codes

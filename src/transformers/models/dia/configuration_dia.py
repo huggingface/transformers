@@ -113,7 +113,9 @@ class DiaConfig(PretrainedConfig):
         decoder_config=None,
         norm_eps=1e-5,
         is_encoder_decoder=True,
-        pad_token_id=0,
+        pad_token_id=1025,
+        eos_token_id=1024,
+        bos_token_id=1026,
         delay_pattern=None,
         **kwargs,
     ):
@@ -127,6 +129,8 @@ class DiaConfig(PretrainedConfig):
         self.delay_pattern = delay_pattern if delay_pattern is not None else [0, 8, 9, 10, 11, 12, 13, 14, 15]
         super().__init__(
             pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            bos_token_id=bos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
