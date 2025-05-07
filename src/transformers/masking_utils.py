@@ -202,7 +202,7 @@ def chunked_causal_mask_mod(chunk_size: int) -> Callable:
     return and_masks(chunked_overlay(chunk_size), causal_mask_mod)
 
 
-def _vmap_for_qkv(
+def _vmap_for_q_idx_kv_idx(
     fn: Callable,
 ):
     """Used to vmap both score_mods and mask_mods over 4-dimensional/5-dimension inputs.
@@ -332,13 +332,13 @@ def create_4d_causal_mask(
     kv_arange += kv_offset
 
     if sliding_window is not None:
-        causal_mask = _vmap_for_qkv(sliding_window_causal_mask_mod(sliding_window))(None, None, cache_position, kv_arange)
+        causal_mask = _vmap_for_q_idx_kv_idx(sliding_window_causal_mask_mod(sliding_window))(None, None, cache_position, kv_arange)
     elif chunk_size is not None:
-        causal_mask = _vmap_for_qkv(chunked_causal_mask_mod(chunk_size))(None, None, cache_position, kv_arange)
+        causal_mask = _vmap_for_q_idx_kv_idx(chunked_causal_mask_mod(chunk_size))(None, None, cache_position, kv_arange)
     else:
-        causal_mask = _vmap_for_qkv(causal_mask_mod)(None, None, cache_position, kv_arange)
+        causal_mask = _vmap_for_q_idx_kv_idx(causal_mask_mod)(None, None, cache_position, kv_arange)
 
-    # Make it 4D (this is more efficient than vmap-ing over the 4D, as `expand` is a view, not a copy over the batch)
+    # Make it 4D (this is more efficient than vmap-ing over the 4D, as `expand` is a view, not a copy over the batch dim)
     causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
     return causal_mask
 
