@@ -250,6 +250,10 @@ def _vmap_for_q_idx_kv_idx(mask_mod: Callable) -> Callable:
 
 
 def prepare_padding_mask(attention_mask: Optional[torch.Tensor], kv_length: int, kv_offset: int) -> Optional[torch.Tensor]:
+    """
+    From the 2D attention mask, prepare the correct padding mask to use by potentially padding the mask, and slicing
+    according to the `kv_offset`.
+    """
     local_padding_mask = attention_mask
     if attention_mask is not None:
         # Pad it if necesary
@@ -360,7 +364,7 @@ def sdpa_mask(
     # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
     if allow_is_causal_skip and _ignore_causal_mask_sdpa(attention_mask, query_length, kv_length, window, chunk):
         return None
-    
+
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
     # but without data-dependent slicing (i.e. torch.compile friendly)
     kv_arange = torch.arange(kv_length, device=cache_position.device)
@@ -397,7 +401,7 @@ def eager_mask(
     attention_mask = None,
     sliding_window: Optional[int] = None,
     chunk_size: Optional[int] = None,
-    dtype: torch.dtype,
+    dtype: torch.dtype = torch.float32,
     **kwargs,
 ) -> torch.Tensor:
     # The masks for eager attention are simply boolean mask from sdpa, casted to 0 and -inf
