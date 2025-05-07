@@ -1266,7 +1266,9 @@ class BambaForCausalLM(LlamaForCausalLM):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
             if self.zloss_coeff > 0:
-                loss = loss + self.zloss_coeff * logits.logsumexp(dim=-1).to(dtype=loss.dtype).pow(2).mean()
+                # Type-match loss, but avoid upcasting large logits tensor until after it's been reduced on dim -1
+                z_loss = logits.logsumexp(dim=-1).to(dtype=loss.dtype).pow(2).mean()
+                loss = loss + self.zloss_coeff * z_loss
 
         return CausalLMOutputWithPast(
             loss=loss,
