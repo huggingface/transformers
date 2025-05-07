@@ -652,23 +652,39 @@ def DinoDetrForObjectDetectionLoss(
     device,
     pred_boxes,
     dn_meta,
-    config,
+    class_cost,
+    bbox_cost,
+    giou_cost,
+    num_labels,
+    focal_alpha,
+    auxiliary_loss,
+    cls_loss_coefficient,
+    bbox_loss_coefficient,
+    giou_loss_coefficient,
+    mask_loss_coefficient,
+    use_dn,
+    use_masks,
+    dice_loss_coefficient,
+    num_decoder_layers,
+    two_stage_type,
+    no_interm_box_loss,
+    interm_loss_coef,
     outputs_class=None,
     outputs_coord=None,
     **kwargs,
 ):
     # First: create the matcher
     matcher = HungarianMatcher(
-        class_cost=config.class_cost,
-        bbox_cost=config.bbox_cost,
-        giou_cost=config.giou_cost,
+        class_cost=class_cost,
+        bbox_cost=bbox_cost,
+        giou_cost=giou_cost,
     )
     # Second: create the criterion
     losses = ["class_labels", "boxes", "cardinality"]
     criterion = DinoDetrImageLoss(
-        num_classes=config.num_labels,
+        num_classes=num_labels,
         matcher=matcher,
-        focal_alpha=config.focal_alpha,
+        focal_alpha=focal_alpha,
         losses=losses,
     )
     criterion.to(device)
@@ -678,48 +694,74 @@ def DinoDetrForObjectDetectionLoss(
     outputs_loss["logits"] = logits
     outputs_loss["pred_boxes"] = pred_boxes
     outputs_loss["dn_meta"] = dn_meta
-    if config.auxiliary_loss:
+    if auxiliary_loss:
         auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord)
         outputs_loss["auxiliary_outputs"] = auxiliary_outputs
 
     loss_dict = criterion(outputs_loss, labels)
     # Fourth: compute total loss, as a weighted sum of the various losses
-    weight_dict = compute_weight_dict(config)
+    weight_dict = compute_weight_dict(
+        cls_loss_coefficient,
+        bbox_loss_coefficient,
+        giou_loss_coefficient,
+        mask_loss_coefficient,
+        use_dn,
+        use_masks,
+        dice_loss_coefficient,
+        auxiliary_loss,
+        num_decoder_layers,
+        two_stage_type,
+        no_interm_box_loss,
+        interm_loss_coef,
+    )
     loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
     return loss, loss_dict, auxiliary_outputs
 
 
-def compute_weight_dict(config):
+def compute_weight_dict(
+    cls_loss_coefficient,
+    bbox_loss_coefficient,
+    giou_loss_coefficient,
+    mask_loss_coefficient,
+    use_dn,
+    use_masks,
+    dice_loss_coefficient,
+    auxiliary_loss,
+    num_decoder_layers,
+    two_stage_type,
+    no_interm_box_loss,
+    interm_loss_coef,
+):
     # prepare weight dict
     weight_dict = {
-        "loss_ce": config.cls_loss_coefficient,
-        "loss_bbox": config.bbox_loss_coefficient,
+        "loss_ce": cls_loss_coefficient,
+        "loss_bbox": bbox_loss_coefficient,
     }
-    weight_dict["loss_giou"] = config.giou_loss_coefficient
+    weight_dict["loss_giou"] = giou_loss_coefficient
     clean_weight_dict_wo_dn = copy.deepcopy(weight_dict)
 
     # for DN training
-    if config.use_dn:
-        weight_dict["loss_ce_dn"] = config.cls_loss_coefficient
-        weight_dict["loss_bbox_dn"] = config.bbox_loss_coefficient
-        weight_dict["loss_giou_dn"] = config.giou_loss_coefficient
+    if use_dn:
+        weight_dict["loss_ce_dn"] = cls_loss_coefficient
+        weight_dict["loss_bbox_dn"] = bbox_loss_coefficient
+        weight_dict["loss_giou_dn"] = giou_loss_coefficient
 
-    if config.use_masks:
-        weight_dict["loss_mask"] = config.mask_loss_coefficient
-        weight_dict["loss_dice"] = config.dice_loss_coefficient
+    if use_masks:
+        weight_dict["loss_mask"] = mask_loss_coefficient
+        weight_dict["loss_dice"] = dice_loss_coefficient
     clean_weight_dict = copy.deepcopy(weight_dict)
 
     # TODO this is a hack
-    if config.auxiliary_loss:
+    if auxiliary_loss:
         aux_weight_dict = {}
-        for i in range(config.num_decoder_layers - 1):
+        for i in range(num_decoder_layers - 1):
             aux_weight_dict.update({k + f"_{i}": v for k, v in clean_weight_dict.items()})
         weight_dict.update(aux_weight_dict)
 
-    if config.two_stage_type != "no":
+    if two_stage_type != "no":
         interm_weight_dict = {}
         try:
-            no_interm_box_loss = config.no_interm_box_loss
+            no_interm_box_loss = no_interm_box_loss
         except AttributeError:
             no_interm_box_loss = False
         _coeff_weight_dict = {
@@ -728,7 +770,7 @@ def compute_weight_dict(config):
             "loss_giou": 1.0 if not no_interm_box_loss else 0.0,
         }
         try:
-            interm_loss_coef = config.interm_loss_coef
+            interm_loss_coef = interm_loss_coef
         except AttributeError:
             interm_loss_coef = 1.0
         interm_weight_dict.update(
