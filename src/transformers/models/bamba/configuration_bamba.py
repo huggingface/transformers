@@ -137,7 +137,7 @@ class BambaConfig(PretrainedConfig):
         mamba_chunk_size=256,
         mamba_conv_bias=True,
         mamba_proj_bias=False,
-        z_loss_coefficient=False
+        z_loss_coefficient=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
