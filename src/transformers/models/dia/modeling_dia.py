@@ -32,6 +32,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     logging,
 )
+from ...cache_utils import DynamicCache
 from .configuration_dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
 from .generation_dia import DiaGenerationMixin
 
@@ -230,7 +231,7 @@ class DiaCrossAttention(nn.Module):
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, cache_position=cache_position
                 )
-        elif cache_position[0].shape == 1:  # not prefill, make it compile compatible
+        else:  # not prefill, make it compile compatible
             key_states = past_key_value.key_cache[self.layer_idx]
             value_states = past_key_value.value_cache[self.layer_idx]
 
@@ -417,7 +418,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
             hidden_states=normed_states,
             attention_mask=attention_mask[:,:,:hidden_states.shape[1],:hidden_states.shape[1]],
             position_embeddings=position_embeddings,
-            past_key_values=past_key_values,
+            past_key_values=past_key_values.self_attention_cache,
             cache_position=cache_position,
             output_attentions=output_attentions,
         )
@@ -439,7 +440,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
                 cross_position_embeddings=cross_position_embeddings,
                 attention_mask=attention_mask,
                 cache_position=cache_position,
-                past_key_values=past_key_values,
+                past_key_values=past_key_values.cross_attention_cache,
                 output_attentions=output_attentions,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -496,6 +497,8 @@ class DiaDecoder(DiaPreTrainedModel):
         self.logits_dense = nn.Linear(config.hidden_size, (self.num_channels * self.vocab_size), bias=False)
 
     def forward(self, audio_codes: torch.Tensor, encoder_hidden_states, cache_position, attention_mask, past_key_values, output_attentions, output_hidden_states) -> torch.Tensor:
+        if past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
         if encoder_hidden_states is not None:
             cross_position_embeddings = self.rotary_embeddings(encoder_hidden_states, cache_position)
         else:

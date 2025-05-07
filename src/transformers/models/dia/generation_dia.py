@@ -14,15 +14,36 @@
 # limitations under the License.
 
 import time
-
 import numpy as np
 import torch
 
 from ...generation import GenerationMixin
 from ...utils import logging
 
-
+from .processing_dia import build_delay_indices, build_revert_indices, revert_audio_delay
 logger = logging.get_logger(__name__)
+
+
+@torch.no_grad()
+@torch.inference_mode()
+def decode(
+    model,
+    audio_codes,
+):
+    """
+    Decodes the given frames into an output audio waveform
+    """
+    if len(audio_codes) != 1:
+        raise ValueError(f"Expected one frame, got {len(audio_codes)}")
+
+    try:
+        audio_values = model.quantizer.from_codes(audio_codes)
+        audio_values = model.decode(audio_values[0])
+
+        return audio_values
+    except Exception as e:
+        print(f"Error in decode method: {str(e)}")
+        raise
 
 
 
@@ -62,6 +83,16 @@ def _sample_next_token(
     return sampled_indices_C
 
 class DiaGenerationMixin(GenerationMixin):
+
+    def _load_dac_model(self):
+        try:
+            import dac
+            dac_model_path = dac.utils.download()
+            dac_model = dac.DAC.load(dac_model_path).to(self.device)
+        except Exception as e:
+            raise RuntimeError("Failed to load DAC model") from e
+        self.dac_model = dac_model
+
     @torch.inference_mode()
     def generate(
         self,
@@ -141,4 +172,39 @@ class DiaGenerationMixin(GenerationMixin):
 
             dec_step += 1
 
-        return input_ids
+        # sanity : 
+
+        return self._generate_output(generated_codes)
+
+
+
+
+    def _generate_output(self, generated_codes: torch.Tensor) -> np.ndarray:
+        num_channels = self.config.decoder_config.num_channels
+        seq_length = generated_codes.shape[0]
+        delay_pattern = self.config.delay_pattern
+        audio_pad_value = self.config.pad_token_id
+        max_delay_pattern = max(delay_pattern)
+
+        revert_precomp = build_revert_indices(
+            B=generated_codes.shape[1],
+            T=seq_length,
+            C=num_channels,
+            delay_pattern=delay_pattern,
+        )
+
+        codebook = revert_audio_delay(
+            audio_BxTxC=generated_codes.unsqueeze(0),
+            pad_value=audio_pad_value,
+            precomp=revert_precomp,
+            T=seq_length,
+        )[:, :-max_delay_pattern, :]
+
+        min_valid_index = 0
+        max_valid_index = 1023
+        invalid_mask = (codebook < min_valid_index) | (codebook > max_valid_index)
+        codebook[invalid_mask] = 0
+
+        audio = decode(self.dac_model, codebook.transpose(1, 2))
+
+        return audio.squeeze().cpu().numpy()
