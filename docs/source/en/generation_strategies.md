@@ -20,10 +20,9 @@ A decoding strategy informs how a model should select the next generated token. 
 
 This guide will help you understand the different decoding strategies available in Transformers and how and when to use them.
 
-> [!TIP]
-> `transformers` can also load custom generation strategies from the Hub! See the `Custom decoding methods` section below for instructions on how to load or share a custom generation strategy.
-
 ## Basic decoding methods
+
+These are well established decoding methods, and should be you starting point for text generation tasks.
 
 ### Greedy search
 
@@ -67,7 +66,7 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
 ### Beam search
 
-Beam search keeps track of several generated sequences (beams) at each time step. After a certain number of steps, it selects the sequence with the highest *overall* probability. Unlike greedy search, this strategy can "look ahead" and pick a sequence with a higher probability overall even if the initial tokens have a lower probability. It is best suited for input-grounded tasks, like describing an image or speech recognition.
+Beam search keeps track of several generated sequences (beams) at each time step. After a certain number of steps, it selects the sequence with the highest *overall* probability. Unlike greedy search, this strategy can "look ahead" and pick a sequence with a higher probability overall even if the initial tokens have a lower probability. It is best suited for input-grounded tasks, like describing an image or speech recognition. You can also use `do_sample=True` with beam search to sample at each step, but beam search will still greedily prune out low probability sequences between steps.
 
 > [!TIP]
 > Check out the [beam search visualizer](https://huggingface.co/spaces/m-ric/beam_search_visualizer) to see how beam search works.
@@ -89,6 +88,8 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ```
 
 ## Advanced decoding methods
+
+Advanced decoding methods aim at either tackling specific generation quality issues (e.g. repetition) or at improving the generation throughput in certain situations. These techniques are more complex, and may not work correctly with all models.
 
 ### Speculative decoding
 
@@ -316,12 +317,11 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
 ## Custom decoding methods
 
-Under specific circumstances, it may be useful to have specialized generation behaviour:
+Custom decoding methods enable specialized generation behavior such as the following:
 - have the model continue thinking if it is uncertain;
 - roll back generation if the model gets stuck;
 - handle special tokens with custom logic;
 - enhanced input preparation for advanced models;
-- (...)
 
 To that end, we enable `generate` to load custom generation recipes from the Hub through its `recipe` argument. This means anyone can create and share their own advanced generation method which, from a user perspective, requires no additional python packages.
 
