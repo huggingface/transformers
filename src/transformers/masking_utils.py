@@ -561,6 +561,7 @@ def get_causal_masks(
         )
         masks.append(causal_mask)
 
+    # Map back to each layer
     mask_per_layers = [masks[layer_to_mask_mapping[i]] for i in range(num_layers)]
     return mask_per_layers
 
