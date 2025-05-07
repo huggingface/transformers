@@ -1495,7 +1495,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         >>> processor = AutoProcessor.from_pretrained("microsoft/git-base-vatex")
         >>> model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-vatex")
 
-        >>> # set seed for reproducability
+        >>> # set seed for reproducibility
         >>> np.random.seed(45)
 
 

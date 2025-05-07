@@ -235,7 +235,7 @@ class Blip2Config(PretrainedConfig):
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
         image_text_hidden_size (`int`, *optional*, defaults to 256):
-            Dimentionality of the hidden state of the image-text fusion layer.
+            Dimensionality of the hidden state of the image-text fusion layer.
 
         image_token_index (`int`, *optional*):
             Token index of special image token.

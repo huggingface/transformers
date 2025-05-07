@@ -1067,7 +1067,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         last_hidden_state: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1931,7 +1931,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         user_audio_codes: Optional[torch.Tensor] = None,
         moshi_input_values: Optional[torch.FloatTensor] = None,
         moshi_audio_codes: Optional[torch.Tensor] = None,
-        past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         text_labels: Optional[torch.LongTensor] = None,
         audio_labels: Optional[torch.LongTensor] = None,
@@ -2277,7 +2277,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         generation_config, kwargs = self._prepare_generation_config(kwargs.pop("generation_config", None), **kwargs)
 
         input_ids, user_audio_codes, moshi_audio_codes, concat_unconditional_inputs = (
-            self._check_and_maybe_initalize_inputs(
+            self._check_and_maybe_initialize_inputs(
                 input_ids=input_ids,
                 user_input_values=user_input_values,
                 user_audio_codes=user_audio_codes,
@@ -2707,7 +2707,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
         )
 
-    def _check_and_maybe_initalize_inputs(
+    def _check_and_maybe_initialize_inputs(
         self,
         input_ids=None,
         user_input_values=None,

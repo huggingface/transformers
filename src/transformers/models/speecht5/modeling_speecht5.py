@@ -299,9 +299,7 @@ class SpeechT5SinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.weights = nn.Parameter(emb_weights)
-        self.weights.requires_grad = False
-        self.weights.detach_()
+        self.register_buffer("weights", emb_weights, persistent=False)
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -1979,10 +1977,10 @@ SPEECHT5_BASE_START_DOCSTRING = r"""
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
         encoder ([`SpeechT5EncoderWithSpeechPrenet`] or [`SpeechT5EncoderWithTextPrenet`] or `None`):
-            The Transformer encoder module that applies the appropiate speech or text encoder prenet. If `None`,
+            The Transformer encoder module that applies the appropriate speech or text encoder prenet. If `None`,
             [`SpeechT5EncoderWithoutPrenet`] will be used and the `input_values` are assumed to be hidden states.
         decoder ([`SpeechT5DecoderWithSpeechPrenet`] or [`SpeechT5DecoderWithTextPrenet`] or `None`):
-            The Transformer decoder module that applies the appropiate speech or text decoder prenet. If `None`,
+            The Transformer decoder module that applies the appropriate speech or text decoder prenet. If `None`,
             [`SpeechT5DecoderWithoutPrenet`] will be used and the `decoder_input_values` are assumed to be hidden
             states.
 """
