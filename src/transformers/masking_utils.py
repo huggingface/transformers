@@ -260,8 +260,8 @@ def prepare_padding_mask(
     attention_mask: Optional[torch.Tensor], kv_length: int, kv_offset: int, _slice: bool = True
 ) -> Optional[torch.Tensor]:
     """
-    From the 2D attention mask, prepare the correct padding mask to use by potentially padding the mask, and slicing
-    according to the `kv_offset`.
+    From the 2D attention mask, prepare the correct padding mask to use by potentially padding it, and slicing
+    according to the `kv_offset` if `_slice` is `True`.
     """
     local_padding_mask = attention_mask
     if attention_mask is not None:
