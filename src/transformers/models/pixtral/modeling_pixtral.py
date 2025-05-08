@@ -27,12 +27,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    logging,
-)
+from ...utils import auto_docstring, can_return_tuple, logging
 from .configuration_pixtral import PixtralVisionConfig
 
 
@@ -407,23 +402,7 @@ class PixtralTransformer(nn.Module):
         )
 
 
-PIXTRAL_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`PixtralVisionConfig`]):
-            Model configuration class with all the parameters of the vision encoder. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
+@auto_docstring
 class PixtralPreTrainedModel(PreTrainedModel):
     config_class = PixtralVisionConfig
     base_model_prefix = "model"
@@ -449,24 +428,6 @@ class PixtralPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-PIXTRAL_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`AutoImageProcessor.__call__`]
-            for details.
-        image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`, *optional*):
-            The sizes of the images in the batch, being (height, width) for each image.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 def generate_block_attention_mask(patch_embeds_list, tensor):
     dtype = tensor.dtype
     device = tensor.device
@@ -483,10 +444,7 @@ def generate_block_attention_mask(patch_embeds_list, tensor):
     return causal_mask
 
 
-@add_start_docstrings(
-    "The bare Pixtral vision encoder outputting raw hidden-states without any specific head on top.",
-    PIXTRAL_START_DOCSTRING,
-)
+@auto_docstring
 class PixtralVisionModel(PixtralPreTrainedModel):
     base_model_prefix = "vision_encoder"
 
@@ -511,7 +469,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         return self.patch_conv
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(PIXTRAL_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -522,11 +480,6 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         *args,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutput]:
-        """
-        Returns:
-            pixel_values: tensor of token features for
-                all tokens of all images of shape (N_toks, D)
-        """
         if image_sizes is None:
             batch_size, _, height, width = pixel_values.shape
             image_sizes = [(height, width)] * batch_size

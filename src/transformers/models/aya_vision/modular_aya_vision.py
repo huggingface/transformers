@@ -29,16 +29,11 @@ from transformers.models.llava.modeling_llava import (
 
 from ...activations import ACT2FN
 from ...processing_utils import Unpack
-from ...utils import (
-    add_start_docstrings,
-    logging,
-)
+from ...utils import logging
 from .configuration_aya_vision import AyaVisionConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "AyaVisionConfig"
 
 
 class AyaVisionMultiModalProjector(nn.Module):
@@ -91,14 +86,6 @@ class AyaVisionMultiModalProjector(nn.Module):
         return image_features
 
 
-AYA_VISION_START_DOCSTRING = None
-AYA_VISION_INPUTS_DOCSTRING = None
-
-
-@add_start_docstrings(
-    "The bare Aya Vision Model outputting raw hidden-states without any specific head on top.",
-    AYA_VISION_START_DOCSTRING,
-)
 class AyaVisionPreTrainedModel(LlavaPreTrainedModel):
     _supports_quantized_cache = False
     _supports_static_cache = False
@@ -127,10 +114,6 @@ class AyaVisionModel(LlavaModel):
     pass
 
 
-@add_start_docstrings(
-    """The AyaVision model which consists of a vision backbone and a language model.""",
-    AYA_VISION_START_DOCSTRING,
-)
 class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
     def forward(
         self,
@@ -153,20 +136,10 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, AyaVisionCausalLMOutputWithPast]:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 

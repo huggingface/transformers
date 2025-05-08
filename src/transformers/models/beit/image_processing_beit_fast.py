@@ -21,7 +21,6 @@ from torchvision.transforms import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
@@ -40,24 +39,21 @@ from ...image_utils import (
     validate_kwargs,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, add_start_docstrings
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import TensorType, auto_docstring
 
 
 class BeitFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    do_reduce_labels: Optional[bool]
-
-
-@add_start_docstrings(
-    "Constructs a fast Beit image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
         Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
         is used for background, and background itself is not included in all classes of a dataset (e.g.
         ADE20k). The background label will be replaced by 255.
-    """,
-)
+    """
+
+    do_reduce_labels: Optional[bool]
+
+
+@auto_docstring
 class BeitImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
@@ -71,6 +67,9 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_reduce_labels = False
     valid_kwargs = BeitFastImageProcessorKwargs
+
+    def __init__(self, **kwargs: Unpack[BeitFastImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -170,23 +169,17 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         # be passed in as positional arguments.
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
 
-    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.41.0")
-    @add_start_docstrings(
-        "Constructs a fast Beit image processor.",
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-        """
-        do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-            Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-            is used for background, and background itself is not included in all classes of a dataset (e.g.
-            ADE20k). The background label will be replaced by 255.
-        """,
-    )
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        **kwargs: Unpack[DefaultFastImageProcessorKwargs],
+        **kwargs: Unpack[BeitFastImageProcessorKwargs],
     ) -> BatchFeature:
+        r"""
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to preprocess.
+        """
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
