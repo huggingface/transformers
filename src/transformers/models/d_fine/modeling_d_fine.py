@@ -1790,8 +1790,8 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = load_image(url)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("ustc-community/dfine_x_coco")
-        >>> model = DFineForObjectDetection.from_pretrained("ustc-community/dfine_x_coco")
+        >>> image_processor = AutoImageProcessor.from_pretrained("ustc-community/dfine-xlarge-coco")
+        >>> model = DFineForObjectDetection.from_pretrained("ustc-community/dfine-xlarge-coco")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")
@@ -1972,8 +1972,8 @@ class DFineConvNormLayer(nn.Module):
         kernel_size: int,
         stride: int,
         groups: int = 1,
-        padding: int = None,
-        activation: str = None,
+        padding: Optional[int] = None,
+        activation: Optional[str] = None,
     ):
         super().__init__()
         self.conv = nn.Conv2d(

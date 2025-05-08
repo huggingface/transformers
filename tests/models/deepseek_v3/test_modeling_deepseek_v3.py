@@ -431,7 +431,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     def test_past_key_values_format(self):
         """
-        Overwritting to pass the expected cache shapes (Deepseek-V3 uses MLA so the cache shapes are non-standard)
+        Overwriting to pass the expected cache shapes (Deepseek-V3 uses MLA so the cache shapes are non-standard)
         """
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         batch_size, seq_length = inputs["input_ids"].shape
@@ -451,7 +451,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     @slow
     def test_eager_matches_sdpa_generate(self):
         """
-        Overwritting the common test as the test is flaky on tiny models
+        Overwriting the common test as the test is flaky on tiny models
         """
         max_new_tokens = 30
 

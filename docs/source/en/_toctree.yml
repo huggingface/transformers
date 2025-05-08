@@ -499,6 +499,8 @@
         title: Granite
       - local: model_doc/granitemoe
         title: GraniteMoe
+      - local: model_doc/granitemoehybrid
+        title: GraniteMoeHybrid
       - local: model_doc/granitemoeshared
         title: GraniteMoeShared
       - local: model_doc/helium
@@ -827,6 +829,8 @@
         title: Bark
       - local: model_doc/clap
         title: CLAP
+      - local: model_doc/csm
+        title: CSM
       - local: model_doc/dac
         title: dac
       - local: model_doc/encodec

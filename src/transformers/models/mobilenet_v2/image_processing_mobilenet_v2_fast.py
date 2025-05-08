@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for MobileNetV2."""
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
@@ -42,7 +42,7 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_convert_rgb = None
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple]] = None):
         """
         Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
