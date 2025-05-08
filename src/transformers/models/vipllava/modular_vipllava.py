@@ -27,7 +27,7 @@ from transformers.models.llava.modeling_llava import (
 )
 
 from ...activations import ACT2FN
-from ...utils import is_torchdynamo_compiling, logging
+from ...utils import auto_docstring, is_torchdynamo_compiling, logging
 from .configuration_vipllava import VipLlavaConfig
 
 
@@ -97,6 +97,7 @@ class VipLlavaModel(LlavaModel):
         image_features = self.multi_modal_projector(image_features)
         return image_features
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,

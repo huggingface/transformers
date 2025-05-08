@@ -142,6 +142,7 @@ class VipLlavaPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_quantized_cache = True
     _supports_static_cache = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         # important: this ported version of VipLlava isn't meant for training from scratch - only
@@ -206,6 +207,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         image_features = self.multi_modal_projector(image_features)
         return image_features
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
