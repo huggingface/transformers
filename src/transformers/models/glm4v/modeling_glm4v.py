@@ -214,10 +214,7 @@ class Glm4vVisionEmbeddings(nn.Module):
         if total_seq == 0:
             return torch.empty(0, hidden_size, device=device, dtype=pos_embed_weight.dtype)
 
-        if isinstance(lengths, list):
-            lengths = torch.tensor(lengths, device=device, dtype=torch.long)
-        if not isinstance(image_shapes, torch.Tensor):
-            image_shapes = torch.tensor(image_shapes, device=device, dtype=torch.long)
+        lengths = torch.tensor(lengths, device=device, dtype=torch.long)
 
         orig_size_sq = pos_embed_weight.shape[0]
         orig_size = int(orig_size_sq**0.5)
