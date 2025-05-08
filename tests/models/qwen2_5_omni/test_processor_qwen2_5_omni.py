@@ -418,7 +418,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
 
-        video_len = 9568 if batch_size == 1 else 11408  # qwen pixels don't scale with bs same way as other models
+        video_len = 5760 if batch_size == 1 else 5808  # qwen pixels don't scale with bs same way as other models
         mm_len = batch_size * 1564 if modality == "image" else video_len
         self.assertEqual(len(out_dict[input_name]), mm_len)
 

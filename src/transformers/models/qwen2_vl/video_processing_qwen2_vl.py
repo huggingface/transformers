@@ -121,6 +121,11 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         do_normalize: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
+        min_pixels: Optional[int] = None,
+        max_pixels: Optional[int] = None,
+        patch_size: Optional[int] = None,
+        temporal_patch_size: Optional[int] = None,
+        merge_size: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
@@ -134,9 +139,9 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                 resized_height, resized_width = smart_resize(
                     height,
                     width,
-                    factor=self.patch_size * self.merge_size,
-                    min_pixels=self.min_pixels,
-                    max_pixels=self.max_pixels,
+                    factor=patch_size * merge_size,
+                    min_pixels=min_pixels,
+                    max_pixels=max_pixels,
                 )
                 stacked_videos = F.resize(
                     stacked_videos, size=(resized_height, resized_width), interpolation=interpolation
@@ -159,31 +164,31 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
             patches = stacked_videos
 
             # Check that videos have `num_frames` divisible by `temporal_patch_size`
-            if patches.shape[1] % self.temporal_patch_size != 0:
+            if patches.shape[1] % temporal_patch_size != 0:
                 repeats = patches[:, -1:].repeat(1, self.temporal_patch_size - 1, 1, 1, 1)
                 patches = torch.cat([patches, repeats], dim=1)
 
             batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // self.temporal_patch_size
-            grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
+            grid_t = grid_t // temporal_patch_size
+            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
             patches = patches.view(
                 batch_size,
                 grid_t,
-                self.temporal_patch_size,
+                temporal_patch_size,
                 channel,
-                grid_h // self.merge_size,
-                self.merge_size,
-                self.patch_size,
-                grid_w // self.merge_size,
-                self.merge_size,
-                self.patch_size,
+                grid_h // merge_size,
+                merge_size,
+                patch_size,
+                grid_w // merge_size,
+                merge_size,
+                patch_size,
             )
             patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
             flatten_patches = patches.reshape(
                 batch_size,
                 grid_t * grid_h * grid_w,
-                channel * self.temporal_patch_size * self.patch_size * self.patch_size,
+                channel * temporal_patch_size * patch_size * patch_size,
             )
 
             processed_videos_grouped[shape] = flatten_patches
