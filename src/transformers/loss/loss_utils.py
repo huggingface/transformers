@@ -43,7 +43,7 @@ def ForCausalLMLoss(
     logits,
     labels,
     vocab_size: int,
-    num_items_in_batch: Optional[int] = None,
+    num_items_in_batch: Optional[torch.Tensor] = None,
     ignore_index: int = -100,
     shift_labels: Optional[torch.Tensor] = None,
     **kwargs,
@@ -61,15 +61,21 @@ def ForCausalLMLoss(
     shift_labels = shift_labels.view(-1)
     # Enable model parallelism
     shift_labels = shift_labels.to(logits.device)
+
+    # Convert tensor to scalar if provided
+    if num_items_in_batch is not None:
+        num_items_in_batch = num_items_in_batch.item()
+
     loss = fixed_cross_entropy(logits, shift_labels, num_items_in_batch, ignore_index, **kwargs)
     return loss
+
 
 
 def ForMaskedLMLoss(
     logits: torch.Tensor,
     labels: torch.Tensor,
     vocab_size: int,
-    num_items_in_batch: Optional[int] = None,
+    num_items_in_batch: Optional[torch.Tensor] = None,
     ignore_index: int = -100,
     **kwargs,
 ):
@@ -80,10 +86,15 @@ def ForMaskedLMLoss(
     logits = logits.view(-1, vocab_size)
     labels = labels.view(-1)
     # Enable model parallelism
-
     labels = labels.to(logits.device)
+
+    # Convert tensor to scalar if provided
+    if num_items_in_batch is not None:
+        num_items_in_batch = num_items_in_batch.item()
+
     loss = fixed_cross_entropy(logits, labels, num_items_in_batch, ignore_index, **kwargs)
     return loss
+
 
 
 def ForSequenceClassificationLoss(labels: torch.Tensor, pooled_logits: torch.Tensor, config, **kwargs) -> torch.Tensor:
