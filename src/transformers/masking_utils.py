@@ -496,7 +496,7 @@ def flash_attention_mask(
             An optional chunk size, if we are using chunked attention. Mutually exclusive with `sliding_window`.
     """
     # Raise if using chunked attention on context too large
-    if chunk_size is not None and kv_length > chunk_size:
+    if chunk_size is not None and kv_offset + kv_length > chunk_size:
         raise ValueError(
             "Flash attention 2 cannot handle attention chunked attention, and the key-value length is larger than the chunk size "
             "so the chunked pattern cannot be respected. You should use another `attn_implementation` when instantiating the model"
