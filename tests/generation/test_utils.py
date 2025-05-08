@@ -2954,7 +2954,7 @@ class GenerationIntegrationTests(unittest.TestCase):
     def test_stop_sequence_stopping_criteria(self):
         prompt = """Hello I believe in"""
         generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-bart")
-        output = generator(prompt)
+        output = generator(prompt, max_new_tokens=10)
         self.assertEqual(
             output,
             [{"generated_text": ("Hello I believe in we we we we we we we we we")}],
@@ -3860,7 +3860,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @slow
     @require_torch_multi_accelerator
-    def test_assisted_decoding_in_different_gpu(self):
+    def test_assisted_decoding_in_different_accelerator(self):
         device_0 = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
         device_1 = f"{torch_device}:1" if torch_device != "cpu" else "cpu"
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(device_0)
@@ -3885,7 +3885,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    def test_assisted_decoding_model_in_gpu_assistant_in_cpu(self):
+    def test_assisted_decoding_model_in_accelerator_assistant_in_cpu(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(
             torch_device
         )
@@ -3970,10 +3970,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue((expected_out == predicted_out).all().item())
 
     @pytest.mark.generate
-    @require_torch_multi_gpu
-    def test_generate_with_static_cache_multi_gpu(self):
+    @require_torch_multi_accelerator
+    def test_generate_with_static_cache_multi_accelerator(self):
         """
-        Tests if the static cache has been set correctly and if generate works correctly when we are using multi-gpus.
+        Tests if the static cache has been set correctly and if generate works correctly when we are using multi-acceleratorss.
         """
         # need to split manually as auto doesn't work well with unbalanced model
         device_map = {"model.embed_tokens": 0, "model.layers.0": 0, "model.layers.1": 1, "model.norm": 1, "lm_head": 0}
@@ -4005,10 +4005,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(key_cache_1.device == value_cache_1.device == torch.device(1))
 
     @pytest.mark.generate
-    @require_torch_multi_gpu
-    def test_generate_multi_gpu_causal_mask(self):
+    @require_torch_multi_accelerator
+    def test_generate_multi_accelerator_causal_mask(self):
         """
-        Tests that cache position device doesn't clash with causal mask device when we are using multi-gpus.
+        Tests that cache position device doesn't clash with causal mask device when we are using multi-accelerators.
         In real life happens only when multimodal encoder size is big, so `embed_tokens` gets allocated to the next device.
         The error will be triggered whenever a bacthed input is used, so that `causal_mask` is actually prepared instead of
         being `None`.
@@ -4033,10 +4033,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         _ = model.generate(**inputs, max_new_tokens=20)
 
     @pytest.mark.generate
-    @require_torch_multi_gpu
-    def test_init_static_cache_multi_gpu(self):
+    @require_torch_multi_accelerator
+    def test_init_static_cache_multi_accelerator(self):
         """
-        Tests if the static cache has been set correctly when we initialize it manually in a multi-gpu setup.
+        Tests if the static cache has been set correctly when we initialize it manually in a multi-accelerator setup.
         """
         # need to split manually as auto doesn't work well with unbalanced model
         device_map = {"model.embed_tokens": 0, "model.layers.0": 0, "model.layers.1": 1, "model.norm": 1, "lm_head": 0}
@@ -4870,7 +4870,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @require_read_token
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_cache_device_map_with_vision_layer_device_map(self):
         """
         Test that the cache device map is correctly set when the vision layer has a device map. Regression test for
@@ -4923,7 +4923,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         # If the generate doesn't infer the DECODER device map correctly, this will fail
         _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_cpu_offload_doesnt_compile(self):
         """Test that CPU offload doesn't trigger compilation"""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
@@ -4931,12 +4931,12 @@ class GenerationIntegrationTests(unittest.TestCase):
         generate_kwargs = {"max_new_tokens": 3, "cache_implementation": "static"}
 
         # Sanity check: if we don't specify a device map, the model will get compiled
-        model_gpu = AutoModelForCausalLM.from_pretrained(
+        model_accelrator = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
         )
-        input_ids = tokenized_inputs.input_ids.to(model_gpu.device)
-        _ = model_gpu.generate(input_ids, **generate_kwargs)
-        self.assertTrue(hasattr(model_gpu, "_compiled_call"))
+        input_ids = tokenized_inputs.input_ids.to(model_accelerator.device)
+        _ = model_accelerator.generate(input_ids, **generate_kwargs)
+        self.assertTrue(hasattr(model_accelerator, "_compiled_call"))
 
         # If we specify a device map, the model will not be compiled
         # (as of April 2025, compiling with CPU offload results in a crash)
