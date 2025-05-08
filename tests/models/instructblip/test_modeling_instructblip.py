@@ -54,7 +54,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import InstructBlipForConditionalGeneration, InstructBlipVisionModel
+    from transformers import InstructBlipForConditionalGeneration, InstructBlipModel, InstructBlipVisionModel
 
 
 if is_vision_available():
@@ -460,14 +460,20 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
             "attention_mask": attention_mask,
             "qformer_input_ids": qformer_input_ids,
             "qformer_attention_mask": qformer_attention_mask,
-            "labels": input_ids,
         }
         return config, inputs_dict
 
 
 @require_torch
 class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (InstructBlipForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            InstructBlipModel,
+            InstructBlipForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = {"image-text-to-text": InstructBlipForConditionalGeneration}
     fx_compatible = False
     test_head_masking = False

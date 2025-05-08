@@ -216,6 +216,32 @@ class MimiConv1d(nn.Module):
         end = padded.shape[-1] - extra_pad
         return padded[..., :end]
 
+    def _get_output_length(self, input_length: torch.LongTensor) -> torch.LongTensor:
+        """
+        Return the length of the output of the MimiConv1d.
+        """
+        # padding size
+        n_frames = (input_length - self.kernel_size + self.padding_total) / self.stride + 1
+        n_frames = torch.ceil(n_frames).to(torch.int64) - 1
+        ideal_length = n_frames * self.stride + self.kernel_size - self.padding_total
+        extra_padding = ideal_length - input_length
+
+        if self.causal:
+            padding_left = self.padding_total
+            padding_right = extra_padding
+        else:
+            padding_left = self.padding_left
+            padding_right = self.padding_right + extra_padding
+
+        # padding
+        input_length = input_length + padding_left + padding_right
+
+        # conv
+        output_lenght = (
+            input_length + 2 * self.conv.padding[0] - self.conv.dilation[0] * (self.conv.kernel_size[0] - 1) - 1
+        ) // self.conv.stride[0] + 1
+        return output_lenght
+
     def forward(self, hidden_states):
         extra_padding = self._get_extra_padding_for_conv1d(hidden_states)
 
@@ -331,21 +357,28 @@ class MimiEncoder(nn.Module):
         model = [MimiConv1d(config, config.audio_channels, config.num_filters, config.kernel_size)]
         scaling = 1
 
+        # keep track of MimiConv1d submodule layer names for easy encoded length computation
+        mimiconv1d_layer_names = ["layers.0"]
+
         # Downsample to raw audio scale
         for ratio in reversed(config.upsampling_ratios):
             current_scale = scaling * config.num_filters
             # Add residual layers
             for j in range(config.num_residual_layers):
+                mimiconv1d_layer_names.extend([f"layers.{len(model)}.block.1", f"layers.{len(model)}.block.3"])
                 model += [MimiResnetBlock(config, current_scale, [config.dilation_growth_rate**j, 1])]
             # Add downsampling layers
             model += [nn.ELU()]
+            mimiconv1d_layer_names.append(f"layers.{len(model)}")
             model += [MimiConv1d(config, current_scale, current_scale * 2, kernel_size=ratio * 2, stride=ratio)]
             scaling *= 2
 
         model += [nn.ELU()]
+        mimiconv1d_layer_names.append(f"layers.{len(model)}")
         model += [MimiConv1d(config, scaling * config.num_filters, config.hidden_size, config.last_kernel_size)]
 
         self.layers = nn.ModuleList(model)
+        self._mimiconv1d_layer_names = mimiconv1d_layer_names
 
     # Copied from transformers.models.encodec.modeling_encodec.EncodecEncoder.forward
     def forward(self, hidden_states):
@@ -1566,6 +1599,38 @@ class MimiModel(MimiPreTrainedModel):
         codes = self.quantizer.encode(embeddings, num_quantizers)
         codes = codes.transpose(0, 1)
         return codes, past_key_values
+
+    def get_encoded_length(self, input_length: torch.LongTensor) -> torch.LongTensor:
+        """
+        Return the number of frames of the encoded audio waveform.
+        """
+        output_length = input_length
+
+        # encoder
+        for layer_name in self.encoder._mimiconv1d_layer_names:
+            output_length = self.encoder.get_submodule(layer_name)._get_output_length(output_length)
+
+        # downsample
+        output_length = self.downsample._get_output_length(output_length)
+
+        return output_length
+
+    def get_audio_codes_mask(self, padding_mask: torch.Tensor, padding_side: str = "right"):
+        """
+        Get the mask for the audio codes from the original padding mask.
+        """
+        encoded_lengths = self.get_encoded_length(padding_mask.sum(dim=-1))
+
+        audio_codes_mask = torch.arange(encoded_lengths.max(), device=encoded_lengths.device).expand(
+            len(encoded_lengths), -1
+        )
+        audio_codes_mask = audio_codes_mask < encoded_lengths.unsqueeze(1)
+        audio_codes_mask = audio_codes_mask.to(padding_mask.device)
+
+        if padding_side == "right":
+            return audio_codes_mask
+        else:
+            return audio_codes_mask.flip(dims=[-1])
 
     def encode(
         self,
