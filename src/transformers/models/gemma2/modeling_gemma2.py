@@ -269,7 +269,6 @@ class Gemma2DecoderLayer(nn.Module):
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.sliding_window = config.sliding_window
-        self.layer_idx = layer_idx
 
     @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
@@ -284,8 +283,6 @@ class Gemma2DecoderLayer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        attention_mask = attention_mask[self.layer_idx]
-
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
