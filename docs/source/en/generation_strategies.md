@@ -387,8 +387,8 @@ Updating your Python requirements accordingly will remove this error message.
 To create a new decoding method, you need to create a new [**Model**](https://huggingface.co/new) repository and push a few files into it.
 1. The model you've designed your decoding method with.
 2. `custom_generate/generate.py`, which contains all the logic for your custom decoding method.
-4. `custom_generate/requirements.txt`, used to optionally add new Python requirements and/or lock specific versions to correctly use your method.
-3. `README.md`, where you should add the `custom_generate` tag and document any new arguments or output type differences of your custom method here.
+3. `custom_generate/requirements.txt`, used to optionally add new Python requirements and/or lock specific versions to correctly use your method.
+4. `README.md`, where you should add the `custom_generate` tag and document any new arguments or output type differences of your custom method here.
 
 #### Adding the base model
 
