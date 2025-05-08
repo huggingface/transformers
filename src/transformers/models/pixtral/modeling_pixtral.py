@@ -14,7 +14,8 @@
 # limitations under the License.
 """PyTorch Pixtral model."""
 
-from typing import Callable, Optional, Tuple, Union
+from collections.abc import Callable
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -160,7 +161,9 @@ def eager_attention_forward(
 
 
 class PixtralAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """
+    Multi-headed attention compatible with ALL_ATTENTION_FUNCTIONS.
+    """
 
     def __init__(self, config):
         super().__init__()
@@ -171,6 +174,8 @@ class PixtralAttention(nn.Module):
         self.is_causal = False
 
         self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+
         self.dropout = config.attention_dropout
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
@@ -184,7 +189,7 @@ class PixtralAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -202,7 +207,6 @@ class PixtralAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=0)
 
         attention_interface: Callable = eager_attention_forward
-
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and output_attentions:
                 logger.warning_once(
@@ -378,6 +382,7 @@ class PixtralTransformer(nn.Module):
                     attention_mask,
                     position_embeddings,
                     output_attentions,
+                    **kwargs,
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -430,6 +435,10 @@ class PixtralPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _no_split_modules = ["PixtralAttentionLayer"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -507,7 +516,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
+        image_sizes: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -519,6 +528,10 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             pixel_values: tensor of token features for
                 all tokens of all images of shape (N_toks, D)
         """
+        if image_sizes is None:
+            batch_size, _, height, width = pixel_values.shape
+            image_sizes = [(height, width)] * batch_size
+
         # pass images through initial convolution independently
         patch_embeds = self.patch_conv(pixel_values)
         patch_embeds_list = [
@@ -534,6 +547,8 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         position_ids = position_ids_in_meshgrid(
             patch_embeds_list, max_width=self.config.image_size // self.config.patch_size
         )
+        kwargs["position_ids"] = position_ids
+
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 
         attention_mask = generate_block_attention_mask(
