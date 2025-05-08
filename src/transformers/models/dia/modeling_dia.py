@@ -463,7 +463,7 @@ class DiaMultiChannelEmbed(nn.Module):
 
     def __init__(self, config: DiaConfig):
         super().__init__()
-        self.embed = nn.Embedding(config.vocab_size, config.hidden_size * config.num_channels)
+        self.embed = nn.Embedding(config.vocab_size * config.num_channels, config.hidden_size )
         self.hidden_size = config.hidden_size
         self.num_channels = config.num_channels
         offsets = torch.arange(config.num_channels, dtype=torch.long) * config.hidden_size  # (C,)
