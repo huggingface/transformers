@@ -50,13 +50,13 @@ from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...video_utils import VideoInput
 from ...utils import (
     add_start_docstrings_to_model_forward,
     can_return_tuple,
     logging,
     replace_return_docstrings,
 )
+from ...video_utils import VideoInput
 
 
 if is_flash_attn_available():

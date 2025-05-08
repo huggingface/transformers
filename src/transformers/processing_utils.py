@@ -33,8 +33,9 @@ from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, ImageInput, is_valid_image, is_vision_available, load_image
-from .video_utils import VideoInput, load_video
 from .utils.chat_template_utils import render_jinja_template
+from .video_utils import VideoInput, load_video
+
 
 if is_vision_available():
     from .image_utils import PILImageResampling
