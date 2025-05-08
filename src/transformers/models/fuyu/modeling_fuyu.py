@@ -21,10 +21,19 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...processing_utils import Unpack
+from ...utils import (
+    LossKwargs,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    can_return_tuple,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_fuyu import FuyuConfig
 
 
@@ -58,6 +67,10 @@ class FuyuPreTrainedModel(PreTrainedModel):
     config_class = FuyuConfig
     base_model_prefix = "fuyu"
     supports_gradient_checkpointing = True
+    _supports_attention_backend = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
     _no_split_modules = []
     _skip_keys_device_placement = "past_key_values"
 
@@ -142,6 +155,9 @@ FUYU_INPUTS_DOCSTRING = r"""
 """
 
 
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
 @add_start_docstrings(
     """The Fuyu model which consists of a vision backbone and a language model, without a language modeling head.""",
     FUYU_START_DOCSTRING,
@@ -224,8 +240,8 @@ class FuyuModel(FuyuPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+        **kwargs: Unpack[KwargsForCausalLM],
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -323,6 +339,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model.get_decoder()
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -392,7 +409,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
-            return_dict=return_dict,
+            return_dict=True,
             # don't pass kwargs because Persimmon-backbone doesn't accept FA2 kwargs yet, TODO: raushan
         )
 
@@ -406,10 +423,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             loss = self.loss_function(
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,

@@ -21,10 +21,10 @@ from typing import Any, Callable, List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -32,10 +32,13 @@ from ...modeling_outputs import (
     CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    LossKwargs,
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
     replace_return_docstrings,
     torch_int,
@@ -466,7 +469,7 @@ class Kosmos2VisionEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
+# Adapted from transformers.models.siglip.modeling_siglip.eager_attention_forward -> Kosmos2 doesn't cast attn weights to fp32
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -481,7 +484,7 @@ def eager_attention_forward(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
@@ -892,6 +895,7 @@ class KosmosTextAttention(nn.Module):
         bias: bool = True,
     ):
         super().__init__()
+        self.config = config
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
@@ -929,6 +933,7 @@ class KosmosTextAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -953,8 +958,7 @@ class KosmosTextAttention(nn.Module):
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
-        query_states = self._shape(self.q_proj(hidden_states) * self.scaling)
-        attn_weights = torch.matmul(query_states, key_states.transpose(-1, -2))
+        query_states = self._shape(self.q_proj(hidden_states))
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -966,32 +970,33 @@ class KosmosTextAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        src_len = key_states.size(2)
+        attention_interface: Callable = eager_attention_forward
 
-        if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, seq_length, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, seq_length, src_len)}, but is {attention_mask.size()}"
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
-            attn_weights = attn_weights + attention_mask
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        # Mask heads if we want to
-        if layer_head_mask is not None:
-            attn_weights = attn_weights * layer_head_mask
-
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        #  attn_output = torch.bmm(attn_probs, value_states) ?
-        context_states = torch.matmul(attn_weights, value_states)
-        # attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim) ?
-        context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
-
+        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         if self.inner_attn_ln is not None:
-            context_states = self.inner_attn_ln(context_states)
+            attn_output = self.inner_attn_ln(attn_output)
 
-        attn_output = self.out_proj(context_states)
+        attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights, past_key_value
 
@@ -1060,6 +1065,7 @@ class Kosmos2TextBlock(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
@@ -1076,6 +1082,7 @@ class Kosmos2TextBlock(nn.Module):
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -1103,6 +1110,7 @@ class Kosmos2TextBlock(nn.Module):
                 layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
+                **kwargs,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
@@ -1216,6 +1224,7 @@ class Kosmos2TextTransformer(nn.Module):
 
         return hidden_states
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1233,6 +1242,7 @@ class Kosmos2TextTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1338,6 +1348,7 @@ class Kosmos2TextTransformer(nn.Module):
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
+                    **kwargs,
                 )
             hidden_states = layer_outputs[0]
 
@@ -1357,18 +1368,6 @@ class Kosmos2TextTransformer(nn.Module):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    present_key_value_states,
-                    all_hidden_states,
-                    all_self_attns,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
@@ -1387,6 +1386,9 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
     config_class = Kosmos2Config
     supports_gradient_checkpointing = True
     _no_split_modules = ["Kosmos2VisionEncoderLayer", "Kosmos2TextBlock"]
+    _supports_attention_backend = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1525,6 +1527,7 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPastAndCrossAttentions, config_class=Kosmos2TextConfig)
     def forward(
@@ -1544,6 +1547,7 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Returns:
@@ -1565,7 +1569,11 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @add_start_docstrings(
@@ -1600,6 +1608,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=Kosmos2TextConfig)
     def forward(
@@ -1620,6 +1629,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1652,27 +1662,14 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
+            **kwargs,
         )
         lm_logits = self.lm_head(outputs[0])
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(lm_logits.device)
-            # Shift so that tokens < n predict n
-            shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            batch_size, seq_length, vocab_size = shift_logits.shape
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(batch_size * seq_length, vocab_size), shift_labels.view(batch_size * seq_length)
-            )
-
-        if not return_dict:
-            output = (lm_logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
+            loss = self.loss_function(logits=lm_logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
@@ -1804,6 +1801,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.model.embed_tokens = value
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Kosmos2ModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1822,6 +1820,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, Kosmos2ModelOutput]:
         r"""
         Returns:
@@ -1893,12 +1892,9 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
+            **kwargs,
         )
-
-        if not return_dict:
-            outputs = outputs + (image_embeds, projection_attentions, vision_model_output)
-            return tuple(output for output in outputs if output is not None)
 
         return Kosmos2ModelOutput(
             last_hidden_state=outputs.last_hidden_state,
@@ -1946,6 +1942,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.text_model.set_output_embeddings(new_embeddings)
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Kosmos2ForConditionalGenerationModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1964,6 +1961,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, Kosmos2ForConditionalGenerationModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2048,12 +2046,9 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
+            **kwargs,
         )
-
-        if not return_dict:
-            outputs = lm_outputs + (image_embeds, projection_attentions, vision_model_output)
-            return tuple(output for output in outputs if output is not None)
 
         return Kosmos2ForConditionalGenerationModelOutput(
             loss=lm_outputs.loss,
