@@ -20,7 +20,10 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import DynamicCache
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...processing_utils import Unpack
 from ...utils import (
+    can_return_tuple,
     logging,
 )
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
@@ -195,6 +198,7 @@ class SmolVLMModel(Idefics3Model):
         merged_embeds = torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
         return merged_embeds
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -210,6 +214,7 @@ class SmolVLMModel(Idefics3Model):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, SmolVLMBaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -310,12 +315,10 @@ class SmolVLMModel(Idefics3Model):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
+            **kwargs,
         )
-
-        if not return_dict:
-            return tuple(v for v in [*outputs, image_hidden_states] if v is not None)
 
         return SmolVLMBaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,

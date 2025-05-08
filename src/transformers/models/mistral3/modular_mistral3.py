@@ -19,6 +19,8 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings_to_model_forward,
     can_return_tuple,
@@ -27,6 +29,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..llava.modeling_llava import (
+    KwargsForCausalLM,
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaModel,
@@ -174,6 +177,7 @@ class Mistral3Model(LlavaModel):
         image_features = self.multi_modal_projector(selected_image_feature.squeeze(0), image_sizes)
         return image_features
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -189,7 +193,7 @@ class Mistral3Model(LlavaModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         image_sizes: torch.Tensor = None,
-        **lm_kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, Mistral3ModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -239,17 +243,16 @@ class Mistral3Model(LlavaModel):
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
-            **lm_kwargs,
+            **kwargs,
         )
 
-        output = Mistral3ModelOutputWithPast(
+        return Mistral3ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
-        return output if return_dict else output.to_tuple()
 
 
 class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
@@ -271,8 +274,8 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        image_sizes: torch.Tensor = None,
-        **lm_kwargs,
+        image_sizes: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, Mistral3CausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -330,7 +333,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
             return_dict=True,
             cache_position=cache_position,
             image_sizes=image_sizes,
-            **lm_kwargs,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -340,7 +343,9 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return Mistral3CausalLMOutputWithPast(
             loss=loss,
