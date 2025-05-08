@@ -130,7 +130,7 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
                 embeddings[embeddings_key] = [tensor]
         else:
             converted_state_dict[key] = tensor
-    embeddings = {k: torch.cat(v, dim=-1) for k, v in embeddings.items()}
+    embeddings = {k: torch.cat(v, dim=0) for k, v in embeddings.items()}
     converted_state_dict.update(embeddings)
     print(f"Saved converted checkpoint to {pytorch_dump_folder_path}")
     model_class.load_state_dict(converted_state_dict, assign=True)
