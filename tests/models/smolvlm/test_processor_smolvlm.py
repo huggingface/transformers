@@ -22,7 +22,7 @@ import requests
 
 from transformers import SmolVLMProcessor
 from transformers.models.auto.processing_auto import AutoProcessor
-from transformers.testing_utils import require_av, require_torch, require_vision
+from transformers.testing_utils import is_flaky, require_av, require_torch, require_vision
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -117,6 +117,10 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+
+    @is_flaky # fails 15 out of 100, FIXME @raushan
+    def test_structured_kwargs_nested_from_dict_video(self):
+        super().test_structured_kwargs_nested_from_dict_video()
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor_components = self.prepare_components()
