@@ -606,13 +606,13 @@ def get_causal_masks(
 
     # If using a cache, it can give all informations about mask size and patterns based on seen tokens
     if past_key_values is not None:
-        sizes_and_patterns, layer_to_mask_mapping = past_key_values.get_mask_size_and_pattern(
+        sizes_and_patterns, layer_to_mask_mapping = past_key_values.get_mask_sizes_and_patterns(
             cache_position, num_layers
         )
     # We are either training, or running inference without cache -> extract patterns from config
     else:
         kv_length = input_embeds.shape[1]
-        sizes_and_patterns, layer_to_mask_mapping = infer_mask_sizes_and_patterns_from_config(config, kv_length)
+        sizes_and_patterns, layer_to_mask_mapping = infer_mask_sizes_patterns_from_config(config, kv_length)
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
     if attention_mask is not None:
@@ -692,7 +692,7 @@ def _ignore_causal_mask_sdpa(
     return False
 
 
-def infer_mask_patterns_from_config(config: PretrainedConfig, kv_length: int) -> tuple[list[tuple], list[int]]:
+def infer_mask_sizes_patterns_from_config(config: PretrainedConfig, kv_length: int) -> tuple[list[tuple], list[int]]:
     """
     Return a list of tuples (kv_length, kv_offset, sliding_window, chunk_size), corresponding to all unique mask pattern we may need,
     as well as a mapping of indices from the pattern to each layers in the model.
