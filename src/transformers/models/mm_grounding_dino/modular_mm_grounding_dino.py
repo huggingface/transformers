@@ -20,7 +20,9 @@ from ..grounding_dino.modeling_grounding_dino import (
 class MMGroundingDinoConfig(GroundingDinoConfig):
     r"""
     This is the configuration class to store the configuration of a [`MMGroundingDinoModel`]. It is used to instantiate a
-    MM Grounding DINO model according to the specified arguments, defining the model architecture.
+    MM Grounding DINO model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the MM Grounding DINO tiny architecture
+    [rziga/mm_grounding_dino_tiny_o365v1_goldg_v3det](https://huggingface.co/rziga/mm_grounding_dino_tiny_o365v1_goldg_v3det).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
