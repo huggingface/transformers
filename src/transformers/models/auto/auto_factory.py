@@ -426,9 +426,9 @@ class _BaseAutoModelClass:
                 upstream_repo = class_ref.split("--")[0]
             else:
                 upstream_repo = None
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, config._name_or_path, has_local_code, has_remote_code, upstream_repo=upstream_repo
-        )
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, config._name_or_path, has_local_code, has_remote_code, upstream_repo=upstream_repo
+            )
 
         if has_remote_code and trust_remote_code:
             if "--" in class_ref:
