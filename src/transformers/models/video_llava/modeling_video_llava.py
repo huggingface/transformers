@@ -310,8 +310,8 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
     def get_image_features(
         self,
         pixel_values_images: torch.FloatTensor,
-        vision_feature_layer: Union[int, List[int]] = None,
-        vision_feature_select_strategy: str = None,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -363,7 +363,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
-        vision_feature_layer: Union[int, List[int]] = None,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
     ):
         """
         Obtains video last hidden states from the vision tower and apply multimodal projection.

@@ -259,8 +259,8 @@ class LlavaNextVideoModel(LlavaNextModel):
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: Union[int, List[int]] = None,
-        vision_feature_select_strategy: str = None,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -327,8 +327,8 @@ class LlavaNextVideoModel(LlavaNextModel):
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Union[int, List[int]] = None,
-        vision_feature_select_strategy: str = None,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
     ):
         """
         Obtains video last hidden states from the vision tower and apply multimodal projection.

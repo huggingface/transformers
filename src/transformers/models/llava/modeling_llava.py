@@ -288,8 +288,8 @@ class LlavaModel(LlavaPreTrainedModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Union[int, List[int]] = None,
-        vision_feature_select_strategy: str = None,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
         **kwargs,
     ):
         """

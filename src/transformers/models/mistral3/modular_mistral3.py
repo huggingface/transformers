@@ -142,7 +142,7 @@ class Mistral3Model(LlavaModel):
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: Union[int, List[int]] = None,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
         **kwargs,
     ):
         """
