@@ -111,6 +111,31 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
     return num_patches
 
 
+def reshape_image(image_feature, num_patch_height, num_patch_width, height, width):
+    """
+    Reshape the image feature tensor to recover height and width dimensions.
+
+    Args:
+        image_feature (`torch.Tensor`):
+            The image feature tensor to reshape.
+        num_patch_height (`int`):
+            The number of patches in the height dimension.
+        num_patch_width (`int`):
+            The number of patches in the width dimension.
+        height (`int`):
+            The height of each patch.
+        width (`int`):
+            The width of each patch.
+
+    Returns:
+        `torch.Tensor`: The reshaped image feature tensor.
+    """
+    image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
+    image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
+    image_feature = image_feature.flatten(1, 2).flatten(2, 3)
+    return image_feature
+
+
 def unpad_image(tensor, original_size):
     """
     Unpads a PyTorch tensor of a padded and resized image.
@@ -436,9 +461,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
                         " visual encoder that does not have CLS."
                     )
 
-                image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
-                image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
-                image_feature = image_feature.flatten(1, 2).flatten(2, 3)
+                image_feature = reshape_image(image_feature, num_patch_height, num_patch_width, height, width)
                 image_feature = unpad_image(image_feature, image_sizes[image_idx])
                 if image_newline is not None:
                     image_feature = torch.cat(
