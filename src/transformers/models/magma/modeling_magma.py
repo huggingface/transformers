@@ -239,96 +239,6 @@ MAGMA_INPUTS_DOCSTRING = r"""
 """
 
 @add_start_docstrings(
-    "The bare Magma Model outputting raw hidden-states without any specific head on top.",
-    MAGMA_START_DOCSTRING,
-)
-class MagmaModel(MagmaPreTrainedModel):
-    def __init__(self, config: MagmaConfig):
-        super().__init__(config)
-        self.vision_tower = MagmaImageTower(config.vision_config, require_pretrained=False)
-        config.vision_config.mm_hidden_size = config.vision_config.mm_hidden_size \
-            if 'mm_hidden_size' in config.vision_config else self.vision_tower.hidden_size
-        config.vision_config.hidden_size = config.vision_config.hidden_size \
-            if 'hidden_size' in config.vision_config else self.config.text_config.hidden_size
-        self.multi_modal_projector = MagmaMultiModalProjector(config.vision_config)
-
-        if hasattr(config.text_config, 'auto_map'):
-            del config.text_config.auto_map
-
-        try:
-            self.language_model = AutoModelForCausalLM.from_config(
-                config.text_config,
-                attn_implementation=config._attn_implementation,
-                trust_remote_code=True
-            )
-        except:
-            self.language_model = AutoModelForCausalLM.from_pretrained(
-                config.text_config._name_or_path,
-                attn_implementation=config._attn_implementation,
-                trust_remote_code=True
-            )
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: Union[torch.FloatTensor, List[torch.FloatTensor], List[List[torch.FloatTensor]]] = None,
-        image_sizes: Union[torch.LongTensor, List[torch.LongTensor], List[List[torch.LongTensor]]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[int] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MagmaCausalLMOutputWithPast]:
-        # Implementation similar to MagmaForCausalLM's forward but without the language model head
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_config.vision_feature_layer
-        )
-        
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        if isinstance(past_key_values, Cache):
-            use_cache = True
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-            if pixel_values is not None and input_ids.shape[1] != 1 and len(pixel_values) > 0:
-                # Process images and merge embeddings similar to MagmaForCausalLM
-                # ... (same image processing code as in MagmaForCausalLM)
-                pass
-
-        outputs = self.language_model.model(
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        return outputs
-
-@add_start_docstrings(
     """The Magma model which consists of a vision backbone and a language model.""",
     MAGMA_START_DOCSTRING,
 )
@@ -679,4 +589,4 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
         return self.language_model._reorder_cache(*args, **kwargs)
 
 
-__all__ = ["MagmaModel", "MagmaForCausalLM", "MagmaPreTrainedModel"]
+__all__ = ["MagmaForCausalLM", "MagmaPreTrainedModel"]
