@@ -4620,7 +4620,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     "Generation config file not found, using a generation config created from the model config."
                 )
                 pass
-            # Load custom generate function (and override `generate`) if it exists
+            # Load custom generate function if `pretrained_model_name_or_path` defines it (and override `generate`)
             if hasattr(model, "load_custom_generate"):
                 try:
                     custom_generate = model.load_custom_generate(pretrained_model_name_or_path, **repo_loading_kwargs)
