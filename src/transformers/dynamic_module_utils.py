@@ -714,7 +714,7 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
 
 def check_python_requirements(path_or_repo_id, requirements_file="requirements.txt", **kwargs):
     """
-    Tries to locate a `requirements.txt` file in a local folder and repo, and confirms that the environment has all the
+    Tries to locate `requirements_file` in a local folder and repo, and confirms that the environment has all the
     python dependencies installed.
 
     Args:
