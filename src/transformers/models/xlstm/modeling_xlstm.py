@@ -85,7 +85,7 @@ else:
         matC_initial: torch.Tensor = None,  # (B, NH, DHQK, DHHV)
         vecN_initial: torch.Tensor = None,  # (B, NH, DHQK)
         scaMinter_initial: torch.Tensor = None,  # (B, NH, 1)
-        qk_scale: float = None,
+        qk_scale: Optional[float] = None,
         chunk_size: int = 64,
         num_chunks: int = 1,
     ) -> tuple[
@@ -253,7 +253,7 @@ else:
         c: torch.Tensor = None,  # (B, NH, DHQK, DHHV)
         n: torch.Tensor = None,  # (B, NH, DHQK)
         m: torch.Tensor = None,  # (B, NH, 1)
-        qk_scale: float = None,
+        qk_scale: Optional[float] = None,
         return_last_states: bool = False,
         return_all_states: bool = False,
         chunk_size: int = 64,
@@ -811,8 +811,8 @@ else:
             c_initial: torch.Tensor = None,
             n_initial: torch.Tensor = None,
             m_initial: torch.Tensor = None,
-            return_last_states: bool = None,
-            mode: Literal["train", "inference"] = None,
+            return_last_states: bool = False,
+            mode: Optional[Literal["train", "inference"]] = None,
         ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
             """Forward pass of the mLSTM backend.
 
@@ -1412,10 +1412,10 @@ def wang_init_method(n_layers, dim):
 class xLSTMModel(xLSTMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+        # use embbeding_dim and num_blocks once here to make use of them
+        self.embeddings = nn.Embedding(config.vocab_size, config.embedding_dim)
 
-        self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
-
-        self.blocks = nn.ModuleList([mLSTMBlock(config) for _ in range(config.num_hidden_layers)])
+        self.blocks = nn.ModuleList([mLSTMBlock(config) for _ in range(config.num_blocks)])
 
         self.gradient_checkpointing = False
         # actually unused, but needed in external integration
