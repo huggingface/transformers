@@ -431,7 +431,7 @@ class SamHQVisionModel(SamVisionModel):
 
 @auto_docstring(
     custom_intro="""
-    Segment Anything Model HQ (SAM-HQ) for generating masks,given an input image and
+    Segment Anything Model HQ (SAM-HQ) for generating masks, given an input image and optional 2D location and bounding boxes.
     """
 )
 class SamHQModel(SamModel):
@@ -480,7 +480,6 @@ class SamHQModel(SamModel):
 
         return image_embeddings, intermediate_embeddings
 
-    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,

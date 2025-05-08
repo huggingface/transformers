@@ -1345,7 +1345,7 @@ class SamHQPromptEncoder(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    Segment Anything Model HQ (SAM-HQ) for generating masks,given an input image and
+    Segment Anything Model HQ (SAM-HQ) for generating masks, given an input image and optional 2D location and bounding boxes.
     """
 )
 class SamHQModel(SamHQPreTrainedModel):
@@ -1450,6 +1450,7 @@ class SamHQModel(SamHQPreTrainedModel):
         )
         return prompt_output
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
