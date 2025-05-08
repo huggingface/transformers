@@ -21,6 +21,7 @@ from transformers import set_seed
 from transformers.generation.configuration_utils import ALL_CACHE_IMPLEMENTATIONS
 from transformers.testing_utils import (
     CaptureStderr,
+    Expectations,
     cleanup,
     get_gpu_count,
     is_torch_available,
@@ -28,6 +29,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_multi_accelerator,
     require_torch_multi_gpu,
     slow,
     torch_device,
@@ -350,7 +352,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         self.assertIsInstance(gen_out.past_key_values, DynamicCache)  # sanity check
 
     @parameterized.expand([("eager"), ("sdpa")])
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_static_cache_greedy_decoding_pad_left(self, attn_implementation):
         """Tests that different cache implementations work well with eager and SDPA inference"""
@@ -431,7 +433,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         offloaded_peak_memory = torch_accelerator_module.max_memory_allocated(device)
         self.assertTrue(offloaded_peak_memory < original_peak_memory)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_cache_copy(self):
         """Tests that we can manually set a cache, copy, and reuse it for generation"""
@@ -439,14 +441,14 @@ class CacheHardIntegrationTest(unittest.TestCase):
         # lazy init of cache layers
         model_name = "microsoft/Phi-3-mini-4k-instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cuda", torch_dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map=torch_device, torch_dtype=torch.bfloat16)
 
         prompt_cache = StaticCache(
-            config=model.config, max_batch_size=1, max_cache_len=1024, device="cuda", dtype=torch.bfloat16
+            config=model.config, max_batch_size=1, max_cache_len=1024, device=torch_device, dtype=torch.bfloat16
         )
 
         INITIAL_PROMPT = "You are a helpful assistant. "
-        inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to("cuda")
+        inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to(torch_device)
         # This is the common prompt cached, we need to run forward without grad to be able to copy
         with torch.no_grad():
             prompt_cache = model(**inputs_initial_prompt, past_key_values=prompt_cache).past_key_values
@@ -454,7 +456,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         prompts = ["Help me to write a blogpost about travelling.", "What is the capital of France?"]
         responses = []
         for prompt in prompts:
-            new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to("cuda")
+            new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to(torch_device)
             past_key_values = copy.deepcopy(prompt_cache)
             outputs = model.generate(
                 **new_inputs, past_key_values=past_key_values, max_new_tokens=40, disable_compile=True
@@ -469,6 +471,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
             "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital "
             "of France.\n\n\n\n\n\n\n<|endoftext|>",
         ]
+
         self.assertEqual(responses, EXPECTED_DECODED_TEXT)
 
     @require_torch_multi_gpu
@@ -521,11 +524,11 @@ class CacheHardIntegrationTest(unittest.TestCase):
             model.generate(**inputs, max_new_tokens=2, cache_implementation="static")
         self.assertNotIn("cuda", cap.err.lower())
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     @slow
     @require_read_token
-    def test_static_cache_multi_gpu(self):
-        """Regression test for #35164: static cache with multi-gpu"""
+    def test_static_cache_multi_accelerator(self):
+        """Regression test for #35164: static cache with multi-accelerator"""
 
         model_id = "google/gemma-2-2b-it"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
