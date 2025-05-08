@@ -54,8 +54,8 @@ if is_torch_available():
 TEST_CACHE_IMPLEMENTATIONS = [
     cache_name
     for cache_name in ALL_CACHE_IMPLEMENTATIONS
-    # TODO (joao): Mamba is not compatible with most models, remove from `ALL_CACHE_IMPLEMENTATIONS`?
-    if cache_name != "mamba"
+    # TODO (joao): Mamba, xLSTM is not compatible with most models, remove from `ALL_CACHE_IMPLEMENTATIONS`?
+    if cache_name not in ["mamba", "xlstm"]
     # TODO (joao): offloaded_hybrid == offloaded_hybrid_chunked, deprecate one of them
     if cache_name != "offloaded_hybrid"
 ]
