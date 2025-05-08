@@ -1247,7 +1247,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         inputs_embeds = self.get_input_embeddings()(input_tokens)
 
-        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
+        model_kwargs = self._get_initial_cache_position(seq_len, device, model_kwargs)
 
         if model_kwargs.get("past_key_values", None) is None:
             # Prepare cache if not provided.
@@ -1377,7 +1377,7 @@ class JanusImageProcessor(BlipImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         min_size: int = 14,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
@@ -1385,7 +1385,7 @@ class JanusImageProcessor(BlipImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
+        do_convert_rgb: Optional[bool] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -1542,13 +1542,13 @@ class JanusImageProcessor(BlipImageProcessor):
     def postprocess(
         self,
         images: ImageInput,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: List[float] = None,
-        image_std: List[float] = None,
-        input_data_format: str = None,
-        return_tensors: str = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[List[float]] = None,
+        image_std: Optional[List[float]] = None,
+        input_data_format: Optional[str] = None,
+        return_tensors: Optional[str] = None,
     ):
         """Applies post-processing to the decoded image tokens by reversing transformations applied during preprocessing."""
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale

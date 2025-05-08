@@ -31,7 +31,12 @@ from ...utils import auto_docstring, can_return_tuple, logging, torch_int
 from ..clip.modeling_clip import CLIPMLP
 from ..janus.modeling_janus import JanusVisionAttention
 from ..llama.modeling_llama import LlamaRMSNorm
-from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration, LlavaPreTrainedModel
+from ..llava.modeling_llava import (
+    LlavaCausalLMOutputWithPast,
+    LlavaForConditionalGeneration,
+    LlavaModel,
+    LlavaPreTrainedModel,
+)
 from .configuration_internvl import InternVLConfig, InternVLVisionConfig
 
 
@@ -511,11 +516,7 @@ class InternVLMultiModalProjector(nn.Module):
         return hidden_states
 
 
-class InternVLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
-    pass
-
-
-class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
+class InternVLModel(LlavaModel):
     def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
         """Perform pixel shuffle downsampling on vision features.
 
@@ -596,6 +597,12 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
 
         return vision_features
 
+
+class InternVLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
+    pass
+
+
+class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
     def forward(**super_kwargs):
         r"""
         Example:
@@ -639,5 +646,6 @@ __all__ = [
     "InternVLVisionPreTrainedModel",
     "InternVLVisionModel",
     "InternVLPreTrainedModel",
+    "InternVLModel",
     "InternVLForConditionalGeneration",
 ]

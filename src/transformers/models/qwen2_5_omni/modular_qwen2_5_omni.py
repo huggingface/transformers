@@ -33,8 +33,8 @@ from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLAttention,
     Qwen2_5_VLMLP,
-    Qwen2_5_VLModel,
     Qwen2_5_VLPreTrainedModel,
+    Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionBlock,
     Qwen2RMSNorm,
 )
@@ -2137,7 +2137,7 @@ class Qwen2MLP(Qwen2_5_VLMLP):
     pass
 
 
-class Qwen2_5OmniThinkerTextModel(Qwen2_5_VLModel):
+class Qwen2_5OmniThinkerTextModel(Qwen2_5_VLTextModel):
     config_class = Qwen2_5OmniTextConfig
     _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
 
@@ -2492,7 +2492,7 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
     thinker_reply_part: torch.FloatTensor = None
 
 
-class Qwen2_5OmniTalkerModel(Qwen2_5_VLModel):
+class Qwen2_5OmniTalkerModel(Qwen2_5_VLTextModel):
     config_class = Qwen2_5OmniTalkerConfig
     _no_split_modules = ["Qwen2_5OmniTalkerDecoderLayer"]
 
@@ -2678,10 +2678,10 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
             thinker_reply_part=thinker_reply_part,
         )
 
-    def _get_initial_cache_position(self, input_ids, model_kwargs):
+    def _get_initial_cache_position(self, seq_length, device, model_kwargs):
         # Talker needs to calculate cache_position with input_ids, so pop inputs_embeds temporarily
         inputs_embeds = model_kwargs.pop("inputs_embeds")
-        model_kwargs = super()._get_initial_cache_position(input_ids, model_kwargs)
+        model_kwargs = super()._get_initial_cache_position(seq_length, device, model_kwargs)
         model_kwargs["inputs_embeds"] = inputs_embeds
         return model_kwargs
 
