@@ -15,6 +15,8 @@
 
 """xLSTM configuration."""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import is_xlstm_available, logging
 
@@ -150,8 +152,8 @@ class xLSTMConfig(PretrainedConfig):
         vocab_size: int = 50304,
         hidden_size: int = 4096,
         embedding_dim: int | None = None,
-        num_hidden_layers: int | None = 32,
-        num_blocks: int | None = None,
+        num_hidden_layers: Optional[int] = 32,
+        num_blocks: Optional[int] = None,
         num_heads: int = 8,
         use_bias: bool = False,
         norm_reduction_force_float32: bool = True,
