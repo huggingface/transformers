@@ -604,23 +604,15 @@ def get_causal_masks(
     
     batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
 
+    # If using a cache, it can give all informations about mask size and patterns based on seen tokens
     if past_key_values is not None:
         sizes_and_patterns, layer_to_mask_mapping = past_key_values.get_mask_size_and_pattern(
             cache_position, num_layers
         )
+    # We are either training, or running inference without cache -> extract patterns from config
     else:
-        kv_offset = 0
-        kv_length = attention_mask.shape[-1]
-
-        # HERE WE SHOULD EXTRACT ALL WAYS TO GET SLIDING_WINDOW/CHUNK SIZE IN THE CONFIG IF WE DON'T USE CACHE (OTHERWISE IT'S EMBEDDED
-        # IN THE CACHE ALREADY)
-        sliding_window = getattr(config, "sliding_window", None)
-        chunk_size = getattr(config, "attention_chunk_size", None)
-
-        # HERE MODELS WITH HYBRID CACHE STRUCTURE SHOULD STILL ALTERNATE BETWEEN USING LOCAL ATTENTION OR NOT EVEN WITHOUT CACHE!!!!
-        # PROBABLY THE EASIEST IS TO HAVE A FUNCTION RETURNING THE PATTERN BASED ON ALL POSSIBLE CONFIG ARGS???
-        sizes_and_patterns = [(kv_offset, kv_length, sliding_window, chunk_size)] * num_layers
-        layer_to_mask_mapping = [0] * num_layers
+        kv_length = input_embeds.shape[1]
+        sizes_and_patterns, layer_to_mask_mapping = infer_mask_sizes_and_patterns_from_config(config, kv_length)
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
     if attention_mask is not None:
@@ -629,7 +621,7 @@ def get_causal_masks(
     # We now create all the masks
     mask_interface = ALL_MASK_CREATION_FUNCTIONS[config._attn_implementation]
     masks = []
-    for kv_offset, kv_length, window, chunk in sizes_and_patterns:
+    for kv_length, kv_offset, window, chunk in sizes_and_patterns:
         # Raise if both are provided somehow
         if window is not None and chunk is not None:
             raise ValueError("`sliding_window` and `chunk_size` are mutually exclusive for mask creation")
@@ -698,3 +690,47 @@ def _ignore_causal_mask_sdpa(
             # Reference: https://github.com/pytorch/pytorch/issues/108108
 
     return False
+
+
+def infer_mask_patterns_from_config(config: PretrainedConfig, kv_length: int) -> tuple[list[tuple], list[int]]:
+    """
+    Return a list of tuples (kv_length, kv_offset, sliding_window, chunk_size), corresponding to all unique mask pattern we may need,
+    as well as a mapping of indices from the pattern to each layers in the model.
+    The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns (sliding_window, chunk_size), and
+    mapped back to the corresponding layers to be easily indexed in the modleing code (in case of different patterns par layers).
+    """
+
+    # Extract sliding window and chunk size from config
+    sliding_window = getattr(config, "sliding_window", None)
+    chunk_size = getattr(config, "attention_chunk_size", None)
+
+    # Default sizes and patterns, and mapping when all layers are similar
+    sizes_and_patterns = (kv_length, 0, sliding_window, chunk_size)
+    layer_to_mask_mapping = [0] * config.num_hidden_layers
+
+    # sliding_window_pattern is the attribute used by models with alternate full/sliding layers
+    sliding_window_pattern = getattr(config, "sliding_window_pattern", None)
+    # no_rope_layers is the attribute used by models with alternate full/chunked layers
+    is_chunked = getattr(config, "no_rope_layers", None)
+
+    if sliding_window_pattern is not None and is_chunked is not None:
+        raise ValueError("We detected both an alternating sliding and chunked pattern, which is incompatible")
+    # This is for models with HybridCache
+    elif sliding_window_pattern is not None:
+        if sliding_window is None:
+            raise ValueError("We detected a sliding window pattern, but no sliding window")
+        # If this is not the case, we can still use only a single mask as the speciall pattern has no importance
+        if kv_length > sliding_window:
+            is_sliding = [bool((i + 1) % sliding_window_pattern) for i in range(config.num_hidden_layers)]
+            layer_to_mask_mapping = [1 if sliding else 0 for sliding in is_sliding]
+            sizes_and_patterns = [(kv_length, 0, None, None), (kv_length, 0, sliding_window, None)]
+    # For models with HybridChunkedCache
+    elif is_chunked is not None:
+        if chunk_size is None:
+            raise ValueError("We detected a chunked attention pattern, but no chunk size")
+        # If this is not the case, we can still use only a single mask as the speciall pattern has no importance
+        if kv_length > chunk_size:
+            layer_to_mask_mapping = [1 if chunked else 0 for chunked in is_chunked]
+            sizes_and_patterns = [(kv_length, 0, None, None), (kv_length, 0, None, chunk_size)]
+
+    return sizes_and_patterns, layer_to_mask_mapping
