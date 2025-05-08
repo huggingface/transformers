@@ -982,15 +982,20 @@ class AutoTokenizer:
                 or tokenizer_class_from_name(config_tokenizer_class + "Fast") is not None
             )
         )
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
-        )
-
-        if has_remote_code and trust_remote_code:
+        if has_remote_code:
             if use_fast and tokenizer_auto_map[1] is not None:
                 class_ref = tokenizer_auto_map[1]
             else:
                 class_ref = tokenizer_auto_map[0]
+            if "--" in class_ref:
+                upstream_repo = class_ref.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+            )
+
+        if has_remote_code and trust_remote_code:
             tokenizer_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             tokenizer_class.register_for_auto_class()

@@ -539,22 +539,26 @@ class AutoImageProcessor:
 
         has_remote_code = image_processor_auto_map is not None
         has_local_code = image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
-        )
-
-        if image_processor_auto_map is not None and not isinstance(image_processor_auto_map, tuple):
-            # In some configs, only the slow image processor class is stored
-            image_processor_auto_map = (image_processor_auto_map, None)
+        if has_remote_code:
+            if image_processor_auto_map is not None and not isinstance(image_processor_auto_map, tuple):
+                # In some configs, only the slow image processor class is stored
+                image_processor_auto_map = (image_processor_auto_map, None)
+            if use_fast and image_processor_auto_map[1] is not None:
+                class_ref = image_processor_auto_map[1]
+            else:
+                class_ref = image_processor_auto_map[0]
+            if "--" in class_ref:
+                upstream_repo = class_ref.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+            )
 
         if has_remote_code and trust_remote_code:
             if not use_fast and image_processor_auto_map[1] is not None:
                 _warning_fast_image_processor_available(image_processor_auto_map[1])
 
-            if use_fast and image_processor_auto_map[1] is not None:
-                class_ref = image_processor_auto_map[1]
-            else:
-                class_ref = image_processor_auto_map[0]
             image_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             image_processor_class.register_for_auto_class()

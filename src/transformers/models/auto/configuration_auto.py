@@ -1152,12 +1152,17 @@ class AutoConfig:
         config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
-        )
+        if has_remote_code:
+            class_ref = config_dict["auto_map"]["AutoConfig"]
+            if "--" in class_ref:
+                upstream_repo = class_ref.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+            )
 
         if has_remote_code and trust_remote_code:
-            class_ref = config_dict["auto_map"]["AutoConfig"]
             config_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
             )

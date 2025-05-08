@@ -371,9 +371,14 @@ class AutoFeatureExtractor:
 
         has_remote_code = feature_extractor_auto_map is not None
         has_local_code = feature_extractor_class is not None or type(config) in FEATURE_EXTRACTOR_MAPPING
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
-        )
+        if has_remote_code:
+            if "--" in feature_extractor_auto_map:
+                upstream_repo = feature_extractor_auto_map.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+            )
 
         if has_remote_code and trust_remote_code:
             feature_extractor_class = get_class_from_dynamic_module(
