@@ -1412,12 +1412,7 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    Flaubert Model with a beam-search span classification head on top for extractive question-answering tasks like
-    SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """
-)
+@dataclass
 # Copied from transformer.models.xlm.modeling_xlm.XLMForQuestionAnsweringOutput with XLM->Flaubert
 class FlaubertForQuestionAnsweringOutput(ModelOutput):
     """
@@ -1461,6 +1456,7 @@ class FlaubertForQuestionAnsweringOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+@auto_docstring
 # Copied from transformers.models.xlm.modeling_xlm.XLMForQuestionAnswering with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
     def __init__(self, config):
