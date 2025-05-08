@@ -13,12 +13,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib
 from functools import partial
 from typing import Callable, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
+
+from transformers.pytorch_utils import is_torch_greater_or_equal
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache, StaticCache
@@ -44,6 +47,10 @@ from ..gemma.modeling_gemma import (
 
 _CHECKPOINT_FOR_DOC = "google/gemma2-7b"
 GEMMA2_INPUTS_DOCSTRING = None  # Will be picked up by modular
+
+# This is to workaround issue where we can't import torch in
+# configuration_gemma2.py. Local import also doesn't work
+pytree_module = importlib.import_module("torch.utils._pytree")
 
 
 if is_torch_flex_attn_available():
@@ -200,6 +207,12 @@ class Gemma2Config(PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.cache_implementation = cache_implementation
+
+        if is_torch_greater_or_equal("2.7"):
+            pytree_module.register_constant(self.__class__)
+
+    def __hash__(self):
+        return hash(tuple(sorted(self.__dict__.items())))
 
 
 class Gemma2RMSNorm(GemmaRMSNorm):

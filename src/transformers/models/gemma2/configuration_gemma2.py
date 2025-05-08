@@ -19,7 +19,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib
+
+from transformers.pytorch_utils import is_torch_greater_or_equal
+
 from ...configuration_utils import PretrainedConfig
+
+
+# This is to workaround issue where we can't import torch in
+# configuration_gemma2.py. Local import also doesn't work
+pytree_module = importlib.import_module("torch.utils._pytree")
 
 
 class Gemma2Config(PretrainedConfig):
@@ -167,6 +176,12 @@ class Gemma2Config(PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.cache_implementation = cache_implementation
+
+        if is_torch_greater_or_equal("2.7"):
+            pytree_module.register_constant(self.__class__)
+
+    def __hash__(self):
+        return hash(tuple(sorted(self.__dict__.items())))
 
 
 __all__ = ["Gemma2Config"]
