@@ -112,36 +112,51 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
                 Whether to pad the image to a square based on the longest edge. Can be overridden by the `do_pad` parameter
         """,
     )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
-
-    def _preprocess(
-        self,
-        images: List["torch.Tensor"],
-        videos: List["torch.Tensor"],
-        return_tensors: Optional[Union[str, TensorType]],
-        **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]
-    ) -> BatchFeature:
-        # Group images by size for batched transformation
-        del kwargs
+    def preprocess(self, images: ImageInput, videos: VideoInput, **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]) -> BatchFeature:
+        return_tensors = kwargs.get("return_tensors", "pt")
         if images:
-            grouped_images, grouped_images_index = group_images_by_shape(images)
-            processed_images_grouped = {}
-            for shape, stacked_images in grouped_images.items():
-                stacked_images, _ = self.image_transform(stacked_images)
-                print("stacked_images shape: ", stacked_images.shape)
-                processed_images_grouped[shape] = stacked_images
-            processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+            processed_images = []
+            for image in images:
+                processed = [self.image_transform(im)[0] for im in image]
+                processed = torch.cat(processed, dim=0)
+                processed_images.append(processed)
             processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
             return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
         elif videos:
             videos = [torch.from_numpy(np.array(v)).flatten(0, 1).permute(0, 3, 1, 2) for v in videos]
-            processed_videos = [self.video_transform(v)[0].squeeze(1) for v in videos]
+            processed_videos = [self.video_transform(v)[0] for v in videos]
             processed_videos = torch.stack(processed_videos, dim=0) if return_tensors else processed_videos
             return BatchFeature(data={"pixel_values": processed_videos}, tensor_type=return_tensors)
         else:
             return BatchFeature(data={"pixel_values": None}, tensor_type=return_tensors)
+
+
+    # def _preprocess(
+    #     self,
+    #     images: List["torch.Tensor"],
+    #     videos: List["torch.Tensor"],
+    #     return_tensors: Optional[Union[str, TensorType]],
+    #     **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]
+    # ) -> BatchFeature:
+    #     # Group images by size for batched transformation
+    #     del kwargs
+    #     if images:
+    #         grouped_images, grouped_images_index = group_images_by_shape(images)
+    #         processed_images_grouped = {}
+    #         for shape, stacked_images in grouped_images.items():
+    #             stacked_images, _ = self.image_transform(stacked_images)
+    #             print("stacked_images shape: ", stacked_images.shape)
+    #             processed_images_grouped[shape] = stacked_images
+    #         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+    #         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
+    #         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+    #     elif videos:
+    #         videos = [torch.from_numpy(np.array(v)).flatten(0, 1).permute(0, 3, 1, 2) for v in videos]
+    #         processed_videos = [self.video_transform(v)[0].squeeze(1) for v in videos]
+    #         processed_videos = torch.stack(processed_videos, dim=0) if return_tensors else processed_videos
+    #         return BatchFeature(data={"pixel_values": processed_videos}, tensor_type=return_tensors)
+    #     else:
+    #         return BatchFeature(data={"pixel_values": None}, tensor_type=return_tensors)
 
 
 __all__ = ["PerceptionLMImageProcessorFast"]
