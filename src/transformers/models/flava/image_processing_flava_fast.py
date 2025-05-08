@@ -66,7 +66,7 @@ class FlavaMaskingGenerator:
         mask_group_max_patches: Optional[int] = None,
         mask_group_min_patches: int = 16,
         mask_group_min_aspect_ratio: Optional[float] = 0.3,
-        mask_group_max_aspect_ratio: float = None,
+        mask_group_max_aspect_ratio: Optional[float] = None,
     ):
         if not isinstance(input_size, tuple):
             input_size = (input_size,) * 2

@@ -555,7 +555,7 @@ class PipelineDataFormat:
 
         if input_path is not None:
             if not exists(abspath(self.input_path)):
-                raise OSError(f"{self.input_path} doesnt exist on disk")
+                raise OSError(f"{self.input_path} doesn't exist on disk")
 
     @abstractmethod
     def __iter__(self):

@@ -593,8 +593,8 @@ class RagModel(RagPreTrainedModel):
                         context_input_ids,
                         context_attention_mask,
                         retrieved_doc_embeds,
-                        retrived_doc_input_ids,
-                        retrived_doc_attention_mask,
+                        retrieved_doc_input_ids,
+                        retrieved_doc_attention_mask,
                         retrieved_doc_ids,
                     ) = (
                         retriever_outputs["context_input_ids"],
@@ -608,10 +608,10 @@ class RagModel(RagPreTrainedModel):
                     context_input_ids = context_input_ids.to(input_ids)
                     context_attention_mask = context_attention_mask.to(input_ids)
 
-                    retrived_doc_input_ids = retrived_doc_input_ids.to(input_ids)
-                    retrived_doc_attention_mask = retrived_doc_attention_mask.to(input_ids)
+                    retrieved_doc_input_ids = retrieved_doc_input_ids.to(input_ids)
+                    retrieved_doc_attention_mask = retrieved_doc_attention_mask.to(input_ids)
                     retrieved_doc_embeds = self.ctx_encoder(
-                        retrived_doc_input_ids, attention_mask=retrived_doc_attention_mask, return_dict=True
+                        retrieved_doc_input_ids, attention_mask=retrieved_doc_attention_mask, return_dict=True
                     ).pooler_output
                     retrieved_doc_embeds = retrieved_doc_embeds.view(
                         -1, n_docs, question_encoder_last_hidden_state.shape[1]
@@ -1375,7 +1375,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         doc_scores: Optional[torch.FloatTensor] = None,
         n_docs: Optional[int] = None,
         generation_config: Optional[GenerationConfig] = None,
-        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
         logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
         stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
         **kwargs,

@@ -501,9 +501,9 @@ class GenerationTesterMixin:
             output_generate = self._greedy_generate(model=model, inputs_dict=inputs_dict)
 
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
             else:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1])
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
 
     @pytest.mark.generate
     def test_greedy_generate_dict_outputs(self):
@@ -525,13 +525,13 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, GreedySearchEncoderDecoderOutput)
             else:
                 self.assertTrue(
-                    output_generate.sequences.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1]
+                    output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
                 self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
                 # Retrocompatibility check
@@ -565,10 +565,10 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(
-                    output_generate.sequences.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1]
+                    output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
 
             self._check_generate_outputs(output_generate, model.config, use_cache=True)
@@ -582,9 +582,9 @@ class GenerationTesterMixin:
             output_generate = self._sample_generate(model=model, inputs_dict=inputs_dict, num_return_sequences=1)
 
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
             else:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1])
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
 
     @pytest.mark.generate
     def test_sample_generate_dict_output(self):
@@ -607,13 +607,13 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, SampleEncoderDecoderOutput)
             else:
                 self.assertTrue(
-                    output_generate.sequences.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1]
+                    output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
                 self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
                 # Retrocompatibility check
@@ -632,9 +632,9 @@ class GenerationTesterMixin:
             output_generate = self._beam_search_generate(model=model, inputs_dict=inputs_dict, beam_kwargs=beam_kwargs)
 
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
             else:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1])
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
 
     @pytest.mark.generate
     def test_beam_search_generate_dict_output(self):
@@ -657,13 +657,13 @@ class GenerationTesterMixin:
                 use_cache=False,
             )
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
             else:
                 self.assertTrue(
-                    output_generate.sequences.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1]
+                    output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
                 self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
                 # Retrocompatibility check
@@ -706,10 +706,10 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(
-                    output_generate.sequences.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1]
+                    output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
 
             self._check_generate_outputs(
@@ -759,9 +759,9 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
             else:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1])
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
 
     @pytest.mark.generate
     def test_beam_sample_generate_dict_output(self):
@@ -786,13 +786,13 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSampleEncoderDecoderOutput)
             else:
                 self.assertTrue(
-                    output_generate.sequences.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1]
+                    output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
                 self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
                 # Retrocompatibility check
@@ -840,9 +840,9 @@ class GenerationTesterMixin:
                 beam_kwargs=beam_kwargs,
             )
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
             else:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1])
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
 
             # check `group_beam_search` for higher than 1 `num_return_sequences`
             num_return_sequences = 2
@@ -853,9 +853,9 @@ class GenerationTesterMixin:
                 beam_kwargs=beam_kwargs,
             )
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
             else:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1])
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
 
     @pytest.mark.generate
     def test_group_beam_search_generate_dict_output(self):
@@ -878,13 +878,13 @@ class GenerationTesterMixin:
                 use_cache=False,
             )
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
             else:
                 self.assertTrue(
-                    output_generate.sequences.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1]
+                    output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
                 self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
                 # Retrocompatibility check
@@ -923,9 +923,9 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
             else:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1])
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
 
             for generation_output in output_generate:
                 self._check_sequence_inside_sequence(force_tokens, generation_output)
@@ -947,9 +947,9 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
             else:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1])
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
 
             for generation_output in output_generate:
                 self._check_sequence_inside_sequence(force_tokens, generation_output)
@@ -987,13 +987,13 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
             else:
                 self.assertTrue(
-                    output_generate.sequences.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1]
+                    output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
                 self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
                 # Retrocompatibility check
@@ -1031,9 +1031,9 @@ class GenerationTesterMixin:
                 use_cache=True,  # Enable cache
             )
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
             else:
-                self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1])
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
 
     @pytest.mark.generate
     def test_contrastive_generate_dict_outputs_use_cache(self):
@@ -1067,10 +1067,10 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
             else:
                 self.assertTrue(
-                    output_generate.sequences.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1]
+                    output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
 
             self._check_generate_outputs(output_generate, model.config, use_cache=True)
@@ -1097,25 +1097,18 @@ class GenerationTesterMixin:
 
             # test output equality of low versus high memory
             model = model_class(config).to(torch_device).eval()
+            generate_kwargs = {
+                "top_k": 4,
+                "penalty_alpha": 0.6,
+                "max_new_tokens": self.max_new_tokens,
+                "use_cache": True,
+                "return_dict_in_generate": True,
+                "output_scores": True,
+            }
 
-            low_output = model.generate(
-                top_k=4,
-                penalty_alpha=0.6,
-                low_memory=True,
-                max_new_tokens=self.max_new_tokens,
-                **inputs_dict,
-                use_cache=True,
-            )
-
-            high_output = model.generate(
-                top_k=4,
-                penalty_alpha=0.6,
-                low_memory=False,
-                max_new_tokens=self.max_new_tokens,
-                **inputs_dict,
-                use_cache=True,
-            )
-            self.assertListEqual(low_output.tolist(), high_output.tolist())
+            low_output = model.generate(**inputs_dict, **generate_kwargs, low_memory=True)
+            high_output = model.generate(**inputs_dict, **generate_kwargs, low_memory=False)
+            self._check_similar_generate_outputs(low_output, high_output)
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
@@ -1506,7 +1499,7 @@ class GenerationTesterMixin:
                 position_ids.masked_fill_(attention_mask == 0, 1)
                 model_kwargs["position_ids"] = position_ids
             if "cache_position" in signature:
-                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
+                cache_position = torch.arange(input_ids.shape[1], device=torch_device)
                 model_kwargs["cache_position"] = cache_position
             return model_kwargs
 
@@ -1532,10 +1525,12 @@ class GenerationTesterMixin:
             pad_token_id = (
                 config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
             )
-            pad_size = (input_ids.shape[0], 32)
+            pad_size = (input_ids.shape[0], 32, *input_ids.shape[2:])
             padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
             padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
+            padded_attention_mask = torch.cat(
+                (torch.zeros(pad_size[:2], dtype=input_ids.dtype, device=torch_device), attention_mask), dim=1
+            )
             model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
@@ -1594,7 +1589,7 @@ class GenerationTesterMixin:
                         else text_config.num_attention_heads
                     )
                     encoder_per_head_embed_dim = embed_dim // encoder_num_attention_heads
-                    batch_size, seq_length = inputs["decoder_input_ids"].shape
+                    batch_size, seq_length = inputs["decoder_input_ids"].shape[:2]
                     # The sequence length for the encoder K V depends on the model. Since it is not manipulated in
                     # autoregressive generation, we're keeping the test general and not checking the 3rd dim
                     default_cross_attention_shape = (
@@ -1613,7 +1608,7 @@ class GenerationTesterMixin:
                         for _ in range(num_decoder_layers)
                     ]
                 else:
-                    batch_size, seq_length = inputs["input_ids"].shape
+                    batch_size, seq_length = inputs["input_ids"].shape[:2]
                     default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
                     all_cache_shapes = [
                         [default_self_attention_shape, default_self_attention_shape] for _ in range(num_decoder_layers)
@@ -1734,7 +1729,7 @@ class GenerationTesterMixin:
                 "min_new_tokens": 5,  # generate exactly 5 tokens
             }
             outputs_from_ids = model.generate(input_ids, **generation_kwargs, **inputs_dict)
-            self.assertEqual(outputs_from_ids.sequences.shape, (input_ids.shape[0], input_ids.shape[1] + 5))
+            self.assertEqual(outputs_from_ids.sequences.shape[:2], (input_ids.shape[0], input_ids.shape[1] + 5))
 
             # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output).
             # The output of the two calls should be the same.
@@ -1863,22 +1858,29 @@ class GenerationTesterMixin:
 
             model = model_class(config).to(torch_device)
             model.eval()
-            model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
-            model.generation_config.forced_eos_token_id = None
-            model.generation_config.encoder_no_repeat_ngram_size = 0
-            model.generation_config.use_cache = True
 
             # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs)
             if "past_key_values" not in outputs:
                 self.skipTest(reason="This model doesn't return `past_key_values`")
 
+            generate_kwargs = {
+                "pad_token_id": -1,
+                "eos_token_id": -1,
+                "forced_eos_token_id": None,
+                "encoder_no_repeat_ngram_size": 0,
+                "use_cache": True,
+                "do_sample": False,
+                "return_dict_in_generate": True,
+                "output_scores": True,
+            }
+
             # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
-            outputs = model.generate(**inputs, do_sample=False, max_new_tokens=4, return_dict_in_generate=True)
+            outputs = model.generate(**inputs, **generate_kwargs, max_new_tokens=4)
 
             # Let's generate again, but passing the past key values in between (3 + 1 = 4 tokens). Note that the
             # inputs may need to be tweaked across `generate` calls (like the attention mask).
-            outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=3, return_dict_in_generate=True)
+            outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=3)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
             inputs["past_key_values"] = outputs_cached.past_key_values
@@ -1901,10 +1903,13 @@ class GenerationTesterMixin:
                         mode="constant",
                         value=1,
                     )
-            outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=1, return_dict_in_generate=True)
+            first_caches_scores = outputs_cached.scores
+            outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=1)
+            full_cached_scores = first_caches_scores + outputs_cached.scores
+            outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self.assertListEqual(outputs.sequences.tolist(), outputs_cached.sequences.tolist())
+            self._check_similar_generate_outputs(outputs, outputs_cached)
             for layer_idx in range(len(outputs_cached.past_key_values)):
                 for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
                     self.assertTrue(
@@ -1930,6 +1935,8 @@ class GenerationTesterMixin:
 
             if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder")
+            # TODO (joao, raushan): the correct line below is `if not hasattr(config.get_text_config(), "use_cache")`,
+            # but it breaks a few models. Fix and then apply `_check_similar_generate_outputs` pattern
             if not hasattr(config, "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
@@ -1989,32 +1996,6 @@ class GenerationTesterMixin:
                             cached_output.past_key_values[layer_idx][kv_idx],
                         )
                     )
-
-    @parameterized.expand([("offloaded",)])  # ("offloaded_static",) TODO: @raushan fixme in some models (eg T5)
-    @require_torch_accelerator
-    @pytest.mark.generate
-    def test_offloaded_cache_implementation(self, cache_implementation):
-        """Tests we can generate by indicating `cache_implementation` for each possible cache class"""
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_cache_class:
-                self.skipTest(reason="This model does not support the new cache format")
-
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-
-            model = model_class(config).to(torch_device).eval()
-            generation_kwargs = {
-                "max_new_tokens": 5,
-                "use_cache": True,
-                "cache_implementation": cache_implementation,
-            }
-
-            legacy_results = model.generate(**generation_kwargs, **inputs_dict)
-
-            # Most cache classes have their own tests except for some that are tested here
-            # The ones here do not need special treatment when passing `cache_implementation`
-            # and are not bound to specific models only
-            new_results = model.generate(**generation_kwargs, **inputs_dict)
-            self.assertListEqual(legacy_results.tolist(), new_results.tolist())
 
     @pytest.mark.generate
     def test_generate_with_static_cache(self):
@@ -2196,23 +2177,27 @@ class GenerationTesterMixin:
 
             compiled_outputs = []
             # Uses a context manager to catch recompilation logs. If there is any recompilation, this test fails.
-            torch._logging.set_logs(recompiles_verbose=True)
-            logger = logging.get_logger("torch._dynamo.guards")
-            with CaptureLogger(logger) as cl:
-                for model_inputs in model_input_sets:
-                    # with torch.compiler.set_stance("fail_on_recompile"):
-                    gen_out = model.generate(**model_inputs, **generation_kwargs)
-                    compiled_outputs.append(gen_out)
-                    # sanity checks
-                    decoder_cache = (
-                        gen_out.past_key_values.self_attention_cache
-                        if config.is_encoder_decoder
-                        else gen_out.past_key_values
-                    )
-                    self.assertFalse(isinstance(decoder_cache, DynamicCache))
-                    self.assertTrue(decoder_cache.is_compileable)
-                    # our auto compile should have been called
-                    self.assertTrue(hasattr(model_to_be_compiled, "_compiled_call"))
+            # Try/Finally is used to ensure that the log options are reset even if an error is raised.
+            try:
+                torch._logging.set_logs(recompiles_verbose=True)
+                logger = logging.get_logger("torch._dynamo.guards")
+                with CaptureLogger(logger) as cl:
+                    for model_inputs in model_input_sets:
+                        # with torch.compiler.set_stance("fail_on_recompile"):
+                        gen_out = model.generate(**model_inputs, **generation_kwargs)
+                        compiled_outputs.append(gen_out)
+                        # sanity checks
+                        decoder_cache = (
+                            gen_out.past_key_values.self_attention_cache
+                            if config.is_encoder_decoder
+                            else gen_out.past_key_values
+                        )
+                        self.assertFalse(isinstance(decoder_cache, DynamicCache))
+                        self.assertTrue(decoder_cache.is_compileable)
+                        # our auto compile should have been called
+                        self.assertTrue(hasattr(model_to_be_compiled, "_compiled_call"))
+            finally:
+                torch._logging.set_logs()
 
             if "Recompiling" in cl.out or ("guard" in cl.out and "failure" in cl.out):
                 raise RuntimeError(
@@ -2245,13 +2230,15 @@ class GenerationTesterMixin:
             # BLIP is the only exception with custom generate which call `self.lm.generate()`
             # We should avoid such calls in all subsequent multimodal models and try to make `generate()`
             # compatible with multimodality
+            compile_config = CompileConfig()
+            compile_config._compile_all_devices = True
             if "blip" in model.__class__.__name__.lower():
-                model.language_model.generation_config.compile_config._compile_all_devices = True
+                model.language_model.generation_config.compile_config = compile_config
                 if not has_defined_cache_implementation:
                     model.language_model.generation_config.cache_implementation = "static"
             else:
                 # force compilation (e.g. fast CI, CPU)
-                model.generation_config.compile_config._compile_all_devices = True
+                model.generation_config.compile_config = compile_config
                 if not has_defined_cache_implementation:
                     model.generation_config.cache_implementation = "static"
 
@@ -2277,11 +2264,11 @@ class GenerationTesterMixin:
                 self.assertTrue(hasattr(model, "_compiled_call"))  # our auto compile should have been called
 
             if model.config.is_encoder_decoder:
-                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertTrue(output_generate.sequences.shape[1] == self.max_new_tokens + 1)
                 self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
             else:
                 self.assertTrue(
-                    output_generate.sequences.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1]
+                    output_generate.sequences.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1]
                 )
                 self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
@@ -2423,7 +2410,7 @@ class GenerationTesterMixin:
         config = config.text_config if hasattr(config, "text_config") else config
 
         generated_length = (
-            output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - prompt_length
+            output.sequences.shape[1] - 1 if config.is_encoder_decoder else output.sequences.shape[1] - prompt_length
         )
         decoder_past_key_values = getattr(output, "past_key_values", None)
         if config.is_encoder_decoder and isinstance(decoder_past_key_values, EncoderDecoderCache):
@@ -2456,7 +2443,7 @@ class GenerationTesterMixin:
                     batch_size=internal_batch_size,
                     attentions=output.decoder_attentions,
                     prompt_length=1,  # the BOS token
-                    output_length=output.sequences.shape[-1],
+                    output_length=output.sequences.shape[1],
                     config=config,
                     decoder_past_key_values=decoder_past_key_values,
                 )
@@ -2465,7 +2452,7 @@ class GenerationTesterMixin:
                     batch_size=internal_batch_size,
                     attentions=output.attentions,
                     prompt_length=prompt_length,
-                    output_length=output.sequences.shape[-1],
+                    output_length=output.sequences.shape[1],
                     config=config,
                     decoder_past_key_values=decoder_past_key_values,
                 )
@@ -2484,7 +2471,7 @@ class GenerationTesterMixin:
                 batch_size=internal_batch_size,
                 hidden_states=output.decoder_hidden_states,
                 prompt_length=1,  # the BOS token
-                output_length=output.sequences.shape[-1],
+                output_length=output.sequences.shape[1],
                 config=config,
                 use_cache=use_cache,
             )
@@ -2493,7 +2480,7 @@ class GenerationTesterMixin:
                 batch_size=internal_batch_size,
                 hidden_states=output.hidden_states,
                 prompt_length=prompt_length,
-                output_length=output.sequences.shape[-1],
+                output_length=output.sequences.shape[1],
                 config=config,
                 use_cache=use_cache,
             )
@@ -2506,6 +2493,7 @@ class GenerationTesterMixin:
             "bamba",
             "ctrl",
             "fsmt",
+            "granitemoehybrid",
             "gptbigcode",
             "mega",
             "reformer",
@@ -2520,7 +2508,7 @@ class GenerationTesterMixin:
         )
         if has_standard_cache:
             if use_cache:
-                cache_length = output.sequences.shape[-1] - 1
+                cache_length = output.sequences.shape[1] - 1
                 self._check_past_key_values_for_generate(
                     batch_size=internal_batch_size,
                     decoder_past_key_values=decoder_past_key_values,
@@ -4018,6 +4006,34 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @pytest.mark.generate
     @require_torch_multi_gpu
+    def test_generate_multi_gpu_causal_mask(self):
+        """
+        Tests that cache position device doesn't clash with causal mask device when we are using multi-gpus.
+        In real life happens only when multimodal encoder size is big, so `embed_tokens` gets allocated to the next device.
+        The error will be triggered whenever a bacthed input is used, so that `causal_mask` is actually prepared instead of
+        being `None`.
+        """
+        # need to split manually as auto doesn't work well with unbalanced model
+        device_map = {
+            "visual": 0,
+            "model.embed_tokens": 1,
+            "model.layers.0": 1,
+            "model.layers.1": 1,
+            "model.rotary_emb": 1,
+            "model.norm.weight": 1,
+            "lm_head": 1,
+        }
+        model = AutoModelForImageTextToText.from_pretrained(
+            "hf-internal-testing/tiny-random-Qwen2VLForConditionalGeneration", device_map=device_map
+        )
+        processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-Qwen2VLForConditionalGeneration")
+
+        text = ["Hello world", "Today I went to the supermarket to buy"]
+        inputs = processor(text=text, padding=True, return_tensors="pt").to(torch_device)
+        _ = model.generate(**inputs, max_new_tokens=20)
+
+    @pytest.mark.generate
+    @require_torch_multi_gpu
     def test_init_static_cache_multi_gpu(self):
         """
         Tests if the static cache has been set correctly when we initialize it manually in a multi-gpu setup.
@@ -4906,6 +4922,37 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # If the generate doesn't infer the DECODER device map correctly, this will fail
         _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
+
+    @require_torch_gpu
+    def test_cpu_offload_doesnt_compile(self):
+        """Test that CPU offload doesn't trigger compilation"""
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        tokenized_inputs = tokenizer(["Hello world"], return_tensors="pt")
+        generate_kwargs = {"max_new_tokens": 3, "cache_implementation": "static"}
+
+        # Sanity check: if we don't specify a device map, the model will get compiled
+        model_gpu = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        input_ids = tokenized_inputs.input_ids.to(model_gpu.device)
+        _ = model_gpu.generate(input_ids, **generate_kwargs)
+        self.assertTrue(hasattr(model_gpu, "_compiled_call"))
+
+        # If we specify a device map, the model will not be compiled
+        # (as of April 2025, compiling with CPU offload results in a crash)
+        device_map = {
+            "model.embed_tokens": 0,
+            "model.layers.0": 0,
+            "model.layers.1": "cpu",
+            "model.norm": "cpu",
+            "lm_head": 0,
+        }
+        model_cpu = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map=device_map
+        )
+        input_ids = tokenized_inputs.input_ids.to(model_cpu.device)
+        _ = model_cpu.generate(input_ids, **generate_kwargs)
+        self.assertFalse(hasattr(model_cpu, "_compiled_call"))
 
 
 @require_torch
