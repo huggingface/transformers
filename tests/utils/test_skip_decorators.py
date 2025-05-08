@@ -61,10 +61,7 @@ def check_slow_torch_cuda():
 
 def check_slow_torch_accelerator():
     run_slow = bool(os.getenv("RUN_SLOW", 0))
-    if run_slow and torch_device in ["cuda", "xpu"]:
-        assert True
-    else:
-        assert False, "should have been skipped"
+    assert run_slow and torch_device in ["cuda", "xpu"], "should have been skipped"
 
 
 @require_torch
