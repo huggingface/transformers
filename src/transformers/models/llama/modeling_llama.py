@@ -37,16 +37,14 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...masking_utils import get_causal_masks
 from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...integrations import use_kernel_forward_from_hub
+
 from .configuration_llama import LlamaConfig
 
-
-if is_torch_flex_attn_available():
-    pass
-
-from ...integrations import use_kernel_forward_from_hub
 
 
 logger = logging.get_logger(__name__)
@@ -279,7 +277,6 @@ class LlamaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: LlamaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.layer_idx = layer_idx
 
         self.self_attn = LlamaAttention(config=config, layer_idx=layer_idx)
 
@@ -305,7 +302,7 @@ class LlamaDecoderLayer(GradientCheckpointingLayer):
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=attention_mask[self.layer_idx],
+            attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
@@ -431,9 +428,7 @@ class LlamaModel(LlamaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        from ...masking_utils import get_causal_masks
-
-        causal_mask = get_causal_masks(
+        causal_masks = get_causal_masks(
             self.config,
             inputs_embeds,
             attention_mask,
@@ -450,13 +445,13 @@ class LlamaModel(LlamaPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i in range(self.config.num_hidden_layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            layer_outputs = decoder_layer(
+            layer_outputs = self.layers[i](
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_masks[i],
                 position_ids=position_ids,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,

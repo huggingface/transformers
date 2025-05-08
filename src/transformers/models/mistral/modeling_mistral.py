@@ -24,13 +24,10 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...masking_utils import get_causal_masks
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_mistral import MistralConfig
-
-
-if is_torch_flex_attn_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -221,7 +218,6 @@ class MistralDecoderLayer(GradientCheckpointingLayer):
         self.mlp = MistralMLP(config)
         self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.layer_idx = layer_idx
 
     def forward(
         self,
@@ -241,7 +237,7 @@ class MistralDecoderLayer(GradientCheckpointingLayer):
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=attention_mask[self.layer_idx],
+            attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
@@ -401,9 +397,7 @@ class MistralModel(MistralPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        from ...masking_utils import get_causal_masks
-
-        causal_mask = get_causal_masks(
+        causal_masks = get_causal_masks(
             self.config,
             inputs_embeds,
             attention_mask,
@@ -420,13 +414,13 @@ class MistralModel(MistralPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i in range(self.config.num_hidden_layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            layer_outputs = decoder_layer(
+            layer_outputs = self.layers[i](
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_masks[i],
                 position_ids=position_ids,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,

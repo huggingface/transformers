@@ -29,15 +29,13 @@ from ...generation import GenerationMixin
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
+from ...masking_utils import get_causal_masks
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_llama4 import Llama4Config, Llama4TextConfig
 
-
-if is_torch_flex_attn_available():
-    pass
 
 logger = logging.get_logger(__name__)
 
@@ -386,7 +384,6 @@ class Llama4TextDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Llama4TextAttention(config, layer_idx)
-        self.use_chunked_attention = config.attention_chunk_size is not None and bool(config.no_rope_layers[layer_idx])
         self.is_moe_layer = layer_idx in config.moe_layers
         if self.is_moe_layer:  # the 128E model interleaves dense / sparse
             self.feed_forward = Llama4TextMoe(config)
@@ -402,7 +399,6 @@ class Llama4TextDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        chunk_causal_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
@@ -415,10 +411,6 @@ class Llama4TextDecoderLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
-
-        # use local attention mask for ROPE layers
-        if self.use_chunked_attention and chunk_causal_mask is not None:
-            attention_mask = chunk_causal_mask
 
         # Self Attention
         attention_states, self_attn_weights = self.self_attn(
@@ -572,14 +564,12 @@ class Llama4TextModel(Llama4PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        from ...masking_utils import sdpa_mask
-
-        causal_mask = sdpa_mask(
+        causal_masks = get_causal_masks(
+            self.config,
+            inputs_embeds,
             attention_mask,
             cache_position,
             past_key_values,
-            input_ids.shape[0],
-            chunk_size=getattr(self.config, "attention_chunk_size", None),
         )
 
         hidden_states = inputs_embeds
@@ -591,16 +581,15 @@ class Llama4TextModel(Llama4PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i in range(self.config.num_hidden_layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    self.layers[i].__call__,
                     hidden_states,
-                    causal_mask,
-                    chunk_causal_mask,
+                    causal_masks[i],
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -610,10 +599,9 @@ class Llama4TextModel(Llama4PreTrainedModel):
                     freq_cis,
                 )
             else:
-                layer_outputs = decoder_layer(
+                layer_outputs = self.layers[i](
                     hidden_states,
-                    attention_mask=causal_mask,
-                    chunk_causal_mask=chunk_causal_mask,
+                    attention_mask=causal_masks[i],
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,

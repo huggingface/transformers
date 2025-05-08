@@ -36,15 +36,13 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...masking_utils import get_causal_masks
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_gemma2 import Gemma2Config
 
-
-if is_torch_flex_attn_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -461,9 +459,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        from ...masking_utils import get_causal_masks
-
-        causal_mask = get_causal_masks(
+        causal_masks = get_causal_masks(
             self.config,
             inputs_embeds,
             attention_mask,
@@ -487,16 +483,16 @@ class Gemma2Model(Gemma2PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i in range(self.config.num_hidden_layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    partial(decoder_layer.__call__, **flash_attn_kwargs),
+                    partial(self.layers[i].__call__, **flash_attn_kwargs),
                     hidden_states,
                     position_embeddings,
-                    causal_mask,
+                    causal_masks[i],
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -504,10 +500,10 @@ class Gemma2Model(Gemma2PreTrainedModel):
                     cache_position,
                 )
             else:
-                layer_outputs = decoder_layer(
+                layer_outputs = self.layers[i](
                     hidden_states,
                     position_embeddings=position_embeddings,
-                    attention_mask=causal_mask,
+                    attention_mask=causal_masks[i],
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
