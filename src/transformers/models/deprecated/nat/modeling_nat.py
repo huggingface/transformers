@@ -545,7 +545,7 @@ class NatEncoder(nn.Module):
         super().__init__()
         self.num_levels = len(config.depths)
         self.config = config
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
         self.levels = nn.ModuleList(
             [
                 NatStage(
@@ -948,3 +948,6 @@ class NatBackbone(NatPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["NatForImageClassification", "NatModel", "NatPreTrainedModel", "NatBackbone"]

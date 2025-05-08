@@ -471,7 +471,11 @@ class Qwen2AudioPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         # important: this ported version of Qwen2Audio isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed
-        std = self.config.init_std if hasattr(self.config, "init_std") else self.config.audio_config.init_std
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.audio_config.initializer_range
+        )
 
         if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -795,27 +799,21 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
             raise ValueError(f"{padding_side} is not `left` or `right`.")
         self._padding_side = padding_side
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_input_embeddings
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_input_embeddings
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_output_embeddings
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.language_model.set_output_embeddings(new_embeddings)
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.set_decoder
     def set_decoder(self, decoder):
         self.language_model.set_decoder(decoder)
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_decoder
     def get_decoder(self):
         return self.language_model.get_decoder()
 
@@ -928,7 +926,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                 raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
 
         # 1. Create a mask to know where special audio tokens are
-        special_audio_token_mask = input_ids == self.config.audio_token_index
+        special_audio_token_mask = input_ids == self.config.audio_token_id
         num_special_audio_tokens = torch.sum(special_audio_token_mask, dim=-1)
 
         # In case the Audio model or the Language model has been offloaded to CPU, we need to manually
@@ -938,7 +936,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         input_ids = input_ids.to(target_device)
         num_audio_tokens = num_audio_tokens.to(target_device)
         batch_indices, non_audio_indices = torch.where(
-            (input_ids != self.config.audio_token_index) & (attention_mask == 1)
+            (input_ids != self.config.audio_token_id) & (attention_mask == 1)
         )
 
         # 2. Compute the positions where text should be written
@@ -1110,7 +1108,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                 audio_features = self.multi_modal_projector(selected_audio_feature)
 
                 # if we have consecutive audio tokens, then it means we expanded input_ids in processing
-                audio_tokens = input_ids == self.config.audio_token_index
+                audio_tokens = input_ids == self.config.audio_token_id
                 legacy_processing = (audio_tokens[:, :-1] & audio_tokens[:, 1:]).sum() == 0
 
                 if legacy_processing:
@@ -1126,14 +1124,14 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                     audio_features_mask = audio_features_mask < audio_output_lengths[:, None]
                     audio_features = audio_features[audio_features_mask]
 
-                    n_audio_tokens = (input_ids == self.config.audio_token_index).sum().item()
+                    n_audio_tokens = (input_ids == self.config.audio_token_id).sum().item()
                     n_audio_features = audio_features.shape[0]
 
                     if n_audio_tokens != n_audio_features:
                         raise ValueError(
                             f"Audio features and audio tokens do not match: tokens: {n_audio_tokens}, features {n_audio_features}"
                         )
-                    special_audio_mask = (input_ids == self.config.audio_token_index).to(inputs_embeds.device)
+                    special_audio_mask = (input_ids == self.config.audio_token_id).to(inputs_embeds.device)
                     special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
                     audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
                     inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Qwen team, Alibaba Group and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,6 +34,7 @@ if is_torch_available():
 
     from transformers import (
         GotOcr2ForConditionalGeneration,
+        GotOcr2Model,
     )
 
 
@@ -141,7 +141,14 @@ class GotOcr2VisionText2TextModelTester:
 
 @require_torch
 class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (GotOcr2ForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            GotOcr2Model,
+            GotOcr2ForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {
             "image-to-text": GotOcr2ForConditionalGeneration,
@@ -229,8 +236,8 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_past_key_values_format(self):
         pass
 
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
+    @unittest.skip(reason="Vision backbone doesn't support FLEX yet!")
+    def test_flex_attention_with_grads(self):
         pass
 
 

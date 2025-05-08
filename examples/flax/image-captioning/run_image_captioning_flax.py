@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -833,8 +832,7 @@ def main():
             # No need to shuffle here
             loader = data_loader(rng, _ds, batch_size=batch_size, shuffle=False)
 
-            for batch in loader:
-                yield batch
+            yield from loader
 
     # Metric
     metric = evaluate.load("rouge", cache_dir=model_args.cache_dir)

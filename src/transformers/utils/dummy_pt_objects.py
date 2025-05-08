@@ -538,15 +538,22 @@ def convert_and_export_with_cache(*args, **kwargs):
     requires_backends(convert_and_export_with_cache, ["torch"])
 
 
-def model_addition_debugger(*args, **kwargs):
-    requires_backends(model_addition_debugger, ["torch"])
-
-
 def model_addition_debugger_context(*args, **kwargs):
     requires_backends(model_addition_debugger_context, ["torch"])
 
 
+class GradientCheckpointingLayer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 ROPE_INIT_FUNCTIONS = None
+
+
+def dynamic_rope_update(*args, **kwargs):
+    requires_backends(dynamic_rope_update, ["torch"])
 
 
 class AttentionInterface(metaclass=DummyObject):

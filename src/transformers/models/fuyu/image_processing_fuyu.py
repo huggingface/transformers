@@ -537,7 +537,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         }
         return FuyuBatchFeature(data=data, tensor_type=return_tensors)
 
-    def get_num_patches(self, image_height: int, image_width: int, patch_size: Dict[str, int] = None) -> int:
+    def get_num_patches(self, image_height: int, image_width: int, patch_size: Optional[Dict[str, int]] = None) -> int:
         """
         Calculate number of patches required to encode an image.
 

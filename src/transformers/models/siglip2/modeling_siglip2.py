@@ -32,6 +32,7 @@ from torch.nn.init import _calculate_fan_in_and_fan_out
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
@@ -356,7 +357,7 @@ class Siglip2MLP(nn.Module):
         return hidden_states
 
 
-class Siglip2EncoderLayer(nn.Module):
+class Siglip2EncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Union[Siglip2VisionConfig, Siglip2TextConfig]):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -462,19 +463,12 @@ class Siglip2Encoder(nn.Module):
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions=output_attentions,
-                )
+
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -999,7 +993,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
         self.mlp = Siglip2MLP(config)
         self.num_heads = config.num_attention_heads
 
-    def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
+    def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size = hidden_state.shape[0]
         probe = self.probe.repeat(batch_size, 1, 1)
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -220,9 +219,10 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else {}
     )
     is_encoder_decoder = False
-    fx_compatible = True
+    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     test_pruning = False
     test_missing_keys = False
+    test_head_masking = False  # new attn API doesn't support head mask
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -413,7 +413,6 @@ class OPTEmbeddingsTest(unittest.TestCase):
         # verify that prompt without BOS token is identical to Metaseq -> add_special_tokens=False
         inputs = tokenizer(prompts, return_tensors="pt", padding=True, add_special_tokens=False)
         logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(dim=-1)
-        # logits_meta = torch.load(self.path_logits_meta)
         logits_meta = torch.Tensor(
             [
                 [1.3851, -13.8923, -10.5229, -10.7533, -0.2309, -10.2384, -0.5365, -9.0947, -5.1670],

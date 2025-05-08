@@ -326,7 +326,7 @@ class TFMistralAttention(keras.layers.Layer):
         )
 
         if past_key_value is not None:
-            # resue k, v, self_attention
+            # reuse k, v, self_attention
             key_states = tf.concat([past_key_value[0], key_states], axis=2)
             value_states = tf.concat([past_key_value[1], value_states], axis=2)
 
@@ -1041,3 +1041,6 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
         if getattr(self, "score", None) is not None:
             with tf.name_scope(self.score.name):
                 self.score.build((self.config.hidden_size,))
+
+
+__all__ = ["TFMistralModel", "TFMistralForCausalLM", "TFMistralForSequenceClassification", "TFMistralPreTrainedModel"]

@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch OPT model."""
 
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -22,23 +22,26 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
-from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_flash_attention_utils import FlashAttentionKwargs, is_flash_attn_available
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutputWithPast,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    LossKwargs,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
@@ -53,7 +56,7 @@ if is_torch_flex_attn_available():
 
 
 if is_flash_attn_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -96,6 +99,30 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
             position_ids = position_ids[:, past_key_values_length:]
 
         return super().forward(position_ids + self.offset)
+
+
+# Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 class OPTAttention(nn.Module):
@@ -143,9 +170,8 @@ class OPTAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        # isn't needed in normal attention, but needed in flash attention so to keep the signature same
-        position_ids: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
         """Input shape: Batch x Time x Channel"""
         bsz, tgt_len, _ = hidden_states.size()
@@ -165,206 +191,35 @@ class OPTAttention(nn.Module):
                 key_states, value_states, self.layer_idx, {"cache_position": cache_position}
             )
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(3, 2))
-        if attention_mask is not None:
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            attn_weights = attn_weights + causal_mask
+        attention_interface: Callable = eager_attention_forward
 
-        # upcast to fp32 if the weights are in fp16. Please see https://github.com/huggingface/transformers/pull/17437
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.matmul(attn_probs, value_states)
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-
-        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned aross GPUs when using tensor-parallelism.
-        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_probs, past_key_value
-
-
-class OptFlashAttention2(OPTAttention):
-    """
-    OPT flash attention module. This module inherits from `OPTAttention` as the weights of the module stays untouched.
-    The only required change would be on the forward pass where it needs to correctly call the public API of flash
-    attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        position_ids: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
-
-        bsz, query_length, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        query_states = query_states.view(bsz, -1, self.num_heads, self.head_dim)
-
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-
-        if past_key_value is not None:
-            # save all key/value_states to cache to be re-used for fast auto-regressive generation
-            key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-            )
-
-        attn_dropout = self.dropout if self.training else 0.0
-
-        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
-        # to be able to avoid many of these transpose/reshape/view.
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in float16 just to be sure everything works as expected.
-        input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
             else:
-                target_dtype = self.q_proj.weight.dtype
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        attn_output = _flash_attention_forward(
+        attn_output, attn_weights = attention_interface(
+            self,
             query_states,
             key_states,
             value_states,
             attention_mask,
-            query_length,
-            position_ids=position_ids,
-            dropout=attn_dropout,
-            is_causal=self.is_causal,
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            **kwargs,
         )
 
-        attn_weights_reshaped = attn_output.reshape(bsz, query_length, self.num_heads * self.head_dim)
-        attn_output = self.out_proj(attn_weights_reshaped)
-
-        if not output_attentions:
-            attn_weights_reshaped = None
-
-        return attn_output, attn_weights_reshaped, past_key_value
-
-
-class OPTSdpaAttention(OPTAttention):
-    """
-    OPT sdpa attention module. This module inherits from `OPTAttention` as the weights of the module stays untouched.
-    The only required change would be on the forward pass where it needs to correctly call the public API of sdpa
-    attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        position_ids: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if output_attentions or layer_head_mask is not None:
-            logger.warning_once(
-                "OPTModel is using SDPA attention, which currently does not support output_attentions=True."
-                'failing back to eager attention. remove warning using attn_implementation="eager".'
-            )
-
-            return super().forward(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                layer_head_mask=layer_head_mask,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                cache_position=cache_position,
-            )
-
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        query_states = query_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-
-        if past_key_value is not None:
-            # save all key/value_states to cache to be re-used for fast auto-regressive generation
-            key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-            )
-
-        causal_mask = attention_mask
-        if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
-
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = True if causal_mask is None and q_len > 1 else False
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=causal_mask,
-            dropout_p=self.dropout if self.training else 0.0,
-            is_causal=is_causal,
-        )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, -1)
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, None, past_key_value
+        if not output_attentions:
+            attn_weights = None
 
-
-OPT_ATTENTION_CLASSES = {
-    "eager": OPTAttention,
-    "flash_attention_2": OptFlashAttention2,
-    "sdpa": OPTSdpaAttention,
-}
+        return attn_output, attn_weights, past_key_value
 
 
 class OPTDecoderLayer(nn.Module):
@@ -372,7 +227,7 @@ class OPTDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
 
-        self.self_attn = OPT_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = OPTAttention(config=config, layer_idx=layer_idx)
 
         self.do_layer_norm_before = config.do_layer_norm_before
         self.dropout = config.dropout
@@ -395,6 +250,7 @@ class OPTDecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -429,6 +285,7 @@ class OPTDecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
             cache_position=cache_position,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -495,8 +352,10 @@ class OPTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OPTDecoderLayer"]
+    _supports_attention_backend = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_flex_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
@@ -511,6 +370,9 @@ class OPTPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
 
 OPT_INPUTS_DOCSTRING = r"""
@@ -638,7 +500,7 @@ class OPTDecoder(OPTPreTrainedModel):
     # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
@@ -651,17 +513,16 @@ class OPTDecoder(OPTPreTrainedModel):
         if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
-            if isinstance(attention_mask, BlockMask):
-                return attention_mask
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_static_cache = isinstance(past_key_values, StaticCache)
+        using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -670,9 +531,9 @@ class OPTDecoder(OPTPreTrainedModel):
             ):
                 return None
 
-        dtype, device = input_tensor.dtype, input_tensor.device
+        dtype = input_tensor.dtype
         sequence_length = input_tensor.shape[1]
-        if using_static_cache:
+        if using_compilable_cache:
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
@@ -687,7 +548,6 @@ class OPTDecoder(OPTPreTrainedModel):
             sequence_length=sequence_length,
             target_length=target_length,
             dtype=dtype,
-            device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
@@ -695,7 +555,7 @@ class OPTDecoder(OPTPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -713,7 +573,6 @@ class OPTDecoder(OPTPreTrainedModel):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         **kwargs,
@@ -733,8 +592,6 @@ class OPTDecoder(OPTPreTrainedModel):
                 to account for the 0 padding, the part of the cache that is not filled yet.
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -746,11 +603,11 @@ class OPTDecoder(OPTPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
@@ -765,6 +622,7 @@ class OPTDecoder(OPTPreTrainedModel):
 
         return causal_mask
 
+    @can_return_tuple
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -778,6 +636,7 @@ class OPTDecoder(OPTPreTrainedModel):
         return_dict: Optional[bool] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         r"""
         Args:
@@ -944,6 +803,7 @@ class OPTDecoder(OPTPreTrainedModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
+                    **kwargs,
                 )
 
             hidden_states = layer_outputs[0]
@@ -968,8 +828,6 @@ class OPTDecoder(OPTPreTrainedModel):
         if return_legacy_cache:
             next_cache = next_cache.to_legacy_cache()
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -998,6 +856,7 @@ class OPTModel(OPTPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(OPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1010,7 +869,7 @@ class OPTModel(OPTPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1018,6 +877,7 @@ class OPTModel(OPTPreTrainedModel):
         return_dict: Optional[bool] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1037,12 +897,10 @@ class OPTModel(OPTPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
+            **kwargs,
         )
-
-        if not return_dict:
-            return decoder_outputs
 
         return BaseModelOutputWithPast(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1050,6 +908,9 @@ class OPTModel(OPTPreTrainedModel):
             hidden_states=decoder_outputs.hidden_states,
             attentions=decoder_outputs.attentions,
         )
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
@@ -1083,13 +944,14 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model.decoder
 
+    @can_return_tuple
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1098,7 +960,7 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1200,8 +1062,9 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
+            **kwargs,
         )
 
         logits = self.lm_head(outputs[0]).contiguous()
@@ -1216,10 +1079,6 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1277,7 +1136,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1396,7 +1255,7 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,

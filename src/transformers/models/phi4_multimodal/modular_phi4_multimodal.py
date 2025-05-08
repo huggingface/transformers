@@ -40,7 +40,14 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..phi3.configuration_phi3 import Phi3Config
-from ..phi3.modeling_phi3 import Phi3DecoderLayer, Phi3ForCausalLM, Phi3Model, Phi3RMSNorm
+from ..phi3.modeling_phi3 import (
+    Phi3DecoderLayer,
+    Phi3ForCausalLM,
+    Phi3Model,
+    Phi3PreTrainedModel,
+    Phi3RMSNorm,
+    Phi3RotaryEmbedding,
+)
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
     SiglipEncoder,
@@ -1133,6 +1140,9 @@ class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, Phi4MultimodalAudioGluPointWiseConv):
+            module.b1.data.zero_()
+            module.b2.data.zero_()
 
 
 class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
@@ -1176,7 +1186,7 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
         seq_len = math.ceil(hidden_states.shape[1] / self.config.time_reduction)
         if seq_len <= 0:
             raise ValueError(
-                f"The squence length after time reduction is invalid: {seq_len}. Your input feature is too short."
+                f"The sequence length after time reduction is invalid: {seq_len}. Your input feature is too short."
             )
 
         batch_size = hidden_states.shape[0]
@@ -1221,7 +1231,7 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
 
         unfolded = False
         bs, seq_len, _ = hidden_states.shape
-        max_seq_len = 500  # maxium position for absolute positional encoding
+        max_seq_len = 500  # maximum position for absolute positional encoding
         if seq_len > max_seq_len:
             # audio sequence is longer than max_seq_len, unfold it into chunks of max_seq_len
             unfolded = True
@@ -1255,14 +1265,7 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
         attention_mask = hs_mask.unsqueeze(1) + relative_attention_bias
 
         for layer in self.encoders:
-            if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                )
-            else:
-                hidden_states = layer(hidden_states, attention_mask)
+            hidden_states = layer(hidden_states, attention_mask)
 
         if unfolded:
             embed_dim = hidden_states.shape[-1]
@@ -1519,6 +1522,28 @@ PHI4_MULTIMODAL_MODEL_INPUTS_DOCSTRING = r"""
 """
 
 
+class Phi4MultimodalRotaryEmbedding(Phi3RotaryEmbedding):
+    pass
+
+
+class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Phi4MultimodalRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, Phi4MultimodalImageEmbedding):
+            module.global_img_feature_extensor.data.zero_()
+            module.sub_img_feature_extensor.data.zero_()
+
+
 class Phi4MultimodalModel(Phi3Model, nn.Module):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Phi4MultimodalMMDecoderLayer`]
@@ -1623,30 +1648,17 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                    **kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1829,7 +1841,7 @@ __all__ = [
     "Phi4MultimodalAudioModel",
     "Phi4MultimodalVisionPreTrainedModel",
     "Phi4MultimodalVisionModel",
-    "Phi4MultimodalPreTrainedModel",  # noqa
+    "Phi4MultimodalPreTrainedModel",
     "Phi4MultimodalModel",
     "Phi4MultimodalForCausalLM",
     "Phi4MultimodalVisionConfig",
