@@ -20,9 +20,7 @@ conversation = [
     }
 ]
 
-print(model.config)
-
-
+# print(model.config)
 inputs = processor.apply_chat_template(
     conversation,
     add_generation_prompt=True,
@@ -40,6 +38,6 @@ generate_ids = model.generate(**inputs, max_new_tokens=256)
 input_length = inputs["input_ids"].shape[1]
 generate_ids_without_inputs = generate_ids[:, input_length:]
 
-print(generate_ids_without_inputs.cpu().numpy().tolist())
+# print(generate_ids_without_inputs.cpu().numpy().tolist())
 for output in processor.batch_decode(generate_ids_without_inputs, skip_special_tokens=True):
     print(output)
