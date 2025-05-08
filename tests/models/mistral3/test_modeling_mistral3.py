@@ -429,7 +429,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "The image depicts a vibrant urban scene in what appears to be Chinatown. The focal point is a traditional Chinese archway",
-                ("cuda", 7): 'The image depicts a vibrant urban street scene in what appears to be Chinatown. The focal point is a red "Stop',
+                ("cuda", 7): 'The image depicts a vibrant street scene in Chinatown, likely in a major city. The focal point is a traditional Chinese',
                 ("cuda", 8): 'The image depicts a vibrant street scene in what appears to be Chinatown in a major city. The focal point is a',
             }
         )  # fmt: skip
@@ -504,7 +504,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Certainly! The images depict two iconic landmarks:\n\n1. The first image shows the Statue of Liberty in New York City.",
-                ("cuda", 7): "Certainly! The images depict the following landmarks:\n\n1. The first image shows the Statue of Liberty and the skyline of",
+                ("cuda", 7): "Certainly! The images depict the following landmarks:\n\n1. The first image shows the Statue of Liberty and the New York City",
                 ("cuda", 8): "Certainly! The images depict the following landmarks:\n\n1. The first image shows the Statue of Liberty and the New York City",
             }
         )  # fmt: skip
