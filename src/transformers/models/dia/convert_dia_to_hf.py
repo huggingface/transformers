@@ -22,7 +22,7 @@ import torch
 from huggingface_hub import snapshot_download
 from safetensors.torch import load_file
 
-from transformers import DiaConfig, DiaModel, DiaProcessor, DacFeatureExtractor, DiaTokenizer
+from transformers import DacFeatureExtractor, DiaConfig, DiaModel, DiaProcessor, DiaTokenizer
 from transformers.utils.import_utils import _is_package_available
 
 
@@ -65,10 +65,10 @@ def reshape_or_transpose(tensor, target_tensor, key):
         elif "cross_attention" in key:
             reshaped = tensor.reshape(target_shape[1], target_shape[0]).T
         elif tensor.shape[0] != target_shape[0] and tensor.shape[-1] != target_shape[-1]:
-            reshaped = tensor.permute(1,2,0).view(target_shape)
+            reshaped = tensor.permute(1, 2, 0).view(target_shape)
         else:
             reshaped = tensor.view(target_shape)
-        
+
         return reshaped, "reshaped"
     except Exception:
         pass
@@ -165,7 +165,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(e)
         else:
-            processor = DiaProcessor( DacFeatureExtractor(), DiaTokenizer())
+            processor = DiaProcessor(DacFeatureExtractor(), DiaTokenizer())
             processor.save_pretrained(args.pytorch_dump_folder_path)
 
     model.save_pretrained("ArthurZ/Dia-1.6B")

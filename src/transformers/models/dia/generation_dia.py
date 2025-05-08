@@ -14,15 +14,25 @@
 # limitations under the License.
 
 import time
+
 import numpy as np
 import torch
 
+from ...cache_utils import DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...cache_utils import EncoderDecoderCache, DynamicCache
 from ...utils import logging
+from .processing_dia import build_revert_indices, revert_audio_delay
 
-from .processing_dia import build_delay_indices, build_revert_indices, revert_audio_delay
+
 logger = logging.get_logger(__name__)
+
+"""
+tensor([[568, 232, 852, 626, 467, 403, 667, 855, 411],
+        [568, 232, 852, 626, 920, 115, 667, 855, 411]], device='cuda:0')
+pred_BxC
+tensor([[ 568,  151,  208,  289,  671,  266, 1024,  186,  651],
+        [ 568,  778,  208,  289,   80,  266, 1024,  186,  328]],
+"""
 
 
 @torch.no_grad()
@@ -45,7 +55,6 @@ def decode(
         except Exception as e:
             print(f"Error in decode method: {str(e)}")
             raise
-
 
 
 def _sample_next_token(
@@ -83,11 +92,12 @@ def _sample_next_token(
     sampled_indices_C = sampled_indices_BC.squeeze(-1)
     return sampled_indices_C
 
-class DiaGenerationMixin(GenerationMixin):
 
+class DiaGenerationMixin(GenerationMixin):
     def _load_dac_model(self):
         try:
             import dac
+
             dac_model_path = dac.utils.download()
             dac_model = dac.DAC.load(dac_model_path).to(self.device)
         except Exception as e:
@@ -133,54 +143,54 @@ class DiaGenerationMixin(GenerationMixin):
                 print("generate: by using use_torch_compile=True, the first step would take long")
             start_time = time.time()
 
-        dec_step = len(input_ids)
+        dec_step = 0
         cache_position = None
+        audio_codes = None
         generated_codes = []
-        cache = EncoderDecoderCache(DynamicCache(),DynamicCache())
+        cache = EncoderDecoderCache(DynamicCache(), DynamicCache())
         while dec_step < max_tokens:
+            decoder_outputs = self(
+                input_ids=input_ids,
+                audio_codes=audio_codes,
+                attention_mask=attention_mask,
+                past_key_values=cache,
+                cache_position=cache_position,
+                input_audio_codes=audio_prompt,
+            )[0]
+            logits = decoder_outputs.view(-1, 2, *decoder_outputs.shape[1:])
 
-            decoder_outputs = self(input_ids=input_ids, attention_mask=attention_mask, past_key_values=cache,cache_position=cache_position, input_audio_codes=audio_prompt)[0]
-            uncond_logits_CxV, cond_logits_CxV = torch.split(decoder_outputs, 2, 0)
-
-            logits_CxV = cond_logits_CxV + cfg_scale * (cond_logits_CxV - uncond_logits_CxV)
-            logits_CxV[:, audio_eos_value + 1 :] = -torch.inf
-            logits_CxV[1:, audio_eos_value:] = -torch.inf
+            uncond_logits_BxCxV = logits[:, 0, :]  # Shape [B, C, V]
+            cond_logits_BxCxV = logits[:, 1, :]  # Shape [B, C, V]
+            logits_CxV = cond_logits_BxCxV + cfg_scale * (cond_logits_BxCxV - uncond_logits_BxCxV)
+            logits_CxV = logits_CxV.view(-1, logits_CxV.shape[-1])  # Shape [B, C, V]
+            # logits_CxV[:, audio_eos_value + 1 :] = -torch.inf
+            # logits_CxV[1:, audio_eos_value:] = -torch.inf
 
             pred_C = _sample_next_token(
-                logits_CxV,
+                logits_CxV.float().clone(),
                 temperature=0,
                 top_p=top_p,
                 cfg_filter_top_k=cfg_filter_top_k,
-            ).clone()
-            if not eos_detected and all(pred_C[:,0] == audio_eos_value) or dec_step == max_tokens - max_delay_pattern - 1:
-                eos_detected = True
-                eos_countdown = max_delay_pattern
+            )
+            pred_C = pred_C.view(-1, 9)
 
-            if eos_countdown > 0:
-                step_after_eos = max_delay_pattern - eos_countdown
-                for i, d in enumerate(delay_pattern):
-                    if step_after_eos == d:
-                        pred_C[:, i] = audio_eos_value
-                    elif step_after_eos > d:
-                        pred_C[:,i] = audio_pad_value
-                eos_countdown -= 1
-
-            bos_countdown = max(0, bos_countdown - 1)
-            generated_codes += [pred_C.clone()]
-            input_ids = pred_C
+            if dec_step < 9:
+                audio_codes = pred_C[:, :1].clone()
+            else:
+                audio_codes = pred_C.clone()
+            generated_codes += [audio_codes]
             cache_position = torch.tensor([dec_step + 1], device=input_ids.device).unsqueeze(0)
 
             if eos_countdown == 0:
                 break
 
             dec_step += 1
+            if dec_step == 2:
+                break
 
-        # sanity : 
+        # sanity :
 
         return self._generate_output(generated_codes)
-
-
-
 
     def _generate_output(self, generated_codes: torch.Tensor) -> np.ndarray:
         num_channels = self.config.decoder_config.num_channels
