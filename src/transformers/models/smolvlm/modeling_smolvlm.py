@@ -722,18 +722,6 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         image_hidden_states = self.connector(image_hidden_states)
         return image_hidden_states
 
-    @add_start_docstrings_to_model_forward(
-        """
-        Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
-        the model have image padding -> (batch_size, max_num_images, 3, max_heights, max_widths) where
-        max_num_images is the maximum number of images among the batch_size samples in the batch.
-        Padding images are not needed beyond padding the pixel_values at the entrance of the model.
-        For efficiency, we only pass through the vision_model's forward the real images by
-        discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
-        image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
-        """,
-        SMOLVLM_INPUTS_DOCSTRING,
-    )
     @can_return_tuple
     def forward(
         self,
