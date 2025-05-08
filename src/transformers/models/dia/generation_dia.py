@@ -18,6 +18,7 @@ import numpy as np
 import torch
 
 from ...generation import GenerationMixin
+from ...cache_utils import EncoderDecoderCache, DynamicCache
 from ...utils import logging
 
 from .processing_dia import build_delay_indices, build_revert_indices, revert_audio_delay
@@ -135,8 +136,10 @@ class DiaGenerationMixin(GenerationMixin):
         dec_step = len(input_ids)
         cache_position = None
         generated_codes = []
+        cache = EncoderDecoderCache(DynamicCache(),DynamicCache())
         while dec_step < max_tokens:
-            decoder_outputs = self(input_ids=input_ids, attention_mask=attention_mask, cache_position=cache_position, input_audio_codes=audio_prompt)[0]
+
+            decoder_outputs = self(input_ids=input_ids, attention_mask=attention_mask, past_key_values=cache,cache_position=cache_position, input_audio_codes=audio_prompt)[0]
             uncond_logits_CxV, cond_logits_CxV = torch.split(decoder_outputs, 2, 0)
 
             logits_CxV = cond_logits_CxV + cfg_scale * (cond_logits_CxV - uncond_logits_CxV)

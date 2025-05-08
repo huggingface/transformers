@@ -138,7 +138,7 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
         hidden_states: torch.Tensor,
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
@@ -152,9 +152,9 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
         query_states = apply_rotary_pos_emb(query_states, position_embeddings, -2).transpose(1, 2)
         key_states = apply_rotary_pos_emb(key_states, position_embeddings, -2).transpose(1, 2)
 
-        if past_key_value is not None:
-            key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, cache_position=cache_position
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(
+                key_states, value_states, self.layer_idx, {"cache_positions":cache_position}
             )
 
         attention_interface: Callable = eager_attention_forward
@@ -204,14 +204,12 @@ class DiaCrossAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cross_attention_states: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
-        cross_position_embeddings: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        use_cache: Optional[bool] = None,
+        cross_attention_states: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Cache] = None,
+        output_attentions: bool = False,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -227,13 +225,13 @@ class DiaCrossAttention(nn.Module):
             key_states = self.k_proj(cross_attention_states).view(cross_shape)
             value_states = self.v_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
             key_states = apply_rotary_pos_emb(key_states, position_embeddings, -2).transpose(1, 2)
-            if past_key_value is not None:
-                key_states, value_states = past_key_value.update(
-                    key_states, value_states, self.layer_idx, cache_position=cache_position
+            if past_key_values is not None:
+                key_states, value_states = past_key_values.update(
+                    key_states, value_states, self.layer_idx, {"cache_positions":cache_position}
                 )
         else:  # not prefill, make it compile compatible
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
+            key_states = past_key_values.key_cache[self.layer_idx]
+            value_states = past_key_values.value_cache[self.layer_idx]
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -268,7 +266,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -427,24 +425,19 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-
-        # Cross-Attention Block
-        cross_attn_weights = None
-        if encoder_hidden_states is not None:
-            residual = hidden_states
-            hidden_states = self.pre_ca_norm(hidden_states)
-            hidden_states, cross_attn_weights = self.cross_attention(
-                hidden_states=hidden_states,
-                cross_attention_states=encoder_hidden_states,
-                position_embeddings=position_embeddings,
-                cross_position_embeddings=cross_position_embeddings,
-                attention_mask=attention_mask,
-                cache_position=cache_position,
-                past_key_values=past_key_values.cross_attention_cache,
-                output_attentions=output_attentions,
-            )
-            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-            hidden_states = residual + hidden_states
+        hidden_states = self.pre_ca_norm(hidden_states)
+        hidden_states, cross_attn_weights = self.cross_attention(
+            hidden_states=hidden_states,
+            cross_attention_states=encoder_hidden_states,
+            position_embeddings=position_embeddings,
+            cross_position_embeddings=cross_position_embeddings,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values.cross_attention_cache,
+            output_attentions=output_attentions,
+        )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
 
         residual = hidden_states
         x_norm = self.pre_mlp_norm(hidden_states)
@@ -503,6 +496,7 @@ class DiaDecoder(DiaPreTrainedModel):
             cross_position_embeddings = self.rotary_embeddings(encoder_hidden_states, cache_position)
         else:
             cross_position_embeddings = None
+
         hidden_states = self.embeddings(audio_codes)
         cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)[None, :]
         position_embeddings = self.rotary_embeddings(hidden_states, cache_position)
