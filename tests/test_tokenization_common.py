@@ -629,18 +629,18 @@ class TokenizerTesterMixin:
             self.skipTest(reason="test_rust_tokenizer is set to False")
 
         dataset = load_dataset("hf-internal-testing/tokenization_test_data", split="train")
-        class_rows = [row for row in dataset if row["TestClass"] == self.__class__.__name__]
+        test_cases = [row for row in dataset if row["TestClass"] == self.__class__.__name__]
 
-        if not class_rows:
+        if not test_cases:
             self.skipTest(reason="No test data available")
 
-        for row in class_rows:
-            expected_tokens = row["tokens"]
-            expected_ids = row["encoded"]
-            expected_special = row["encoded_special"]
-            params = {k: v for k, v in row["params"].items() if v is not None}
-            params_encode = {k: v for k, v in row["params_encode"].items() if v is not None}
-            sequence = params_encode.pop("text", row["sequence"])
+        for test_case in test_cases:
+            expected_tokens = test_case["tokens"]
+            expected_ids = test_case["encoded"]
+            expected_special = test_case["encoded_special"]
+            params = {k: v for k, v in test_case["params"].items() if v is not None}
+            params_encode = {k: v for k, v in test_case["params_encode"].items() if v is not None}
+            sequence = params_encode.pop("text", test_case["sequence"])
 
             rust_tokenizer = self.get_rust_tokenizer(**params)
 
