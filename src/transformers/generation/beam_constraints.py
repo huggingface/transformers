@@ -522,3 +522,116 @@ class ConstraintListState:
             new_state.pending_constraints = [constraint.copy() for constraint in self.pending_constraints]
 
         return new_state
+
+
+class TemplateConstraint(Constraint):
+    r"""
+    [`Constraint`] enforcing that a sequence of tokens follows a specific template.
+
+    Args:
+        template (`List[Optional[int]]`):
+            A list representing the template of token IDs that must be followed. `None` values in the list represent
+            positions where any token is allowed.
+    """
+
+    def __init__(self, template: List[Optional[int]]):
+        self.template = template
+        self.seqlen = len(template)
+        self.position = 0
+        self.completed = False
+        super().__init__()
+        self.reset()
+
+    def advance(self):
+        if self.completed:
+            return []
+        if self.template[self.position] is None:
+            return None
+        else:
+            return self.template[self.position]
+
+    def does_advance(self, token_id: int):
+        if self.completed:
+            return False
+        expected = self.template[self.position]
+        return expected is None or expected == token_id
+
+    def update(self, token_id: int):
+        if not self.does_advance(token_id):
+            self.reset()
+            return False, False, True
+        self.position += 1
+        self.completed = self.position == self.seqlen
+        return True, self.completed, False
+
+    def reset(self):
+        self.position = 0
+        self.completed = False
+
+    def remaining(self):
+        return self.seqlen - self.position
+
+    def copy(self, stateful=False):
+        new = TemplateConstraint(self.template)
+        if stateful:
+            new.position = self.position
+            new.completed = self.completed
+        return new
+
+
+class OrderedConstraint(Constraint):
+    r"""
+    [`Constraint`] enforcing that tokens are generated in a specific order.
+
+    Args:
+        ordered_token_ids (`List[int]`):
+            A list of token IDs that must be generated in the specified order.
+    """
+
+    def __init__(self, ordered_token_ids: List[int]):
+        self.ordered_token_ids = ordered_token_ids
+        self.position = 0
+        self.completed = False
+        self.seqlen = len(ordered_token_ids)
+        super().__init__()
+        self.reset()
+
+    def advance(self):
+        if self.completed:
+            return []
+        if self.position >= len(self.ordered_token_ids):
+            self.completed = True
+            return []
+        return self.ordered_token_ids[self.position]
+
+    def does_advance(self, token_id: int):
+        if self.completed:
+            return False
+        expected = self.ordered_token_ids[self.position]
+        return expected is None or expected == token_id
+
+    def update(self, token_id: int):
+        if self.completed:
+            return False, True, False
+        expected = self.ordered_token_ids[self.position]
+        if expected is None or expected == token_id:
+            self.position += 1
+            if self.position >= len(self.ordered_token_ids):
+                self.completed = True
+            return True, self.completed, False
+        else:
+            return False, self.completed, False
+
+    def reset(self):
+        self.position = 0
+        self.completed = False
+
+    def remaining(self):
+        return len(self.ordered_token_ids) - self.position
+
+    def copy(self, stateful=False):
+        new_constraint = OrderedConstraint(self.ordered_token_ids)
+        if stateful:
+            new_constraint.position = self.position
+            new_constraint.completed = self.completed
+        return new_constraint
