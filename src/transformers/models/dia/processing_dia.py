@@ -182,7 +182,6 @@ def revert_audio_delay(
     pad_tensor = torch.tensor(pad_value, dtype=audio_BxTxC.dtype, device=device)
     # Create T tensor on the correct device for comparison
     T_tensor = torch.tensor(T, device=device)
-
     result_BxTxC = torch.where(t_idx_BxTxC >= T_tensor, pad_tensor, gathered_BxTxC)  # Changed np.where to torch.where
 
     return result_BxTxC

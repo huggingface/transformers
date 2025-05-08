@@ -194,7 +194,7 @@ class DiaCrossAttention(nn.Module):
         self.hidden_size = config.hidden_size
         self.head_dim = config.cross_head_dim
         self.layer_idx = layer_idx
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = 1
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.hidden_size, bias=False)
         self.v_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.hidden_size, bias=False)
@@ -208,6 +208,7 @@ class DiaCrossAttention(nn.Module):
         cross_attention_states: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[torch.Tensor] = None,
+        cross_position_embeddings: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -218,13 +219,13 @@ class DiaCrossAttention(nn.Module):
         query_states = self.q_proj(hidden_states).view(hidden_shape)
 
 
-        query_states = apply_rotary_pos_emb(query_states, position_embeddings, -2).transpose(1, 2)
+        query_states = apply_rotary_pos_emb(query_states, position_embeddings).transpose(1, 2)
         
         if cross_attention_states is not None:
             cross_shape = (*cross_attention_states.shape[:-1], -1, self.head_dim)
             key_states = self.k_proj(cross_attention_states).view(cross_shape)
             value_states = self.v_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
-            key_states = apply_rotary_pos_emb(key_states, position_embeddings, -2).transpose(1, 2)
+            key_states = apply_rotary_pos_emb(key_states, cross_position_embeddings).transpose(1, 2)
             if past_key_values is not None:
                 key_states, value_states = past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_positions":cache_position}

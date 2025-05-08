@@ -34,17 +34,17 @@ def decode(
     """
     Decodes the given frames into an output audio waveform
     """
-    if len(audio_codes) != 1:
-        raise ValueError(f"Expected one frame, got {len(audio_codes)}")
+    for i, audio_code in enumerate(audio_codes):
+        try:
+            audio_values = model.quantizer.from_codes(audio_code.unsqueeze(0).clone())
+            audio_values = model.decode(audio_values[0])
+            import soundfile as sf
 
-    try:
-        audio_values = model.quantizer.from_codes(audio_codes)
-        audio_values = model.decode(audio_values[0])
-
-        return audio_values
-    except Exception as e:
-        print(f"Error in decode method: {str(e)}")
-        raise
+            sf.write(f"output_{time.time()}.wav", audio_values.cpu().numpy()[0], 44100)
+            return audio_values
+        except Exception as e:
+            print(f"Error in decode method: {str(e)}")
+            raise
 
 
 
@@ -166,7 +166,7 @@ class DiaGenerationMixin(GenerationMixin):
                 eos_countdown -= 1
 
             bos_countdown = max(0, bos_countdown - 1)
-            generated_codes += [pred_C]
+            generated_codes += [pred_C.clone()]
             input_ids = pred_C
             cache_position = torch.tensor([dec_step + 1], device=input_ids.device).unsqueeze(0)
 
@@ -184,20 +184,21 @@ class DiaGenerationMixin(GenerationMixin):
 
     def _generate_output(self, generated_codes: torch.Tensor) -> np.ndarray:
         num_channels = self.config.decoder_config.num_channels
-        seq_length = generated_codes.shape[0]
+        generated_codes = torch.stack(generated_codes, dim=0).transpose(1, 0)
+        seq_length = generated_codes.shape[1]
         delay_pattern = self.config.delay_pattern
         audio_pad_value = self.config.pad_token_id
         max_delay_pattern = max(delay_pattern)
 
         revert_precomp = build_revert_indices(
-            B=generated_codes.shape[1],
+            B=generated_codes.shape[0],
             T=seq_length,
             C=num_channels,
             delay_pattern=delay_pattern,
         )
 
         codebook = revert_audio_delay(
-            audio_BxTxC=generated_codes.unsqueeze(0),
+            audio_BxTxC=generated_codes,
             pad_value=audio_pad_value,
             precomp=revert_precomp,
             T=seq_length,
