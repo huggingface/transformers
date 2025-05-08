@@ -258,7 +258,7 @@ class Blip2VisionEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
+# Adapted from transformers.models.siglip.modeling_siglip.eager_attention_forward -> BLIP doesn't cast attn weights to fp32
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -273,7 +273,7 @@ def eager_attention_forward(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
