@@ -558,7 +558,11 @@ class _BaseAutoModelClass:
             else:
                 upstream_repo = None
             trust_remote_code = resolve_trust_remote_code(
-                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo=upstream_repo
+                trust_remote_code,
+                pretrained_model_name_or_path,
+                has_local_code,
+                has_remote_code,
+                upstream_repo=upstream_repo,
             )
         kwargs["trust_remote_code"] = trust_remote_code
 
