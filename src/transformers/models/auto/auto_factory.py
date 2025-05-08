@@ -420,12 +420,17 @@ class _BaseAutoModelClass:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping.keys()
+        if has_remote_code:
+            class_ref = config.auto_map[cls.__name__]
+            if "--" in class_ref:
+                upstream_repo = class_ref.split("--")[0]
+            else:
+                upstream_repo = None
         trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, config._name_or_path, has_local_code, has_remote_code
+            trust_remote_code, config._name_or_path, upstream_repo, has_local_code, has_remote_code
         )
 
         if has_remote_code and trust_remote_code:
-            class_ref = config.auto_map[cls.__name__]
             if "--" in class_ref:
                 repo_id, class_ref = class_ref.split("--")
             else:
