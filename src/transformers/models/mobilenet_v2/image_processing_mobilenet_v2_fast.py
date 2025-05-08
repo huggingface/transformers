@@ -87,6 +87,7 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[MobileNetV2FastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
+    # Copied from transformers.models.beit.image_processing_beit_fast.BeitImageProcessorFast.reduce_label
     def reduce_label(self, labels: list["torch.Tensor"]):
         for idx in range(len(labels)):
             label = labels[idx]
