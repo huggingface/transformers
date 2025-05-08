@@ -1159,7 +1159,7 @@ class GroundingDinoEncoderLayer(nn.Module):
             text_features, text_position_embedding, text_position_ids
         )
 
-        (vision_features, vision_fused_attn), (text_features, text_fused_attn) = self.fusion_layer(
+        (vision_features, text_features), attentions = self.fusion_layer(
             vision_features=vision_features,
             text_features=text_features,
             attention_mask_vision=key_padding_mask,
@@ -2454,16 +2454,19 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         _class_embed = GroundingDinoContrastiveEmbedding(config)
 
         if config.decoder_bbox_embed_share:
+            # Share the same bbox_embed module across all decoder layers (shallow copy)
             _bbox_embed = GroundingDinoMLPPredictionHead(
                 input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
             )
             self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
         else:
-            for _ in range(config.decoder_layers):
-                _bbox_embed = GroundingDinoMLPPredictionHead(
-                    input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+            # Create a new instance for each decoder layer (deep copy behavior)
+            self.bbox_embed = nn.ModuleList([
+                GroundingDinoMLPPredictionHead(
+                    input_dim=config.d_model, hidden_dim=config.d.model, output_dim=4, num_layers=3
                 )
-                self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
+                for _ in range(config.decoder_layers)
+            ])
         self.class_embed = nn.ModuleList([_class_embed for _ in range(config.decoder_layers)])
         # hack for box-refinement
         self.model.decoder.bbox_embed = self.bbox_embed
