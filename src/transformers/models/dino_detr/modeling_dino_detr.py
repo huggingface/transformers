@@ -89,7 +89,7 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DinoDetrConfig"
-_CHECKPOINT_FOR_DOC = "dino_detr"
+_CHECKPOINT_FOR_DOC = "kostaspitas/dino_detr"
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
@@ -141,36 +141,33 @@ class MultiScaleDeformableAttentionFunction(Function):
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
 def multi_scale_deformable_attention(
     value: Tensor,
     value_spatial_shapes: Union[Tensor, List[Tuple]],
     sampling_locations: Tensor,
     attention_weights: Tensor,
 ) -> Tensor:
-    batch_size, _, num_heads, d_model = value.shape
+    batch_size, _, num_heads, hidden_dim = value.shape
     _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
     value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
     sampling_grids = 2 * sampling_locations - 1
     sampling_value_list = []
     for level_id, (height, width) in enumerate(value_spatial_shapes):
-        # batch_size, height*width, num_heads, d_model
-        # -> batch_size, height*width, num_heads*d_model
-        # -> batch_size, num_heads*d_model, height*width
-        # -> batch_size*num_heads, d_model, height, width
+        # batch_size, height*width, num_heads, hidden_dim
+        # -> batch_size, height*width, num_heads*hidden_dim
+        # -> batch_size, num_heads*hidden_dim, height*width
+        # -> batch_size*num_heads, hidden_dim, height, width
         value_l_ = (
-            value_list[level_id].flatten(2).transpose(1, 2).reshape(batch_size * num_heads, d_model, height, width)
+            value_list[level_id].flatten(2).transpose(1, 2).reshape(batch_size * num_heads, hidden_dim, height, width)
         )
         # batch_size, num_queries, num_heads, num_points, 2
         # -> batch_size, num_heads, num_queries, num_points, 2
         # -> batch_size*num_heads, num_queries, num_points, 2
         sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
-        # batch_size*num_heads, d_model, num_queries, num_points
+        # batch_size*num_heads, hidden_dim, num_queries, num_points
         sampling_value_l_ = nn.functional.grid_sample(
-            value_l_,
-            sampling_grid_l_,
-            mode="bilinear",
-            padding_mode="zeros",
-            align_corners=False,
+            value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
         )
         sampling_value_list.append(sampling_value_l_)
     # (batch_size, num_queries, num_heads, num_levels, num_points)
@@ -182,7 +179,7 @@ def multi_scale_deformable_attention(
     output = (
         (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
         .sum(-1)
-        .view(batch_size, num_heads * d_model, num_queries)
+        .view(batch_size, num_heads * hidden_dim, num_queries)
     )
     return output.transpose(1, 2).contiguous()
 
@@ -317,30 +314,21 @@ class DinoDetrMultiscaleDeformableAttention(nn.Module):
 @dataclass
 class DinoDetrEncoderOutput(ModelOutput):
     """
-    Base class for outputs of the DinoDetrDecoder. This class adds two attributes to
-    BaseModelOutputWithCrossAttentions, namely:
-    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
-    - a stacked tensor of intermediate reference points.
+    Base class for outputs of the DinoDetrEncoder. This class adds attributes specific to the encoder output.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-            Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
-            Stacked intermediate reference points (reference points of each layer of the decoder).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
+        output (`torch.FloatTensor`):
+            Final output tensor of the encoder.
+        intermediate_output (`torch.FloatTensor`, *optional*):
+            Stacked intermediate hidden states (output of each layer of the encoder).
+        intermediate_ref (`torch.FloatTensor`, *optional*):
+            Stacked intermediate reference points (reference points of each layer of the encoder).
+        encoder_states (`tuple(torch.FloatTensor)`, *optional*):
+            Tuple of `torch.FloatTensor` (one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden states of the encoder at the output of each layer.
+        attentions (`tuple(torch.FloatTensor)`, *optional*):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Attention weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
     output: torch.FloatTensor
@@ -353,30 +341,16 @@ class DinoDetrEncoderOutput(ModelOutput):
 @dataclass
 class DinoDetrDecoderOutput(ModelOutput):
     """
-    Base class for outputs of the DinoDetrDecoder. This class adds two attributes to
-    BaseModelOutputWithCrossAttentions, namely:
-    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
-    - a stacked tensor of intermediate reference points.
+    Base class for outputs of the DinoDetrDecoder. This class adds two attributes specific to the decoder output.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        intermediate (`List[torch.FloatTensor]`):
             Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
+        ref_points (`Optional[List[torch.FloatTensor]]`, *optional*):
             Stacked intermediate reference points (reference points of each layer of the decoder).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
+        attentions (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Attention weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
     intermediate: List[torch.FloatTensor]
@@ -387,30 +361,25 @@ class DinoDetrDecoderOutput(ModelOutput):
 @dataclass
 class DinoDetrEncoderDecoderOutput(ModelOutput):
     """
-    Base class for outputs of the DinoDetrDecoder. This class adds two attributes to
-    BaseModelOutputWithCrossAttentions, namely:
-    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
-    - a stacked tensor of intermediate reference points.
+    Base class for outputs of the DinoDetrEncoderDecoder. This class adds attributes specific to the encoder-decoder output.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-            Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
-            Stacked intermediate reference points (reference points of each layer of the decoder).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
+        hidden_states (`torch.FloatTensor`):
+            Final hidden states of the decoder.
+        reference_points (`Optional[torch.FloatTensor]`, *optional*):
+            Final reference points of the decoder.
+        hidden_states_encoder (`Optional[torch.FloatTensor]`, *optional*):
+            Final hidden states of the encoder.
+        reference_points_encoder (`Optional[torch.FloatTensor]`, *optional*):
+            Final reference points of the encoder.
+        init_box_proposal (`Optional[torch.FloatTensor]`, *optional*):
+            Initial box proposals used in the decoder.
+        encoder_states (`Optional[torch.FloatTensor]`, *optional*):
+            Hidden states of the encoder at the output of each layer.
+        encoder_attentions (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
+            Attention weights of the encoder at each layer.
+        decoder_attentions (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
+            Attention weights of the decoder at each layer.
     """
 
     hidden_states: torch.FloatTensor
@@ -429,42 +398,28 @@ class DinoDetrModelOutput(ModelOutput):
     Base class for outputs of the Dino DETR encoder-decoder model.
 
     Args:
-        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-            Initial reference points sent through the Transformer decoder.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-            Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-            Stacked intermediate reference points (reference points of each layer of the decoder).
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, num_queries, hidden_size)`. Hidden-states of the decoder at the output of each layer
-            plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, num_queries,
-            num_queries)`. Attentions weights of the decoder, after the attention softmax, used to compute the weighted
-            average in the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the encoder at the output of each
-            layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
-            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-            picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
-            foreground and background).
-        enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Logits of predicted bounding boxes coordinates in the first stage.
+        last_hidden_state (`torch.FloatTensor`):
+            Sequence of hidden states at the output of the last layer of the decoder of the model.
+        hidden_states (`Optional[list[torch.FloatTensor]]`, *optional*):
+            List of hidden states at the output of each decoder layer.
+        references (`Optional[list[torch.FloatTensor]]`, *optional*):
+            List of reference points at the output of each decoder layer.
+        encoder_last_hidden_state (`Optional[torch.FloatTensor]`, *optional*):
+            Sequence of hidden states at the output of the last layer of the encoder of the model.
+        encoder_reference (`Optional[torch.FloatTensor]`, *optional*):
+            Reference points at the output of the encoder.
+        init_box_proposal (`Optional[torch.FloatTensor]`, *optional*):
+            Initial box proposals used in the decoder.
+        denoising_meta (`Optional[dict]`, *optional*):
+            Metadata related to denoising tasks.
+        encoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
+            Tuple of hidden states of the encoder at the output of each layer.
+        decoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
+            Tuple of hidden states of the decoder at the output of each layer.
+        encoder_attentions (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
+            Tuple of attention weights of the encoder at each layer.
+        decoder_attentions (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
+            Tuple of attention weights of the decoder at each layer.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -483,62 +438,43 @@ class DinoDetrModelOutput(ModelOutput):
 @dataclass
 class DinoDetrObjectDetectionOutput(ModelOutput):
     """
-    Output type of [`DinoDetrForObjectDetection`].
+    Output class for `DinoDetrForObjectDetection`.
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-            Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        last_hidden_state (`torch.FloatTensor`):
+            Sequence of hidden states at the output of the last layer of the decoder of the model.
+        reference (`Optional[torch.FloatTensor]`, *optional*):
+            Final reference points of the decoder.
+        encoder_last_hidden_state (`Optional[torch.FloatTensor]`, *optional*):
+            Sequence of hidden states at the output of the last layer of the encoder of the model.
+        encoder_reference (`Optional[torch.FloatTensor]`, *optional*):
+            Final reference points of the encoder.
+        loss (`Optional[torch.FloatTensor]`, *optional*):
+            Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
             bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
             scale-invariant IoU loss.
-        loss_dict (`Dict`, *optional*):
+        loss_dict (`Optional[Dict]`, *optional*):
             A dictionary containing the individual losses. Useful for logging.
-        logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+        logits (`Optional[torch.FloatTensor]`, *optional*):
             Classification logits (including no-object) for all queries.
-        pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+        pred_boxes (`Optional[torch.FloatTensor]`, *optional*):
+            Normalized box coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~DinoDetrProcessor.post_process_object_detection`] to retrieve the
-            unnormalized bounding boxes.
-        auxiliary_outputs (`list[Dict]`, *optional*):
-            Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
-            and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
-            `pred_boxes`) for each decoder layer.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, num_queries, hidden_size)`. Hidden-states of the decoder at the output of each layer
-            plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, num_queries,
-            num_queries)`. Attentions weights of the decoder, after the attention softmax, used to compute the weighted
-            average in the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the encoder at the output of each
-            layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_heads, 4,
-            4)`. Attentions weights of the encoder, after the attention softmax, used to compute the weighted average
-            in the self-attention heads.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-            Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-            Stacked intermediate reference points (reference points of each layer of the decoder).
-        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-            Initial reference points sent through the Transformer decoder.
-        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-            picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
-            foreground and background).
-        enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Logits of predicted bounding boxes coordinates in the first stage.
+            possible padding).
+        auxiliary_outputs (`Optional[List[Dict]]`, *optional*):
+            Optional, only returned when auxiliary losses are activated (i.e., `config.auxiliary_loss` is set to `True`)
+            and labels are provided. It is a list of dictionaries containing the keys `logits` and `pred_boxes` for
+            each decoder layer.
+        denoising_meta (`Optional[dict]`, *optional*):
+            Metadata related to denoising tasks.
+        encoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
+            Tuple of hidden states of the encoder at the output of each layer.
+        decoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
+            Tuple of hidden states of the decoder at the output of each layer.
+        encoder_attentions (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
+            Tuple of attention weights of the encoder at each layer.
+        decoder_attentions (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
+            Tuple of attention weights of the decoder at each layer.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -572,6 +508,23 @@ def inverse_sigmoid(x: torch.FloatTensor, eps: float = 1e-3):
 
 
 class DinoDetrRandomBoxPerturber:
+    """
+    A utility class to apply random perturbations to bounding box coordinates.
+
+    This class is used to add noise to bounding box coordinates for data augmentation or robustness testing.
+    The noise is applied independently to the x, y, width, and height dimensions of the bounding boxes.
+
+    Args:
+        x_noise_scale (`float`, *optional*, defaults to 0.2):
+            The scale of the noise to be applied to the x-coordinate of the bounding boxes.
+        y_noise_scale (`float`, *optional*, defaults to 0.2):
+            The scale of the noise to be applied to the y-coordinate of the bounding boxes.
+        w_noise_scale (`float`, *optional*, defaults to 0.2):
+            The scale of the noise to be applied to the width of the bounding boxes.
+        h_noise_scale (`float`, *optional*, defaults to 0.2):
+            The scale of the noise to be applied to the height of the bounding boxes.
+    """
+
     def __init__(
         self,
         x_noise_scale: float = 0.2,
@@ -582,7 +535,19 @@ class DinoDetrRandomBoxPerturber:
         self.noise_scale = torch.Tensor([x_noise_scale, y_noise_scale, w_noise_scale, h_noise_scale])
 
     def __call__(self, refanchors: torch.FloatTensor) -> torch.FloatTensor:
-        nq, bs, query_dim = refanchors.shape
+        """
+        Applies random perturbations to the input bounding box coordinates.
+
+        Args:
+            refanchors (`torch.FloatTensor`):
+                A tensor of shape `(num_queries, batch_size, query_dim)` representing the reference bounding box
+                coordinates. The last dimension corresponds to (x, y, width, height).
+
+        Returns:
+            `torch.FloatTensor`: A tensor of the same shape as `refanchors` with perturbed bounding box coordinates,
+            clamped to the range [0, 1].
+        """
+        _, _, query_dim = refanchors.shape
         device = refanchors.device
 
         noise_raw = torch.rand_like(refanchors)
@@ -763,15 +728,38 @@ def prepare_for_cdn(
     device: torch.device,
 ):
     """
-    A major difference of DINO from DN-DETR is that the author process pattern embedding pattern embedding in its detector
-    forward function and use learnable tgt embedding, so we change this function a little bit.
-    :param dn_args: targets, dn_number, label_noise_ratio, box_noise_scale
-    :param training: if it is training or inference
-    :param num_queries: number of queires
-    :param num_classes: number of classes
-    :param d_model: transformer hidden dim
-    :param label_enc: encode labels in dn
-    :return:
+    Prepares the input queries and attention masks for the Conditional Denoising (CDN) task.
+
+    This function generates noisy labels and bounding boxes for the denoising task during training. It also creates
+    the corresponding attention masks and metadata required for the decoder.
+
+    Args:
+        dn_args (`torch.FloatTensor`):
+            A tuple containing the following elements:
+            - `targets` (list of dict): Ground truth targets with keys "class_labels" and "boxes".
+            - `dn_number` (int): Number of denoising groups.
+            - `label_noise_ratio` (float): Ratio of label noise to be applied.
+            - `box_noise_scale` (float): Scale of noise to be applied to bounding boxes.
+        training (`bool`):
+            Whether the model is in training mode.
+        num_queries (`int`):
+            Number of queries used in the decoder.
+        num_classes (`int`):
+            Number of classes for classification.
+        d_model (`int`):
+            Dimension of the model's hidden states.
+        label_enc (`Callable`):
+            A callable function to encode class labels into embeddings.
+        device (`torch.device`):
+            The device on which the tensors will be allocated.
+
+    Returns:
+        `Tuple[torch.FloatTensor, torch.FloatTensor, torch.BoolTensor, dict]`:
+            A tuple containing:
+            - `input_query_label` (`torch.FloatTensor`): The input query embeddings for labels.
+            - `input_query_bbox` (`torch.FloatTensor`): The input query embeddings for bounding boxes.
+            - `attn_mask` (`torch.BoolTensor`): The attention mask for the decoder.
+            - `dn_meta` (`dict`): Metadata containing information about padding size and number of denoising groups.
     """
     if training:
         targets, dn_number, label_noise_ratio, box_noise_scale = dn_args
@@ -890,8 +878,29 @@ def dn_post_process(
     _set_aux_loss: Callable,
 ):
     """
-    post process of dn after output from the transformer
-    put the dn part in the dn_meta
+    Post-processes the outputs of the denoising task in the Conditional Denoising (CDN) framework.
+
+    This function separates the known (denoising) outputs from the unknown outputs and updates the metadata with
+    the processed known outputs. It also handles auxiliary losses if required.
+
+    Args:
+        outputs_class (`torch.FloatTensor`):
+            Classification logits of shape `(batch_size, num_queries, num_classes)`.
+        outputs_coord (`torch.FloatTensor`):
+            Predicted bounding box coordinates of shape `(batch_size, num_queries, 4)`.
+        dn_meta (`Dict`):
+            Metadata dictionary containing information about the denoising task. Must include the key `"pad_size"`,
+            which specifies the number of known (denoising) queries.
+        aux_loss (`bool`):
+            Whether to compute auxiliary losses for intermediate layers.
+        _set_aux_loss (`Callable`):
+            A callable function to compute auxiliary losses.
+
+    Returns:
+        `Tuple[torch.FloatTensor, torch.FloatTensor]`:
+            A tuple containing:
+            - `outputs_class` (`torch.FloatTensor`): Classification logits after removing the known queries.
+            - `outputs_coord` (`torch.FloatTensor`): Bounding box coordinates after removing the known queries.
     """
     if dn_meta and dn_meta["pad_size"] > 0:
         output_known_class = outputs_class[:, :, : dn_meta["pad_size"], :]
@@ -910,8 +919,34 @@ def dn_post_process(
 
 class DinoDetrPositionEmbeddingSineHW(nn.Module):
     """
-    This is a more standard version of the position embedding, very similar to the one
-    used by the Attention is all you need paper, generalized to work on images.
+    This module implements a sine-based positional embedding for 2D images, inspired by the "Attention is All You Need" paper.
+
+    The positional embedding is generalized to work on images by computing separate embeddings for the height and width dimensions.
+    It supports optional normalization and scaling of the positional values.
+
+    Args:
+        num_pos_feats (`int`, *optional*, defaults to 64):
+            The number of positional features (dimensions) for each spatial axis (height and width).
+        temperatureH (`int`, *optional*, defaults to 10000):
+            The temperature parameter for the height dimension, used to scale the sine and cosine functions.
+        temperatureW (`int`, *optional*, defaults to 10000):
+            The temperature parameter for the width dimension, used to scale the sine and cosine functions.
+        normalize (`bool`, *optional*, defaults to `False`):
+            Whether to normalize the positional values to the range [0, scale].
+        scale (`float`, *optional*, defaults to `2 * math.pi`):
+            The scale factor applied to the normalized positional values. Must be provided if `normalize` is `True`.
+
+    Raises:
+        `ValueError`: If `scale` is provided but `normalize` is set to `False`.
+
+    Inputs:
+        pixel_values (`torch.FloatTensor`):
+            A tensor of shape `(batch_size, channels, height, width)` representing the input image.
+        pixel_mask (`torch.LongTensor`):
+            A binary mask of shape `(batch_size, height, width)` where 1 indicates valid pixels and 0 indicates padding.
+
+    Returns:
+        `torch.FloatTensor`: A tensor of shape `(batch_size, 2 * num_pos_feats, height, width)` containing the positional embeddings.
     """
 
     def __init__(
@@ -959,7 +994,24 @@ class DinoDetrPositionEmbeddingSineHW(nn.Module):
 
 class DinoDetrLearnedPositionEmbedding(nn.Module):
     """
-    Absolute pos embedding, learned.
+    This module implements a learned absolute positional embedding for 2D images.
+
+    The positional embeddings are learned independently for the height and width dimensions using embedding layers.
+    These embeddings are combined to form the final positional encoding for the input image.
+
+    Args:
+        num_pos_feats (`int`, *optional*, defaults to 256):
+            The number of positional features (dimensions) for each spatial axis (height and width).
+
+    Inputs:
+        pixel_values (`torch.FloatTensor`):
+            A tensor of shape `(batch_size, channels, height, width)` representing the input image.
+        pixel_mask (`torch.LongTensor`):
+            A binary mask of shape `(batch_size, height, width)` where 1 indicates valid pixels and 0 indicates padding.
+            **Note**: This argument is currently not used in the forward method.
+
+    Returns:
+        `torch.FloatTensor`: A tensor of shape `(batch_size, 2 * num_pos_feats, height, width)` containing the positional embeddings.
     """
 
     def __init__(self, num_pos_feats: int = 256):
@@ -994,6 +1046,27 @@ class DinoDetrLearnedPositionEmbedding(nn.Module):
 
 
 def build_position_encoding(config):
+    """
+    Builds the positional encoding module for the Dino DETR model.
+
+    This function creates a positional encoding module based on the configuration provided. It supports both sine-based
+    and learned positional encodings.
+
+    Args:
+        config (`PretrainedConfig`):
+            The configuration object containing model parameters. Must include the following attributes:
+            - `d_model` (int): The hidden size of the model.
+            - `position_embedding_type` (str): The type of positional embedding to use. Supported values are `"SineHW"`
+              for sine-based embeddings and `"Learned"` for learned embeddings.
+            - `pe_temperatureH` (int, *optional*): The temperature parameter for the height dimension in sine-based embeddings.
+            - `pe_temperatureW` (int, *optional*): The temperature parameter for the width dimension in sine-based embeddings.
+
+    Returns:
+        `nn.Module`: A positional encoding module.
+
+    Raises:
+        `ValueError`: If the `position_embedding_type` is not supported.
+    """
     N_steps = config.d_model // 2
     if config.position_embedding_type in ("SineHW"):
         position_embeddings = DinoDetrPositionEmbeddingSineHW(
@@ -1027,6 +1100,28 @@ def _get_activation_fn(activation: str):
 
 
 def gen_sineembed_for_position(reference_points: torch.FloatTensor, d_model: int):
+    """
+    Generates sine-based positional embeddings for the given reference points.
+
+    This function computes sine and cosine positional embeddings for 2D or 4D reference points, which can be used
+    in transformer models to encode spatial information. The embeddings are computed separately for each dimension
+    and concatenated.
+
+    Args:
+        reference_points (`torch.FloatTensor`):
+            A tensor of shape `(batch_size, num_queries, 2)` for 2D reference points or `(batch_size, num_queries, 4)`
+            for 4D reference points. The last dimension corresponds to (x, y) or (x, y, width, height).
+        d_model (`int`):
+            The dimensionality of the model. Must be an even number, as the sine and cosine embeddings are split
+            equally across dimensions.
+
+    Returns:
+        `torch.FloatTensor`: A tensor of shape `(batch_size, num_queries, d_model)` containing the sine-based
+        positional embeddings.
+
+    Raises:
+        `ValueError`: If the last dimension of `reference_points` is not 2 or 4.
+    """
     scale = 2 * math.pi
     dim_t = torch.arange(d_model / 2, dtype=torch.float32, device=reference_points.device)
     dim_t = 10000 ** (2 * (dim_t // 2) / (d_model / 2))
@@ -1059,15 +1154,31 @@ def gen_encoder_output_proposals(
     spatial_shapes: torch.FloatTensor,
     learned_wh=torch.FloatTensor,
 ):
-    r"""
-    Input:
-        - memory: bs, \sum{hw}, d_model
-        - memory_padding_mask: bs, \sum{hw}
-        - spatial_shapes: nlevel, 2
-        - learnedwh: 2
-    Output:
-        - output_memory: bs, \sum{hw}, d_model
-        - output_proposals: bs, \sum{hw}, 4
+    """
+    Generates output proposals and memory for the encoder in the Dino DETR model.
+
+    This function computes proposals for bounding boxes based on the encoder's output memory and spatial shapes. It
+    also applies padding masks and scales the proposals using learned width and height parameters.
+
+    Args:
+        memory (`torch.FloatTensor`):
+            A tensor of shape `(batch_size, total_spatial_elements, d_model)` representing the encoder's output memory.
+        memory_padding_mask (`torch.LongTensor`):
+            A tensor of shape `(batch_size, total_spatial_elements)` indicating which spatial elements are padded.
+        spatial_shapes (`torch.FloatTensor`):
+            A tensor of shape `(num_levels, 2)` where each row contains the height and width of a feature map level.
+        learned_wh (`torch.FloatTensor`):
+            A tensor of shape `(2,)` representing the learned width and height parameters for scaling the proposals.
+
+    Returns:
+        `Tuple[torch.FloatTensor, torch.FloatTensor]`:
+            - `output_memory` (`torch.FloatTensor`): A tensor of shape `(batch_size, total_spatial_elements, d_model)`
+              containing the processed memory with padding and invalid proposals masked.
+            - `output_proposals` (`torch.FloatTensor`): A tensor of shape `(batch_size, total_spatial_elements, 4)`
+              containing the bounding box proposals in the format `(center_x, center_y, width, height)`.
+
+    Raises:
+        `ValueError`: If the input tensors have incompatible shapes.
     """
     batch_size, _, _ = memory.shape
     proposals = []
@@ -1250,6 +1361,54 @@ class DinoDetrEncoderLayer(nn.Module):
 
 
 class DinoDetrDecoderLayer(nn.Module):
+    """
+    A single layer of the Dino DETR decoder.
+
+    This layer consists of self-attention, cross-attention, and feed-forward submodules, with optional configurations
+    for key-aware projections and different types of self-attention mechanisms.
+
+    Args:
+        config (`DinoDetrConfig`):
+            The configuration object containing model parameters. Must include the following attributes:
+            - `module_seq` (list): The sequence of modules to execute in the decoder layer (e.g., `["sa", "ca", "ffn"]`).
+            - `num_heads` (int): The number of attention heads.
+            - `decoder_n_points` (int): The number of points for deformable attention.
+            - `dropout` (float): The dropout probability.
+            - `d_model` (int): The hidden size of the model.
+            - `d_ffn` (int): The hidden size of the feed-forward network.
+            - `activation` (str): The activation function to use in the feed-forward network.
+            - `key_aware_type` (str, *optional*): The type of key-aware projection to use (e.g., `"mean"`, `"proj_mean"`).
+            - `decoder_sa_type` (str): The type of self-attention to use (e.g., `"sa"`, `"ca_content"`, `"ca_label"`).
+
+    Inputs:
+        queries (`torch.FloatTensor`):
+            A tensor of shape `(num_queries, batch_size, d_model)` representing the input queries.
+        query_position_embeddings (`torch.FloatTensor`):
+            A tensor of shape `(num_queries, batch_size, d_model)` representing the positional embeddings for the queries.
+        query_reference_points (`torch.FloatTensor`):
+            A tensor of shape `(num_queries, batch_size, 4)` representing the reference points for the queries.
+        memory (`torch.FloatTensor`):
+            A tensor of shape `(memory_size, batch_size, d_model)` representing the encoder's output memory.
+        memory_key_padding_mask (`torch.LongTensor`):
+            A tensor of shape `(batch_size, memory_size)` indicating which memory elements are padded.
+        memory_level_start_index (`torch.FloatTensor`):
+            A tensor indicating the start index of each level in the memory.
+        memory_spatial_shapes (`torch.FloatTensor`):
+            A tensor of shape `(num_levels, 2)` where each row contains the height and width of a feature map level.
+        memory_spatial_shapes_list (`List[torch.FloatTensor]`):
+            A list of tensors representing the spatial shapes of each memory level.
+        self_attn_mask (`Optional[torch.LongTensor]`, *optional*):
+            A tensor of shape `(num_queries, num_queries)` representing the self-attention mask.
+        output_attentions (`Optional[bool]`, *optional*):
+            Whether to return attention weights.
+
+    Returns:
+        `Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor]]]`:
+            - `queries` (`torch.FloatTensor`): The updated queries after passing through the decoder layer.
+            - `attn_weights_total` (`Optional[Tuple[torch.FloatTensor]]`): A tuple of attention weights for each module
+              in the sequence, if `output_attentions` is `True`.
+    """
+
     def __init__(self, config: DinoDetrConfig):
         super().__init__()
         self.module_seq = config.module_seq
@@ -1444,6 +1603,62 @@ class DinoDetrMLPPredictionHead(nn.Module):
 
 
 class DinoDetrEncoder(DinoDetrPreTrainedModel):
+    """
+    The encoder module for the Dino DETR model.
+
+    This module processes input embeddings and positional embeddings through multiple encoder layers, applying
+    self-attention and feed-forward networks. It supports optional dropout and two-stage decoding configurations.
+
+    Args:
+        encoder_layer (`DinoDetrEncoderLayer`):
+            A single encoder layer to be cloned and stacked.
+        norm (`torch.nn.Module`):
+            A normalization layer applied to the encoder's output.
+        config (`DinoDetrConfig`):
+            The configuration object containing model parameters. Must include the following attributes:
+            - `num_encoder_layers` (int): The number of encoder layers.
+            - `enc_layer_share` (bool): Whether to share weights across encoder layers.
+            - `num_queries` (int): The number of queries.
+            - `d_model` (int): The hidden size of the model.
+            - `enc_layer_dropout_prob` (Optional[List[float]]): Dropout probabilities for each encoder layer.
+            - `two_stage_type` (str): The type of two-stage decoding to use (e.g., `"enceachlayer"`, `"enclayer1"`).
+
+    Inputs:
+        input_embeddings (`torch.FloatTensor`):
+            A tensor of shape `(batch_size, total_spatial_elements, d_model)` representing the input embeddings.
+        position_embeddings (`torch.FloatTensor`):
+            A tensor of shape `(batch_size, total_spatial_elements, d_model)` representing the positional embeddings.
+        spatial_shapes (`torch.FloatTensor`):
+            A tensor of shape `(num_levels, 2)` where each row contains the height and width of a feature map level.
+        spatial_shapes_list (`List[Tuple[int, int]]`):
+            A list of tuples representing the spatial shapes of each memory level.
+        level_start_index (`torch.FloatTensor`):
+            A tensor indicating the start index of each level in the memory.
+        valid_ratios (`torch.FloatTensor`):
+            A tensor of shape `(batch_size, num_levels, 2)` representing the valid ratios for each level.
+        key_padding_mask (`torch.LongTensor`):
+            A tensor of shape `(batch_size, total_spatial_elements)` indicating which spatial elements are padded.
+        ref_token_index (`Optional[torch.FloatTensor]`, *optional*):
+            A tensor of shape `(batch_size, num_queries)` representing the indices of reference tokens.
+        ref_token_coord (`Optional[torch.FloatTensor]`, *optional*):
+            A tensor of shape `(batch_size, num_queries, 4)` representing the coordinates of reference tokens.
+        return_dict (`Optional[bool]`, *optional*):
+            Whether to return the output as a `DinoDetrEncoderOutput` object.
+        output_attentions (`Optional[bool]`, *optional*):
+            Whether to return attention weights.
+
+    Returns:
+        `DinoDetrEncoderOutput` or `Tuple`:
+            If `return_dict` is `True`, returns a `DinoDetrEncoderOutput` object containing:
+            - `output` (`torch.FloatTensor`): The final output of the encoder.
+            - `intermediate_output` (`Optional[torch.FloatTensor]`): Stacked intermediate hidden states.
+            - `intermediate_ref` (`Optional[torch.FloatTensor]`): Stacked intermediate reference points.
+            - `encoder_states` (`Tuple[torch.FloatTensor]`): Hidden states of the encoder at each layer.
+            - `attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights for each layer, if `output_attentions` is `True`.
+
+            If `return_dict` is `False`, returns a tuple containing the same elements.
+    """
+
     def __init__(
         self,
         encoder_layer: DinoDetrEncoderLayer,
@@ -1517,20 +1732,29 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
     ):
         """
-        Input:
-            - input_embeds: [bs, sum(hi*wi), 256]
-            - position_embeddings: pos embed for input_embeds. [bs, sum(hi*wi), 256]
-            - spatial_shapes: h,w of each level [num_level, 2]
-            - level_start_index: [num_level] start point of level in sum(hi*wi).
-            - valid_ratios: [bs, num_level, 2]
-            - key_padding_mask: [bs, sum(hi*wi)]
+        Forward pass for the encoder module.
 
-            - ref_token_index: bs, nq
-            - ref_token_coord: bs, nq, 4
-        Intermedia:
-            - reference_points: [bs, sum(hi*wi), num_level, 2]
-        Outpus:
-            - output: [bs, sum(hi*wi), 256]
+        Args:
+            input_embeds (`torch.FloatTensor`):
+                A tensor of shape `(batch_size, sum(height_i * width_i), hidden_size)` representing the input embeddings.
+            position_embeddings (`torch.FloatTensor`):
+                A tensor of shape `(batch_size, sum(height_i * width_i), hidden_size)` representing the positional embeddings.
+            spatial_shapes (`torch.FloatTensor`):
+                A tensor of shape `(num_levels, 2)` where each row contains the height and width of a feature map level.
+            level_start_index (`torch.FloatTensor`):
+                A tensor of shape `(num_levels,)` indicating the start index of each level in the flattened spatial dimensions.
+            valid_ratios (`torch.FloatTensor`):
+                A tensor of shape `(batch_size, num_levels, 2)` representing the valid ratios for each level.
+            key_padding_mask (`torch.FloatTensor`):
+                A tensor of shape `(batch_size, sum(height_i * width_i))` indicating which spatial elements are padded.
+            ref_token_index (`torch.FloatTensor`):
+                A tensor of shape `(batch_size, num_queries)` representing the indices of reference tokens.
+            ref_token_coord (`torch.FloatTensor`):
+                A tensor of shape `(batch_size, num_queries, 4)` representing the coordinates of reference tokens.
+
+        Returns:
+            `torch.FloatTensor`:
+                A tensor of shape `(batch_size, sum(height_i * width_i), hidden_size)` representing the output embeddings.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         all_self_attns = () if output_attentions else None
@@ -1626,6 +1850,65 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
 
 
 class DinoDetrDecoder(DinoDetrPreTrainedModel):
+    """
+    The decoder module for the Dino DETR model.
+
+    This module processes queries through multiple decoder layers, applying self-attention, cross-attention, and feed-forward networks.
+    It supports optional dropout, query perturbation, and iterative refinement of reference points.
+
+    Args:
+        decoder_layer (`DinoDetrDecoderLayer`):
+            A single decoder layer to be cloned and stacked.
+        norm (`torch.nn.Module`):
+            A normalization layer applied to the decoder's output.
+        decoder_query_perturber (`Callable[[torch.Tensor], torch.Tensor]`):
+            A function to apply perturbations to the decoder queries during training.
+        config (`DinoDetrConfig`):
+            The configuration object containing model parameters. Must include the following attributes:
+            - `num_decoder_layers` (int): The number of decoder layers.
+            - `dec_layer_share` (bool): Whether to share weights across decoder layers.
+            - `num_feature_levels` (int): The number of feature levels.
+            - `use_detached_boxes_dec_out` (bool): Whether to use detached boxes for decoder output.
+            - `query_dim` (int): The dimensionality of the query embeddings.
+            - `d_model` (int): The hidden size of the model.
+            - `dec_layer_number` (Optional[List[int]]): The number of queries to select at each decoder layer.
+            - `dec_layer_dropout_prob` (Optional[List[float]]): Dropout probabilities for each decoder layer.
+            - `dec_detach` (bool): Whether to detach reference points during iterative refinement.
+
+    Inputs:
+        queries (`torch.FloatTensor`):
+            A tensor of shape `(num_queries, batch_size, d_model)` representing the input queries.
+        memory (`torch.FloatTensor`):
+            A tensor of shape `(memory_size, batch_size, d_model)` representing the encoder's output memory.
+        refpoints_unsigmoid (`torch.FloatTensor`):
+            A tensor of shape `(num_queries, batch_size, 2 or 4)` representing the initial reference points.
+        spatial_shapes_list (`List[Tuple[int, int]]`):
+            A list of tuples representing the spatial shapes of each memory level.
+        self_attn_mask (`Optional[torch.LongTensor]`, *optional*):
+            A tensor of shape `(num_queries, num_queries)` representing the self-attention mask.
+        memory_key_padding_mask (`Optional[torch.LongTensor]`, *optional*):
+            A tensor of shape `(batch_size, memory_size)` indicating which memory elements are padded.
+        level_start_index (`Optional[torch.FloatTensor]`, *optional*):
+            A tensor indicating the start index of each level in the memory.
+        spatial_shapes (`Optional[torch.FloatTensor]`, *optional*):
+            A tensor of shape `(num_levels, 2)` where each row contains the height and width of a feature map level.
+        valid_ratios (`Optional[torch.FloatTensor]`, *optional*):
+            A tensor of shape `(batch_size, num_levels, 2)` representing the valid ratios for each level.
+        return_dict (`Optional[bool]`, *optional*):
+            Whether to return the output as a `DinoDetrDecoderOutput` object.
+        output_attentions (`Optional[bool]`, *optional*):
+            Whether to return attention weights.
+
+    Returns:
+        `DinoDetrDecoderOutput` or `Tuple`:
+            If `return_dict` is `True`, returns a `DinoDetrDecoderOutput` object containing:
+            - `intermediate` (`List[torch.FloatTensor]`): Stacked intermediate hidden states.
+            - `ref_points` (`List[torch.FloatTensor]`): Stacked intermediate reference points.
+            - `attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights for each layer, if `output_attentions` is `True`.
+
+            If `return_dict` is `False`, returns a tuple containing the same elements.
+    """
+
     def __init__(
         self,
         decoder_layer: DinoDetrDecoderLayer,
@@ -1676,12 +1959,25 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
     ):
         """
-        Input:
-            - tgt: nq, bs, d_model
-            - memory: hw, bs, d_model
-            - pos: hw, bs, d_model
-            - refpoints_unsigmoid: nq, bs, 2/4
-            - valid_ratios/spatial_shapes: bs, nlevel, 2
+        Forward pass for the decoder layer.
+
+        Args:
+            tgt (`torch.FloatTensor`):
+                A tensor of shape `(num_queries, batch_size, d_model)` representing the target (decoder input) embeddings.
+            memory (`torch.FloatTensor`):
+                A tensor of shape `(memory_size, batch_size, d_model)` representing the encoder's output memory.
+            pos (`torch.FloatTensor`):
+                A tensor of shape `(memory_size, batch_size, d_model)` representing the positional embeddings for the memory.
+            refpoints_unsigmoid (`torch.FloatTensor`):
+                A tensor of shape `(num_queries, batch_size, 2 or 4)` representing the unsigmoided reference points.
+            valid_ratios (`torch.FloatTensor`):
+                A tensor of shape `(batch_size, num_levels, 2)` representing the valid ratios for each feature map level.
+            spatial_shapes (`torch.FloatTensor`):
+                A tensor of shape `(num_levels, 2)` where each row contains the height and width of a feature map level.
+
+        Returns:
+            `torch.FloatTensor`:
+                A tensor of shape `(num_queries, batch_size, d_model)` representing the updated target embeddings.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         all_attns = () if output_attentions else None
@@ -1786,6 +2082,62 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
 
 
 class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
+    """
+    The encoder-decoder module for the Dino DETR model.
+
+    This module combines an encoder and a decoder to process input features and produce predictions for object detection tasks.
+    It supports multi-scale features, two-stage decoding, and query perturbation.
+
+    Args:
+        config (`DinoDetrConfig`):
+            The configuration object containing model parameters. Must include the following attributes:
+            - `num_feature_levels` (int): The number of feature levels.
+            - `num_queries` (int): The number of queries.
+            - `d_model` (int): The hidden size of the model.
+            - `decoder_layer_noise` (bool): Whether to apply noise to decoder queries.
+            - `dln_xy_noise` (float): Noise scale for x and y coordinates in decoder queries.
+            - `dln_hw_noise` (float): Noise scale for width and height in decoder queries.
+            - `two_stage_type` (str): The type of two-stage decoding to use (e.g., `"standard"`, `"no"`).
+            - `two_stage_keep_all_tokens` (bool): Whether to keep all tokens in two-stage decoding.
+            - `embed_init_tgt` (bool): Whether to initialize target embeddings.
+            - `random_refpoints_xy` (bool): Whether to initialize reference points randomly.
+            - `normalize_before` (bool): Whether to apply normalization before the encoder layers.
+            - `num_encoder_layers` (int): The number of encoder layers.
+            - `num_decoder_layers` (int): The number of decoder layers.
+
+    Inputs:
+        pixel_values (`List[torch.FloatTensor]`):
+            A list of tensors of shape `(batch_size, channels, height, width)` representing the input features.
+        pixel_masks (`List[torch.LongTensor]`):
+            A list of tensors of shape `(batch_size, height, width)` representing the input masks.
+        pixel_position_embeddings (`List[torch.FloatTensor]`):
+            A list of tensors of shape `(batch_size, channels, height, width)` representing the positional embeddings.
+        query_reference_points (`torch.FloatTensor`):
+            A tensor of shape `(batch_size, num_queries, 4)` representing the reference points for the queries.
+        queries (`torch.FloatTensor`):
+            A tensor of shape `(batch_size, num_queries, d_model)` representing the input queries.
+        attn_mask (`Optional[torch.FloatTensor]`, *optional*):
+            A tensor representing the attention mask for the decoder.
+        return_dict (`Optional[bool]`, *optional*):
+            Whether to return the output as a `DinoDetrEncoderDecoderOutput` object.
+        output_attentions (`Optional[bool]`, *optional*):
+            Whether to return attention weights.
+
+    Returns:
+        `DinoDetrEncoderDecoderOutput` or `Tuple`:
+            If `return_dict` is `True`, returns a `DinoDetrEncoderDecoderOutput` object containing:
+            - `hidden_states` (`torch.FloatTensor`): The final hidden states of the decoder.
+            - `reference_points` (`torch.FloatTensor`): The final reference points of the decoder.
+            - `hidden_states_encoder` (`Optional[torch.FloatTensor]`): The final hidden states of the encoder.
+            - `reference_points_encoder` (`Optional[torch.FloatTensor]`): The final reference points of the encoder.
+            - `init_box_proposal` (`Optional[torch.FloatTensor]`): The initial box proposals used in the decoder.
+            - `encoder_states` (`Optional[Tuple[torch.FloatTensor]]`): Hidden states of the encoder at each layer.
+            - `encoder_attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights of the encoder at each layer.
+            - `decoder_attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights of the decoder at each layer.
+
+            If `return_dict` is `False`, returns a tuple containing the same elements.
+    """
+
     def __init__(self, config):
         super().__init__(config)
         if config.decoder_layer_noise:
@@ -1904,13 +2256,41 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
     ):
         """
-        Input:
-            - pixel_values: List of multi features [batch_size, ci, hi, wi]
-            - pixel_masks: List of multi pixel_masks [batch_size, hi, wi]
-            - query_reference_points: [batch_size, num_dn, 4]. None in infer
-            - query_positional_embeddings: List of multi pos embeds [batch_size, ci, hi, wi]
-            - queries: [batch_size, num_dn, d_model]. None in infer
+        Forward pass for the encoder-decoder module.
 
+        Args:
+            pixel_values (`List[torch.FloatTensor]`):
+                A list of tensors of shape `(batch_size, channels, height, width)` representing the input features.
+            pixel_masks (`List[torch.LongTensor]`):
+                A list of tensors of shape `(batch_size, height, width)` representing the input masks.
+            pixel_position_embeddings (`List[torch.FloatTensor]`):
+                A list of tensors of shape `(batch_size, channels, height, width)` representing the positional embeddings.
+            query_reference_points (`torch.FloatTensor`):
+                A tensor of shape `(batch_size, num_queries, 4)` representing the reference points for the queries.
+            query_positional_embeddings (`List[torch.FloatTensor]`):
+                A list of tensors of shape `(batch_size, channels, height, width)` representing the positional embeddings for the queries.
+            queries (`torch.FloatTensor`):
+                A tensor of shape `(batch_size, num_queries, d_model)` representing the input queries.
+            attn_mask (`Optional[torch.FloatTensor]`, *optional*):
+                A tensor representing the attention mask for the decoder.
+            return_dict (`Optional[bool]`, *optional*, defaults to `True`):
+                Whether to return the output as a `DinoDetrEncoderDecoderOutput` object.
+            output_attentions (`Optional[bool]`, *optional*, defaults to `False`):
+                Whether to return attention weights.
+
+        Returns:
+            `DinoDetrEncoderDecoderOutput` or `Tuple`:
+                If `return_dict` is `True`, returns a `DinoDetrEncoderDecoderOutput` object containing:
+                - `hidden_states` (`torch.FloatTensor`): The final hidden states of the decoder.
+                - `reference_points` (`torch.FloatTensor`): The final reference points of the decoder.
+                - `hidden_states_encoder` (`Optional[torch.FloatTensor]`): The final hidden states of the encoder.
+                - `reference_points_encoder` (`Optional[torch.FloatTensor]`): The final reference points of the encoder.
+                - `init_box_proposal` (`Optional[torch.FloatTensor]`): The initial box proposals used in the decoder.
+                - `encoder_states` (`Optional[Tuple[torch.FloatTensor]]`): Hidden states of the encoder at each layer.
+                - `encoder_attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights of the encoder at each layer.
+                - `decoder_attentions` (`Optional[Tuple[torch.FloatTensor]]`): Attention weights of the decoder at each layer.
+
+                If `return_dict` is `False`, returns a tuple containing the same elements.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         encoder_attentions = None
@@ -2554,7 +2934,7 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
 
         >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
+        >>> results = image_processor.post_process_object_detection(outputs, target_sizes=target_sizes)[
         ...     0
         ... ]
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
@@ -2563,9 +2943,9 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         ...         f"Detected {model.config.id2label[label.item()]} with confidence "
         ...         f"{round(score.item(), 3)} at location {box}"
         ...     )
-        Detected cat with confidence 0.8 at location [16.5, 52.84, 318.25, 470.78]
-        Detected cat with confidence 0.789 at location [342.19, 24.3, 640.02, 372.25]
-        Detected remote with confidence 0.633 at location [40.79, 72.78, 176.76, 117.25]
+        Detected <object> with confidence 0.7475 at location <location>
+        Detected <object> with confidence 0.7341 at location <location>
+        Detected <object> with confidence 0.7229 at location <location>
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
