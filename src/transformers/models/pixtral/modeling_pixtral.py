@@ -382,7 +382,6 @@ class PixtralTransformer(nn.Module):
                     attention_mask,
                     position_embeddings,
                     output_attentions,
-                    **kwargs,
                 )
             else:
                 layer_outputs = encoder_layer(
