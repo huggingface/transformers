@@ -73,8 +73,6 @@ class xLSTMConfig(PretrainedConfig):
             `inputs_ids` passed when calling [`xLSTMModel`]. Defaults to the GPT2-NeoX tokenizer size.
         hidden_size (int, optional, *optional*, defaults to 4096):
             Dimensionality of the embeddings or hidden states.
-        num_hidden_layers (int, optional, *optional*, defaults to 32):
-            Number of blocks of the xLSTM model.
         embedding_dim (int, optional, *optional*, defaults to 4096):
             Dimensionality of the embeddings or hidden states, use hidde_size if None.
         num_hidden_layers (int, optional, *optional*, defaults to 32):
