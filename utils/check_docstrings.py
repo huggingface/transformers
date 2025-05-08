@@ -1080,6 +1080,7 @@ def generate_new_docstring_for_signature(
     sig_end_line,
     docstring_line,
     arg_indent="    ",
+    custom_args_dict={},
 ):
     """
     Generalized docstring generator for a function or class signature.
@@ -1118,7 +1119,11 @@ def generate_new_docstring_for_signature(
         args_docstring_dict.update(parsed_docstring)
     # Fill missing args
     for arg in args_in_signature:
-        if arg not in args_docstring_dict and arg not in source_args_doc([ModelArgs, ImageProcessorArgs]):
+        if (
+            arg not in args_docstring_dict
+            and arg not in source_args_doc([ModelArgs, ImageProcessorArgs])
+            and arg not in custom_args_dict
+        ):
             missing_docstring_args.append(arg)
             args_docstring_dict[arg] = {
                 "type": "<fill_type>",
@@ -1152,7 +1157,7 @@ def generate_new_docstring_for_signature(
     return new_docstring, sig_end_line, docstring_end, missing_docstring_args, fill_docstring_args
 
 
-def generate_new_docstring_for_function(lines, current_line_end):
+def generate_new_docstring_for_function(lines, current_line_end, custom_args_dict):
     """
     Wrapper for function docstring generation using the generalized helper.
     """
@@ -1164,10 +1169,11 @@ def generate_new_docstring_for_function(lines, current_line_end):
         sig_line_end,
         docstring_line,
         arg_indent="    ",
+        custom_args_dict=custom_args_dict,
     )
 
 
-def generate_new_docstring_for_class(lines, current_line_end):
+def generate_new_docstring_for_class(lines, current_line_end, custom_args_dict):
     """
     Wrapper for class docstring generation (via __init__) using the generalized helper.
     Returns the new docstring and relevant signature/docstring indices.
@@ -1191,6 +1197,7 @@ def generate_new_docstring_for_class(lines, current_line_end):
             init_method_sig_line_end,
             docstring_line,
             arg_indent="",
+            custom_args_dict=custom_args_dict,
         )
     )
     return (
@@ -1203,6 +1210,40 @@ def generate_new_docstring_for_class(lines, current_line_end):
     )
 
 
+def find_custom_args_with_details(file_content: str, custom_args_var_name: str) -> list[dict]:
+    """
+    Find the given custom args variable in the file content and return its content.
+
+    Args:
+        file_content: The string content of the Python file.
+        custom_args_var_name: The name of the custom args variable.
+    """
+    # Escape the variable_name to handle any special regex characters it might contain
+    escaped_variable_name = re.escape(custom_args_var_name)
+
+    # Construct the regex pattern dynamically with the specific variable name
+    # This regex looks for:
+    # ^\s* : Start of a line with optional leading whitespace.
+    # ({escaped_variable_name}) : Capture the exact variable name.
+    # \s*=\s* : An equals sign, surrounded by optional whitespace.
+    # (r?\"\"\")               : Capture the opening triple quotes (raw or normal string).
+    # (.*?)                    : Capture the content (non-greedy).
+    # (\"\"\")                  : Match the closing triple quotes.
+    regex_pattern = rf"^\s*({escaped_variable_name})\s*=\s*(r?\"\"\")(.*?)(\"\"\")"
+
+    flags = re.MULTILINE | re.DOTALL
+
+    # Use re.search to find the first match
+    match = re.search(regex_pattern, file_content, flags)
+
+    if match:
+        # match.group(1) will be the variable_name itself
+        # match.group(3) will be the content inside the triple quotes
+        content = match.group(3).strip()
+        return content
+    return None
+
+
 def update_file_with_new_docstrings(
     candidate_file, lines, line_starts_candidates, line_ends_candidates, overwrite=False
 ):
@@ -1210,17 +1251,27 @@ def update_file_with_new_docstrings(
     For a given file, update the docstrings for all @auto_docstring candidates and write the new content.
     """
     content_base_file_new_lines = lines[: line_ends_candidates[0]]
+    current_line_start = line_starts_candidates[0]
     current_line_end = line_ends_candidates[0]
     index = 1
     missing_docstring_args_warnings = []
+
     fill_docstring_args_warnings = []
     while index <= len(line_starts_candidates):
+        custom_args_dict = {}
+        auto_docstring_signature_content = "".join(lines[current_line_start:current_line_end])
+        match = re.findall(r"custom_args=(\w+)", auto_docstring_signature_content)
+        if match:
+            custom_args_var_name = match[0]
+            custom_args_var_content = find_custom_args_with_details("\n".join(lines), custom_args_var_name)
+            if custom_args_var_content:
+                custom_args_dict, _ = parse_docstring(custom_args_var_content)
         new_docstring = ""
         found_init_method = False
         # Function
         if "    def" in lines[current_line_end]:
             new_docstring, sig_line_end, docstring_end, missing_docstring_args, fill_docstring_args = (
-                generate_new_docstring_for_function(lines, current_line_end)
+                generate_new_docstring_for_function(lines, current_line_end, custom_args_dict)
             )
         # Class
         elif "class " in lines[current_line_end]:
@@ -1231,7 +1282,7 @@ def update_file_with_new_docstrings(
                 init_method_docstring_end,
                 missing_docstring_args,
                 fill_docstring_args,
-            ) = generate_new_docstring_for_class(lines, current_line_end)
+            ) = generate_new_docstring_for_class(lines, current_line_end, custom_args_dict)
             found_init_method = init_method_line is not None
         # Add warnings if needed
         if missing_docstring_args:
@@ -1265,7 +1316,7 @@ def update_file_with_new_docstrings(
                 content_base_file_new_lines += lines[current_line_end:]
             if index < len(line_ends_candidates):
                 current_line_end = line_ends_candidates[index]
-
+                current_line_start = line_starts_candidates[index]
         index += 1
     content_base_file_new = "\n".join(content_base_file_new_lines)
     if overwrite:

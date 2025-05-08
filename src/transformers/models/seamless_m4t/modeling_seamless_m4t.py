@@ -37,19 +37,42 @@ from ...modeling_outputs import (
     Wav2Vec2BaseModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_seamless_m4t import SeamlessM4TConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "facebook/hf-seamless-m4t-medium"
-_CONFIG_FOR_DOC = "SeamlessM4TConfig"
+SEAMLESS_M4T_COMMON_CUSTOM_ARGS = r"""
+    input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
+        Input audio features. This should be returned by the [`SeamlessM4TFeatureExtractor`] class or the
+        [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
+    decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+        Indices of decoder input sequence tokens in the vocabulary.
+
+        Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+        [`PreTrainedTokenizer.__call__`] for details.
+
+        [What are decoder input IDs?](../glossary#decoder-input-ids)
+
+        Bart uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+        is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+
+        For translation and summarization training, `decoder_input_ids` should be provided. If no
+        `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
+        for denoising pre-training following the paper.
+    decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+        Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+        be used by default.
+
+        If you want to change padding behavior, you should read [`modeling_bart._prepare_decoder_attention_mask`]
+        and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+        information on the default strategy.
+    inputs_embeds (`torch.FloatTensor` of shape`(batch_size, sequence_length, hidden_size)`, *optional*):
+        Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+        is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+        model's internal embedding lookup matrix.
+"""
 
 
 @dataclass
@@ -77,129 +100,6 @@ class SeamlessM4TGenerationOutput(ModelOutput):
     waveform_lengths: Optional[torch.IntTensor] = None
     sequences: Optional[Tuple[torch.FloatTensor]] = None
     unit_sequences: Optional[Tuple[torch.FloatTensor]] = None
-
-
-SEAMLESS_M4T_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`~SeamlessM4TConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-SEAMLESS_M4T_INPUTS_DOCSTRING_FIRST_PART = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
-            Input audio features. This should be returned by the [`SeamlessM4TFeatureExtractor`] class or the
-            [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
-    """
-
-SEAMLESS_M4T_INPUTS_DOCSTRING_TEXT_PART = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        """
-
-SEAMLESS_M4T_INPUTS_DOCSTRING_SPEECH_PART = r"""
-    Args:
-        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
-            Input audio features. This should be returned by the [`SeamlessM4TFeatureExtractor`] class or the
-            [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
-        """
-
-SEAMLESS_M4T_INPUTS_DOCSTRING_LAST_PART = r"""
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Indices of decoder input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-
-            Bart uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
-            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
-
-            For translation and summarization training, `decoder_input_ids` should be provided. If no
-            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
-            for denoising pre-training following the paper.
-        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
-            be used by default.
-
-            If you want to change padding behavior, you should read [`modeling_bart._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape`(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
-            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
-            input (see `past_key_values`). This is useful if you want more control over how to convert
-            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
-
-            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
-            of `inputs_embeds`.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-M4T_MODEL_INPUTS_DOCSTRING = SEAMLESS_M4T_INPUTS_DOCSTRING_FIRST_PART + SEAMLESS_M4T_INPUTS_DOCSTRING_LAST_PART
-
-M4T_TEXT_INPUTS_DOCSTRING = SEAMLESS_M4T_INPUTS_DOCSTRING_TEXT_PART + SEAMLESS_M4T_INPUTS_DOCSTRING_LAST_PART
-
-M4T_SPEECH_INPUTS_DOCSTRING = SEAMLESS_M4T_INPUTS_DOCSTRING_SPEECH_PART + SEAMLESS_M4T_INPUTS_DOCSTRING_LAST_PART
 
 
 ############ UTILS ################
@@ -1443,12 +1343,8 @@ class SeamlessM4TDecoderLayer(nn.Module):
 ############ SUB-MODELS related code ################
 
 
+@auto_docstring
 class SeamlessM4TPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = SeamlessM4TConfig
     base_model_prefix = "seamless_m4t"
     supports_gradient_checkpointing = True
@@ -1553,10 +1449,11 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
         return last_hidden_states
 
 
-@add_start_docstrings(
-    """Transformer speech encoder consisting of *config.speech_encoder_layers* conformer self attention layers.
-    Each layer is a [`SeamlessM4TConformerEncoderLayer`].""",
-    SEAMLESS_M4T_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    Transformer speech encoder consisting of *config.speech_encoder_layers* conformer self attention layers.
+    Each layer is a [`SeamlessM4TConformerEncoderLayer`].
+    """
 )
 class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
     main_input_name = "input_features"
@@ -1625,15 +1522,10 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
 
 
 # inspired from MBart and NllbMoe
-@add_start_docstrings(
-    "Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a [`SeamlessM4TEncoderLayer`].",
-    SEAMLESS_M4T_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a [`SeamlessM4TEncoderLayer`].
     """
-        embed_tokens (`nn.Embedding`, *optional*):
-            Input embedding
-        is_t2u_encoder (`bool`, *optional*, defaults to `False`):
-            indicates if it belongs to the text-to-units model, in which case it won't have input embeddings
-    """,
 )
 class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
     def __init__(
@@ -1642,6 +1534,12 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
         embed_tokens: Optional[nn.Embedding] = None,
         is_t2u_encoder: bool = False,
     ):
+        r"""
+        embed_tokens (`nn.Embedding`, *optional*):
+            Input embedding
+        is_t2u_encoder (`bool`, *optional*, defaults to `False`):
+            indicates if it belongs to the text-to-units model, in which case it won't have input embeddings
+        """
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -1813,13 +1711,10 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`SeamlessM4TDecoderLayer`].",
-    SEAMLESS_M4T_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`SeamlessM4TDecoderLayer`].
     """
-        embed_tokens (`nn.Embedding`, *optional*):
-            Input embedding
-    """,
 )
 class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
     def __init__(
@@ -1827,6 +1722,10 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         config: SeamlessM4TConfig,
         embed_tokens: Optional[nn.Embedding] = None,
     ):
+        r"""
+        embed_tokens (`nn.Embedding`, *optional*):
+            Input embedding
+        """
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -1874,6 +1773,7 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1887,58 +1787,6 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-        r"""
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
-
-                [What are input IDs?](../glossary#input-ids)
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
-                selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
-                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
-                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2061,12 +1909,10 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "Transformer bare text-to-unit encoder-decoder. The encoder is a [`SeamlessM4TEncoder`] without embeddings and the decoder is a [`SeamlessM4TDecoder`].",
-    SEAMLESS_M4T_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    Transformer bare text-to-unit encoder-decoder. The encoder is a [`SeamlessM4TEncoder`] without embeddings and the decoder is a [`SeamlessM4TDecoder`].
     """
-        embed_tokens_decoder (`nn.Embedding`, *optional*): input embedding of the decoder.
-    """,
 )
 class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
     def __init__(
@@ -2074,6 +1920,10 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
         config: SeamlessM4TConfig,
         embed_tokens_decoder: Optional[nn.Embedding] = None,
     ):
+        r"""
+        embed_tokens_decoder (`nn.Embedding`, *optional*):
+            input embedding of the decoder.
+        """
         super().__init__(config)
 
         self.encoder = SeamlessM4TEncoder(config, is_t2u_encoder=True)
@@ -2150,12 +2000,10 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "Transformer text-to-unit encoder-decoder with a language model head. The base encoder-decoder model is a [`SeamlessM4TTextToUnit`].",
-    SEAMLESS_M4T_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    Transformer text-to-unit encoder-decoder with a language model head. The base encoder-decoder model is a [`SeamlessM4TTextToUnit`].
     """
-        embed_tokens_decoder (`nn.Embedding`, *optional*): input embedding of the decoder.
-    """,
 )
 class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = [
@@ -2171,6 +2019,10 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel, 
         config: SeamlessM4TConfig,
         embed_tokens_decoder: Optional[nn.Embedding] = None,
     ):
+        r"""
+        embed_tokens_decoder (`nn.Embedding`, *optional*):
+            input embedding of the decoder.
+        """
         # update config - used principality for bos_token_id etc.
         config = copy.deepcopy(config)
         for param, val in config.to_dict().items():
@@ -2203,7 +2055,7 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel, 
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
+    @auto_docstring(custom_args=SEAMLESS_M4T_COMMON_CUSTOM_ARGS)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2220,6 +2072,12 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel, 
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
@@ -2290,23 +2148,6 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel, 
 
 
 ############ VOCODER related code ################
-
-
-HIFIGAN_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`SeamlessM4TConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
 
 
 # Copied from transformers.models.speecht5.modeling_speecht5.HifiGanResidualBlock
@@ -2481,9 +2322,10 @@ class SeamlessM4THifiGan(nn.Module):
         return waveform
 
 
-@add_start_docstrings(
-    """Code HiFi-GAN vocoder as described in this [repository](https://github.com/facebookresearch/speech-resynthesis).""",
-    HIFIGAN_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    Code HiFi-GAN vocoder as described in this [repository](https://github.com/facebookresearch/speech-resynthesis).
+    """
 )
 class SeamlessM4TCodeHifiGan(PreTrainedModel):
     config_class = SeamlessM4TConfig
@@ -2645,9 +2487,10 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
 ############ WHOLE MODEL related code ################
 
 
-@add_start_docstrings(
-    "The text-to-text SeamlessM4T Model transformer which can be used for T2TT.",
-    SEAMLESS_M4T_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The text-to-text SeamlessM4T Model transformer which can be used for T2TT.
+    """
 )
 class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["speech_encoder", "t2u_model", "vocoder"]
@@ -2697,7 +2540,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel, GenerationMixin):
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
+    @auto_docstring(custom_args=SEAMLESS_M4T_COMMON_CUSTOM_ARGS)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2715,6 +2558,12 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        """
         if labels is not None:
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
@@ -2911,9 +2760,10 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel, GenerationMixin):
         return reordered_past
 
 
-@add_start_docstrings(
-    "The speech-to-text SeamlessM4T Model transformer which can be used for S2TT.",
-    SEAMLESS_M4T_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The speech-to-text SeamlessM4T Model transformer which can be used for S2TT.
+    """
 )
 class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["text_decoder", "t2u_model", "vocoder"]
@@ -2958,7 +2808,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    @add_start_docstrings_to_model_forward(M4T_SPEECH_INPUTS_DOCSTRING)
+    @auto_docstring(custom_args=SEAMLESS_M4T_COMMON_CUSTOM_ARGS)
     def forward(
         self,
         input_features: Optional[torch.LongTensor] = None,
@@ -2976,6 +2826,12 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        """
         if labels is not None:
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
@@ -3181,9 +3037,10 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
         return reordered_past
 
 
-@add_start_docstrings(
-    "The text-to-speech SeamlessM4T Model transformer which can be used for T2ST.",
-    SEAMLESS_M4T_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The text-to-speech SeamlessM4T Model transformer which can be used for T2ST.
+    """
 )
 class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["speech_encoder"]
@@ -3236,7 +3093,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
+    @auto_docstring(custom_args=SEAMLESS_M4T_COMMON_CUSTOM_ARGS)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -3253,6 +3110,12 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        """
         if labels is not None:
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
@@ -3511,9 +3374,10 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         return reordered_past
 
 
-@add_start_docstrings(
-    "The speech-to-speech SeamlessM4T Model transformer which can be used for S2ST.",
-    SEAMLESS_M4T_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The speech-to-speech SeamlessM4T Model transformer which can be used for S2ST.
+    """
 )
 class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["text_encoder"]
@@ -3561,7 +3425,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    @add_start_docstrings_to_model_forward(M4T_SPEECH_INPUTS_DOCSTRING)
+    @auto_docstring(custom_args=SEAMLESS_M4T_COMMON_CUSTOM_ARGS)
     def forward(
         self,
         input_features: Optional[torch.LongTensor] = None,
@@ -3579,6 +3443,12 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        """
         if labels is not None:
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
@@ -3851,13 +3721,10 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         return reordered_past
 
 
-@add_start_docstrings(
-    "The original SeamlessM4T Model transformer which can be used for every tasks available (S2ST, S2TT, T2TT, T2ST).",
-    SEAMLESS_M4T_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The original SeamlessM4T Model transformer which can be used for every tasks available (S2ST, S2TT, T2TT, T2ST).
     """
-        current_modality (`str`, *optional*, defaults to `"text"`):
-            Default modality. Used to initialize the model.
-    """,
 )
 class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
     _tied_weights_keys = [
@@ -3867,6 +3734,10 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
     ]
 
     def __init__(self, config, current_modality="text"):
+        r"""
+        current_modality (`str`, *optional*, defaults to `"text"`):
+            Default modality. Used to initialize the model.
+        """
         super().__init__(config)
 
         self.shared = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
@@ -3923,7 +3794,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    @add_start_docstrings_to_model_forward(M4T_MODEL_INPUTS_DOCSTRING)
+    @auto_docstring(custom_args=SEAMLESS_M4T_COMMON_CUSTOM_ARGS)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -3942,6 +3813,12 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

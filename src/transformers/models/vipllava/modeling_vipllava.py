@@ -207,7 +207,6 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         image_features = self.multi_modal_projector(image_features)
         return image_features
 
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
