@@ -18,7 +18,7 @@ import warnings
 from parameterized import parameterized
 
 from transformers import __version__, is_torch_available
-from transformers.testing_utils import require_torch_accelerator, require_torch_gpu, torch_device
+from transformers.testing_utils import require_torch_accelerator, torch_device
 from transformers.utils.deprecation import deprecate_kwarg
 
 

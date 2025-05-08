@@ -21,7 +21,6 @@ from transformers import set_seed
 from transformers.generation.configuration_utils import ALL_CACHE_IMPLEMENTATIONS
 from transformers.testing_utils import (
     CaptureStderr,
-    Expectations,
     cleanup,
     get_gpu_count,
     is_torch_available,
