@@ -1845,6 +1845,7 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
 
                 # FIXME：暂时屏蔽 Vision Encoder影响，transformers的 vision encoder也不对
                 if image_embeds.shape[0] == 1250:
+                    print("original with:\n", image_embeds)
                     from safetensors.torch import load_file
                     image_embed_dict = load_file("/mnt/image_embed.safetensors")
                     image_embeds = image_embed_dict["image_embeds"].to(inputs_embeds.device)
