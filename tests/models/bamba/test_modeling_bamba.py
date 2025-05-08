@@ -47,6 +47,11 @@ if is_torch_available():
 
 
 class BambaModelTester:
+    config_class = BambaConfig
+    if is_torch_available():
+        model_class = BambaModel
+        for_causal_lm_class = BambaForCausalLM
+
     def __init__(
         self,
         parent,
@@ -118,6 +123,7 @@ class BambaModelTester:
         if self.use_labels:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
 
+        self._update_layer_configs()
         config = self.get_config()
 
         return config, input_ids, input_mask, token_labels
@@ -133,10 +139,12 @@ class BambaModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
-    def get_config(self):
+    def _update_layer_configs(self):
+        """Configures hidden layers and attn layer indices if they are not set."""
         # Fix for SDPA tests, force at least 4 layers
         if self.num_hidden_layers < 4:
             self.num_hidden_layers = 4
+
         if self.attn_layer_indices is None:
             d = [x for x in range(2, self.num_hidden_layers) if self.num_hidden_layers % x == 0]
             if len(d) == 0:
@@ -144,7 +152,8 @@ class BambaModelTester:
             d = d[-1]  # get the largest divisor
             self.attn_layer_indices = [x + 1 for x in range(0, self.num_hidden_layers, d)]
 
-        return BambaConfig(
+    def get_config(self, **kwargs):
+        return self.config_class(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -164,6 +173,7 @@ class BambaModelTester:
             mamba_d_conv=self.mamba_d_conv,
             mamba_expand=self.mamba_expand,
             mamba_chunk_size=self.mamba_chunk_size,
+            **kwargs,
         )
 
     def create_and_check_model(
@@ -173,7 +183,7 @@ class BambaModelTester:
         input_mask,
         token_labels,
     ):
-        model = BambaModel(config=config)
+        model = self.model_class(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -187,7 +197,7 @@ class BambaModelTester:
         input_mask,
         token_labels,
     ):
-        model = BambaForCausalLM(config=config)
+        model = self.for_causal_lm_class(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -205,7 +215,7 @@ class BambaModelTester:
     ):
         # config.is_decoder = True
         # config.add_cross_attention = True
-        model = BambaForCausalLM(config=config)
+        model = self.for_causal_lm_class(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -258,6 +268,7 @@ class BambaModelTester:
 
 @require_torch
 class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = BambaModelTester
     all_model_classes = (BambaModel, BambaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -276,8 +287,8 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     model_split_percents = [0.5, 0.7, 0.8]
 
     def setUp(self):
-        self.model_tester = BambaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BambaConfig, hidden_size=64)
+        self.model_tester = self.model_tester_class(self)
+        self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class, hidden_size=64)
 
     def test_config(self):
         self.config_tester.run_common_tests()
