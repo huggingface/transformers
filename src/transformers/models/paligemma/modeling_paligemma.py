@@ -275,7 +275,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         past_key_values=None,
         cache_position=None,
         input_tensor=None,
-        is_training: bool = None,
+        is_training: Optional[bool] = None,
     ):
         if self.config.text_config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
