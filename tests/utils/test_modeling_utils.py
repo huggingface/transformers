@@ -1912,13 +1912,14 @@ class ModelUtilsTest(TestCasePlus):
             import time
             import argparse
             from transformers import AutoModelForCausalLM
+            from transformers.utils import is_torch_accelerator_available
 
             parser = argparse.ArgumentParser()
             parser.add_argument("model_id", type=str)
             parser.add_argument("max_loading_time", type=float)
             args = parser.parse_args()
 
-            device_type = torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
+            device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
             device = torch.device(f"{device_type}:0")
 
             torch_accelerator_module = getattr(torch, device_type, torch.cuda)
