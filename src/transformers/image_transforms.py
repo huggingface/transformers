@@ -751,7 +751,7 @@ def pad(
         values = ((0, 0), *values) if input_data_format == ChannelDimension.FIRST else (*values, (0, 0))
 
         # Add additional padding if there's a batch dimension
-        values = (0, *values) if image.ndim == 4 else values
+        values = ((0, 0), *values) if image.ndim == 4 else values
         return values
 
     padding = _expand_for_data_format(padding)
