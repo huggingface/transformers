@@ -75,6 +75,12 @@ class xLSTMConfig(PretrainedConfig):
             Dimensionality of the embeddings or hidden states.
         num_hidden_layers (int, optional, *optional*, defaults to 32):
             Number of blocks of the xLSTM model.
+        embedding_dim (int, optional, *optional*, defaults to 4096):
+            Dimensionality of the embeddings or hidden states, use hidde_size if None.
+        num_hidden_layers (int, optional, *optional*, defaults to 32):
+            Number of blocks of the xLSTM model.
+        num_blocks (int, optional, *optional*, defaults to 32):
+            Number of blocks of the xLSTM model, use num_hidden_layers if None.
         num_heads (int, optional, *optional*, defaults to 8):
             Number of heads for the xLSTM Layer/Cell.
         use_bias (bool, optional, *optional*, defaults to `False`):
