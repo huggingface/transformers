@@ -45,7 +45,7 @@ from ...utils import (
     replace_return_docstrings,
     torch_int,
 )
-from ..auto import AutoModelForCausalLM, AutoModelForSeq2SeqLM
+from ..auto import AutoModel, AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from .configuration_instructblipvideo import (
     InstructBlipVideoConfig,
     InstructBlipVideoQFormerConfig,
@@ -945,6 +945,9 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     config_class = InstructBlipVideoConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
+    _supports_cache_class = True
+    _supports_static_cache = True
+    _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
 
     _no_split_modules = [
         "InstructBlipVideoQFormerEmbeddings",
@@ -969,7 +972,7 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
         elif isinstance(module, InstructBlipVideoVisionEmbeddings):
             nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
             nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
-        elif isinstance(module, InstructBlipVideoForConditionalGeneration):
+        elif isinstance(module, (InstructBlipVideoForConditionalGeneration, InstructBlipVideoModel)):
             module.query_tokens.data.zero_()
 
 
@@ -1266,6 +1269,166 @@ class InstructBlipVideoForConditionalGenerationModelOutput(ModelOutput):
             if k not in ["vision_outputs", "qformer_outputs", "language_model_outputs"]
             else getattr(self, k).to_tuple()
             for k in self.keys()
+        )
+
+
+@add_start_docstrings(
+    """
+    InstructBlipVideo base Model consisting of language model, qformer and vision encoder.
+    """,
+    INSTRUCTBLIPVIDEO_START_DOCSTRING,
+)
+class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
+    main_input_name = "pixel_values"
+    _keep_in_fp32_modules = ["query_tokens"]  # TODO @ArthurZucker I don't know why this is required for FP8
+
+    def __init__(self, config: InstructBlipVideoConfig):
+        super().__init__(config)
+
+        self.vision_model = InstructBlipVideoVisionModel(config.vision_config)
+        self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
+        self.qformer = InstructBlipVideoQFormerModel(config.qformer_config)
+
+        self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
+        self.language_model = AutoModel.from_config(config.text_config)
+
+        if self.language_model._no_split_modules is not None:
+            self._no_split_modules.extend(self.language_model._no_split_modules)
+
+        if self.language_model._keep_in_fp32_modules is not None:
+            self._keep_in_fp32_modules.extend(self.language_model._keep_in_fp32_modules)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
+
+    def _tie_weights(self):
+        if not self.config.use_decoder_only_language_model:
+            self.language_model.encoder.embed_tokens = self.language_model.shared
+            self.language_model.decoder.embed_tokens = self.language_model.shared
+
+    def _preprocess_accelerate(self):
+        r"""
+        Some pre-processing hacks to make the model `accelerate` compatible. Check
+        https://github.com/huggingface/transformers/pull/21707 for more details.
+        """
+        hf_device_map = self.hf_device_map
+
+        if len(hf_device_map) > 1 and "language_model" not in hf_device_map and torch.cuda.device_count() > 1:
+            # warn users about unexpected behavior when using multi-GPU + InstructBlipVideo + `accelerate`.
+            logger.warning(
+                "The `language_model` is not in the `hf_device_map` dictionary and you are running your script"
+                " in a multi-GPU environment. this may lead to unexpected behavior when using `accelerate`."
+                " Please pass a `device_map` that contains `language_model` to remove this warning."
+                " Please refer to https://github.com/huggingface/blog/blob/main/accelerate-large-models.md for"
+                " more details on creating a `device_map` for large models.",
+            )
+
+        if hasattr(self.language_model, "_hf_hook"):
+            self.language_model._hf_hook.io_same_device = True  # For `generate` compatibility
+
+    @add_start_docstrings_to_model_forward(INSTRUCTBLIPVIDEO_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        qformer_input_ids: torch.FloatTensor,
+        qformer_attention_mask: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
+        use_cache: Optional[bool] = None,
+    ) -> Union[Tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # step 1: forward the images through the vision encoder,
+        # we process in a batched way, later unbatch it back (video has frames=4 always)
+        batch_size, frames, channel, height, width = pixel_values.shape
+        pixel_values = pixel_values.reshape(batch_size * frames, channel, height, width)
+
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+        )
+        image_embeds = vision_outputs[0]
+
+        # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
+        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
+
+        # difference with BLIP-2 here: we also feed the instruction prompt to the Q-Former
+        query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+        query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
+
+        if qformer_attention_mask is None:
+            qformer_attention_mask = torch.ones_like(qformer_input_ids)
+
+        qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
+        qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
+        qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
+        query_outputs = self.qformer(
+            input_ids=qformer_input_ids,
+            attention_mask=qformer_attention_mask,
+            query_embeds=query_tokens,
+            encoder_hidden_states=image_embeds,
+            encoder_attention_mask=image_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        query_output = query_outputs[0][:, : query_tokens.size(1), :]
+
+        # step 3: use the language model, conditioned on the query outputs and the prompt
+        language_model_inputs = self.language_projection(query_output)
+
+        # unbatch inputs back, each video-frame gets `num_query_tokens` seq length
+        language_model_inputs = language_model_inputs.reshape(batch_size, self.config.num_query_tokens * frames, -1)
+        inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+
+        special_image_mask = (input_ids == self.config.video_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+        inputs_embeds[special_image_mask] = language_model_inputs.flatten()
+
+        if self.config.use_decoder_only_language_model:
+            outputs = self.language_model(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                use_cache=use_cache,
+            )
+        else:
+            outputs = self.language_model(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                use_cache=use_cache,
+            )
+
+        if not return_dict:
+            return (vision_outputs, query_outputs, outputs)
+
+        return InstructBlipVideoForConditionalGenerationModelOutput(
+            vision_outputs=vision_outputs,
+            qformer_outputs=query_outputs,
+            language_model_outputs=outputs,
         )
 
 
@@ -1682,5 +1845,6 @@ __all__ = [
     "InstructBlipVideoVisionModel",
     "InstructBlipVideoPreTrainedModel",
     "InstructBlipVideoQFormerModel",
+    "InstructBlipVideoModel",
     "InstructBlipVideoForConditionalGeneration",
 ]
