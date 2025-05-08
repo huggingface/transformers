@@ -18,7 +18,14 @@ import unittest
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
-from transformers.testing_utils import Expectations, require_read_token, require_torch, require_torch_accelerator, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    require_read_token,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 
 from ...generation.test_utils import GenerationTesterMixin
