@@ -563,7 +563,7 @@ class GenerationMixin:
             if model_inputs["inputs_embeds"] is not None:
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
             else:
-                batch_size, sequence_length = model_inputs[input_ids_key].shape
+                batch_size, sequence_length = model_inputs[input_ids_key].shape[:2]
 
             # Create the causal mask with fixed shape in advance, to reduce recompilations. If the function to create
             # the 4D causal mask exists, it should be present in the base model (XXXModel class) or in its decoder.
@@ -1708,7 +1708,7 @@ class GenerationMixin:
 
         return generation_config, model_kwargs
 
-    def _get_initial_cache_position(self, input_ids, model_kwargs):
+    def _get_initial_cache_position(self, seq_length, device, model_kwargs):
         """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
         # `torch.compile`-friendly `torch.arange` from a shape -- the lines below are equivalent to `torch.arange`
         if "inputs_embeds" in model_kwargs and not self.config.is_encoder_decoder:
@@ -1718,7 +1718,7 @@ class GenerationMixin:
                 torch.ones_like(model_kwargs["decoder_inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0) - 1
             )
         else:
-            cache_position = torch.ones_like(input_ids[0, :], dtype=torch.int64).cumsum(0) - 1
+            cache_position = torch.ones(seq_length, dtype=torch.int64, device=device).cumsum(0) - 1
 
         past_length = 0
         if model_kwargs.get("past_key_values") is not None:
@@ -2332,7 +2332,7 @@ class GenerationMixin:
             streamer.put(input_ids.cpu())
 
         # 6. Prepare `max_length` depending on other stopping criteria.
-        input_ids_length = input_ids.shape[-1]
+        input_ids_length = input_ids.shape[1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
         generation_config = self._prepare_generated_length(
@@ -2805,9 +2805,9 @@ class GenerationMixin:
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # keep track of which sequences are already finished
-        batch_size = input_ids.shape[0]
+        batch_size, cur_length = input_ids.shape[:2]
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
+        model_kwargs = self._get_initial_cache_position(cur_length, input_ids.device, model_kwargs)
 
         this_peer_finished = False
 
@@ -3016,9 +3016,9 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        batch_size = input_ids.shape[0]
+        batch_size, cur_len = input_ids.shape[:2]
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
+        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         # Create cosine_matrix_mask based on the attention_mask
         cosine_matrix_mask = torch.ones_like(input_ids, dtype=torch.long)
@@ -3428,10 +3428,10 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        batch_size, cur_len = input_ids.shape
+        batch_size, cur_len = input_ids.shape[:2]
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
+        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         model_forward = self.__call__
         compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
@@ -3834,7 +3834,7 @@ class GenerationMixin:
         num_beams = generation_config.num_beams
         num_return_sequences = generation_config.num_return_sequences
 
-        batch_size_unflattened, cur_len = input_ids.shape
+        batch_size_unflattened, cur_len = input_ids.shape[:2]
         batch_size = batch_size_unflattened // num_beams
         # TODO (joao): standardize special cases
         if self.__class__.__name__ == "MoshiDepthDecoder":
@@ -3857,7 +3857,7 @@ class GenerationMixin:
             dim=0,
         ).to(input_ids.device)
 
-        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
+        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         # (joao) feature lost in the refactor. Probably won't implement, hurts readability with minimal gains (there
         # are newer low-memory alternatives like the offloaded cache)
@@ -4156,7 +4156,7 @@ class GenerationMixin:
         device = input_ids.device
 
         batch_beam_size, cur_len = input_ids.shape
-        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
+        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         if return_dict_in_generate and output_scores:
             beam_indices = [tuple(() for _ in range(num_sub_beams * batch_size)) for _ in range(num_beam_groups)]
@@ -4190,7 +4190,7 @@ class GenerationMixin:
 
         this_peer_finished = False
 
-        decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
+        decoder_prompt_len = input_ids.shape[1]  # record the prompt length of decoder
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # predicted tokens in cur_len step
             current_tokens = torch.zeros(batch_size * num_beams, dtype=input_ids.dtype, device=device)
@@ -4444,8 +4444,8 @@ class GenerationMixin:
         batch_size = len(constrained_beam_scorer._beam_hyps)
         num_beams = constrained_beam_scorer.num_beams
 
-        batch_beam_size, cur_len = input_ids.shape
-        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
+        batch_beam_size, cur_len = input_ids.shape[:2]
+        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         if num_beams * batch_size != batch_beam_size:
             raise ValueError(
@@ -4477,7 +4477,7 @@ class GenerationMixin:
 
         this_peer_finished = False
 
-        decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
+        decoder_prompt_len = input_ids.shape[1]  # record the prompt length of decoder
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -4698,14 +4698,14 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        batch_size = input_ids.shape[0]
+        batch_size, cur_len = input_ids.shape[:2]
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
+        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         this_peer_finished = False
         is_first_iteration = True  # to preserve the same API in the output as other generation methods
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
-            cur_len = input_ids.shape[-1]
+            cur_len = input_ids.shape[1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator` and move to the correct device
             candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
@@ -4795,7 +4795,7 @@ class GenerationMixin:
             input_ids = torch.cat((input_ids, valid_tokens), dim=-1)
             if streamer is not None:
                 streamer.put(valid_tokens.cpu())
-            new_cur_len = input_ids.shape[-1]
+            new_cur_len = input_ids.shape[1]
 
             # 4.2. Discard past key values relative to unused assistant tokens
             new_cache_size = new_cur_len - 1
