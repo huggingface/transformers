@@ -63,6 +63,8 @@ from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.tensor_parallel import (
     SUPPORTED_TP_STYLES,
+    convert_to_dtensor,
+    reorder_packed_tensor_for_saving,
     shard_and_distribute_module,
 )
 from .loss.loss_utils import LOSS_MAPPING
@@ -3265,6 +3267,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         """
         return any(hasattr(m, "gradient_checkpointing") and m.gradient_checkpointing for m in self.modules())
 
+    def _replace_local_with_dtensor(self, state_dict):
+        for key, value in state_dict.items():
+            if isinstance(value, torch.Tensor) and not isinstance(value, torch.distributed.tensor.DTensor):
+                state_dict[key] = convert_to_dtensor(value, key, self._device_mesh, self._tp_plan)
+        return state_dict
+
     def save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
@@ -3483,6 +3491,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Rename state_dict keys before saving to file. Do nothing unless overridden in a particular model.
         # (initially introduced with TimmWrapperModel to remove prefix and make checkpoints compatible with timm)
         state_dict = self._fix_state_dict_keys_on_save(state_dict)
+        state_dict = self._replace_local_with_dtensor(state_dict)
 
         if safe_serialization:
             # Safetensors does not allow tensor aliasing.
@@ -3602,7 +3611,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             shard = {}
             for tensor in tensors:
                 if isinstance(state_dict[tensor], torch.distributed.tensor.DTensor):
-                    shard[tensor] = state_dict[tensor].full_tensor().contiguous()
+                    full_tensor = state_dict[tensor].full_tensor()
+                    if "gate_up_proj" in tensor:
+                        full_tensor = reorder_packed_tensor_for_saving(full_tensor, -1, 4, 2)
+                    shard[tensor] = full_tensor.contiguous() # only do contiguous after it's permuted correctly
                 else:
                     shard[tensor] = state_dict[tensor].contiguous()
                 # delete reference, see https://github.com/huggingface/transformers/pull/34890
@@ -4533,6 +4545,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # record tp degree the model sharded to
         model._tp_size = tp_size
+        model._device_mesh = device_mesh
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
