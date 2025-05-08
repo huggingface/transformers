@@ -2652,8 +2652,8 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                 layer_reference_points_sigmoid
             )
             outputs_coord_list.append(layer_outputs_unsigmoid.sigmoid())
-        outputs_coord_list = torch.stack(outputs_coord_list)
 
+        outputs_coord_list = torch.stack(outputs_coord_list)
         outputs_class = torch.stack(
             [
                 layer_cls_embed(layer_hidden_states)
