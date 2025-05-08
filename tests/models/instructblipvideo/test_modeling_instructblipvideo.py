@@ -54,7 +54,11 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import InstructBlipVideoForConditionalGeneration, InstructBlipVideoVisionModel
+    from transformers import (
+        InstructBlipVideoForConditionalGeneration,
+        InstructBlipVideoModel,
+        InstructBlipVideoVisionModel,
+    )
 
 
 class InstructBlipVideoVisionModelTester:
@@ -477,7 +481,6 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester:
             "attention_mask": attention_mask,
             "qformer_input_ids": qformer_input_ids,
             "qformer_attention_mask": qformer_attention_mask,
-            "labels": input_ids,
         }
         return config, inputs_dict
 
@@ -486,7 +489,9 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester:
 class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 ):
-    all_model_classes = (InstructBlipVideoForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (InstructBlipVideoForConditionalGeneration, InstructBlipVideoModel) if is_torch_available() else ()
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False

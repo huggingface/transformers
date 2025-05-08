@@ -21,9 +21,9 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...generation import GenerationMixin
-from ...modeling_outputs import CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...models.auto.modeling_auto import AutoModelForCausalLM
+from ...models.auto.modeling_auto import AutoModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_fuyu import FuyuConfig
 
@@ -143,18 +143,17 @@ FUYU_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "Fuyu Model with a language modeling head on top for causal language model conditioned on image patches and text.",
+    """The Fuyu model which consists of a vision backbone and a language model, without a language modeling head.""",
     FUYU_START_DOCSTRING,
 )
-class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
+class FuyuModel(FuyuPreTrainedModel):
+    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
+
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
+        self.language_model = AutoModel.from_config(config.text_config)
         self.vision_embed_tokens = nn.Linear(
             config.patch_size * config.patch_size * config.num_channels, config.hidden_size
         )
@@ -168,18 +167,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
 
     def gather_continuous_embeddings(
         self,
@@ -224,56 +211,21 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         return output_embeddings
 
     @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        image_patches: Optional[
-            torch.Tensor
-        ] = None,  # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
-        image_patches_indices: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor = None,
+        image_patches: torch.Tensor = None,  # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
+        image_patches_indices: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.text_config.vocab_size]`.
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import FuyuProcessor, FuyuForCausalLM
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> processor = FuyuProcessor.from_pretrained("adept/fuyu-8b")
-        >>> model = FuyuForCausalLM.from_pretrained("adept/fuyu-8b")
-
-        >>> url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> prompt = "Generate a coco-style caption.\n"
-
-        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> generated_ids = model.generate(**inputs, max_new_tokens=7)
-        >>> generation_text = processor.batch_decode(generated_ids[:, -7:], skip_special_tokens=True)
-        >>> print(generation_text[0])
-        A blue bus parked on the side of a road.
-        ```"""
-
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -327,13 +279,145 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            labels=labels,
             use_cache=use_cache,
             return_dict=return_dict,
             **kwargs,
         )
 
         return outputs
+
+
+@add_start_docstrings(
+    "Fuyu Model with a language modeling head on top for causal language model conditioned on image patches and text.",
+    FUYU_START_DOCSTRING,
+)
+class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
+    _checkpoint_conversion_mapping = {
+        "^language_model.model": "model.language_model",
+        "^vision_embed_tokens": "model.vision_embed_tokens",
+        "^language_model.lm_head": "lm_head",
+    }
+    _tied_weights_keys = ["lm_head.weight"]
+
+    def __init__(self, config: FuyuConfig):
+        super().__init__(config)
+        self.model = FuyuModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.model.get_decoder()
+
+    @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        image_patches: torch.Tensor = None,  # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
+        image_patches_indices: torch.Tensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        logits_to_keep: Optional[int] = 0,
+        **kwargs,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.text_config.vocab_size]`.
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import FuyuProcessor, FuyuForCausalLM
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> processor = FuyuProcessor.from_pretrained("adept/fuyu-8b")
+        >>> model = FuyuForCausalLM.from_pretrained("adept/fuyu-8b")
+
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> prompt = "Generate a coco-style caption.\n"
+
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=7)
+        >>> generation_text = processor.batch_decode(generated_ids[:, -7:], skip_special_tokens=True)
+        >>> print(generation_text[0])
+        A blue bus parked on the side of a road.
+        ```"""
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            input_ids=input_ids,
+            image_patches=image_patches,
+            image_patches_indices=image_patches_indices,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            use_cache=use_cache,
+            return_dict=return_dict,
+            # don't pass kwargs because Persimmon-backbone doesn't accept FA2 kwargs yet, TODO: raushan
+        )
+
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
     def prepare_inputs_for_generation(
         self,
@@ -373,4 +457,4 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         return reordered_past
 
 
-__all__ = ["FuyuForCausalLM", "FuyuPreTrainedModel"]
+__all__ = ["FuyuForCausalLM", "FuyuPreTrainedModel", "FuyuModel"]

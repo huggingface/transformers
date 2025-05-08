@@ -27,6 +27,7 @@ from transformers.models.instructblip.configuration_instructblip import (
 from transformers.models.instructblip.modeling_instructblip import (
     InstructBlipForConditionalGeneration,
     InstructBlipForConditionalGenerationModelOutput,
+    InstructBlipModel,
     InstructBlipPreTrainedModel,
     InstructBlipQFormerModel,
     InstructBlipVisionModel,
@@ -34,7 +35,7 @@ from transformers.models.instructblip.modeling_instructblip import (
 
 from ...configuration_utils import PretrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-from ...utils import logging
+from ...utils import add_start_docstrings_to_model_forward, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -189,6 +190,110 @@ class InstructBlipVideoQFormerModel(InstructBlipQFormerModel):
 @dataclass
 class InstructBlipVideoForConditionalGenerationModelOutput(InstructBlipForConditionalGenerationModelOutput):
     pass
+
+
+INSTRUCTBLIPVIDEO_INPUTS_DOCSTRING = None
+
+
+class InstructBlipVideoModel(InstructBlipModel):
+    @add_start_docstrings_to_model_forward(INSTRUCTBLIPVIDEO_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        qformer_input_ids: torch.FloatTensor,
+        qformer_attention_mask: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
+        use_cache: Optional[bool] = None,
+    ) -> Union[Tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # step 1: forward the images through the vision encoder,
+        # we process in a batched way, later unbatch it back (video has frames=4 always)
+        batch_size, frames, channel, height, width = pixel_values.shape
+        pixel_values = pixel_values.reshape(batch_size * frames, channel, height, width)
+
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+        )
+        image_embeds = vision_outputs[0]
+
+        # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
+        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
+
+        # difference with BLIP-2 here: we also feed the instruction prompt to the Q-Former
+        query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+        query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
+
+        if qformer_attention_mask is None:
+            qformer_attention_mask = torch.ones_like(qformer_input_ids)
+
+        qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
+        qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
+        qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
+        query_outputs = self.qformer(
+            input_ids=qformer_input_ids,
+            attention_mask=qformer_attention_mask,
+            query_embeds=query_tokens,
+            encoder_hidden_states=image_embeds,
+            encoder_attention_mask=image_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        query_output = query_outputs[0][:, : query_tokens.size(1), :]
+
+        # step 3: use the language model, conditioned on the query outputs and the prompt
+        language_model_inputs = self.language_projection(query_output)
+
+        # unbatch inputs back, each video-frame gets `num_query_tokens` seq length
+        language_model_inputs = language_model_inputs.reshape(batch_size, self.config.num_query_tokens * frames, -1)
+        inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+
+        special_image_mask = (input_ids == self.config.video_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+        inputs_embeds[special_image_mask] = language_model_inputs.flatten()
+
+        if self.config.use_decoder_only_language_model:
+            outputs = self.language_model(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                use_cache=use_cache,
+            )
+        else:
+            outputs = self.language_model(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                use_cache=use_cache,
+            )
+
+        if not return_dict:
+            return (vision_outputs, query_outputs, outputs)
+
+        return InstructBlipVideoForConditionalGenerationModelOutput(
+            vision_outputs=vision_outputs,
+            qformer_outputs=query_outputs,
+            language_model_outputs=outputs,
+        )
 
 
 class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGeneration):
@@ -508,5 +613,6 @@ __all__ = [
     "InstructBlipVideoVisionModel",
     "InstructBlipVideoPreTrainedModel",
     "InstructBlipVideoQFormerModel",
+    "InstructBlipVideoModel",
     "InstructBlipVideoForConditionalGeneration",
 ]

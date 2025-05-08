@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen2.5-VL model."""
 
+import copy
 import gc
 import tempfile
 import unittest
@@ -23,6 +24,7 @@ from transformers import (
     AutoProcessor,
     Qwen2_5_VLConfig,
     Qwen2_5_VLForConditionalGeneration,
+    Qwen2_5_VLModel,
     is_torch_available,
     is_vision_available,
 )
@@ -180,17 +182,11 @@ class Qwen2_5_VLVisionText2TextModelTester:
         input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         input_ids[:, self.num_image_tokens] = self.image_token_id
         input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
-        labels = torch.zeros(
-            (self.batch_size, self.seq_length),
-            dtype=torch.long,
-            device=torch_device,
-        )
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "labels": labels,
         }
         return config, inputs_dict
 
@@ -201,7 +197,14 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     Model tester for `Qwen2_5_VLForConditionalGeneration`.
     """
 
-    all_model_classes = (Qwen2_5_VLForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Qwen2_5_VLModel,
+            Qwen2_5_VLForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     test_pruning = False
     test_head_masking = False
 
@@ -236,19 +239,20 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             _ = model(**input_dict)  # successful forward with no modifications
+            curr_input_dict = copy.deepcopy(input_dict)
 
             # remove one image but leave the image token in text
             patch_size = config.vision_config.patch_size
             one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
-            input_dict["pixel_values"] = input_dict["pixel_values"][-one_img_length:, ...]
-            input_dict["image_grid_thw"] = input_dict["image_grid_thw"][-1:, ...]
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
+            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
             with self.assertRaises(ValueError):
-                _ = model(**input_dict)
+                _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = input_dict["input_ids"][:1]
-            pixel_values = input_dict["pixel_values"][:one_img_length]
-            image_grid_thw = input_dict["image_grid_thw"][:1]
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:one_img_length]
+            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
@@ -374,6 +378,29 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     @unittest.skip(reason="The base class is LM only and cannot be init with XModelConfig`")
     def test_save_load_fast_init_from_base(self):
         pass
+
+    # The multimodal base model embeds will not match ids, due to pixel values. We can't change base test
+    # because in some models `pixel_values` are required. Will be fixed when we add support for merging `embeds+pixels`
+    # TODO: @raushan
+    def test_inputs_embeds_matches_input_ids(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+
+            with torch.no_grad():
+                out_ids = model(input_ids=input_ids, **inputs)[0]
+                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+            torch.testing.assert_close(out_embeds, out_ids)
 
 
 @require_torch
