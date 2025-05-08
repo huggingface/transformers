@@ -1116,6 +1116,7 @@ class FlavaModel(FlavaPreTrainedModel):
         ...     text=["a photo of a cat", "a photo of a dog"], max_length=77, padding="max_length", return_tensors="pt"
         ... )
         >>> text_features = model.get_text_features(**inputs)
+        ```
         """
         text_outputs = self.text_model(
             input_ids=input_ids,
@@ -1168,6 +1169,7 @@ class FlavaModel(FlavaPreTrainedModel):
         >>> inputs = processor(images=image, return_tensors="pt")
 
         >>> image_features = model.get_image_features(**inputs)
+        ```
         """
         image_outputs = self.image_model(
             pixel_values=pixel_values,
