@@ -149,7 +149,9 @@ class xLSTMConfig(PretrainedConfig):
         self,
         vocab_size: int = 50304,
         hidden_size: int = 4096,
-        num_hidden_layers: int = 32,
+        embedding_dim: int | None = None,
+        num_hidden_layers: int | None = 32,
+        num_blocks: int | None = None,
         num_heads: int = 8,
         use_bias: bool = False,
         norm_reduction_force_float32: bool = True,
@@ -188,8 +190,10 @@ class xLSTMConfig(PretrainedConfig):
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
+        self.hidden_size = hidden_size if hidden_size is not None else embedding_dim
+        self.embedding_dim = embedding_dim if embedding_dim is not None else hidden_size
+        self.num_hidden_layers = num_hidden_layers if num_hidden_layers is not None else num_blocks
+        self.num_blocks = num_blocks if num_blocks is not None else num_hidden_layers
         self.num_heads = num_heads
         self.use_bias = use_bias
         self.tie_word_embeddings = tie_word_embeddings
@@ -234,14 +238,14 @@ class xLSTMConfig(PretrainedConfig):
     @property
     def qk_dim(self):
         return round_up_to_next_multiple_of(
-            self.embedding_dim * self.qk_dim_factor,
+            self.hidden_size * self.qk_dim_factor,
             multiple_of=64,
         )
 
     @property
     def v_dim(self):
         return round_up_to_next_multiple_of(
-            self.embedding_dim * self.v_dim_factor,
+            self.hidden_size * self.v_dim_factor,
             multiple_of=64,
         )
 
