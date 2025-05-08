@@ -25,29 +25,25 @@ from typing import Deque, Dict, List, Optional, Union
 import torch
 
 
-if False:
-    from flash_attn import flash_attn_varlen_func
-
 from ..cache_utils import Cache
 from ..configuration_utils import PretrainedConfig
 from ..generation.configuration_utils import GenerationConfig
 from ..generation.utils import GenerationMixin
 from ..utils import (
-    is_accelerate_available,
     logging,
 )
 
 
 logger = logging.get_logger(__name__)
 
-if is_accelerate_available():
-    pass
 
-
-# Request State Tracking
 @dataclass
 class RequestState:
-    """Tracks the state of a generation request through its lifecycle."""
+    """Tracks the state of a generation request through its lifecycle.
+
+    Attributes:
+        status (str): can be one of 'pending', 'prefilling', 'prefilling_split', 'split_pending_remainder', 'decoding', 'finished', 'failed'
+    """
 
     # Required fields
     request_id: str
@@ -58,9 +54,7 @@ class RequestState:
     remaining_prompt_ids: List[int] = field(default_factory=list)  # For split requests
     allocated_blocks: List[int] = field(default_factory=list)
     position_offset: int = 0  # Current position in the sequence for position_ids
-    status: str = (
-        "pending"  # pending, prefilling, prefilling_split, split_pending_remainder, decoding, finished, failed
-    )
+    status: str = "pending"
     max_new_tokens: int = 20
     eos_token_id: int = -1
     created_time: float = field(default_factory=time.time)
@@ -229,7 +223,6 @@ class PagedAttentionCache(Cache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cumulative_seqlens_k: torch.Tensor,
         cache_index,
         **kwargs,
     ) -> (torch.Tensor, torch.Tensor):
@@ -297,69 +290,6 @@ class PagedAttentionCache(Cache):
                     f"IndexError during cache write for request {request_id}. Physical indices: {physical_indices_tensor.tolist()}, Max index: {k_cache_flat.shape[0] - 1}"
                 )
                 raise e
-
-
-def paged_attention_forward(
-    module: torch.nn.Module,
-    q: torch.Tensor,
-    k: torch.Tensor,
-    v: torch.Tensor,
-    cumulative_seqlens_q=None,
-    cumulative_seqlens_k=None,
-    max_seqlen_q=None,
-    max_seqlen_k=None,
-    block_table: Optional[torch.Tensor] = None,
-    cache: Optional[PagedAttentionCache] = None,
-    **kwargs,
-) -> torch.Tensor:
-    r"""Perform the forward pass of attention with paged key-value cache.
-
-    This function handles the cache updates and performs the attention computation
-    using the flash_attn_varlen_func for efficient processing.
-
-    Args:
-        q: (total_q, nheads, headdim), where total_q = total number of query tokens in the batch.
-        k: (total_k, nheads_k, headdim), where total_k = total number of key tokens in the batch.  but if there is a block table it can be the full k
-        v: (total_k, nheads_k, headdim), where total_k = total number of key tokens in the batch.  but if there is a block table it can be the full v
-        cumulative_seqlens_q: (batch_size + 1,), dtype torch.int32. The cumulative sequence lengths
-           of the sequences in the batch, used to index into q.
-        cumulative_seqlens_k: (batch_size + 1,), dtype torch.int32. The cumulative sequence lengths
-           of the sequences in the batch, used to index into kv.
-        max_seqlen_q: int. Maximum query sequence length in the batch.
-        max_seqlen_k: int. Maximum key sequence length in the batch.
-        dropout_p: float. Dropout probability.
-        softmax_scale: float. The scaling of QK^T before applying softmax.
-            Default to 1 / sqrt(headdim).
-        causal: bool. Whether to apply causal attention mask (e.g., for auto-regressive modeling).
-        window_size: (left, right). If not (-1, -1), implements sliding window local attention.
-        softcap: float. Anything > 0 activates softcapping attention.
-        block_table [optional]: (num_blocks, max_num_blocks_per_seq), dtype torch.int32. This array should be used to index into
-            the cache. Here, you already pass concatenated K and V. k[block_table] gives the cache the positions in cache that we need to fill?
-            If we use with_kv_cache as it supports paged attention, it means it supports writing in a paged cache. But it does not support computing with
-            ragged input.
-            Whiile flash_attn_varlen_func, supports ragged inputs, but it does not write into the kv_cache.
-            Paged <==> fragmented cache, helpful for very long sequences.
-            continuous <==> ragged inputs -> no padding
-    """
-    k, v = cache.update(k, v, module.layer_idx, cumulative_seqlens_q, cumulative_seqlens_k)
-
-    attn_output = flash_attn_varlen_func(
-        q,
-        k,
-        v,
-        cumulative_seqlens_q,
-        cumulative_seqlens_k,
-        max_seqlen_q,
-        max_seqlen_k,
-        block_table=block_table,
-        softmax_scale=None,
-        causal=False,
-        window_size=(-1, -1),  # -1 means infinite context window
-        rotary_interleaved=True,
-        **kwargs,
-    )
-
-    return attn_output
 
 
 def compute_optimal_blocks(
