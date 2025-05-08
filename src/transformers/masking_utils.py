@@ -592,12 +592,17 @@ def get_causal_masks(
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
 ) -> list[Union[torch.Tensor, "BlockMask"]]:
+    num_layers = config.num_hidden_layers
+
     # It means the masks were already prepared outside the `forward`, e.g. by `generate` when compiling - return immediately
     if isinstance(attention_mask, list):
         return attention_mask
 
+    # For TGI/vLLM backends, or other custom attention without equivalent mask creation. we don't need a mask!
+    if config._attn_implementation not in ALL_MASK_CREATION_FUNCTIONS:
+        return [None] * num_layers
+    
     batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
-    num_layers = config.num_hidden_layers
 
     if past_key_values is not None:
         sizes_and_patterns, layer_to_mask_mapping = past_key_values.get_mask_size_and_pattern(
