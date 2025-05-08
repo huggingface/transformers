@@ -19,21 +19,10 @@ import torch.nn as nn
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPooling,
-)
-from ...modeling_utils import (
-    ALL_ATTENTION_FUNCTIONS,
-    PreTrainedModel,
-)
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, logging
 from ..clip.modeling_clip import (
     CLIPMLP,
     CLIPAttention,
@@ -44,10 +33,7 @@ from ..clip.modeling_clip import (
     CLIPVisionTransformer,
 )
 from ..llama.modeling_llama import eager_attention_forward
-from ..qwen2_vl.modeling_qwen2_vl import (
-    VisionRotaryEmbedding,
-    apply_rotary_pos_emb_vision,
-)
+from ..qwen2_vl.modeling_qwen2_vl import VisionRotaryEmbedding, apply_rotary_pos_emb_vision
 
 
 logger = logging.get_logger(__name__)
@@ -409,29 +395,13 @@ class MLCDEncoder(CLIPEncoder):
         )
 
 
-MLCD_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 class MLCDVisionTransformer(CLIPVisionTransformer):
     def __init__(self, config: MLCDVisionConfig):
         super().__init__(config)
         self.vision_rotary_embedding = MLCDRotaryEmbedding(config.hidden_size // config.num_attention_heads // 2)
         self.class_pos_emb = nn.Parameter(torch.randn(1, config.hidden_size // config.num_attention_heads // 2))
 
-    @add_start_docstrings_to_model_forward(MLCD_VISION_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -482,29 +452,8 @@ class MLCDVisionTransformer(CLIPVisionTransformer):
         )
 
 
-MLCD_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`MLCDVisionConfig`]):
-            Model configuration class with all the parameters of the vision encoder. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
+@auto_docstring
 class MLCDPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = MLCDVisionConfig
     base_model_prefix = "mlcd"
     supports_gradient_checkpointing = True
@@ -543,13 +492,8 @@ class MLCDPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-@add_start_docstrings(
-    "The bare MLCD vision encoder outputting raw hidden-states without any specific head on top.",
-    MLCD_START_DOCSTRING,
-)
 class MLCDVisionModel(CLIPVisionModel):
-    @add_start_docstrings_to_model_forward(MLCD_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=MLCDVisionConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -558,6 +502,8 @@ class MLCDVisionModel(CLIPVisionModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
+        Example:
+
         ```python
         >>> import requests
         >>> from PIL import Image
