@@ -176,6 +176,10 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         segmentation_maps: Optional[ImageInput] = None,
         **kwargs: Unpack[BeitFastImageProcessorKwargs],
     ) -> BatchFeature:
+        r"""
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to preprocess.
+        """
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.

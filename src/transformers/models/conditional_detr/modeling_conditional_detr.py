@@ -1567,7 +1567,7 @@ class ConditionalDetrMLPPredictionHead(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    CONDITIONAL_DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on
+    Conditional DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on
     top, for tasks such as COCO detection.
     """
 )
@@ -1735,7 +1735,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    CONDITIONAL_DETR Model (consisting of a backbone and encoder-decoder Transformer) with a segmentation head on top,
+    Conditional DETR Model (consisting of a backbone and encoder-decoder Transformer) with a segmentation head on top,
     for tasks such as COCO panoptic.
     """
 )

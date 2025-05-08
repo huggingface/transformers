@@ -1093,10 +1093,13 @@ def _process_regular_parameters(sig, func, class_name, documented_params, indent
         )
 
         if is_documented:
-            # Check if type is missing
-            if param_type == "":
-                if False:
-                    print(f"🚨 {param_name} for {func.__qualname__} in file {func.__code__.co_filename} has no type")
+            if param_name == "config":
+                if param_type == "":
+                    param_type = f"[`{class_name}`]"
+                else:
+                    param_type = f"[`{param_type.split('.')[-1]}`]"
+            elif param_type == "" and False:  # TODO: Enforce typing for all parameters
+                print(f"🚨 {param_name} for {func.__qualname__} in file {func.__code__.co_filename} has no type")
             param_type = param_type if "`" in param_type else f"`{param_type}`"
             # Format the parameter docstring
             if additional_info:
@@ -1474,7 +1477,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
     )
     indent_level = get_indent_level(cls)
     model_name_lowercase = get_model_name(cls)
-    model_name_title = "".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
+    model_name_title = " ".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
     if model_name_lowercase and model_name_lowercase not in getattr(
         getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
         PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
@@ -1516,9 +1519,11 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
                 indented_doc = getattr(ClassAttrs, attr_name, None)
                 if indented_doc is not None:
                     attr_docs += set_min_indent(f"{attr_name} (`{attr_type}`): {indented_doc}", 0)
-        if len(attr_docs.replace(" ", "")):
-            docstring += set_min_indent("\nAttributes:\n", indent_level)
-            docstring += set_min_indent(attr_docs, indent_level + 4)
+
+        # TODO: Add support for Attributes section in docs
+        # if len(attr_docs.replace(" ", "")):
+        #     docstring += set_min_indent("\nAttributes:\n", indent_level)
+        #     docstring += set_min_indent(attr_docs, indent_level + 4)
     else:
         print(
             f"You used `@auto_class_docstring` decorator on `{cls.__name__}` but this class is not part of the AutoMappings. Remove the decorator"
