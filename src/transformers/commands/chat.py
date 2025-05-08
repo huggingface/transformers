@@ -19,6 +19,7 @@ import os
 import platform
 import string
 import time
+import warnings
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from threading import Thread
@@ -103,6 +104,19 @@ separated by a ';'). Available settings: `{"`, `".join(SUPPORTED_GENERATION_KWAR
 `./chat_history/{{MODEL_NAME}}/chat_{{DATETIME}}.yaml` or `{{SAVE_NAME}}` if provided
 - **exit**: closes the interface
 """
+
+# format: (optional CLI arg being deprecated, its current default, corresponding `generate` flag)
+_DEPRECATION_MAP = [
+    ("max_new_tokens", 256, "max_new_tokens"),
+    ("do_sample", True, "do_sample"),
+    ("num_beams", 1, "num_beams"),
+    ("temperature", 1.0, "temperature"),
+    ("top_k", 50, "top_k"),
+    ("top_p", 1.0, "top_p"),
+    ("repetition_penalty", 1.0, "repetition_penalty"),
+    ("eos_tokens", None, "eos_token_id"),
+    ("eos_token_ids", None, "eos_token_id"),
+]
 
 
 class RichInterface:
@@ -207,6 +221,16 @@ class ChatArguments:
     examples_path: Optional[str] = field(default=None, metadata={"help": "Path to a yaml file with examples."})
 
     # Generation settings
+    generation_config: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Path to a local generation config file or to a HuggingFace repo containing a "
+                "`generation_config.json` file. Other generation settings passed as CLI arguments will be applied on "
+                "top of this generation config."
+            ),
+        },
+    )
     max_new_tokens: int = field(default=256, metadata={"help": "Maximum number of tokens to generate."})
     do_sample: bool = field(default=True, metadata={"help": "Whether to sample outputs during generation."})
     num_beams: int = field(default=1, metadata={"help": "Number of beams for beam search."})
@@ -280,23 +304,64 @@ class ChatCommand(BaseTransformersCLICommand):
 
         group = chat_parser.add_argument_group("Positional arguments")
         group.add_argument(
-            "model_name_or_path_positional", type=str, nargs="?", default=None, help="Name of the pre-trained model."
+            "model_name_or_path_positional", type=str, default=None, help="Name of the pre-trained model."
         )
-
+        group.add_argument(
+            "generate_flags",
+            type=str,
+            default=None,
+            help=(
+                "Flags to pass to `generate`. See the docs for your selected model, `GenerationConfig` and `generate` "
+                "for more details. Usage: `arg_1=value_1 arg_2=value_2 ...`. Example: "
+                "`max_new_tokens=100 do_sample=False eos_token_id=[1,2] foo=bar`."
+            ),
+            nargs="*",
+        )
         chat_parser.set_defaults(func=chat_command_factory)
 
     def __init__(self, args):
-        args.model_name_or_path = args.model_name_or_path_positional or args.model_name_or_path
+        args = self._handle_deprecated_args(args)
+        self.args = args
 
-        if args.model_name_or_path is None:
+    def _handle_deprecated_args(self, args: ChatArguments) -> ChatArguments:
+        """
+        Handles deprecated arguments and their deprecation cycle. To be removed after we fully migrated to the new
+        args.
+        """
+        has_warnings = False
+
+        # 1. Model as a positional argument
+        args.model_name_or_path_positional = args.model_name_or_path_positional or args.model_name_or_path
+        if args.model_name_or_path_positional is None:
             raise ValueError(
                 "One of the following must be provided:"
-                "\n- The positional argument containing the model repo;"
-                "\n- the optional --model_name_or_path argument, containing the model repo"
-                "\ne.g. transformers chat <model_repo> or transformers chat --model_name_or_path <model_repo>"
+                "\n- The positional argument containing the model repo, e.g. `transformers chat <model_repo>`"
+                "\n- the optional --model_name_or_path argument, containing the model repo (deprecated)"
             )
+        elif args.model_name_or_path is not None:
+            has_warnings = True
+            warnings.warn(
+                "The --model_name_or_path argument is deprecated will be removed in v4.54.0. Use the positional "
+                "argument instead, e.g. `transformers chat <model_repo>`.",
+                FutureWarning,
+            )
+        # 2. Named generate option args
+        for deprecated_arg, default_value, new_arg in _DEPRECATION_MAP:
+            value = getattr(args, deprecated_arg)
+            if value != default_value:
+                has_warnings = True
+                warnings.warn(
+                    f"The --{deprecated_arg} argument is deprecated will be removed in v4.54.0. There are two "
+                    "alternative solutions to specify this generation setting: \n"
+                    "1. Pass `--generation-config <path_to_file/repo>` to specify a generation config.\n"
+                    "2. Pass `generate` flags through positional arguments, e.g. `transformers chat <model_repo> "
+                    f"{new_arg}={value}`",
+                )
 
-        self.args = args
+        if has_warnings:
+            print("\n(Press any key to continue)")
+            input()
+        return args
 
     # -----------------------------------------------------------------------------------------------------------------
     # Chat session methods
@@ -319,7 +384,7 @@ class ChatCommand(BaseTransformersCLICommand):
 
         if filename is None:
             time_str = time.strftime("%Y-%m-%d_%H-%M-%S")
-            filename = f"{args.model_name_or_path}/chat_{time_str}.json"
+            filename = f"{args.model_name_or_path_positional}/chat_{time_str}.json"
             filename = os.path.join(folder, filename)
 
         os.makedirs(os.path.dirname(filename), exist_ok=True)
@@ -338,6 +403,46 @@ class ChatCommand(BaseTransformersCLICommand):
 
     # -----------------------------------------------------------------------------------------------------------------
     # Input parsing methods
+    def parse_generate_flags(self, generate_flags: list[str]) -> dict:
+        """Parses the generate flags from the user input into a dictionary of `generate` kwargs."""
+        if len(generate_flags) == 0:
+            return {}
+
+        # Assumption: `generate_flags` is a list of strings that can be parsed into a json string if we:
+        # 1. Add quotes around each flag name
+        generate_flags_as_dict = {'"' + flag.split("=")[0] + '"': flag.split("=")[1] for flag in generate_flags}
+        # 2. Handle types:
+        # 2. a. booleans should be lowercase, None should be null
+        generate_flags_as_dict = {
+            k: v.lower() if v.lower() in ["true", "false"] else v for k, v in generate_flags_as_dict.items()
+        }
+        generate_flags_as_dict = {k: "null" if v == "None" else v for k, v in generate_flags_as_dict.items()}
+
+        # 2. b. strings should be quoted
+        def is_number(s: str) -> bool:
+            return s.replace(".", "", 1).isdigit()
+
+        generate_flags_as_dict = {k: f'"{v}"' if not is_number(v) else v for k, v in generate_flags_as_dict.items()}
+        # 2. c. [no processing needed] lists are lists of ints because `generate` doesn't take lists of strings :)
+
+        # 3. Join the the result into a comma separated string
+        generate_flags_string = ", ".join([f"{k}: {v}" for k, v in generate_flags_as_dict.items()])
+        # 4. Add the opening/closing brackets
+        generate_flags_string = "{" + generate_flags_string + "}"
+        # 5. Remove quotes around boolean/null and around lists
+        generate_flags_string = generate_flags_string.replace('"null"', "null")
+        generate_flags_string = generate_flags_string.replace('"true"', "true")
+        generate_flags_string = generate_flags_string.replace('"false"', "false")
+        generate_flags_string = generate_flags_string.replace('"[', "[")
+        generate_flags_string = generate_flags_string.replace(']"', "]")
+        # 6. Replace the `=` with `:`
+        generate_flags_string = generate_flags_string.replace("=", ":")
+        try:
+            processed_flags = json.loads(generate_flags_string)
+        except json.JSONDecodeError:
+            raise ValueError(f"Invalid generate flags: {generate_flags_string}")
+        return processed_flags
+
     @staticmethod
     def parse_settings(
         user_input: str, current_args: ChatArguments, interface: RichInterface
@@ -460,7 +565,7 @@ class ChatCommand(BaseTransformersCLICommand):
 
     def load_model_and_tokenizer(self, args: ChatArguments) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
         tokenizer = AutoTokenizer.from_pretrained(
-            args.model_name_or_path,
+            args.model_name_or_path_positional,
             revision=args.model_revision,
             trust_remote_code=args.trust_remote_code,
         )
@@ -475,7 +580,7 @@ class ChatCommand(BaseTransformersCLICommand):
             "quantization_config": quantization_config,
         }
         model = AutoModelForCausalLM.from_pretrained(
-            args.model_name_or_path, trust_remote_code=args.trust_remote_code, **model_kwargs
+            args.model_name_or_path_positional, trust_remote_code=args.trust_remote_code, **model_kwargs
         )
 
         if getattr(model, "hf_device_map", None) is None:
@@ -492,6 +597,7 @@ class ChatCommand(BaseTransformersCLICommand):
             raise ImportError("You need to install torch to use the chat interface. (`pip install torch`)")
 
         args = self.args
+        args.generate_flags = self.parse_generate_flags(args.generate_flags)
         if args.examples_path is None:
             examples = DEFAULT_EXAMPLES
         else:
@@ -510,7 +616,7 @@ class ChatCommand(BaseTransformersCLICommand):
 
         pad_token_id, eos_token_ids = self.parse_eos_tokens(tokenizer, args.eos_tokens, args.eos_token_ids)
 
-        interface = RichInterface(model_name=args.model_name_or_path, user_name=user)
+        interface = RichInterface(model_name=args.model_name_or_path_positional, user_name=user)
         interface.clear()
         chat = self.clear_chat_history(current_args.system_prompt)
 
