@@ -14,6 +14,7 @@
 # limitations under the License.
 """PyTorch Pixtral model."""
 
+from collections.abc import Callable
 from typing import Optional, Tuple, Union
 
 import torch
@@ -22,13 +23,12 @@ from torch import nn
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import dynamic_rope_update
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_pixtral import PixtralVisionConfig
 
 
@@ -132,8 +132,34 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+# Copied from transformers.models.smolvlm.modeling_smolvlm.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class PixtralAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """
+    Multi-headed attention compatible with ALL_ATTENTION_FUNCTIONS.
+    """
 
     def __init__(self, config):
         super().__init__()
@@ -141,6 +167,8 @@ class PixtralAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
+
+        self.is_causal = False
 
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
@@ -156,6 +184,7 @@ class PixtralAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -172,17 +201,34 @@ class PixtralAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=0)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scale
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if attention_mask is not None:
-            attn_weights = attn_weights + attention_mask
+        # Since we use packing, if Flash-Attn 2 is selected we rely on position_ids
+        if self.config._attn_implementation == "flash_attention_2":
+            kwargs["position_ids"] = kwargs["position_ids"].to(hidden_states.device, non_blocking=True)
+            attention_mask = None
 
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+            is_causal=self.is_causal,
+            output_attentions=output_attentions,
+            **kwargs,
+        )
 
-        attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(batch_size, patches, -1)
 
         attn_output = self.o_proj(attn_output)
@@ -242,6 +288,7 @@ class PixtralAttentionLayer(nn.Module):
         attention_mask: torch.Tensor,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
+        **kwargs,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -261,6 +308,7 @@ class PixtralAttentionLayer(nn.Module):
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -293,6 +341,7 @@ class PixtralTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
         Args:
@@ -334,6 +383,7 @@ class PixtralTransformer(nn.Module):
                     attention_mask,
                     position_embeddings,
                     output_attentions,
+                    **kwargs,
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -341,6 +391,7 @@ class PixtralTransformer(nn.Module):
                     attention_mask,
                     position_embeddings=position_embeddings,
                     output_attentions=output_attentions,
+                    **kwargs,
                 )
 
             hidden_states = layer_outputs[0]
@@ -381,6 +432,10 @@ class PixtralPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PixtralAttentionLayer"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -457,7 +512,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
+        image_sizes: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -469,6 +524,10 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             pixel_values: tensor of token features for
                 all tokens of all images of shape (N_toks, D)
         """
+        if image_sizes is None:
+            batch_size, _, height, width = pixel_values.shape
+            image_sizes = [(height, width)] * batch_size
+
         # pass images through initial convolution independently
         patch_embeds = self.patch_conv(pixel_values)
         patch_embeds_list = [
@@ -484,6 +543,8 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         position_ids = position_ids_in_meshgrid(
             patch_embeds_list, max_width=self.config.image_size // self.config.patch_size
         )
+        kwargs["position_ids"] = position_ids
+
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 
         attention_mask = generate_block_attention_mask(
@@ -497,6 +558,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             return_dict=return_dict,
+            **kwargs,
         )
 
         return out
