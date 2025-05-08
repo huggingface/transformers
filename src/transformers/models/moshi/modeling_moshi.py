@@ -1907,7 +1907,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         self.audio_encoder = AutoModel.from_config(config.audio_encoder_config)
         self.decoder = MoshiForCausalLM(config)
 
-        self.depth_decoder = MoshiDepthDecoder(config.depth_decoder_config)
+        self.depth_decoder = MoshiDepthDecoder._from_config(config.depth_decoder_config)
 
         self.num_codebooks = config.num_codebooks
         self.post_init()
