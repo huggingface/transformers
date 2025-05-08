@@ -9,6 +9,13 @@ if is_torch_available():
     import torch.nn as nn
     import torch.nn.functional as F
 
+    # We reuse the RMSNorm implementation shipped with the reference BitNet model to avoid code duplication
+    # and guarantee consistency with the official implementation.
+    try:
+        from ..models.bitnet.modeling_bitnet import BitNetRMSNorm
+    except (ModuleNotFoundError, ImportError):
+        BitNetRMSNorm = None  # BitNet model might not be available in minimal installations
+
 logger = logging.get_logger(__name__)
 
 
@@ -124,7 +131,16 @@ def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
 
 
 class BitLinear(nn.Module):
-    def __init__(self, in_features: int, out_features: int, bias: bool, device=None, dtype=None):
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        bias: bool,
+        device=None,
+        dtype=None,
+        use_rms_norm: bool = False,
+        rms_norm_eps: float = 1e-6,
+    ):
         super().__init__()
         self.dtype = dtype
         self.in_features = in_features
@@ -149,6 +165,17 @@ class BitLinear(nn.Module):
             self.register_buffer("bias", torch.zeros((out_features), dtype=dtype, device=device))
         else:
             self.bias = None
+
+        # Optional RMSNorm (applied on the activations before quantization).
+        self.rms_norm = None
+        if use_rms_norm:
+            if BitNetRMSNorm is None:
+                raise ImportError(
+                    "`with_rms_norm=True` requires the BitNet model code to be available in the current Transformers"
+                    " installation. Please install the full `transformers` package or ensure the BitNet model files"
+                    " are accessible."
+                )
+            self.rms_norm = BitNetRMSNorm(in_features, eps=rms_norm_eps)
 
     @torch.compile
     def activation_quant(self, input, num_bits=8):
@@ -180,6 +207,10 @@ class BitLinear(nn.Module):
         return out
 
     def forward(self, input):
+        # Apply RMSNorm on the input if requested.
+        if self.rms_norm is not None:
+            input = self.rms_norm(input)
+
         w = self.weight
         w_quant = unpack_weights(w, dtype=self.dtype)
         input_quant, input_scale = self.activation_quant(input)
@@ -245,9 +276,21 @@ class AutoBitLinear(nn.Linear):
         device=None,
         dtype=None,
         online_quant: bool = False,
+        use_rms_norm: bool = False,
+        rms_norm_eps: float = 1e-6,
     ):
         super().__init__(in_features, out_features, bias)
         self.online_quant = online_quant
+        # Optional RMSNorm
+        self.rms_norm = None
+        if use_rms_norm:
+            if BitNetRMSNorm is None:
+                raise ImportError(
+                    "`with_rms_norm=True` requires the BitNet model code to be available in the current Transformers"
+                    " installation. Please install the full `transformers` package or ensure the BitNet model files"
+                    " are accessible."
+                )
+            self.rms_norm = BitNetRMSNorm(in_features, eps=rms_norm_eps)
         if not online_quant:
             self.register_buffer(
                 "weight_scale",
@@ -271,6 +314,10 @@ class AutoBitLinear(nn.Linear):
         return state_dict
 
     def forward(self, input):
+        # Optional RMSNorm on activations prior to quantization.
+        if self.rms_norm is not None:
+            input = self.rms_norm(input)
+
         if self.online_quant:
             weight = WeightQuant.apply(self.weight)
         else:
@@ -318,6 +365,7 @@ def _replace_with_bitnet_linear(
                             device=module.weight.device,
                             dtype=module.weight.dtype,
                             online_quant=(quantization_config.quantization_mode == "online"),
+                            use_rms_norm=getattr(quantization_config, "with_rms_norm", False),
                         )
                         if quantization_config.quantization_mode == "offline":
                             model._modules[name].requires_grad_(False)
@@ -328,6 +376,7 @@ def _replace_with_bitnet_linear(
                             bias=module.bias is not None,
                             device=module.weight.device,
                             dtype=module.weight.dtype,
+                            use_rms_norm=getattr(quantization_config, "with_rms_norm", False),
                         )
                         model._modules[name].requires_grad_(False)
                     has_been_replaced = True

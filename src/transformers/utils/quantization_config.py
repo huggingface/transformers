@@ -1791,6 +1791,8 @@ class BitNetQuantConfig(QuantizationConfigMixin):
             In `offline` mode, quantization parameters are pre-calculated *before* inference.
             These parameters are then fixed and loaded into the quantized model. This
             generally results in lower runtime overhead compared to online quantization.
+        with_rms_norm (`bool`, *optional*, defaults to `False`):
+            Whether to apply RMSNorm on the activations before quantization.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional keyword arguments that may be used by specific quantization
             backends or future versions.
@@ -1801,6 +1803,7 @@ class BitNetQuantConfig(QuantizationConfigMixin):
         modules_to_not_convert: Optional[List] = None,
         linear_class: Optional[str] = "bitlinear",
         quantization_mode: Optional[str] = "offline",
+        with_rms_norm: bool = False,
         **kwargs,
     ):
         if linear_class not in ["bitlinear", "autobitlinear"]:
@@ -1811,6 +1814,7 @@ class BitNetQuantConfig(QuantizationConfigMixin):
         self.modules_to_not_convert = modules_to_not_convert
         self.linear_class = linear_class
         self.quantization_mode = quantization_mode
+        self.with_rms_norm = with_rms_norm
         self.post_init()
 
     def post_init(self):
