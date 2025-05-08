@@ -392,9 +392,9 @@ To create a new decoding method, you need to create a new [**Model**](https://hu
 
 #### Adding the base model
 
-The starting point for your custom decoding method is a model repository just like any other. The model to add to this repository should be the model you've designed your method with, and it is meant to be part of a working self-contained model-generate pair: when the model in this repository is loaded, your custom decoding method will override `generate`. Don't worry -- your decoding method can still be loaded with any other Transformers model, as explained in the section above.
+The starting point for your custom decoding method is a model repository just like any other. The model to add to this repository should be the model you've designed your method with, and it is meant to be part of a working self-contained model-generate pair. When the model in this repository is loaded, your custom decoding method will override `generate`. Don't worry -- your decoding method can still be loaded with any other Transformers model, as explained in the section above.
 
-If you simply want to copy an existing model, you can quickly do
+If you simply want to copy an existing model, you can do
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -412,7 +412,7 @@ This is the core of your decoding method. It *must* contain a method named `gene
 > [!WARNING]
 > `generate.py` must be placed in a folder named `custom_generate`, and not at the root level of the repository. The file paths for this feature are hardcoded.
 
-Under the hood, when the base [`~GenerationMixin.generate`] method is called with a `custom_generate` argument, it first checks its Python requirements, then locates the custom `generate` method in `generate.py`, and finally calls the custom `generate`. All received arguments and `model` are forwarded to your custom `generate` method.
+Under the hood, when the base [`~GenerationMixin.generate`] method is called with a `custom_generate` argument, it first checks its Python requirements (if any), then locates the custom `generate` method in `generate.py`, and finally calls the custom `generate`. All received arguments and `model` are forwarded to your custom `generate` method.
 
 This means your `generate` can have a mix of original and custom arguments (as well as a different output type) as shown below.
 
@@ -451,8 +451,8 @@ def generate(model, input_ids, generation_config=None, left_padding=None, **kwar
 Follow the recommended practices below to ensure your custom decoding method works as expected.
 - Feel free to reuse the logic for validation and input preparation in the original [`~GenerationMixin.generate`].
 - Pin the `transformers` version in the requirements if you use any private method/attribute in `model`.
+- You can add other files in the `custom_generate` folder, and use relative imports.
 - Consider adding model validation, input validation, or even a separate test file to help users sanity-check your code in their environment.
-- You can add other files in the `custom_generate` folder, and use relative imports. Self-contained tests for your method are highly recommended too.
 
 #### requirements.txt
 
@@ -460,9 +460,9 @@ You can optionaly specify additional Python requirements in a `requirements.txt`
 
 #### README.md
 
-The root-level `README.md` in the model repository usually describes the model in therein. However, since the focus of the repository is the custom decoding method, we highly recomend to shift its focus towards describing the decoding method to other users. In addition to a description of the method, we recommend documenting any input and/or output differences to the original [`~GenerationMixin.generate`]. This way, users can focus on what's new, and rely on Transformers docs for generic implementation details.
+The root level `README.md` in the model repository usually describes the model in therein. However, since the focus of the repository is the custom decoding method, we highly recomend to shift its focus towards describing the custom decoding method. In addition to a description of the method, we recommend documenting any input and/or output differences to the original [`~GenerationMixin.generate`]. This way, users can focus on what's new, and rely on Transformers docs for generic implementation details.
 
-Some more recommended practices:
+Recommended practices:
 - Document input and output differences in [`~GenerationMixin.generate`].
 - Add self-contained examples to enable quick experimentation.
 - Describe soft-requirements such as if the method only works well with a certain family of models.
