@@ -32,6 +32,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -40,6 +41,7 @@ from ...tokenization_utils import (
     TextInput,
 )
 from ...utils import (
+    LossKwargs,
     TensorType,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -1240,6 +1242,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = False
     _supports_sdpa = True
     _supports_cache_class = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1288,6 +1291,9 @@ class AriaTextModel(LlamaModel):
         )
         self.gradient_checkpointing = False
         self.post_init()
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
@@ -1434,6 +1440,7 @@ class AriaModel(LlavaModel):
         image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
         return image_features
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1449,6 +1456,7 @@ class AriaModel(LlavaModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, AriaModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1495,16 +1503,16 @@ class AriaModel(LlavaModel):
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
+            **kwargs,
         )
 
-        output = AriaModelOutputWithPast(
+        return AriaModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values if use_cache else None,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
-        return output if return_dict else output.to_tuple()
 
 
 @add_start_docstrings(
@@ -1533,7 +1541,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         cache_position: Optional[torch.LongTensor] = None,
-        **loss_kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1615,6 +1623,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -1625,7 +1634,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **loss_kwargs
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
         return AriaCausalLMOutputWithPast(

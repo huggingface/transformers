@@ -21,26 +21,29 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
+    LossKwargs,
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    can_return_tuple,
     logging,
     replace_return_docstrings,
     torch_int,
@@ -130,6 +133,30 @@ class InstructBlipVideoVisionEmbeddings(nn.Module):
         return embeddings
 
 
+# Adapted from transformers.models.siglip.modeling_siglip.eager_attention_forward -> InstructBlipVideo doesn't cast attn weights to fp32
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class InstructBlipVideoAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -145,7 +172,8 @@ class InstructBlipVideoAttention(nn.Module):
                 f" {self.num_heads})."
             )
         self.scale = self.head_dim**-0.5
-        self.dropout = nn.Dropout(config.attention_dropout)
+        self.is_causal = False
+        self.attention_dropout = config.attention_dropout
 
         # small tweak here compared to CLIP, no bias here
         self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=False)
@@ -171,6 +199,7 @@ class InstructBlipVideoAttention(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -183,31 +212,32 @@ class InstructBlipVideoAttention(nn.Module):
         )
         query_states, key_states, value_states = mixed_qkv[0], mixed_qkv[1], mixed_qkv[2]
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
+        attention_interface: Callable = eager_attention_forward
 
-        attention_scores = attention_scores * self.scale
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask=None,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scale,
+            **kwargs,
+        )
 
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = self.projection(attn_output)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_states).permute(0, 2, 1, 3)
-
-        new_context_layer_shape = context_layer.size()[:-2] + (self.embed_dim,)
-        context_layer = context_layer.reshape(new_context_layer_shape)
-
-        output = self.projection(context_layer)
-
-        outputs = (output, attention_probs) if output_attentions else (output, None)
-
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output, None)
         return outputs
 
 
@@ -852,6 +882,9 @@ class InstructBlipVideoQFormerEmbeddings(nn.Module):
         return embeddings
 
 
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
 INSTRUCTBLIPVIDEO_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -945,6 +978,10 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     config_class = InstructBlipVideoConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
+    _supports_attention_backend = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
     _supports_cache_class = True
     _supports_static_cache = True
     _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
@@ -1048,6 +1085,11 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
     Querying Transformer (Q-Former), used in InstructBlipVideo. Slightly modified from BLIP-2 as it also takes the
     instruction as input.
     """
+
+    _supports_attention_backend = False  # adds position on attn weights before last matmul
+    _supports_flash_attn_2 = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
 
     def __init__(self, config: InstructBlipVideoQFormerConfig):
         super().__init__(config)
@@ -1332,6 +1374,7 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
         if hasattr(self.language_model, "_hf_hook"):
             self.language_model._hf_hook.io_same_device = True  # For `generate` compatibility
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(INSTRUCTBLIPVIDEO_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1347,6 +1390,7 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         use_cache: Optional[bool] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1409,6 +1453,7 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 use_cache=use_cache,
+                **kwargs,
             )
         else:
             outputs = self.language_model(
@@ -1420,10 +1465,8 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 use_cache=use_cache,
+                **kwargs,
             )
-
-        if not return_dict:
-            return (vision_outputs, query_outputs, outputs)
 
         return InstructBlipVideoForConditionalGenerationModelOutput(
             vision_outputs=vision_outputs,
@@ -1453,10 +1496,10 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
     def __init__(self, config: InstructBlipVideoConfig):
         super().__init__(config)
 
-        self.vision_model = InstructBlipVideoVisionModel(config.vision_config)
+        self.vision_model = InstructBlipVideoVisionModel._from_config(config.vision_config)
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
-        self.qformer = InstructBlipVideoQFormerModel(config.qformer_config)
+        self.qformer = InstructBlipVideoQFormerModel._from_config(config.qformer_config)
 
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
 
@@ -1519,9 +1562,10 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         if hasattr(self.language_model, "_hf_hook"):
             self.language_model._hf_hook.io_same_device = True  # For `generate` compatibility
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(INSTRUCTBLIPVIDEO_INPUTS_DOCSTRING)
     @replace_return_docstrings(
-        output_type=InstructBlipVideoForConditionalGenerationModelOutput, config_class=InstructBlipVideoVisionConfig
+        output_type=InstructBlipVideoForConditionalGenerationModelOutput, config_class=InstructBlipVideoConfig
     )
     def forward(
         self,
@@ -1538,6 +1582,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         use_cache: Optional[bool] = None,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1682,21 +1727,15 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 use_cache=use_cache,
+                **kwargs,
             )
             logits = outputs.logits if return_dict else outputs[0]
             loss = None
-            # we compute the loss here since we need to take into account the sequence length of the query embeds
             if labels is not None:
-                labels = labels.to(logits.device)
-                logits = logits[:, -labels.size(1) :, :]
-                # Shift so that tokens < n predict n
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous().to(logits.device)
+                loss = self.loss_function(
+                    logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+                )
 
-                # Flatten the tokens
-                loss_fct = CrossEntropyLoss(reduction="mean")
-
-                loss = loss_fct(shift_logits.view(-1, self.config.text_config.vocab_size), shift_labels.view(-1))
         else:
             outputs = self.language_model(
                 inputs_embeds=inputs_embeds,
@@ -1708,13 +1747,10 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
                 return_dict=return_dict,
                 labels=labels,
                 use_cache=use_cache,
+                **kwargs,
             )
             loss = outputs.loss if return_dict else outputs[0]
             logits = outputs.logits if return_dict else outputs[1]
-
-        if not return_dict:
-            output = (logits, vision_outputs, query_outputs, outputs)
-            return ((loss,) + output) if loss is not None else output
 
         return InstructBlipVideoForConditionalGenerationModelOutput(
             loss=loss,

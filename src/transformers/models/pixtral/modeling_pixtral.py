@@ -21,14 +21,18 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    can_return_tuple,
+    logging,
+)
 from .configuration_pixtral import PixtralVisionConfig
 
 
@@ -132,7 +136,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-# Copied from transformers.models.smolvlm.modeling_smolvlm.eager_attention_forward
+# Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -167,10 +171,11 @@ class PixtralAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-
         self.is_causal = False
 
-        self.scale = self.head_dim**-0.5
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+
         self.dropout = config.attention_dropout
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
@@ -211,28 +216,22 @@ class PixtralAttention(nn.Module):
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # Since we use packing, if Flash-Attn 2 is selected we rely on position_ids
-        if self.config._attn_implementation == "flash_attention_2":
-            kwargs["position_ids"] = kwargs["position_ids"].to(hidden_states.device, non_blocking=True)
-            attention_mask = None
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
             attention_mask,
-            scaling=self.scale,
             dropout=0.0 if not self.training else self.dropout,
-            is_causal=self.is_causal,
-            output_attentions=output_attentions,
+            scaling=self.scaling,
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(batch_size, patches, -1)
-
+        attn_output = attn_output.reshape(batch_size, patches, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
+        if not output_attentions:
+            attn_weights = None
         return attn_output, attn_weights
 
 
@@ -288,7 +287,7 @@ class PixtralAttentionLayer(nn.Module):
         attention_mask: torch.Tensor,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -341,7 +340,7 @@ class PixtralTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
         Args:
@@ -383,7 +382,6 @@ class PixtralTransformer(nn.Module):
                     attention_mask,
                     position_embeddings,
                     output_attentions,
-                    **kwargs,
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -431,6 +429,10 @@ class PixtralPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _supports_attention_backend = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
     _no_split_modules = ["PixtralAttentionLayer"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -508,6 +510,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_conv
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(PIXTRAL_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -517,7 +520,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         *args,
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutput]:
         """
         Returns:
@@ -551,17 +554,15 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             [p.shape[-2] * p.shape[-1] for p in patch_embeds_list], patch_embeds
         )
 
-        out = self.transformer(
+        return self.transformer(
             patch_embeds,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
-            return_dict=return_dict,
+            return_dict=True,
             **kwargs,
         )
-
-        return out
 
 
 __all__ = ["PixtralVisionModel", "PixtralPreTrainedModel"]
