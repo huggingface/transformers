@@ -1,10 +1,6 @@
 name: Self-hosted runner (AMD mi210 scheduled CI caller)
 
-on:
-  workflow_run:
-    workflows: ["Self-hosted runner (AMD scheduled CI caller)"]
-    branches: ["main"]
-    types: [completed]
+on: workflow_dispatch
 
 jobs:
   example-ci:
