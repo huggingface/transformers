@@ -598,13 +598,6 @@ def get_causal_masks(
 
     batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
     num_layers = config.num_hidden_layers
-    # HERE WE SHOULD EXTRACT ALL WAYS TO GET SLIDING_WINDOW/CHUNK SIZE IN THE CONFIG IF WE DON'T USE CACHE (OTHERWISE IT'S EMBEDDED
-    # IN THE CACHE ALREADY)
-    sliding_window = getattr(config, "sliding_window", None)
-    chunk_size = getattr(config, "attention_chunk_size", None)
-
-    if sliding_window is not None and chunk_size is not None:
-        raise ValueError("`sliding_window` and `chunk_size` are mutually exclusive for mask creation")
 
     if past_key_values is not None:
         sizes_and_patterns, layer_to_mask_mapping = past_key_values.get_mask_size_and_pattern(
@@ -613,6 +606,12 @@ def get_causal_masks(
     else:
         kv_offset = 0
         kv_length = attention_mask.shape[-1]
+
+        # HERE WE SHOULD EXTRACT ALL WAYS TO GET SLIDING_WINDOW/CHUNK SIZE IN THE CONFIG IF WE DON'T USE CACHE (OTHERWISE IT'S EMBEDDED
+        # IN THE CACHE ALREADY)
+        sliding_window = getattr(config, "sliding_window", None)
+        chunk_size = getattr(config, "attention_chunk_size", None)
+
         # HERE MODELS WITH HYBRID CACHE STRUCTURE SHOULD STILL ALTERNATE BETWEEN USING LOCAL ATTENTION OR NOT EVEN WITHOUT CACHE!!!!
         # PROBABLY THE EASIEST IS TO HAVE A FUNCTION RETURNING THE PATTERN BASED ON ALL POSSIBLE CONFIG ARGS???
         sizes_and_patterns = [(kv_offset, kv_length, sliding_window, chunk_size)] * num_layers
@@ -623,19 +622,25 @@ def get_causal_masks(
         attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
 
     # We now create all the masks
-    masks = []
     mask_interface = ALL_MASK_CREATION_FUNCTIONS[config._attn_implementation]
+    masks = []
     for kv_offset, kv_length, window, chunk in sizes_and_patterns:
+        # Raise if both are provided somehow
+        if window is not None and chunk is not None:
+            raise ValueError("`sliding_window` and `chunk_size` are mutually exclusive for mask creation")
+
         causal_mask = mask_interface(
             batch_size=batch_size,
             cache_position=cache_position,
             kv_length=kv_length,
             kv_offset=kv_offset,
             attention_mask=attention_mask,
-            sliding_window=sliding_window,
-            chunk_size=chunk_size,
+            sliding_window=window,
+            chunk_size=chunk,
             # Additional kwargs for eager
             dtype=dtype,
+            # Pass the config as well, in case someone wants to easily have their own mask_interface????
+            config=config,
         )
         masks.append(causal_mask)
 
