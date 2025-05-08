@@ -118,7 +118,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    @is_flaky # fails 15 out of 100, FIXME @raushan
+    @is_flaky  # fails 15 out of 100, FIXME @raushan
     def test_structured_kwargs_nested_from_dict_video(self):
         super().test_structured_kwargs_nested_from_dict_video()
 
