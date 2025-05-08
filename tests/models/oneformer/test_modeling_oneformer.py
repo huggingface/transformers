@@ -530,34 +530,20 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
 
         expected_slice_hidden_state = [[0.2723, 0.8280, 0.6026], [1.2699, 1.1257, 1.1444], [1.1344, 0.6153, 0.4177]]
         expected_slice_hidden_state = torch.tensor(expected_slice_hidden_state).to(torch_device)
-        torch.testing.assert_close(
-            outputs.encoder_hidden_states[-1][0, 0, :3, :3],
-            expected_slice_hidden_state,
-            atol=TOLERANCE,
-            rtol=TOLERANCE,
-        )
+        slice_hidden_state = outputs.encoder_hidden_states[-1][0, 0, :3, :3]
+        torch.testing.assert_close(slice_hidden_state, expected_slice_hidden_state, atol=TOLERANCE, rtol=TOLERANCE)
 
         expected_slice_hidden_state = [[1.0581, 1.2276, 1.2003], [1.1903, 1.2925, 1.2862], [1.158, 1.2559, 1.3216]]
         expected_slice_hidden_state = torch.tensor(expected_slice_hidden_state).to(torch_device)
-        torch.testing.assert_close(
-            outputs.pixel_decoder_hidden_states[0][0, 0, :3, :3],
-            expected_slice_hidden_state,
-            atol=TOLERANCE,
-            rtol=TOLERANCE,
-        )
+        slice_hidden_state = outputs.pixel_decoder_hidden_states[0][0, 0, :3, :3]
+        torch.testing.assert_close(slice_hidden_state, expected_slice_hidden_state, atol=TOLERANCE, rtol=TOLERANCE)
 
-        expected_slice_hidden_state = [
-            [3.0668, -1.1833, -5.1103],
-            [3.344, -3.362, -5.1101],
-            [2.6017, -4.3613, -4.1444],
-        ]
+        # fmt: off
+        expected_slice_hidden_state = [[3.0668, -1.1833, -5.1103], [3.344, -3.362, -5.1101], [2.6017, -4.3613, -4.1444]]
         expected_slice_hidden_state = torch.tensor(expected_slice_hidden_state).to(torch_device)
-        torch.testing.assert_close(
-            outputs.transformer_decoder_class_predictions[0, :3, :3],
-            expected_slice_hidden_state,
-            atol=TOLERANCE,
-            rtol=TOLERANCE,
-        )
+        slice_hidden_state = outputs.transformer_decoder_class_predictions[0, :3, :3]
+        torch.testing.assert_close(slice_hidden_state, expected_slice_hidden_state, atol=TOLERANCE, rtol=TOLERANCE)
+        # fmt: on
 
     def test_inference_universal_segmentation_head(self):
         model = OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
