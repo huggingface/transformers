@@ -302,10 +302,15 @@ def sdpa_mask(
             The size that the key and value states will have during the attention computation.
         kv_offset (`int`, optional):
             An optional offset to indicate at which first position the key and values states will refer to.
+        attention_mask (`torch.Tensor`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
         sliding_window (`int`, optional):
             An optional sliding window length, if we are using sliding window attention. Mutually exclusive with `chunk_size`.
         chunk_size (`int`, optional):
             An optional chunk size, if we are using chunked attention. Mutually exclusive with `sliding_window`.
+        allow_is_causal_skip (`bool`, optional):
+            Whether to allow to return `None` for the mask under conditions where we can use the `is_causal` argument in
+            `torch.sdpa` instead. Default to `True`.
 
 
     ## Creating a simple causal mask:
@@ -418,6 +423,29 @@ def eager_mask(
     dtype: torch.dtype = torch.float32,
     **kwargs,
 ) -> torch.Tensor:
+    """
+    Create a 4D float mask of shape `(batch_size, 1, query_length, kv_length)` where a value of 0 indicates that
+    the element should take part in the attention computation, and -inf (minimum value for the given `dtype`) that
+    it should not.
+
+    Args:
+        batch_size (`int`):
+            The batch size of the input sequence.
+        cache_position (`torch.Tensor`):
+            A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
+        kv_length (`int`):
+            The size that the key and value states will have during the attention computation.
+        kv_offset (`int`, optional):
+            An optional offset to indicate at which first position the key and values states will refer to.
+        attention_mask (`torch.Tensor`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
+        sliding_window (`int`, optional):
+            An optional sliding window length, if we are using sliding window attention. Mutually exclusive with `chunk_size`.
+        chunk_size (`int`, optional):
+            An optional chunk size, if we are using chunked attention. Mutually exclusive with `sliding_window`.
+        dtype (`torch.dtype`, optional):
+            The dtype to use for the mask. By default, `torch.float32`.
+    """
     # The masks for eager attention are simply boolean mask from sdpa, casted to 0 and -inf
     mask = sdpa_mask(
         batch_size=batch_size,
@@ -436,17 +464,53 @@ def eager_mask(
     return mask
 
 
-def flash_attention_mask(attention_mask: Optional[torch.Tensor], **kwargs):
+def flash_attention_mask(
+    batch_size: int,
+    cache_position: torch.Tensor,
+    kv_length: int,
+    kv_offset: int = 0,
+    attention_mask: Optional[torch.Tensor] = None,
+    sliding_window: Optional[int] = None,
+    chunk_size: Optional[int] = None,
+    **kwargs,
+):
     """
     Create the attention mask necesary to use FA2. Since FA2 is un-padded by definition, here we simply return
     `None` if the mask is fully causal, or we return the 2D mask which will then be used to extract the seq_lens.
+    We just slice it in case of sliding window.
 
     Args:
-        attention_mask (`torch.Tensor`, , *optional*):
-            A 2D attention mask of shape `(batch_size, key_value_length)`.
+        batch_size (`int`):
+            The batch size of the input sequence.
+        cache_position (`torch.Tensor`):
+            A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
+        kv_length (`int`):
+            The size that the key and value states will have during the attention computation.
+        kv_offset (`int`, optional):
+            An optional offset to indicate at which first position the key and values states will refer to.
+        attention_mask (`torch.Tensor`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
+        sliding_window (`int`, optional):
+            An optional sliding window length, if we are using sliding window attention. Mutually exclusive with `chunk_size`.
+        chunk_size (`int`, optional):
+            An optional chunk size, if we are using chunked attention. Mutually exclusive with `sliding_window`.
     """
+    # Raise if using chunked attention on context too large
+    if chunk_size is not None and kv_length > chunk_size:
+        raise ValueError(
+            "Flash attention 2 cannot handle attention chunked attention, and the key-value length is larger than the chunk size "
+            "so the chunked pattern cannot be respected. You should use another `attn_implementation` when instantiating the model"
+        )
+    
+    # Here we need to slice from the right (padding is always left)
+    if sliding_window is not None or chunk_size is not None:
+        if attention_mask is not None:
+            attention_mask = attention_mask[:, -kv_length :]
+
+    # We only return an actual mask if there is at least 1 padding token, otherwise we return `None` and use `is_causal` in
+    # FA2
     if attention_mask is not None and (attention_mask == 0.0).any():
-        return AttentionMask.from_tensor(attention_mask)
+        return attention_mask
     return None
 
 
@@ -461,26 +525,24 @@ def flex_attention_mask(
     **kwargs,
 ) -> "BlockMask":
     """
-    Create a block causal document mask for a batch of sequences, both packed and unpacked.
-    Create Block causal logic and passing it into :func:`torch.nn.attention.flex_attention.create_block_mask`.
-    The resultant BlockMask is a compressed representation of the full block causal
-    mask. BlockMask is essential for performant computation of flex attention.
-    See: https://pytorch.org/blog/flexattention/
+    Create a 4D block mask which is a compressed representation of the full 4D block causal mask. BlockMask is essential
+    for performant computation of flex attention. See: https://pytorch.org/blog/flexattention/
 
     Args:
-        attention_mask_2d (torch.Tensor): Attention mask for packed and padded sequences
-        of shape (batch_size, total_seq_len). e.g.
-
-        For unpacked sequence:
-        [[1, 1, 1, 1, 0, 0, 0],
-         [1, 1, 1, 1, 1, 0, 0]]
-
-        For packed sequence:
-        [[1, 1, 1, 2, 2, 2, 0],
-         [1, 1, 2, 2, 2, 3, 3]]
-
-    Returns:
-        BlockMask
+        batch_size (`int`):
+            The batch size of the input sequence.
+        cache_position (`torch.Tensor`):
+            A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
+        kv_length (`int`):
+            The size that the key and value states will have during the attention computation.
+        kv_offset (`int`, optional):
+            An optional offset to indicate at which first position the key and values states will refer to.
+        attention_mask (`torch.Tensor`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
+        sliding_window (`int`, optional):
+            An optional sliding window length, if we are using sliding window attention. Mutually exclusive with `chunk_size`.
+        chunk_size (`int`, optional):
+            An optional chunk size, if we are using chunked attention. Mutually exclusive with `sliding_window`.
     """
     q_length, q_offset = cache_position.shape[0], cache_position[0]
 
