@@ -33,9 +33,9 @@ if is_torch_available():
 
     if is_torch_xpu_available():
         if is_ipex_available():
-            pass
+            import intel_extension_for_pytorch  # noqa: F401
         if is_ccl_available():
-            pass
+            import oneccl_bindings_for_pytorch  # noqa: F401
     import torch.distributed
     from torch.distributed._composable.fsdp import fully_shard, register_fsdp_forward_method
     from torch.distributed.device_mesh import init_device_mesh
