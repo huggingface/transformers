@@ -15,8 +15,7 @@
 import argparse
 from typing import Any, Callable
 
-from transformers import is_torch_available, is_torch_xpu_available, is_torch_mlu_available
-from transformers.utils import is_ipex_available, is_ccl_available
+from transformers import is_torch_available, is_torch_xpu_available
 from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
@@ -24,17 +23,19 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     torch_device,
 )
+from transformers.utils import is_ccl_available, is_ipex_available
 
 
 if is_torch_available():
     import functools
 
     import torch
+
     if is_torch_xpu_available():
         if is_ipex_available():
-            import intel_extension_for_pytorch
+            pass
         if is_ccl_available():
-            import oneccl_bindings_for_pytorch
+            pass
     import torch.distributed
     from torch.distributed._composable.fsdp import fully_shard, register_fsdp_forward_method
     from torch.distributed.device_mesh import init_device_mesh

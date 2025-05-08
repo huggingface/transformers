@@ -41,7 +41,6 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_greater_or_equal,
     require_torch_multi_accelerator,
-    require_torch_multi_gpu,
     require_torch_sdpa,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
@@ -4923,7 +4922,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         # If the generate doesn't infer the DECODER device map correctly, this will fail
         _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
 
-    @require_torch_accelerator
+    @require_torch_gpu
     def test_cpu_offload_doesnt_compile(self):
         """Test that CPU offload doesn't trigger compilation"""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
@@ -4931,12 +4930,12 @@ class GenerationIntegrationTests(unittest.TestCase):
         generate_kwargs = {"max_new_tokens": 3, "cache_implementation": "static"}
 
         # Sanity check: if we don't specify a device map, the model will get compiled
-        model_accelrator = AutoModelForCausalLM.from_pretrained(
+        model_gpu = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
         )
-        input_ids = tokenized_inputs.input_ids.to(model_accelerator.device)
-        _ = model_accelerator.generate(input_ids, **generate_kwargs)
-        self.assertTrue(hasattr(model_accelerator, "_compiled_call"))
+        input_ids = tokenized_inputs.input_ids.to(model_gpu.device)
+        _ = model_gpu.generate(input_ids, **generate_kwargs)
+        self.assertTrue(hasattr(model_gpu, "_compiled_call"))
 
         # If we specify a device map, the model will not be compiled
         # (as of April 2025, compiling with CPU offload results in a crash)
