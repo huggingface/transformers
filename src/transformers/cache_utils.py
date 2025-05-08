@@ -22,7 +22,7 @@ logger = logging.get_logger(__name__)
 
 
 # Utility functions for static/sliding cache update logic
-def _static_cache_update_logic(
+def _static_cache_update(
     k_cache: torch.Tensor,
     v_cache: torch.Tensor,
     key_states: torch.Tensor,
