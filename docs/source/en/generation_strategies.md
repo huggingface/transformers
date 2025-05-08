@@ -335,8 +335,7 @@ tokenizer = AutoTokenizer.from_pretrained("joaogante/test_generate_from_hub_mode
 model = AutoModelForCausalLM.from_pretrained("joaogante/test_generate_from_hub_model", device_map="auto")
 
 inputs = tokenizer(["The quick brown"], return_tensors="pt").to(model.device)
-# `joaogante/test_generate_from_hub_model` holds a minimal greedy decoding implementation.
-# It also prints a custom message at run time.
+# The custom decoding method is a minimal greedy decoding implementation. It also prints a custom message at run time.
 gen_out = model.generate(**inputs)
 # you should now see its custom message, "✨ using a custom generation method ✨"
 print(tokenizer.batch_decode(gen_out, skip_special_tokens=True))
