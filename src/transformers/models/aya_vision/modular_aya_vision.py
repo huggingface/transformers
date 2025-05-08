@@ -20,6 +20,7 @@ import torch
 from torch import nn
 
 from transformers.models.llava.modeling_llava import (
+    KwargsForCausalLM,
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaModel,
@@ -27,6 +28,7 @@ from transformers.models.llava.modeling_llava import (
 )
 
 from ...activations import ACT2FN
+from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     logging,
@@ -148,7 +150,7 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         image_sizes: Optional[torch.Tensor] = None,
-        **lm_kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, AyaVisionCausalLMOutputWithPast]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -213,7 +215,7 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             image_sizes=image_sizes,
-            **lm_kwargs,
+            **kwargs,
         )
 
 
