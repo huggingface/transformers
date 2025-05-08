@@ -1,0 +1,6 @@
+强化学习
+transformer架构
+模型部署框架ollama和vllm的使用
+微调框架llamafactory
+阅读文献ICLR和SECOT/Self-plan
+ text2sql
