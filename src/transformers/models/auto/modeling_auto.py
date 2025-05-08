@@ -166,7 +166,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("luke", "LukeModel"),
         ("lxmert", "LxmertModel"),
         ("m2m_100", "M2M100Model"),
-        ("magma", "MagmaModel"),
         ("mamba", "MambaModel"),
         ("mamba2", "Mamba2Model"),
         ("marian", "MarianModel"),
