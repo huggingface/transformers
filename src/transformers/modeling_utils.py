@@ -216,6 +216,28 @@ TORCH_INIT_FUNCTIONS = {
     "kaiming_normal": nn.init.kaiming_normal,
 }
 
+# DO NOT MODIFY, KEPT FOR BC ONLY
+VLMS = [
+    "aria",
+    "aya_vision",
+    "emu3",
+    "fuyu",
+    "got_ocr2",
+    "gemma3",
+    "internvl",
+    "llava",
+    "llava_next",
+    "llava_next_video",
+    "llava_onevision",
+    "mistral3",
+    "mllama",
+    "paligemma",
+    "qwen2_vl",
+    "qwem2_5_vl",
+    "video_llava",
+    "vipllava",
+]
+
 
 @contextmanager
 def no_init_weights():
@@ -1275,7 +1297,7 @@ def _get_device_map(
             )
 
         if device_map != "sequential":
-            max_memory = get_balanced_memory(
+            inferred_max_memory = get_balanced_memory(
                 model,
                 dtype=target_dtype,
                 low_zero=(device_map == "balanced_low_0"),
@@ -1283,20 +1305,23 @@ def _get_device_map(
                 **device_map_kwargs,
             )
         else:
-            max_memory = get_max_memory(max_memory)
+            inferred_max_memory = get_max_memory(max_memory)
         if hf_quantizer is not None:
-            max_memory = hf_quantizer.adjust_max_memory(max_memory)
+            inferred_max_memory = hf_quantizer.adjust_max_memory(inferred_max_memory)
 
-        # `max_memory` contains non-reserved memory. There may be *unused* reserved memory in the GPU, which we
-        # can use to allocate parameters.
-        for device_name in max_memory.keys():
+        # `inferred_max_memory` contains non-reserved memory. There may be *unused* reserved memory in the GPU,
+        # which we can use to allocate parameters.
+        for device_name in inferred_max_memory.keys():
             if isinstance(device_name, int):  # it's a GPU device
                 if is_torch_xpu_available():
                     unused_memory = torch.xpu.memory_reserved(device_name) - torch.xpu.memory_allocated(device_name)
                 else:
                     unused_memory = torch.cuda.memory_reserved(device_name) - torch.cuda.memory_allocated(device_name)
-                max_memory[device_name] += unused_memory
-        device_map_kwargs["max_memory"] = max_memory
+                inferred_max_memory[device_name] += unused_memory
+            # respect the `max_memory` passed by the user
+            if max_memory is not None and device_name in max_memory:
+                inferred_max_memory[device_name] = min(inferred_max_memory[device_name], max_memory[device_name])
+        device_map_kwargs["max_memory"] = inferred_max_memory
 
         device_map = infer_auto_device_map(model, dtype=target_dtype, **device_map_kwargs)
 
@@ -1774,6 +1799,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     base_model_prefix = ""
     main_input_name = "input_ids"
     model_tags = None
+
+    _checkpoint_conversion_mapping = {}  # used for BC support in VLMs, not meant to be used by new models
 
     _auto_class = None
     _no_split_modules = None
@@ -3403,9 +3430,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Attach architecture to the config
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
 
-        # Unset attn implementation so it can be set to another one when loading back
-        model_to_save.config._attn_implementation_autoset = False
-
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
         if self._auto_class is not None:
@@ -3480,6 +3504,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     for key in module_state_dict:
                         module_map[name + f".{key}"] = module
             state_dict = model_to_save.state_dict()
+
+        if any(allowed_name in self.__class__.__name__.lower() for allowed_name in VLMS):
+            reverse_key_mapping = {v: k for k, v in self._checkpoint_conversion_mapping.items()}
+
+            original_state_dict = {}
+            for key, value in state_dict.items():
+                for pattern, replacement in reverse_key_mapping.items():
+                    replacement = replacement.lstrip("^")  # strip off un-needed chars and patterns
+                    replacement = re.sub(r"\(.*?\)", "", pattern)
+                    key, n_replace = re.subn(pattern, replacement, key)
+                    # Early exit of the loop
+                    if n_replace > 0:
+                        break
+                original_state_dict[key] = value
+            state_dict = original_state_dict
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
         if IS_SAGEMAKER_MP_POST_1_10:
@@ -4068,7 +4107,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
-        key_mapping = kwargs.pop("key_mapping", None)
+
+        # Load models with hardcoded key mapping on class for VLMs only,  to keep BC and standardize model
+        if any(allowed_name in cls.__name__.lower() for allowed_name in VLMS):
+            key_mapping = kwargs.pop("key_mapping", cls._checkpoint_conversion_mapping)
+        else:
+            key_mapping = kwargs.pop("key_mapping", None)
+
         # Not used anymore -- remove them from the kwargs
         _ = kwargs.pop("resume_download", None)
         _ = kwargs.pop("trust_remote_code", None)

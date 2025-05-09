@@ -24,7 +24,12 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 import requests
 
-from .utils import is_librosa_available, requires_backends
+from .utils import (
+    is_librosa_available,
+    is_numpy_array,
+    is_torch_tensor,
+    requires_backends,
+)
 
 
 if is_librosa_available():
@@ -67,6 +72,36 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
 AudioInput = Union[
     np.ndarray, "torch.Tensor", List[np.ndarray], Tuple[np.ndarray], List["torch.Tensor"], Tuple["torch.Tensor"]  # noqa: F821
 ]
+
+
+def is_valid_audio(audio):
+    return is_numpy_array(audio) or is_torch_tensor(audio)
+
+
+def is_valid_list_of_audio(audio):
+    return audio and all(is_valid_audio(audio_i) for audio_i in audio)
+
+
+def make_list_of_audio(
+    audio: Union[list[AudioInput], AudioInput],
+) -> AudioInput:
+    """
+    Ensure that the output is a list of audio.
+    Args:
+        audio (`Union[List[AudioInput], AudioInput]`):
+            The input audio.
+    Returns:
+        list: A list of audio.
+    """
+    # If it's a list of audios, it's already in the right format
+    if isinstance(audio, (list, tuple)) and is_valid_list_of_audio(audio):
+        return audio
+
+    # If it's a single audio, convert it to a list of
+    if is_valid_audio(audio):
+        return [audio]
+
+    raise ValueError("Invalid input type. Must be a single audio or a list of audio")
 
 
 def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
