@@ -2527,11 +2527,13 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             )
             self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
         else:
+            model_list = []
             for _ in range(config.decoder_layers):
                 _bbox_embed = GroundingDinoMLPPredictionHead(
-                    input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+                    input_dim=config.d_model, hidden_dim=config.d.model, output_dim=4, num_layers=3
                 )
-                self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
+                model_list.append(_bbox_embed)
+            self.bbox_embed = nn.ModuleList(model_list)
         self.class_embed = nn.ModuleList([_class_embed for _ in range(config.decoder_layers)])
         # hack for box-refinement
         self.model.decoder.bbox_embed = self.bbox_embed
