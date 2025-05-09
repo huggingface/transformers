@@ -27,7 +27,7 @@ This guide shows you how to quickly start chatting with Transformers from the co
 
 ## transformers CLI
 
-Chat with a model directly from the command line as shown below. It launches an interactive session with a model, with a few base commands listed at the start of the session.
+After you've [installed Transformers](./installation.md), chat with a model directly from the command line as shown below. It launches an interactive session with a model, with a few base commands listed at the start of the session.
 
 ```bash
 transformers chat Qwen/Qwen2.5-0.5B-Instruct

@@ -319,7 +319,7 @@ class ChatCommand(BaseTransformersCLICommand):
             help=(
                 "Flags to pass to `generate`, using a space as a separator between flags. Accepts booleans, numbers, "
                 "and lists of integers, more advanced parameterization should be set through --generation-config. "
-                "See the docs for your selected model, `GenerationConfig`, and `generate` for available flags."
+                "If you're a new user, check this basic flag guide: https://huggingface.co/docs/transformers/llm_tutorial#common-options"
                 "Example: `transformers chat <model_repo> max_new_tokens=100 do_sample=False eos_token_id=[1,2]`."
             ),
             nargs="*",
