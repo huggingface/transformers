@@ -7,11 +7,11 @@ on:
     types: [completed]
   push:
     branches:
-      - run_amd_scheduled_ci_caller*
+      - huggingface-test-ci-mi300*
 
 jobs:
   example-ci:
-    name: Example CI
+    name: Example CI Test
     uses: jitesh-gupta/hf-workflows/.github/workflows/transformers_amd_ci_scheduled.yaml@use-arc-runner
     with:
       job: run_examples_gpu
