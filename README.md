@@ -6,55 +6,83 @@
 
 [![Self-hosted runner (nightly-past-ci-caller)](https://github.com/nodoubtz/transformers/actions/workflows/self-nightly-past-ci-caller.yml/badge.svg)](https://github.com/nodoubtz/transformers/actions/workflows/self-nightly-past-ci-caller.yml)
 
-Transformers is a powerful library designed for natural language processing (NLP) tasks. It provides pre-trained models and tools to fine-tune and deploy state-of-the-art transformer-based architectures.
+# 🤗 Transformers
 
-## Features
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-- **Pre-trained Models:** Access a wide range of pre-trained transformer models.
-- **Custom Fine-tuning:** Easily fine-tune models for your own datasets and use cases.
-- **Easy Inference:** Perform NLP tasks such as text classification, translation, summarization, and more.
-- **Extensibility:** Build custom transformer architectures and workflows.
+Welcome to the **Transformers** repository! This is a fork of the [Hugging Face Transformers repository](https://github.com/huggingface/transformers) that provides state-of-the-art Machine Learning tools for PyTorch, TensorFlow, and JAX.
 
-## Installation
+---
 
-To install the library, use the following command:
+## Overview
+
+Transformers is a library designed to make the latest advances in natural language processing (NLP) and other machine learning domains accessible to everyone. It includes pre-trained models, tokenizers, and APIs for seamless integration into your projects.
+
+### Key Features:
+- **Multi-Framework Support**: Use the library with PyTorch, TensorFlow, or JAX according to your preference.
+- **Pre-Trained Models**: Access a vast collection of pre-trained models for tasks like text classification, translation, question-answering, and more.
+- **Custom Fine-Tuning**: Adapt pre-trained models to your specific needs with easy fine-tuning capabilities.
+- **Community Contributions**: Leverage and contribute to a vibrant open-source community.
+
+For the original library and more details, visit the [Hugging Face Transformers documentation](https://huggingface.co/transformers).
+
+---
+
+## Getting Started
+
+### Installation
+
+To install the library, simply run:
 
 ```bash
 pip install transformers
 ```
 
-## Getting Started
+For more installation options and configurations, refer to the [installation guide](https://huggingface.co/transformers/installation.html).
 
-Here’s a quick example to get you started with Transformers:
+---
+
+### Usage
+
+Below is a simple example to get started with one of the pre-trained models:
 
 ```python
 from transformers import pipeline
 
-# Load a sentiment analysis pipeline
-classifier = pipeline("sentiment-analysis")
+# Load a pre-trained model and tokenizer for sentiment analysis
+sentiment_analyzer = pipeline("sentiment-analysis")
 
-# Perform inference
-result = classifier("I love using Transformers!")
+# Analyze sentiment
+result = sentiment_analyzer("I love using the Transformers library!")
 print(result)
 ```
 
-## Documentation
+For more usage examples and detailed tutorials, check the [official documentation](https://huggingface.co/transformers).
 
-Find the full documentation [here](https://github.com/nodoubtz/transformers/actions/workflows/build_pr_documentation.yml).
+---
 
 ## Contributing
 
-We welcome contributions! Please follow the guidelines below:
+This repository is a fork of the original Transformers library. If you would like to contribute, please consider submitting pull requests to the [upstream repository](https://github.com/huggingface/transformers).
 
-1. Fork the repository.
-2. Create a new branch for your feature or bug fix.
-3. Commit your changes with clear messages.
-4. Submit a pull request.
+---
 
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
+---
+
 ## Acknowledgements
 
-Special thanks to the open-source community for their support and contributions.
+This repository is built upon the amazing work of the [Hugging Face](https://huggingface.co/) team. Visit their website for more innovative tools and resources.
+
+---
+
+## Stay Connected
+
+- **Homepage**: [Transformers Documentation](https://huggingface.co/transformers)
+- **Original Repository**: [Hugging Face Transformers](https://github.com/huggingface/transformers)
+
+Feel free to explore, experiment, and contribute to this project!
+
