@@ -880,7 +880,7 @@ class SyntheticCacheTest(unittest.TestCase):
         config = copy.deepcopy(self.config)
         config.sliding_window_pattern = 1  # Layer 0 is static (1 % 1 == 0)
         hybrid_cache_static_mode = HybridCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
-        hybrid_cache_static_mode.reset() # Ensure it's clean even if it's new
+        hybrid_cache_static_mode.reset()  # Ensure it's clean even if it's new
 
         # Scenario 1
         prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
