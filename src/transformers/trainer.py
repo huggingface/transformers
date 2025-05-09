@@ -2471,19 +2471,29 @@ class Trainer:
             if torch.cuda.is_available():
                 activities.append(ProfilerActivity.CUDA)
             prof_schedule = schedule(wait=1, warmup=1, active=2, repeat=1)
-            log_dir = self.args.logging_dir or self.args.output_dir
-            rank = dist.get_rank() if dist.is_initialized() else 0
-
             def trace_handler(p):
-                p.export_chrome_trace(os.path.join(f"{log_dir}/rank{rank}", "profiler"))
+                p.export_chrome_trace(os.path.join(self.args.output_dir, f"rank_{self.args.local_rank}_profiler"))
+                if torch.cuda.is_available():
+                    print("cuda is supported")
+                    device = 'cuda'
+                elif torch.xpu.is_available():
+                    print("xpu is supported")
+                    device = 'xpu'
+                else:
+                    logger.warning(
+                        'Neither CUDA nor XPU devices are available to demonstrate profiling on acceleration devices')
+                    return
+                sort_by_keyword = device + "_time_total"
+                output = p.key_averages().table(sort_by=sort_by_keyword, row_limit=10)
+                logger.info(output)
+                pass
 
             self.profiler = profile(
                 activities=activities,
                 schedule=prof_schedule,
                 on_trace_ready=trace_handler,
                 record_shapes=True,
-                profile_memory=True,
-                # **self.args.profiler_options
+                profile_memory=True
             )
             self.profiler.start()
 
