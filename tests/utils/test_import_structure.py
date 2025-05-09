@@ -13,7 +13,7 @@ from transformers.utils.import_utils import (
 )
 
 
-import_structures = Path("import_structures")
+import_structures = Path(__file__).parent / "import_structures"
 
 
 def fetch__all__(file_content):
