@@ -59,8 +59,8 @@ if is_torch_available():
 class Gemma3ModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = Gemma3TextConfig
-        model_class = Gemma3TextModel
-        for_causal_lm_class = Gemma3ForCausalLM
+        base_model_class = Gemma3TextModel
+        causal_lm_class = Gemma3ForCausalLM
 
 
 @require_torch
