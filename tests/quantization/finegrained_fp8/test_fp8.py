@@ -216,7 +216,7 @@ class FP8QuantizerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
 
-            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map="balanced")
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map="auto")
             self.assertTrue(set(model.hf_device_map.values()) == {0, 1})
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
