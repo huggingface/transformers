@@ -145,9 +145,9 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 | Option name | Type | Simplified description |
 |---|---|---|
 | `max_new_tokens` | `int` | Controls the maximum generation length. Be sure to define it, as it is usually a small value by default. |
-| `do_sample` | `bool` | Defines whether generation will sample the next token (`True`), or is greedy instead (`False`).<br>Most use cases should set this flag. Check [this guide](./generation_strategies.md) for more information. |
-| `temperature` | `float` | How unpredictable the next selected token will be. Requires `do_sample=True`.<br>High values (e.g. `1.0`) are good for creative tasks, low values (e.g. `0.3`) for tasks that require "thinking". |
-| `num_beams` | `int` | Values above `1` activate the beam search algorithm, which is good for input-grounded tasks.<br>Check [this guide](./generation_strategies.md) for more information. |
+| `do_sample` | `bool` | Defines whether generation will sample the next token (`True`), or is greedy instead (`False`). Most use cases should set this flag. Check [this guide](./generation_strategies.md) for more information. |
+| `temperature` | `float` | How unpredictable the next selected token will be. Requires `do_sample=True`. High values (e.g. `1.0`) are good for creative tasks, low values (e.g. `0.3`) for tasks that require "thinking". |
+| `num_beams` | `int` | Values above `1` activate the beam search algorithm, which is good for input-grounded tasks. Check [this guide](./generation_strategies.md) for more information. |
 | `repetition_penalty` | `float` | Applies a penalty to prevent repeated generated tokens, when set to `>1.0`. |
 | `eos_token_id` | `List[int]` | The token(s) that will cause generation to stop. The default value is usually good, but you can specify a different token. |
 
