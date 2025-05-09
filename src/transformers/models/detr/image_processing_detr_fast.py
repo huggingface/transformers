@@ -28,11 +28,7 @@ from ...image_processing_utils_fast import (
     get_max_height_width,
     safe_squeeze,
 )
-from ...image_transforms import (
-    center_to_corners_format,
-    corners_to_center_format,
-    id_to_rgb,
-)
+from ...image_transforms import center_to_corners_format, corners_to_center_format, id_to_rgb
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -622,7 +618,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             )
             kwargs["size"] = kwargs.pop("max_size")
 
-        return super().preprocess(images, annotations, masks_path, **kwargs)
+        return super().preprocess(images, annotations=annotations, masks_path=masks_path, **kwargs)
 
     def _preprocess(
         self,

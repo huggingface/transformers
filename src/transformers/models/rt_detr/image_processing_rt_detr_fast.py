@@ -385,8 +385,7 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
-        (
-            r"""
+        r"""
         annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
             List of annotations associated with the image or batch of images. If annotation is for object
             detection, the annotations should be a dictionary with the following keys:
@@ -402,9 +401,8 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             Data format of the annotations. One of "coco_detection" or "coco_panoptic".
         masks_path (`str` or `pathlib.Path`, *optional*):
             Path to the directory containing the segmentation masks.
-        """,
-        )
-        return super().preprocess(images, annotations, masks_path, **kwargs)
+        """
+        return super().preprocess(images, annotations=annotations, masks_path=masks_path, **kwargs)
 
     def _preprocess(
         self,
