@@ -55,15 +55,6 @@ class Gemma2ModelTester(CausalLMModelTester):
         for_causal_lm_class = Gemma2ForCausalLM
         for_sequence_class = Gemma2ForSequenceClassification
         for_token_class = Gemma2ForTokenClassification
-
-
-@require_torch
-class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (Gemma2Model, Gemma2ForCausalLM, Gemma2ForSequenceClassification, Gemma2ForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": Gemma2Model,
@@ -75,6 +66,16 @@ class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+
+
+@require_torch
+class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
+    all_model_classes = (
+        (Gemma2Model, Gemma2ForCausalLM, Gemma2ForSequenceClassification, Gemma2ForTokenClassification)
+        if is_torch_available()
+        else ()
+    )
+
     test_headmasking = False
     test_pruning = False
     _is_stateful = True

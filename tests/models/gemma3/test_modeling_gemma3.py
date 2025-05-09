@@ -61,11 +61,6 @@ class Gemma3ModelTester(CausalLMModelTester):
         config_class = Gemma3TextConfig
         base_model_class = Gemma3TextModel
         causal_lm_class = Gemma3ForCausalLM
-
-
-@require_torch
-class Gemma3ModelTest(CausalLMModelTest, unittest.TestCase):
-    model_tester_class = Gemma3ModelTester
     pipeline_model_mapping = (
         {
             "feature-extraction": Gemma3TextModel,
@@ -74,6 +69,11 @@ class Gemma3ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+
+
+@require_torch
+class Gemma3ModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = Gemma3ModelTester
     all_model_classes = (Gemma3TextModel, Gemma3ForCausalLM) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
