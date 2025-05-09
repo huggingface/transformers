@@ -2508,8 +2508,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if self._auto_class is not None:
-            custom_object_save(self, save_directory, config=tokenizer_config)
+        custom_object_save(self, save_directory, config=tokenizer_config)
 
         # remove private information
         if "name_or_path" in tokenizer_config:
