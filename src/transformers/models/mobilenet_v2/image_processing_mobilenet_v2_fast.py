@@ -63,9 +63,8 @@ class MobileNetV2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         is used for background, and background itself is not included in all classes of a dataset (e.g.
         ADE20k). The background label will be replaced by 255.
     """
-    
-    do_reduce_labels: Optional[bool]
 
+    do_reduce_labels: Optional[bool]
 
 
 @auto_docstring
@@ -83,7 +82,7 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = None
     do_reduce_labels = False
     valid_kwargs = MobileNetV2FastImageProcessorKwargs
-    
+
     def __init__(self, **kwargs: Unpack[MobileNetV2FastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
@@ -211,7 +210,7 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
         # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
         # be passed in as positional arguments.
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
-    
+
     @auto_docstring
     def preprocess(
         self,
