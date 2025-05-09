@@ -1,7 +1,8 @@
-from transformers import GroundingDinoProcessor, GroundingDinoForObjectDetection
-from PIL import Image
-import torch
 import requests
+import torch
+from PIL import Image
+
+from transformers import GroundingDinoForObjectDetection, GroundingDinoProcessor
 
 
 image_url = "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/lena.png"
