@@ -18,12 +18,12 @@ import tempfile
 import textwrap
 
 from transformers import is_torch_available
+from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
 from transformers.testing_utils import (
     TestCasePlus,
     get_torch_dist_unique_port,
     require_torch_multi_gpu,
 )
-from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
 
 
 if is_torch_available():

@@ -63,10 +63,10 @@ from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.tensor_parallel import (
     SUPPORTED_TP_STYLES,
+    _get_parameter_tp_plan,
     convert_local_tensor_to_dtensor,
     repack_weights,
     shard_and_distribute_module,
-    _get_parameter_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
@@ -169,6 +169,8 @@ _is_quantized = False
 _is_ds_init_called = False
 _torch_distributed_available = torch.distributed.is_available()
 
+if _torch_distributed_available and is_torch_greater_or_equal("2.5"):
+    from torch.distributed.tensor import DTensor
 
 def is_fsdp_enabled():
     return (
@@ -3497,7 +3499,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             for name, tensor in state_dict.items():
                 # Sometimes in the state_dict we have non-tensor objects.
                 # e.g. in bitsandbytes we have some `str` objects in the state_dict
-                if isinstance(tensor, torch.Tensor) or isinstance(tensor, torch.distributed.tensor.DTensor):
+                if isinstance(tensor, torch.Tensor) or isinstance(tensor, DTensor):
                     ptrs[id_tensor_storage(tensor)].append(name)
                 else:
                     # In the non-tensor case, fall back to the pointer of the object itself
@@ -3607,7 +3609,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         for shard_file, tensors in filename_to_tensors:
             shard = {}
             for tensor in tensors:
-                if isinstance(state_dict[tensor], torch.distributed.tensor.DTensor):
+                if isinstance(state_dict[tensor], DTensor):
                     full_tensor = state_dict[tensor].full_tensor()
                     # to get the correctly ordered tensor we need to repack if packed
                     if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
@@ -4739,7 +4741,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             return state_dict
         # TODO: optimize this to avoid iterating over all
         for key, value in state_dict.items():
-            if isinstance(value, torch.Tensor) and not isinstance(value, torch.distributed.tensor.DTensor):
+            if isinstance(value, torch.Tensor) and not isinstance(value, DTensor):
                 state_dict[key] = convert_local_tensor_to_dtensor(value, key, self._device_mesh, self._tp_plan)
         return state_dict
 
