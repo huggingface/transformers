@@ -22,13 +22,7 @@ import warnings
 import numpy as np
 from packaging import version
 
-from transformers.testing_utils import (
-    require_torch,
-    require_torch_gpu,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
@@ -157,8 +151,6 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
     def test_call_numpy_4_channels(self):
         pass
 
-    @require_torch
-    @require_vision
     def test_cast_dtype_device(self):
         for image_processing_class in self.image_processor_list:
             if self.test_cast_dtype is not None:
@@ -296,8 +288,6 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.skipTest(reason="No validation found for `preprocess` method")
 
     @slow
-    @require_torch_gpu
-    @require_vision
     def test_can_compile_fast_image_processor(self):
         if self.fast_image_processing_class is None:
             self.skipTest("Skipping compilation test as fast image processor is not defined")

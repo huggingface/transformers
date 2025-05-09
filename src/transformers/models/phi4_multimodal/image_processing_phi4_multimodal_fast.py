@@ -18,8 +18,6 @@ from typing import List, Optional, Union
 import torch
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     BatchFeature,
     DefaultFastImageProcessorKwargs,
@@ -28,7 +26,7 @@ from ...image_processing_utils_fast import (
 from ...image_utils import ImageInput, SizeDict
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torchvision_available,
     is_torchvision_v2_available,
     is_vision_available,
@@ -48,20 +46,18 @@ logger = logging.get_logger(__name__)
 
 
 class Phi4MultimodalFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    r"""
+    patch_size (`int`, *optional*):
+        The size of the patch.
+    dynamic_hd (`int`, *optional*):
+        The maximum number of crops per image.
+    """
+
     patch_size: Optional[int]
     dynamic_hd: Optional[int]
 
 
-@add_start_docstrings(
-    "Constructs a fast Phi4Multimodal image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        patch_size (`int`, *optional*):
-            The size of the patch.
-        dynamic_hd (`int`, *optional*):
-            The maximum number of crops per image.
-    """,
-)
+@auto_docstring
 class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     size = {"height": 448, "width": 448}
@@ -168,15 +164,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
             masks = torch.cat([masks, pad], dim=0)
         return masks
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            patch_size (`int`, *optional*):
-                The size of the patch.
-            dynamic_hd (`int`, *optional*):
-                The maximum number of crops per image.
-        """,
-    )
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
