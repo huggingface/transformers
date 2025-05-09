@@ -20,7 +20,6 @@ import accelerate
 from transformers import (
     AutoProcessor,
     Mistral3Config,
-    is_bitsandbytes_available,
     is_torch_available,
 )
 from transformers.testing_utils import (
