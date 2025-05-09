@@ -270,8 +270,8 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
                 attn_implementation=config._attn_implementation, 
                 trust_remote_code=True
             )
-        
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+
+        self.pad_token_id = self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else -1
         self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
 
         self.post_init()
@@ -454,7 +454,7 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
                             image_features = self.vision_tower(pixel_values_for_image)
                             selected_image_feature = image_features[vision_feature_layer][0].permute(1, 2, 0)
                             selected_image_feature = self.multi_modal_projector(selected_image_feature)
-                            if "mm_use_row_seperator" not in self.config.vision_config or self.config.vision_config.mm_use_row_seperator:
+                            if self.config.vision_config.mm_use_row_seperator:
                                 selected_image_feature = torch.cat((selected_image_feature, self.multi_modal_projector.row_seperator.repeat(selected_image_feature.shape[0],1,1)), dim=1)
                             flattened_image_features.append(selected_image_feature.flatten(0, 1))
                 elif self.config.vision_config.img_anyres_strategy == "crop":
@@ -472,7 +472,7 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
                     for image_feature, image_size in zip(image_features_split, _image_sizes_list_temp):
                         image_feature = image_feature.view(image_size[0], image_size[1], *image_feature.shape[1:])
                         image_feature = image_feature.permute(0, 2, 1, 3, 4).flatten(2, 3).flatten(0, 1)
-                        if "mm_use_row_seperator" not in self.config.vision_config or self.config.vision_config.mm_use_row_seperator:
+                        if self.config.vision_config.mm_use_row_seperator:
                             image_feature = torch.cat((image_feature, self.multi_modal_projector.row_seperator.repeat(image_feature.shape[0],1,1)), dim=1)
                         flattened_image_features.append(image_feature.flatten(0, 1))
 

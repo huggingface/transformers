@@ -108,7 +108,7 @@ class MagmaConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
             The config object or dictionary of the text backbone.
-        image_token_index (`int`, *optional*, defaults to 128257):
+        image_token_id (`int`, *optional*, defaults to 128257):
             The image token index to encode the image prompt.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
@@ -127,21 +127,18 @@ class MagmaConfig(PretrainedConfig):
     ```"""
 
     model_type = "magma"
-    attribute_map = {
-        "image_token_id": "image_token_index",
-    }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
         vision_config=None,
         text_config=None,
-        image_token_index=None,
+        image_token_id=None,
         tie_word_embeddings=False,
         **kwargs,
     ):
         
-        self.image_token_index = image_token_index
+        self.image_token_id = image_token_id
         
         if isinstance(vision_config, dict):
             vision_config = PretrainedConfig(**vision_config)
