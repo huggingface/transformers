@@ -4319,7 +4319,7 @@ class ModelTesterMixin:
 
         seq_len = self.model_tester.seq_length
         batch_size = self.model_tester.batch_size
-        sliding_window = 3 # set to arbitrary small number
+        sliding_window = 3  # set to arbitrary small number
 
         sliding_mask = torch.zeros((seq_len, seq_len), dtype=torch.bool)
         for i in range(seq_len):
