@@ -134,7 +134,7 @@ _cv2_available = importlib.util.find_spec("cv2") is not None
 _yt_dlp_available = importlib.util.find_spec("yt_dlp") is not None
 _datasets_available = _is_package_available("datasets")
 _detectron2_available = _is_package_available("detectron2")
-# We need to check both `faiss` and `faiss-cpu`.
+# We need to check `faiss`, `faiss-cpu` and `faiss-gpu`.
 _faiss_available = importlib.util.find_spec("faiss") is not None
 try:
     _faiss_version = importlib.metadata.version("faiss")
@@ -144,7 +144,11 @@ except importlib.metadata.PackageNotFoundError:
         _faiss_version = importlib.metadata.version("faiss-cpu")
         logger.debug(f"Successfully imported faiss version {_faiss_version}")
     except importlib.metadata.PackageNotFoundError:
-        _faiss_available = False
+        try:
+            _faiss_version = importlib.metadata.version("faiss-gpu")
+            logger.debug(f"Successfully imported faiss version {_faiss_version}")
+        except importlib.metadata.PackageNotFoundError:
+            _faiss_available = False
 _ftfy_available = _is_package_available("ftfy")
 _g2p_en_available = _is_package_available("g2p_en")
 _hadamard_available = _is_package_available("fast_hadamard_transform")
@@ -536,10 +540,12 @@ def is_torch_bf16_gpu_available() -> bool:
 
     if torch.cuda.is_available():
         return torch.cuda.is_bf16_supported()
-    if torch.xpu.is_available():
+    if is_torch_xpu_available():
         return torch.xpu.is_bf16_supported()
     if is_torch_hpu_available():
         return True
+    if is_torch_npu_available():
+        return torch.npu.is_bf16_supported()
     return False
 
 

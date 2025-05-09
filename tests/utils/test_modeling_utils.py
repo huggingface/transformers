@@ -63,7 +63,6 @@ from transformers.testing_utils import (
     require_tf,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_multi_accelerator,
     require_usr_bin_time,
     slow,
@@ -1896,7 +1895,7 @@ class ModelUtilsTest(TestCasePlus):
     @parameterized.expand([("Qwen/Qwen2.5-3B-Instruct", 10), ("meta-llama/Llama-2-7b-chat-hf", 10)])
     @slow
     @require_read_token
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_loading_is_fast_on_gpu(self, model_id: str, max_loading_time: float):
         """
         This test is used to avoid regression on https://github.com/huggingface/transformers/pull/36380.
@@ -1913,27 +1912,30 @@ class ModelUtilsTest(TestCasePlus):
             import time
             import argparse
             from transformers import AutoModelForCausalLM
+            from transformers.utils import is_torch_accelerator_available
 
             parser = argparse.ArgumentParser()
             parser.add_argument("model_id", type=str)
             parser.add_argument("max_loading_time", type=float)
             args = parser.parse_args()
 
-            device = torch.device("cuda:0")
+            device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
+            device = torch.device(f"{device_type}:0")
 
-            torch.cuda.synchronize(device)
+            torch_accelerator_module = getattr(torch, device_type, torch.cuda)
+            torch_accelerator_module.synchronize(device)
             t0 = time.time()
             model = AutoModelForCausalLM.from_pretrained(args.model_id, torch_dtype=torch.float16, device_map=device)
-            torch.cuda.synchronize(device)
+            torch_accelerator_module.synchronize(device)
             dt = time.time() - t0
 
             # Assert loading is faster (it should be more than enough in both cases)
             if dt > args.max_loading_time:
                 raise ValueError(f"Loading took {dt:.2f}s! It should not take more than {args.max_loading_time}s")
-            # Ensure everything is correctly loaded on gpu
+            # Ensure everything is correctly loaded on accelerator
             bad_device_params = {k for k, v in model.named_parameters() if v.device != device}
             if len(bad_device_params) > 0:
-                raise ValueError(f"The following parameters are not on GPU: {bad_device_params}")
+                raise ValueError(f"The following parameters are not on accelerator: {bad_device_params}")
             """
         )
 
