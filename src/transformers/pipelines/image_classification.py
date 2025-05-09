@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List, Union
+from typing import Any, Dict, List, Union, overload
 
 import numpy as np
 
@@ -122,7 +122,15 @@ class ImageClassificationPipeline(Pipeline):
             postprocess_params["function_to_apply"] = function_to_apply
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
+    @overload
+    def __call__(self, inputs: Union[str, "Image.Image"], **kwargs: Any) -> List[Dict[str, Any]]: ...
+
+    @overload
+    def __call__(self, inputs: Union[List[str], List["Image.Image"]], **kwargs: Any) -> List[List[Dict[str, Any]]]: ...
+
+    def __call__(
+        self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs: Any
+    ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
         """
         Assign labels to the image(s) passed as inputs.
 
