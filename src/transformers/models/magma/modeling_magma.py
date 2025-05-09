@@ -22,9 +22,7 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
-import torch.distributed as dist
 from ...modeling_utils import PreTrainedModel
 from ...generation import GenerationMixin
 from ...activations import ACT2FN
@@ -96,11 +94,10 @@ class MagmaMultiModalProjector(nn.Module):
         mlp_gelu_match = re.match(r'^mlp(\d+)x_gelu$', projector_type)
         if mlp_gelu_match:
             mlp_depth = int(mlp_gelu_match.group(1))
-            modules = [nn.Linear(config.mm_hidden_size, config.hidden_size)]
+            self.proj = nn.ModuleList([nn.Linear(config.mm_hidden_size, config.hidden_size)])
             for _ in range(1, mlp_depth):
-                modules.append(nn.GELU())
-                modules.append(nn.Linear(config.hidden_size, config.hidden_size))
-            self.proj = nn.Sequential(*modules)
+                self.proj.append(nn.GELU())
+                self.proj.append(nn.Linear(config.hidden_size, config.hidden_size))
         else:
             raise ValueError(f"Unsupported projector type: {projector_type}")
     
@@ -109,7 +106,9 @@ class MagmaMultiModalProjector(nn.Module):
             self.row_seperator = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
 
     def forward(self, x):
-        return self.proj(x)
+        for layer in self.proj:
+            x = layer(x)
+        return x
 
 MAGMA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -306,39 +305,6 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
 
     def tie_weights(self):
         return self.language_model.tie_weights()
-
-    def load_special_module_from_ckpt(self, ckpt_path, torch_dtype=None):
-        from deepspeed.runtime.zero import Init
-        from deepspeed import zero
-        # Defer initialization for ZeRO-3 compatibility
-        # with Init(data_parallel_group=None):
-        #     # Initialize the special module
-        #     self.vision_tower = MagmaImageTower(self.config.vision_config, require_pretrained=False)
-
-        # Load checkpoint weights into the special module
-        checkpoint = torch.load(ckpt_path, map_location='cpu')
-        state_dict = {k.replace('visual.', ''): v for k, v in checkpoint.items() if 'visual.' in k}
-
-        # Convert checkpoint weights to match model's parameter dtype
-        if torch_dtype is None:
-            model_dtype = next(self.vision_tower.clip_vision_model.parameters()).dtype
-            for k, v in state_dict.items():
-                state_dict[k] = v.to(model_dtype)
-        else:
-            for k, v in state_dict.items():
-                state_dict[k] = v.to(torch_dtype)
-
-        # Temporarily gather parameters for loading (if ZeRO-3 is active)
-        with zero.GatheredParameters(list(self.vision_tower.parameters()), modifier_rank=0):
-            # Load the state dictionary
-            self.vision_tower.clip_vision_model.load_state_dict(state_dict, strict=False)
-            # After loading, ensure the module is on the correct device
-            for param in self.vision_tower.parameters():
-                param.data = param.data.to(self.device).to(torch_dtype)
-
-        # If using a DeepSpeed engine, attach the updated module
-        if hasattr(self, "deepspeed_engine"):
-            self.deepspeed_engine.module = self
         
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
