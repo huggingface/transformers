@@ -94,8 +94,9 @@ Full command list:
 - **!status**: shows the current status of the model and generation settings
 - **!example {{NAME}}**: loads example named `{{NAME}}` from the config and uses it as the user input.
 Available example names: `{"`, `".join(DEFAULT_EXAMPLES.keys())}`
-- **!set {{ARG_1}}={{VALUE_1}} {{ARG_2}}={{VALUE_2}}**: changes the system prompt or generation settings (multiple
+- **!set {{ARG_1}}={{VALUE_1}} {{ARG_2}}={{VALUE_2}}** ...: changes the system prompt or generation settings (multiple
 settings are separated by a space). Accepts the same flags and format as the `generate_flags` CLI argument.
+If you're a new user, check this basic flag guide: https://huggingface.co/docs/transformers/llm_tutorial#common-options
 - **!save {{SAVE_NAME}} (optional)**: saves the current chat and settings to file by default to
 `./chat_history/{{MODEL_NAME}}/chat_{{DATETIME}}.yaml` or `{{SAVE_NAME}}` if provided
 - **!exit**: closes the interface
@@ -319,8 +320,8 @@ class ChatCommand(BaseTransformersCLICommand):
             help=(
                 "Flags to pass to `generate`, using a space as a separator between flags. Accepts booleans, numbers, "
                 "and lists of integers, more advanced parameterization should be set through --generation-config. "
+                "Example: `transformers chat <model_repo> max_new_tokens=100 do_sample=False eos_token_id=[1,2]`. "
                 "If you're a new user, check this basic flag guide: https://huggingface.co/docs/transformers/llm_tutorial#common-options"
-                "Example: `transformers chat <model_repo> max_new_tokens=100 do_sample=False eos_token_id=[1,2]`."
             ),
             nargs="*",
         )
@@ -474,6 +475,7 @@ class ChatCommand(BaseTransformersCLICommand):
             # Apply deprecated CLI args on top of the default generation config
             pad_token_id, eos_token_ids = self.parse_eos_tokens(tokenizer, args.eos_tokens, args.eos_token_ids)
             deprecated_kwargs = {
+                "max_new_tokens": args.max_new_tokens,
                 "do_sample": args.do_sample,
                 "num_beams": args.num_beams,
                 "temperature": args.temperature,
@@ -632,7 +634,7 @@ class ChatCommand(BaseTransformersCLICommand):
                 interface.clear()
                 chat = []
                 interface.print_user_message(examples[example_name]["text"])
-                user_input = examples[example_name]["text"]
+                chat.append({"role": "user", "content": examples[example_name]["text"]})
             else:
                 example_error = (
                     f"Example {example_name} not found in list of available examples: {list(examples.keys())}."
@@ -701,9 +703,11 @@ class ChatCommand(BaseTransformersCLICommand):
                             model_kwargs=model_kwargs,
                             chat=chat,
                         )
+                    # `!example` sends a user message to the model
+                    if not user_input.startswith("!example"):
                         continue
-
-                chat.append({"role": "user", "content": user_input})
+                else:
+                    chat.append({"role": "user", "content": user_input})
 
                 inputs = tokenizer.apply_chat_template(chat, return_tensors="pt", add_generation_prompt=True).to(
                     model.device
