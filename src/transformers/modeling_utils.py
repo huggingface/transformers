@@ -64,7 +64,7 @@ from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.tensor_parallel import (
     SUPPORTED_TP_STYLES,
     convert_local_tensor_to_dtensor,
-    reorder_packed_tensor_for_saving,
+    repack_weights,
     shard_and_distribute_module,
 )
 from .loss.loss_utils import LOSS_MAPPING
@@ -3613,7 +3613,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 if isinstance(state_dict[tensor], torch.distributed.tensor.DTensor):
                     full_tensor = state_dict[tensor].full_tensor()
                     if "gate_up_proj" in tensor:
-                        full_tensor = reorder_packed_tensor_for_saving(full_tensor, -1, 4, 2)
+                        full_tensor = repack_weights(full_tensor, -1, 4, 2)
                     shard[tensor] = full_tensor.contiguous()  # only do contiguous after it's permuted correctly
                 else:
                     shard[tensor] = state_dict[tensor].contiguous()

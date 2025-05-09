@@ -154,7 +154,7 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
     return tensor.to(str_to_torch_dtype[slice_dtype])
 
 
-def reorder_packed_tensor_for_saving(
+def repack_weights(
     packed_parameter: torch.Tensor,
     sharded_dim: int,  # The dimension index in the global tensor that was sharded
     world_size: int,

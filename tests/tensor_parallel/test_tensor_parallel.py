@@ -23,10 +23,40 @@ from transformers.testing_utils import (
     get_torch_dist_unique_port,
     require_torch_multi_gpu,
 )
+from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
 
 
 if is_torch_available():
     import torch
+
+
+class TestTensorParallelUtils(TestCasePlus):
+    def test_packed_unpacked_conversion(self):
+        WORLD_SIZE = 2
+        PACKED_BLOCK_SIZE = 800
+        SHARDING_DIM = 2
+        NUM_BLOCKS = 2
+
+        original_packed_weights = torch.randn(4, 512, 2 * PACKED_BLOCK_SIZE)
+        original_packed_weights.get_dtype = lambda: "F32"  # get_packed_weights expects PySlice object
+        empty_param = torch.empty(4, 512, 2 * PACKED_BLOCK_SIZE)
+
+        class MockDeviceMesh:
+            def size(self):
+                return WORLD_SIZE
+
+        mock_mesh = (
+            MockDeviceMesh()
+        )  # get_packed_weights only calls `.size()`, do this to avoid doing actual distributed run
+
+        packed_weights_0 = get_packed_weights(original_packed_weights, empty_param, mock_mesh, 0, SHARDING_DIM)
+        packed_weights_1 = get_packed_weights(original_packed_weights, empty_param, mock_mesh, 1, SHARDING_DIM)
+
+        # simulate all gather of sharded weights
+        packed_weights = torch.cat([packed_weights_0, packed_weights_1], dim=SHARDING_DIM)
+        unpacked_weights = repack_weights(packed_weights, SHARDING_DIM, WORLD_SIZE, NUM_BLOCKS)
+
+        assert torch.allclose(unpacked_weights, original_packed_weights)
 
 
 # RUN_SLOW=1 pytest -sv tests/tensor_parallel/test_tensor_parallel.py
