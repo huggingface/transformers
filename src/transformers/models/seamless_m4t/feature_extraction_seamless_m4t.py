@@ -74,7 +74,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         self.stride = stride
 
         mel_filters = mel_filter_bank(
-            num_frequency_bins=256,
+            num_frequency_bins=257,
             num_mel_filters=self.num_mel_bins,
             min_frequency=20,
             max_frequency=sampling_rate // 2,
@@ -84,7 +84,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             triangularize_in_mel_space=True,
         )
 
-        self.mel_filters = np.pad(mel_filters, ((0, 1), (0, 0)))
+        self.mel_filters = mel_filters
         self.window = window_function(400, "povey", periodic=False)
 
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)

@@ -151,7 +151,7 @@ def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_fold
     logger.info(f"Converting model {model_name}...")
 
     # load original state dict
-    state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"))
+    state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"), weights_only=True)
 
     # rename keys
     state_dict = rename_keys(state_dict)

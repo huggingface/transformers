@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -171,14 +170,6 @@ class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, P
 
     @unittest.skip(reason="Not yet implemented")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="trocr has no base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="trocr has no base model")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     def test_config(self):

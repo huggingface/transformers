@@ -21,8 +21,7 @@
 # limitations under the License.
 
 import collections.abc
-import math
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Callable, Dict, List, Optional, Set, Tuple, Union
 
 import torch
 from torch import nn
@@ -30,27 +29,14 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import auto_docstring, logging, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_dinov2_with_registers import Dinov2WithRegistersConfig
 
 
 logger = logging.get_logger(__name__)
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/dinov2_with_registers-base"
-
-# General docstring
-_CONFIG_FOR_DOC = "Dinov2WithRegistersConfig"
 
 
 class Dinov2WithRegistersPatchEmbeddings(nn.Module):
@@ -185,6 +171,36 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         return embeddings
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+
+    # Normalize the attention scores to probabilities.
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+
+    # This is actually dropping out entire tokens to attend to, which might
+    # seem a bit unusual, but is taken from the original Transformer paper.
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    # Mask heads if we want to
+    if attention_mask is not None:
+        attn_weights = attn_weights * attention_mask
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class Dinov2WithRegistersSelfAttention(nn.Module):
     def __init__(self, config: Dinov2WithRegistersConfig) -> None:
         super().__init__()
@@ -194,15 +210,17 @@ class Dinov2WithRegistersSelfAttention(nn.Module):
                 f"heads {config.num_attention_heads}."
             )
 
+        self.config = config
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -212,78 +230,37 @@ class Dinov2WithRegistersSelfAttention(nn.Module):
     def forward(
         self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
-
-
-class Dinov2WithRegistersSdpaSelfAttention(Dinov2WithRegistersSelfAttention):
-    def __init__(self, config: Dinov2WithRegistersConfig) -> None:
-        super().__init__(config)
-        self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
-
-    def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        if output_attentions:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "Dinov2WithRegistersModel is using Dinov2WithRegistersSdpaSelfAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states, head_mask=head_mask, output_attentions=output_attentions
-            )
-
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        context_layer = torch.nn.functional.scaled_dot_product_attention(
+        context_layer, attention_probs = attention_interface(
+            self,
             query_layer,
             key_layer,
             value_layer,
             head_mask,
-            self.attention_probs_dropout_prob if self.training else 0.0,
-            is_causal=False,
-            scale=None,
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.dropout_prob,
         )
 
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
+        context_layer = context_layer.reshape(new_context_layer_shape)
 
-        return context_layer, None
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        return outputs
 
 
 class Dinov2WithRegistersSelfOutput(nn.Module):
@@ -341,12 +318,6 @@ class Dinov2WithRegistersAttention(nn.Module):
 
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
-
-
-class Dinov2WithRegistersSdpaAttention(Dinov2WithRegistersAttention):
-    def __init__(self, config: Dinov2WithRegistersConfig) -> None:
-        super().__init__(config)
-        self.attention = Dinov2WithRegistersSdpaSelfAttention(config)
 
 
 class Dinov2WithRegistersLayerScale(nn.Module):
@@ -428,12 +399,6 @@ class Dinov2WithRegistersSwiGLUFFN(nn.Module):
         return self.weights_out(hidden)
 
 
-DINOV2_WITH_REGISTERS_ATTENTION_CLASSES = {
-    "eager": Dinov2WithRegistersAttention,
-    "sdpa": Dinov2WithRegistersSdpaAttention,
-}
-
-
 class Dinov2WithRegistersLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
@@ -441,7 +406,7 @@ class Dinov2WithRegistersLayer(nn.Module):
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = DINOV2_WITH_REGISTERS_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.attention = Dinov2WithRegistersAttention(config)
         self.layer_scale1 = Dinov2WithRegistersLayerScale(config)
         self.drop_path = (
             Dinov2WithRegistersDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
@@ -538,18 +503,15 @@ class Dinov2WithRegistersEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = Dinov2WithRegistersConfig
     base_model_prefix = "dinov2_with_registers"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dinov2WithRegistersSwiGLUFFN"]
     _supports_sdpa = True
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -577,52 +539,13 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
                 std=self.config.initializer_range,
             ).to(module.cls_token.dtype)
 
-
-_EXPECTED_OUTPUT_SHAPE = [1, 257, 768]
-
-
-DINOV2_WITH_REGISTERS_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`Dinov2WithRegistersConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-DINOV2_WITH_REGISTERS_BASE_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`BitImageProcessor.preprocess`] for details.
-
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
-            pre-training.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
+            module.mask_token.data.zero_()
+            module.register_tokens.data.zero_()
+        elif isinstance(module, Dinov2WithRegistersLayerScale):  # noqa: F821
+            module.lambda1.data.fill_(self.config.layerscale_value)
 
 
-@add_start_docstrings(
-    "The bare Dinov2WithRegisters Model transformer outputting raw hidden-states without any specific head on top.",
-    DINOV2_WITH_REGISTERS_START_DOCSTRING,
-)
+@auto_docstring
 class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
     def __init__(self, config: Dinov2WithRegistersConfig):
         super().__init__(config)
@@ -647,14 +570,7 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(DINOV2_WITH_REGISTERS_BASE_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -664,6 +580,11 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
+            pre-training.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -705,39 +626,11 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
         )
 
 
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "facebook/dinov2_with_registers-small-imagenet1k-1-layer"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-DINOV2_WITH_REGISTERS_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`BitImageProcessor.preprocess`] for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Dinov2WithRegisters Model transformer with an image classification head on top (a linear layer on top of the final hidden state
     of the [CLS] token) e.g. for ImageNet.
-    """,
-    DINOV2_WITH_REGISTERS_START_DOCSTRING,
+    """
 )
 class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedModel):
     def __init__(self, config: Dinov2WithRegistersConfig) -> None:
@@ -754,13 +647,7 @@ class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedMod
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(DINOV2_WITH_REGISTERS_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -789,7 +676,8 @@ class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedMod
         sequence_output = outputs[0]  # batch_size, sequence_length, hidden_size
 
         cls_token = sequence_output[:, 0]
-        patch_tokens = sequence_output[:, 1:]
+        # cls and register tokens should not be included in patch tokens variable
+        patch_tokens = sequence_output[:, 1 + self.config.num_register_tokens :]
 
         linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
 
@@ -832,11 +720,10 @@ class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedMod
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Dinov2WithRegisters backbone, to be used with frameworks like DETR and MaskFormer.
-    """,
-    DINOV2_WITH_REGISTERS_START_DOCSTRING,
+    """
 )
 class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMixin):
     def __init__(self, config):
@@ -856,8 +743,7 @@ class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMi
     def get_input_embeddings(self) -> Dinov2WithRegistersPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @add_start_docstrings_to_model_forward(DINOV2_WITH_REGISTERS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -865,14 +751,8 @@ class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMi
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
-        """
-        Returns:
-
+        r"""
         Examples:
-        Returns:
-
-        Examples:
-
 
         ```python
         >>> from transformers import AutoImageProcessor, AutoBackbone

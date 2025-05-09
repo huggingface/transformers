@@ -14,52 +14,79 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# ModernBERT
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+  </div>
 </div>
 
-## Overview
+# ModernBERT
 
-The ModernBERT model was proposed in [Smarter, Better, Faster, Longer: A Modern Bidirectional Encoder for Fast, Memory Efficient, and Long Context Finetuning and Inference](https://arxiv.org/abs/2412.13663) by Benjamin Warner, Antoine Chaffin, Benjamin Clavié, Orion Weller, Oskar Hallström, Said Taghadouini, Alexis Galalgher, Raja Bisas, Faisal Ladhak, Tom Aarsen, Nathan Cooper, Grifin Adams, Jeremy Howard and Iacopo Poli.
+[ModernBERT](https://huggingface.co/papers/2412.13663) is a modernized version of [`BERT`] trained on 2T tokens. It brings many improvements to the original architecture such as rotary positional embeddings to support sequences of up to 8192 tokens, unpadding to avoid wasting compute on padding tokens, GeGLU layers, and alternating attention.
 
-It is a refresh of the traditional encoder architecture, as used in previous models such as [BERT](https://huggingface.co/docs/transformers/en/model_doc/bert) and [RoBERTa](https://huggingface.co/docs/transformers/en/model_doc/roberta). 
+You can find all the original ModernBERT checkpoints under the [ModernBERT](https://huggingface.co/collections/answerdotai/modernbert-67627ad707a4acbf33c41deb) collection.
 
-It builds on BERT and implements many modern architectural improvements which have been developed since its original release, such as:
-- [Rotary Positional Embeddings](https://huggingface.co/blog/designing-positional-encoding) to support sequences of up to 8192 tokens.
-- [Unpadding](https://arxiv.org/abs/2208.08124) to ensure no compute is wasted on padding tokens, speeding up processing time for batches with mixed-length sequences.
-- [GeGLU](https://arxiv.org/abs/2002.05202) Replacing the original MLP layers with GeGLU layers, shown to improve performance.
-- [Alternating Attention](https://arxiv.org/abs/2004.05150v2) where most attention layers employ a sliding window of 128 tokens, with Global Attention only used every 3 layers.
-- [Flash Attention](https://github.com/Dao-AILab/flash-attention) to speed up processing.
-- A model designed following recent [The Case for Co-Designing Model Architectures with Hardware](https://arxiv.org/abs/2401.14489), ensuring maximum efficiency across inference GPUs.
-- Modern training data scales (2 trillion tokens) and mixtures (including code ande math data)
+> [!TIP]
+> Click on the ModernBERT models in the right sidebar for more examples of how to apply ModernBERT to different language tasks.
 
-The abstract from the paper is the following:
+The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
-*Encoder-only transformer models such as BERT offer a great performance-size tradeoff for retrieval and classification tasks with respect to larger decoder-only models. Despite being the workhorse of numerous production pipelines, there have been limited Pareto improvements to BERT since its release. In this paper, we introduce ModernBERT, bringing modern model optimizations to encoder-only models and representing a major Pareto improvement over older encoders. Trained on 2 trillion tokens with a native 8192 sequence length, ModernBERT models exhibit state-of-the-art results on a large pool of evaluations encompassing diverse classification tasks and both single and multi-vector retrieval on different domains (including code). In addition to strong downstream performance, ModernBERT is also the most speed and memory efficient encoder and is designed for inference on common GPUs.*
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The original code can be found [here](https://github.com/answerdotai/modernbert).
+```py
+import torch
+from transformers import pipeline
 
-## Resources
+pipeline = pipeline(
+    task="fill-mask",
+    model="answerdotai/ModernBERT-base",
+    torch_dtype=torch.float16,
+    device=0
+)
+pipeline("Plants create [MASK] through a process known as photosynthesis.")
+```
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ModernBert.
+</hfoption>
+<hfoption id="AutoModel">
 
-<PipelineTag pipeline="text-classification"/>
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-- A notebook on how to [finetune for General Language Understanding Evaluation (GLUE) with Transformers](https://github.com/AnswerDotAI/ModernBERT/blob/main/examples/finetune_modernbert_on_glue.ipynb), also available as a Google Colab [notebook](https://colab.research.google.com/github/AnswerDotAI/ModernBERT/blob/main/examples/finetune_modernbert_on_glue.ipynb). 🌎
+tokenizer = AutoTokenizer.from_pretrained(
+    "answerdotai/ModernBERT-base",
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    "answerdotai/ModernBERT-base",
+    torch_dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt").to("cuda")
 
-<PipelineTag pipeline="sentence-similarity"/>
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = outputs.logits
 
-- A script on how to [finetune for text similarity or information retrieval with Sentence Transformers](https://github.com/AnswerDotAI/ModernBERT/blob/main/examples/train_st.py). 🌎
-- A script on how to [finetune for information retrieval with PyLate](https://github.com/AnswerDotAI/ModernBERT/blob/main/examples/train_pylate.py). 🌎
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
+predicted_token = tokenizer.decode(predicted_token_id)
 
-<PipelineTag pipeline="fill-mask"/>
+print(f"The predicted token is: {predicted_token}")
+```
 
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
+</hfoption>
+<hfoption id="transformers CLI">
 
+```bash
+echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model answerdotai/ModernBERT-base --device 0
+```
+
+</hfoption>
+</hfoptions>
 
 ## ModernBertConfig
 
@@ -87,6 +114,16 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] ModernBertForTokenClassification
     - forward
+
+## ModernBertForQuestionAnswering
+
+[[autodoc]] ModernBertForQuestionAnswering
+    - forward
+
+### Usage tips
+
+The ModernBert model can be fine-tuned using the HuggingFace Transformers library with its [official script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/question-answering/run_qa.py) for question-answering tasks.
+
 
 </pt>
 </frameworkcontent>

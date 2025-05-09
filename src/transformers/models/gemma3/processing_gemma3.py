@@ -65,6 +65,7 @@ class Gemma3Processor(ProcessorMixin):
         self.image_seq_length = image_seq_length
         self.image_token_id = tokenizer.image_token_id
         self.boi_token = tokenizer.boi_token
+        self.image_token = tokenizer.image_token
         image_tokens_expanded = "".join([tokenizer.image_token] * image_seq_length)
         self.full_image_sequence = f"\n\n{tokenizer.boi_token}{image_tokens_expanded}{tokenizer.eoi_token}\n\n"
 
@@ -112,8 +113,8 @@ class Gemma3Processor(ProcessorMixin):
                 )
 
             # Replace image tokens by the full expanded sequence
-            batch_num_crops = to_py_obj(image_inputs.pop("num_crops"))
-            text_with_crops = text
+            num_crops = to_py_obj(image_inputs.pop("num_crops"))
+            batch_num_crops = [[num_crops.pop(0) for _ in range(len(images))] for images in batched_images]
             for batch_idx, (prompt, images, num_crops) in enumerate(zip(text, batched_images, batch_num_crops)):
                 image_indexes = [m.start() for m in re.finditer(self.boi_token, prompt)]
 
@@ -130,16 +131,17 @@ class Gemma3Processor(ProcessorMixin):
                             + " ".join([self.boi_token] * num)
                         )
                         prompt = prompt[:idx] + formatted_image_text + prompt[idx + len(self.boi_token) :]
-                        text_with_crops[batch_idx] = prompt
+                        text[batch_idx] = prompt
 
             # Expand placeholder image tokens to the full image token sequence
             text = [prompt.replace(self.boi_token, self.full_image_sequence) for prompt in text]
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"], return_tensors="np")
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
         # Add token type ids manually, as tokenizer can't do arbitrary position token types
-        array_ids = np.array(text_inputs["input_ids"])
+        array_ids = text_inputs["input_ids"]
         mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
         mm_token_type_ids[array_ids == self.image_token_id] = 1
         text_inputs = {k: v.tolist() for k, v in text_inputs.items()}  # in case user requested list inputs

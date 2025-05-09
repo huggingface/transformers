@@ -89,15 +89,6 @@ class Pix2StructProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
-        legacy = kwargs.pop("legacy", True)
-        if legacy:
-            logger.warning_once(
-                "Legacy behavior is being used. The current behavior will be deprecated in version 5.0.0. "
-                "In the new behavior, If both images and text are provided, image_processor is not a VQA processor, and `add_special_tokens` is unset, "
-                "the default value of `add_special_tokens` will be changed to `False` when calling the tokenizer. "
-                "To test the new behavior, set `legacy=False`as a processor call argument."
-            )
-
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 
@@ -126,7 +117,7 @@ class Pix2StructProcessor(ProcessorMixin):
 
         if text is not None and not self.image_processor.is_vqa:
             output_kwargs["text_kwargs"]["add_special_tokens"] = (
-                add_special_tokens if add_special_tokens is not None else legacy
+                add_special_tokens if add_special_tokens is not None else False
             )
             text_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
 

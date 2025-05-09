@@ -172,7 +172,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         crop_to_patches: bool = False,
         min_patches: int = 1,
         max_patches: int = 12,
@@ -266,7 +266,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        do_convert_rgb: bool = None,
+        do_convert_rgb: Optional[bool] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> PIL.Image.Image:
@@ -419,7 +419,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         min_patches: int,
         max_patches: int,
         use_thumbnail: bool = True,
-        patch_size: Union[Tuple, int, dict] = None,
+        patch_size: Optional[Union[Tuple, int, dict]] = None,
         data_format: ChannelDimension = None,
     ):
         """

@@ -22,12 +22,16 @@ from collections import Counter
 from pathlib import Path
 
 def pattern_to_regex(pattern):
-    start_anchor = pattern.startswith("/")
-    pattern = re.escape(pattern)
+    if pattern.startswith("/"):
+        start_anchor = True
+        pattern = re.escape(pattern[1:])
+    else:
+        start_anchor = False
+        pattern = re.escape(pattern)
     # Replace `*` with "any number of non-slash characters"
     pattern = pattern.replace(r"\*", "[^/]*")
     if start_anchor:
-        pattern = "^" + pattern
+        pattern = r"^\/?" + pattern  # Allow an optional leading slash after the start of the string
     return pattern
 
 def get_file_owners(file_path, codeowners_lines):
@@ -50,6 +54,21 @@ def get_file_owners(file_path, codeowners_lines):
             return owners  # Remember, can still be empty!
     return []  # Should never happen, but just in case
 
+def pr_author_is_in_hf(pr_author, codeowners_lines):
+    # Check if the PR author is in the codeowners file
+    for line in codeowners_lines:
+        line = line.split('#')[0].strip()
+        if not line:
+            continue
+
+        # Split into pattern and owners
+        parts = line.split()
+        owners = [owner.removeprefix("@") for owner in parts[1:]]
+
+        if pr_author in owners:
+            return True
+    return False
+
 def main():
     script_dir = Path(__file__).parent.absolute()
     with open(script_dir / "codeowners_for_review_action") as f:
@@ -64,6 +83,9 @@ def main():
     pr_number = event['pull_request']['number']
     pr = repo.get_pull(pr_number)
     pr_author = pr.user.login
+    if pr_author_is_in_hf(pr_author, codeowners_lines):
+        print(f"PR author {pr_author} is in codeowners, skipping review request.")
+        return
 
     existing_reviews = list(pr.get_reviews())
     if existing_reviews:

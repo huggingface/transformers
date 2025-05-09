@@ -30,6 +30,7 @@ from ...utils import (
     is_torchvision_available,
 )
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
@@ -199,6 +200,7 @@ def _post_process_boxes_for_image(
     return boxes_per_image, scores_per_image, labels_per_image
 
 
+@requires(backends=("vision", "torchvision"))
 class OmDetTurboProcessor(ProcessorMixin):
     r"""
     Constructs a OmDet-Turbo processor which wraps a Deformable DETR image processor and an AutoTokenizer into a
@@ -216,7 +218,7 @@ class OmDetTurboProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "DetrImageProcessor"
+    image_processor_class = ("DetrImageProcessor", "DetrImageProcessorFast")
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer):
@@ -225,7 +227,7 @@ class OmDetTurboProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[List[str], List[List[str]]] = None,
+        text: Optional[Union[List[str], List[List[str]]]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],

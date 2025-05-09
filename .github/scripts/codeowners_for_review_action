@@ -14,7 +14,7 @@ docs/ @stevhliu
 # Owners of subsections of the library
 /src/transformers/generation/ @gante
 /src/transformers/pipeline/ @Rocketknight1 @yonigozlan
-/src/transformers/integrations/ @SunMarc @MekkCyber @muellerzr
+/src/transformers/integrations/ @SunMarc @MekkCyber @zach-huggingface
 /src/transformers/quantizers/ @SunMarc @MekkCyber
 tests/ @ydshieh
 tests/generation/ @gante
@@ -27,8 +27,8 @@ tests/generation/ @gante
 # Specific files come after the sections/globs, so they take priority
 /.circleci/config.yml @ArthurZucker @ydshieh
 /utils/tests_fetcher.py @ydshieh
-trainer.py @muellerzr @SunMarc
-trainer_utils.py @muellerzr @SunMarc
+trainer.py @zach-huggingface @SunMarc
+trainer_utils.py @zach-huggingface @SunMarc
 /utils/modular_model_converter.py @Cyrilvallez @ArthurZucker
 
 # Owners of individual models are specific / high priority, and so they come last
