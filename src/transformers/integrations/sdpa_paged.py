@@ -15,7 +15,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def sdpa_attention_forward(
+def sdpa_attention_paged_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
@@ -26,12 +26,33 @@ def sdpa_attention_forward(
     is_causal: Optional[bool] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, None]:
+    cache = kwargs.pop("cache", None)
+    if cache is not None:
+        cumulative_seqlens_q = kwargs.pop("cumulative_seqlens_q")
+        cumulative_seqlens_k = kwargs.pop("cumulative_seqlens_k")
+        key, value = cache.update(key, value, module.layer_idx, cumulative_seqlens_k, **kwargs)
+        attention_mask_ = torch.full(
+            [1, 1, query.shape[2], key.shape[2] + 1], torch.finfo(query.dtype).min, device=query.device, dtype=query.dtype
+        )
+        for i in range(len(cumulative_seqlens_k) - 1):
+            attention_mask_[
+                ...,
+                cumulative_seqlens_q[i] : cumulative_seqlens_q[i + 1],
+                cumulative_seqlens_k[i] : cumulative_seqlens_k[i + 1],
+            ] = 0
+
+        if attention_mask.shape == attention_mask_.shape:
+            attention_mask_.masked_fill_(attention_mask != 0, torch.finfo(query.dtype).min)
+
+        causal_mask = attention_mask_
+    else:
+        causal_mask = attention_mask
+
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
         value = repeat_kv(value, module.num_key_value_groups)
 
-    causal_mask = attention_mask
-    if attention_mask is not None and causal_mask.ndim == 4:
+    if causal_mask is not None and causal_mask.ndim == 4:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
     # SDPA with memory-efficient backend is bugged with non-contiguous inputs and custom attn_mask for some torch versions
@@ -44,7 +65,7 @@ def sdpa_attention_forward(
     # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
     # Note that it is important to check first for the shape, otherwise compile will fail with `argument 'is_causal' must be bool, not SymBool`
     if is_causal is None:
-        is_causal = query.shape[2] > 1 and causal_mask is None
+        is_causal = query.shape[2] > 1 and causal_mask is None and False
 
     # Shapes (e.g. query.shape[2]) are tensors during jit tracing, resulting in `is_causal` being a tensor.
     # We convert it to a bool for the SDPA kernel that only accepts bools.
