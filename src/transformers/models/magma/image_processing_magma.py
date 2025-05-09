@@ -34,40 +34,12 @@ from transformers.image_utils import (
 )
 from transformers.utils import TensorType, is_vision_available, logging
 
+from ...image_processing_utils import select_best_resolution
+
 logger = logging.get_logger(__name__)
 
 if is_vision_available():
     from PIL import Image
-
-
-def select_best_resolution(original_size, possible_resolutions):
-    """
-    Selects the best resolution from a list of possible resolutions based on the original size.
-
-    Args:
-        original_size (tuple): The original size of the image in the format (width, height).
-        possible_resolutions (list): A list of possible resolutions in the format [(width1, height1), (width2, height2), ...].
-
-    Returns:
-        tuple: The best fit resolution in the format (width, height).
-    """
-    original_width, original_height = original_size
-    best_fit = None
-    max_effective_resolution = 0
-    min_wasted_resolution = float('inf')
-
-    for width, height in possible_resolutions:
-        scale = min(width / original_width, height / original_height)
-        downscaled_width, downscaled_height = int(original_width * scale), int(original_height * scale)
-        effective_resolution = min(downscaled_width * downscaled_height, original_width * original_height)
-        wasted_resolution = (width * height) - effective_resolution
-
-        if effective_resolution > max_effective_resolution or (effective_resolution == max_effective_resolution and wasted_resolution < min_wasted_resolution):
-            max_effective_resolution = effective_resolution
-            min_wasted_resolution = wasted_resolution
-            best_fit = (width, height)
-
-    return best_fit
 
 def process_anyres_image(image, max_num_crops=None, base_width=768, base_height=768):
     """
@@ -92,9 +64,8 @@ def process_anyres_image(image, max_num_crops=None, base_width=768, base_height=
     else:
         possible_resolutions = ast.literal_eval(grid_pinpoints)
     
+    # NOTE: returns best_resolution in format of (height, width)
     best_resolution = select_best_resolution((image.shape[2], image.shape[1]), possible_resolutions)
-    # NOTE: reverse best_resolution from (width, height) to (height, width)
-    best_resolution = (best_resolution[1], best_resolution[0])
     best_resolution_grid = (best_resolution[0] // base_height, best_resolution[1] // base_width)
 
     # resize image tensor to best resolution
@@ -126,10 +97,9 @@ def process_anyres_image_global(image, max_num_crops=None, base_width=768, base_
         possible_resolutions = grid_pinpoints
     else:
         possible_resolutions = ast.literal_eval(grid_pinpoints)
-    
+
+    # NOTE: returns best_resolution in format of (height, width)
     best_resolution = select_best_resolution((image.shape[2], image.shape[1]), possible_resolutions)
-    # NOTE: reverse best_resolution from (width, height) to (height, width)
-    best_resolution = (best_resolution[1], best_resolution[0])
     best_resolution_grid = (best_resolution[0] // base_height, best_resolution[1] // base_width)
 
     # resize image tensor to best resolution
@@ -137,7 +107,7 @@ def process_anyres_image_global(image, max_num_crops=None, base_width=768, base_
     return image
 
 class preprocessor():
-    def __init__(self, image_preprocessor, base_resolution=(256, 256)):
+    def __init__(self, image_preprocessor, base_resolution=(512, 512)):
         self.image_preprocessor = image_preprocessor
         self.crop_size = {
             'height': base_resolution[0],
@@ -171,8 +141,8 @@ class MagmaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        anyres_strategy: str = 'global', 
-        base_img_size: int = 768, 
+        anyres_strategy: str = 'crop', 
+        base_img_size: int = 512, 
         num_crops: int = 1,
         do_convert_rgb: bool = True,
         image_mean: List[float] = OPENAI_CLIP_MEAN,

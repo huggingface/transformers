@@ -101,13 +101,12 @@ class MagmaMultiModalProjector(nn.Module):
                 modules.append(nn.GELU())
                 modules.append(nn.Linear(config.hidden_size, config.hidden_size))
             self.proj = nn.Sequential(*modules)
-
-        if "mm_use_row_seperator" not in config or config.mm_use_row_seperator:
-            # define a row seperator
+        else:
+            raise ValueError(f"Unsupported projector type: {projector_type}")
+    
+        # define a row seperator
+        if config.mm_use_row_seperator:
             self.row_seperator = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        if 'mm_use_im_start_end' in config and config.mm_use_im_start_end:
-            self.img_start_seperator = nn.Parameter(torch.zeros(1, config.hidden_size))
-            self.img_end_seperator = nn.Parameter(torch.zeros(1, config.hidden_size))                        
 
     def forward(self, x):
         return self.proj(x)
@@ -477,7 +476,7 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
                             image_feature = torch.cat((image_feature, self.multi_modal_projector.row_seperator.repeat(image_feature.shape[0],1,1)), dim=1)
                         flattened_image_features.append(image_feature.flatten(0, 1))
 
-                inputs_embeds[input_ids == self.config.image_token_index] = torch.cat(flattened_image_features, dim=0)
+                inputs_embeds[input_ids == self.config.image_token_id] = torch.cat(flattened_image_features, dim=0)
 
             elif past_key_values is not None and pixel_values is None and input_ids.shape[1] == 1:
                 # Retrieve the first layer to inspect the logits and mask out the hidden states
