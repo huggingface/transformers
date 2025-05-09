@@ -1,8 +1,12 @@
-from flash_attn import flash_attn_varlen_func
 import torch
 
 from ..generation.continuous_batching import PagedAttentionCache
+from ..utils import is_flash_attn_2_available
+from ..utils.import_utils import _torch_version
 
+
+if is_flash_attn_2_available():
+    from flash_attn import flash_attn_varlen_func
 
 def paged_attention_forward(
     module: torch.nn.Module,

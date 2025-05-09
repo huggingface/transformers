@@ -30,7 +30,7 @@ def sdpa_attention_paged_forward(
     if cache is not None:
         cumulative_seqlens_q = kwargs.pop("cumulative_seqlens_q")
         cumulative_seqlens_k = kwargs.pop("cumulative_seqlens_k")
-        key, value = cache.update(key, value, module.layer_idx, cumulative_seqlens_k, **kwargs)
+        key, value = cache.update(key, value, module.layer_idx, cumulative_seqlens_k=cumulative_seqlens_k, **kwargs)
         attention_mask_ = torch.full(
             [1, 1, query.shape[2], key.shape[2] + 1], torch.finfo(query.dtype).min, device=query.device, dtype=query.dtype
         )

@@ -743,7 +743,7 @@ class ContinuousBatchProcessor:
 
             if state.status == "prefilling":
                 state.status = "decoding"
-                state.prompt_ids = []  # Clear prompt as it's now in cache
+                # state.prompt_ids = []  # Clear prompt as it's now in cache
 
                 token = generated_ids[token_idx].item()
                 token_idx += 1
@@ -758,10 +758,10 @@ class ContinuousBatchProcessor:
 
                 if state.remaining_prompt_ids:
                     state.status = "split_pending_remainder"
-                    state.prompt_ids = []
+                    # state.prompt_ids = []
                 else:
                     state.status = "decoding"
-                    state.prompt_ids = []
+                    # state.prompt_ids = []
 
                     token = generated_ids[token_idx].item()
                     token_idx += 1
@@ -798,6 +798,7 @@ class ContinuousBatchProcessor:
         output = {
             "request_id": state.request_id,
             "status": state.status,
+            "prompt_token_ids": state.prompt_ids,
         }
 
         if self.streaming:
@@ -1010,10 +1011,10 @@ class ContinuousBatchingManager:
             )
             first = True
             # Capture the graph
-            graph = torch.cuda.CUDAGraph()
-            static_batch_data = {} 
-            static_input_ids = torch.empty(1, paged_attention_cache.cache_shape[1], self.model.config.vocab_size, device=self.model.device, dtype=torch.long)
-            static_position_ids = torch.empty(1, paged_attention_cache.cache_shape[1], device=self.model.device, dtype=torch.long)
+            # graph = torch.cuda.CUDAGraph()
+            # static_batch_data = {} 
+            # static_input_ids = torch.empty(1, paged_attention_cache.cache_shape[1], self.model.config.vocab_size, device=self.model.device, dtype=torch.long)
+            # static_position_ids = torch.empty(1, paged_attention_cache.cache_shape[1], device=self.model.device, dtype=torch.long)
 
             while not self.stop_event.is_set() or batch_processor.has_pending_requests():
                 batch_data = batch_processor.prepare_next_batch()
@@ -1025,34 +1026,34 @@ class ContinuousBatchingManager:
 
                 input_ids, position_ids, model_kwargs = batch_data
 
-                if first:
-                    # get first request
-                    static_batch_data.update(model_kwargs)
-                    with torch.cuda.graph(graph):
-                        static_outputs = self.model.forward(
-                            input_ids=static_input_ids,
-                            position_ids=static_position_ids,
-                            **batch_data,
-                        )
-                    first = False
+                # if first:
+                #     # get first request
+                #     static_batch_data.update(model_kwargs)
+                #     with torch.cuda.graph(graph):
+                #         static_outputs = self.model.forward(
+                #             input_ids=static_input_ids,
+                #             position_ids=static_position_ids,
+                #             **batch_data,
+                #         )
+                #     first = False
                 try:
-                    # === Copy input data into static tensors ===
-                    static_input_ids.copy_(input_ids)
-                    static_position_ids.copy_(position_ids)
-                    for key in static_batch_data:
-                        static_batch_data[key].copy_(model_kwargs[key])
+                    # # === Copy input data into static tensors ===
+                    # static_input_ids.copy_(input_ids)
+                    # static_position_ids.copy_(position_ids)
+                    # for key in static_batch_data:
+                    #     static_batch_data[key].copy_(model_kwargs[key])
 
-                    # === Replay captured CUDA graph ===
-                    graph.replay()
+                    # # === Replay captured CUDA graph ===
+                    # graph.replay()
 
-                    outputs = static_outputs  # Already computed by graph.replay()
+                    # outputs = static_outputs  # Already computed by graph.replay()
 
-                    # with torch.no_grad():
-                    #     outputs = self.model.forward(
-                    #         input_ids=input_ids,
-                    #         position_ids=position_ids,
-                    #         **model_kwargs,
-                    #     )
+                    with torch.no_grad():
+                        outputs = self.model.forward(
+                            input_ids=input_ids,
+                            position_ids=position_ids,
+                            **model_kwargs,
+                        )
                 except Exception as e:
                     logger.error(f"Model forward pass failed: {e}", exc_info=True)
                     batch_processor.handle_batch_error(e)
@@ -1170,7 +1171,7 @@ class ContinuousMixin:
                     if req_id in request_ids:
                         original_idx = request_ids[req_id]
                         if result["status"] == "finished":
-                            results[original_idx] = result["output_ids"]
+                            results[original_idx] = result 
                         else:  # Failed
                             logger.warning(f"Request {req_id} failed: {result.get('error', 'Unknown error')}")
                             results[original_idx] = []
