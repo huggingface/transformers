@@ -18,13 +18,14 @@ from typing import Any, Callable
 from transformers import is_torch_available, is_torch_xpu_available
 from transformers.testing_utils import (
     TestCasePlus,
+    backend_device_count,
+    backend_torch_accelerator_module,
     execute_subprocess_async,
     get_torch_dist_unique_port,
     require_torch_multi_accelerator,
     torch_device,
 )
 from transformers.utils import is_ccl_available, is_ipex_available
-
 
 if is_torch_available():
     import functools
@@ -54,8 +55,7 @@ if is_torch_available():
         """Manage the creation and destruction of the distributed process group for the wrapped function."""
 
         def wrapped(*args: Any, **kwargs: Any) -> Any:
-            torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
-            device_count = torch_accelerator_module.device_count()
+            device_count = backend_device_count(torch_device)
             torch.distributed.init_process_group(world_size=device_count)
             try:
                 return func(*args, **kwargs)
@@ -66,7 +66,7 @@ if is_torch_available():
 
     @manage_process_group
     def fsdp_generate():
-        torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
+        torch_accelerator_module = backend_torch_accelerator_module(torch_device)
         torch_accelerator_module.set_device(device := torch.device(rank := torch.distributed.get_rank()))
 
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(device)
@@ -90,7 +90,7 @@ if is_torch_available():
 
     @manage_process_group
     def fsdp2_generate():
-        torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
+        torch_accelerator_module = backend_torch_accelerator_module(torch_device)
         torch_accelerator_module.set_device(device := torch.device(rank := torch.distributed.get_rank()))
 
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(device)
@@ -116,8 +116,7 @@ if is_torch_available():
 class TestFSDPGeneration(TestCasePlus):
     @require_torch_multi_accelerator
     def test_fsdp_generate(self):
-        torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
-        device_count = torch_accelerator_module.device_count()
+        device_count = backend_device_count(torch_device)
         distributed_args = f"""--nproc_per_node={device_count}
             --master_port={get_torch_dist_unique_port()}
             {self.test_file_dir}/test_fsdp.py
@@ -129,8 +128,7 @@ class TestFSDPGeneration(TestCasePlus):
 
     @require_torch_multi_accelerator
     def test_fsdp2_generate(self):
-        torch_accelerator_module = getattr(torch, torch_device, torch.cuda)
-        device_count = torch_accelerator_module.device_count()
+        device_count = backend_device_count(torch_device)
 
         distributed_args = f"""--nproc_per_node={device_count}
             --master_port={get_torch_dist_unique_port()}
