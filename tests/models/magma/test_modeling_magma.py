@@ -140,7 +140,7 @@ class MagmaVisionText2TextModelTester:
             text_config=self.text_config,
             vision_config=self.vision_config,
             ignore_index=self.ignore_index,
-            image_token_index=self.image_token_index,
+            image_token_id=self.image_token_index,
             projector_hidden_act=self.projector_hidden_act,
             vision_feature_layer=self.vision_feature_layer,
         )
@@ -401,7 +401,7 @@ class MagmaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
     def test_disk_offload_safetensors(self):
         pass
-    
+
     @unittest.skip("Model parallel not supported")
     def test_model_parallel_beam_search(self):
         pass
