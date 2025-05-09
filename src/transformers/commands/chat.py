@@ -692,7 +692,6 @@ class ChatCommand(BaseTransformersCLICommand):
                     if user_input == "!exit":
                         break
                     else:
-                        # MISSING: test loading generation config from file
                         chat, generation_config, model_kwargs = self.handle_non_exit_user_commands(
                             user_input=user_input,
                             args=args,
