@@ -27,6 +27,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_ccl_available, is_ipex_available
 
+
 if is_torch_available():
     import functools
 

@@ -3057,8 +3057,10 @@ def backend_max_memory_allocated(device: str):
 def backend_memory_allocated(device: str):
     return _device_agnostic_dispatch(device, BACKEND_MEMORY_ALLOCATED)
 
+
 def backend_torch_accelerator_module(device: str):
     return _device_agnostic_dispatch(device, BACKEND_TORCH_ACCELERATOR_MODULE)
+
 
 if is_torch_available():
     # If `TRANSFORMERS_TEST_DEVICE_SPEC` is enabled we need to import extra entries
