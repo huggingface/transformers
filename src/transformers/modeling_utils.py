@@ -66,6 +66,7 @@ from .integrations.tensor_parallel import (
     convert_local_tensor_to_dtensor,
     repack_weights,
     shard_and_distribute_module,
+    _get_parameter_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
@@ -3267,12 +3268,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         """
         return any(hasattr(m, "gradient_checkpointing") and m.gradient_checkpointing for m in self.modules())
 
-    def _replace_local_with_dtensor(self, state_dict):
-        for key, value in state_dict.items():
-            if isinstance(value, torch.Tensor) and not isinstance(value, torch.distributed.tensor.DTensor):
-                state_dict[key] = convert_local_tensor_to_dtensor(value, key, self._device_mesh, self._tp_plan)
-        return state_dict
-
     def save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
@@ -3491,7 +3486,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Rename state_dict keys before saving to file. Do nothing unless overridden in a particular model.
         # (initially introduced with TimmWrapperModel to remove prefix and make checkpoints compatible with timm)
         state_dict = self._fix_state_dict_keys_on_save(state_dict)
-        state_dict = self._replace_local_with_dtensor(state_dict)
+        # If model was sharded, we cannot properly determine sizes of tensors that `local_*` strategy was used,
+        # therefore we replace them with DTensors that are equivalently sharded
+        state_dict = self._replace_state_dict_local_with_dtensor(state_dict)
 
         if safe_serialization:
             # Safetensors does not allow tensor aliasing.
@@ -3612,7 +3609,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             for tensor in tensors:
                 if isinstance(state_dict[tensor], torch.distributed.tensor.DTensor):
                     full_tensor = state_dict[tensor].full_tensor()
-                    if "gate_up_proj" in tensor:
+                    # to get the correctly ordered tensor we need to repack if packed
+                    if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
                         full_tensor = repack_weights(full_tensor, -1, 4, 2)
                     shard[tensor] = full_tensor.contiguous()  # only do contiguous after it's permuted correctly
                 else:
@@ -4732,6 +4730,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         Apply `_fix_state_dict_key_on_save` to all keys in `state_dict`.
         """
         return {self._fix_state_dict_key_on_save(key)[0]: value for key, value in state_dict.items()}
+
+    def _replace_state_dict_local_with_dtensor(self, state_dict):
+        """
+        Replaces all tensors that were sharded with `local_*` strategy with DTensor to make saving possible.
+        """
+        if not self._tp_plan:
+            return state_dict
+        # TODO: optimize this to avoid iterating over all
+        for key, value in state_dict.items():
+            if isinstance(value, torch.Tensor) and not isinstance(value, torch.distributed.tensor.DTensor):
+                state_dict[key] = convert_local_tensor_to_dtensor(value, key, self._device_mesh, self._tp_plan)
+        return state_dict
 
     @classmethod
     def _load_pretrained_model(
