@@ -33,9 +33,9 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...models.gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
-from ...test_configuration_common import ConfigTester
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_configuration_common import ConfigTester
+
 
 if is_torch_available():
     import torch
