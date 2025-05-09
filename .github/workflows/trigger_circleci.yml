@@ -3,7 +3,7 @@ name: Trigger CircleCI
 
 on:
   pull_request:
-    types: [ready_for_review]
+    types: [ready_for_review, synchronize]
 
 
 jobs:
