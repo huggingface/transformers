@@ -30,7 +30,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    is_pil_image,
+    is_torch_tensor,
     make_list_of_images,
     pil_torch_interpolation_mapping,
     validate_kwargs,
@@ -40,7 +40,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
     is_torch_available,
-    is_torch_tensor,
     is_torchvision_available,
     is_torchvision_v2_available,
 )
@@ -79,7 +78,6 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
     do_center_crop = True
     do_rescale = True
     do_normalize = True
-    do_convert_rgb = None
     do_reduce_labels = False
     valid_kwargs = MobileNetV2FastImageProcessorKwargs
 
@@ -146,65 +144,39 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_images(
         self,
         images,
-        do_convert_rgb,
-        input_data_format,
-        device,
         **kwargs,
     ):
         """Preprocesses images."""
-        # Add an axis to the segmentation maps for transformations.
         kwargs["do_reduce_labels"] = False
-        # Prepare input images
-        images = self._prepare_input_images(
-            images=images,
-            do_convert_rgb=do_convert_rgb,
-            input_data_format=input_data_format,
-            device=device,
-        )
-        images = self._preprocess(images=images, **kwargs)
-        return images
+        processed_images = self._preprocess(images=images, **kwargs)
+        return processed_images
 
     def _preprocess_segmentation_maps(
         self,
         segmentation_maps,
-        device,
         **kwargs,
     ):
         """Preprocesses segmentation maps."""
+        processed_segmentation_maps = []
+        for segmentation_map in segmentation_maps:
+            segmentation_map = self._process_image(
+                segmentation_map, do_convert_rgb=False, input_data_format=ChannelDimension.FIRST
+            )
+
+            if segmentation_map.ndim == 2:
+                segmentation_map = segmentation_map[None, ...]
+
+            processed_segmentation_maps.append(segmentation_map)
+
         kwargs["do_normalize"] = False
         kwargs["do_rescale"] = False
+        kwargs["input_data_format"] = ChannelDimension.FIRST
+        processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
 
-        segmentation_maps = make_list_of_images(images=segmentation_maps, expected_ndims=2)
+        processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
 
-        # Convert PIL image to tensor (other types can be successfully handled without conversion).
-        if is_pil_image(segmentation_maps[0]):
-            # F.pil.to_tensor converts grayscale images to (1, h, w) while to_numpy_array converts to (h, w)
-            # so we have to set added_channel_dim to True to keep fast and slow processors equivalent
-            added_channel_dim = True
-            segmentation_maps = [F.pil_to_tensor(segmentation_map) for segmentation_map in segmentation_maps]
-            input_data_format = ChannelDimension.FIRST
-        # Add an axis to the segmentation maps for transformations.
-        elif segmentation_maps[0].ndim == 2:
-            added_channel_dim = True
-            segmentation_maps = [segmentation_map[None, ...] for segmentation_map in segmentation_maps]
-            input_data_format = ChannelDimension.FIRST
-        else:
-            added_channel_dim = False
-            input_data_format = None
-
-        segmentation_maps = self._prepare_input_images(
-            images=segmentation_maps,
-            do_convert_rgb=False,
-            input_data_format=input_data_format,
-            device=device,
-        )
-
-        segmentation_maps = self._preprocess(images=segmentation_maps, **kwargs).to(torch.int64)
-
-        if added_channel_dim:
-            segmentation_maps = segmentation_maps.squeeze(1)
-
-        return segmentation_maps
+        processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
+        return processed_segmentation_maps
 
     def __call__(self, images, segmentation_maps=None, **kwargs):
         # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
@@ -232,6 +204,14 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb = kwargs.pop("do_convert_rgb")
         input_data_format = kwargs.pop("input_data_format")
         device = kwargs.pop("device")
+        # Prepare input images
+        images = self._prepare_input_images(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+
+        # Prepare segmentation maps
+        if segmentation_maps is not None:
+            segmentation_maps = make_list_of_images(images=segmentation_maps, expected_ndims=2)
 
         # Update kwargs that need further processing before being validated
         kwargs = self._further_process_kwargs(**kwargs)
@@ -251,9 +231,6 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
 
         images = self._preprocess_images(
             images=images,
-            do_convert_rgb=do_convert_rgb,
-            input_data_format=input_data_format,
-            device=device,
             **kwargs,
         )
         data = {"pixel_values": images}
@@ -261,7 +238,6 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
         if segmentation_maps is not None:
             segmentation_maps = self._preprocess_segmentation_maps(
                 segmentation_maps=segmentation_maps,
-                device=device,
                 **kwargs,
             )
             data["labels"] = segmentation_maps
