@@ -26,7 +26,6 @@ TASK_PATTERN = "task: Optional[str] = None"
 
 
 def main(pipeline_file_path: str, fix_and_overwrite: bool = False):
-
     with open(pipeline_file_path, "r") as file:
         content = file.read()
 
@@ -35,10 +34,12 @@ def main(pipeline_file_path: str, fix_and_overwrite: bool = False):
     content_without_generated_code = content.replace(current_generated_code, "")
 
     # extract pipeline signature in between `def pipeline` and `-> Pipeline`
-    pipeline_signature = re.search(r"def pipeline(.*) -> Pipeline:", content_without_generated_code, re.DOTALL).group(1)
-    pipeline_signature = pipeline_signature.replace("(\n    ", "(")   # start of the signature
+    pipeline_signature = re.search(r"def pipeline(.*) -> Pipeline:", content_without_generated_code, re.DOTALL).group(
+        1
+    )
+    pipeline_signature = pipeline_signature.replace("(\n    ", "(")  # start of the signature
     pipeline_signature = pipeline_signature.replace(",\n    ", ", ")  # intermediate arguments
-    pipeline_signature = pipeline_signature.replace(",\n)", ")")      # end of the signature
+    pipeline_signature = pipeline_signature.replace(",\n)", ")")  # end of the signature
 
     # collect and sort available pipelines
     pipelines = [(f'"{task}"', task_info["impl"]) for task, task_info in SUPPORTED_TASKS.items()]
@@ -66,7 +67,7 @@ def main(pipeline_file_path: str, fix_and_overwrite: bool = False):
         # write content to file
         with open(pipeline_file_path, "w") as file:
             file.write(content)
-    
+
     elif new_generated_code != current_generated_code and not fix_and_overwrite:
         message = (
             f"Found inconsistencies in {pipeline_file_path}. "
@@ -74,10 +75,17 @@ def main(pipeline_file_path: str, fix_and_overwrite: bool = False):
         )
         raise ValueError(message)
 
+
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
-    parser.add_argument("--pipeline_file_path", type=str, default="src/transformers/pipelines/__init__.py", help="Path to the pipeline file.")
+    parser.add_argument(
+        "--pipeline_file_path",
+        type=str,
+        default="src/transformers/pipelines/__init__.py",
+        help="Path to the pipeline file.",
+    )
     args = parser.parse_args()
     main(args.pipeline_file_path, args.fix_and_overwrite)
