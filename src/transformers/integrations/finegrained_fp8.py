@@ -15,7 +15,7 @@
 
 from typing import List, Optional, Tuple
 
-from ..utils import is_accelerate_available, is_torch_available, is_torch_accelerator_available, logging
+from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
 
 
 if is_torch_available():

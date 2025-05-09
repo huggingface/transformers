@@ -22,9 +22,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_read_token,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_multi_accelerator,
-    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -63,7 +61,7 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 
 @slow
 @require_accelerate
-# @require_read_token
+@require_read_token
 @require_torch_accelerator
 class FP8QuantizerTest(unittest.TestCase):
     model_name = "meta-llama/Llama-3.2-1B"

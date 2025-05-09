@@ -24,7 +24,6 @@ from transformers import AutoTokenizer, GPT2TokenizerFast
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torchaudio,
     torch_device,
 )
