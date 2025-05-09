@@ -194,6 +194,31 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                         not_missing_keys.append(missing)
         return [k for k in missing_keys if k not in not_missing_keys]
 
+    def update_tp_plan(self, config):
+        if "Qwen3" in config.__class__.__name__:
+            text_plan = {
+                "layers.*.self_attn.q_proj.weight": "local_colwise",
+                "layers.*.self_attn.q_proj.weight_scale_inv": "local_colwise",
+                "layers.*.self_attn.k_proj.weight": "local_colwise",
+                "layers.*.self_attn.k_proj.weight_scale_inv": "local_colwise",
+                "layers.*.self_attn.v_proj.weight": "local_colwise",
+                "layers.*.self_attn.v_proj.weight_scale_inv": "local_colwise",
+                "layers.*.self_attn.o_proj.weight": "local_rowwise",
+                "layers.*.self_attn.o_proj.weight_scale_inv": "local_rowwise",
+                "layers.*.self_attn": "gather",
+                "layers.*.mlp.gate_proj.weight": "local_colwise",
+                "layers.*.mlp.gate_proj.weight_scale_inv": "local_colwise",
+                "layers.*.mlp.up_proj.weight": "local_colwise",
+                "layers.*.mlp.up_proj.weight_scale_inv": "local_colwise",
+                "layers.*.mlp.down_proj.weight": "local_rowwise",
+                "layers.*.mlp.down_proj.weight_scale_inv": "local_rowwise",
+                "layers.*.mlp": "gather",
+            }
+
+            config.base_model_tp_plan = text_plan
+
+            return config
+
     def is_serializable(self, safe_serialization=None):
         return True
 

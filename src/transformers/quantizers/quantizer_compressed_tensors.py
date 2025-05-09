@@ -69,7 +69,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             return missing_keys
 
         # We expect some keys to be missing for
-        # compresed models
+        # compressed models
         # This is fine as the weights are reconstructed by ModelCompressor
         # in _process_model_after_weight_loading
 

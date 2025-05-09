@@ -269,14 +269,14 @@ class InternVLProcessor(ProcessorMixin):
         return BatchFeature(data={**text_inputs, **image_videos_inputs}, tensor_type=return_tensors)
 
     def sample_indices_fn(
-        self, metadata: VideoMetadata, num_frames: int = None, initial_shift: Union[bool, float, int] = True
+        self, metadata: VideoMetadata, num_frames: Optional[int] = None, initial_shift: Union[bool, float, int] = True
     ):
         """
         The function to generate indices of frames to sample from a video.
 
         Args:
             metadata (`VideoMetadata`):
-                `VideoMetadata` object containing metadat about the video, such as "total_num_frames" or "fps".
+                `VideoMetadata` object containing metadata about the video, such as "total_num_frames" or "fps".
             num_frames (`int`, *optional*):
                 Number of frames to sample uniformly. If None, all frames are sampled.
             initial_shift (`bool`, `float` or `int`, defaults to `0`):

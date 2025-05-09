@@ -833,6 +833,7 @@ class PretrainedConfig(PushToHubMixin):
                 if "model_type" in value:
                     # Needs to be set even if it's not in the diff
                     diff["model_type"] = value["model_type"]
+
                 serializable_config_dict[key] = diff
             elif (
                 key not in default_config_dict
@@ -844,6 +845,10 @@ class PretrainedConfig(PushToHubMixin):
                 serializable_config_dict[key] = value
 
         self._remove_keys_not_serialized(serializable_config_dict)
+
+        # Key removed only in diff dict
+        if "_name_or_path" in serializable_config_dict:
+            del serializable_config_dict["_name_or_path"]
 
         if hasattr(self, "quantization_config"):
             serializable_config_dict["quantization_config"] = (
@@ -999,14 +1004,14 @@ class PretrainedConfig(PushToHubMixin):
             del d["_commit_hash"]
         if "_attn_implementation_internal" in d:
             del d["_attn_implementation_internal"]
+        if "_attn_implementation_autoset" in d:
+            del d["_attn_implementation_autoset"]
         # Do not serialize `base_model_tp_plan` for now
         if "base_model_tp_plan" in d:
             del d["base_model_tp_plan"]
         # Do not serialize `base_model_pp_plan` for now
         if "base_model_pp_plan" in d:
             del d["base_model_pp_plan"]
-        if "_name_or_path" in d:
-            del d["_name_or_path"]
         for value in d.values():
             if isinstance(value, dict):
                 self._remove_keys_not_serialized(value)

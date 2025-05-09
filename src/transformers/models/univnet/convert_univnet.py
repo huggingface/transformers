@@ -56,7 +56,7 @@ def get_kernel_predictor_key_mapping(config: UnivNetConfig, old_prefix: str = ""
 def get_key_mapping(config: UnivNetConfig):
     mapping = {}
 
-    # NOTE: inital conv layer keys are the same
+    # NOTE: initial conv layer keys are the same
 
     # LVC Residual blocks
     for i in range(len(config.resblock_stride_sizes)):
