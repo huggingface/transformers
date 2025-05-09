@@ -60,7 +60,7 @@ def _static_cache_update(
     return k_cache, v_cache
 
 
-def _sliding_cache_update_logic(
+def _sliding_cache_update(
     k_cache: torch.Tensor,
     v_cache: torch.Tensor,
     key_states: torch.Tensor,
@@ -1363,7 +1363,7 @@ class StaticCache(Cache):
 
         key_states = key_states.to(self.key_cache[layer_idx].dtype)
         value_states = value_states.to(self.value_cache[layer_idx].dtype)
-        return _static_cache_update_logic(
+        return _static_cache_update(
             self.key_cache[layer_idx],
             self.value_cache[layer_idx],
             key_states,
@@ -1489,7 +1489,7 @@ class SlidingWindowCache(StaticCache):
         key_states = key_states.to(self.key_cache[layer_idx].dtype)
         value_states = value_states.to(self.value_cache[layer_idx].dtype)
 
-        return _sliding_cache_update_logic(
+        return _sliding_cache_update(
             self.key_cache[layer_idx],
             self.value_cache[layer_idx],
             key_states,
@@ -1807,7 +1807,7 @@ class HybridCache(Cache):
         value_states = value_states.to(v_cache.dtype)
 
         if is_sliding_layer:
-            return _sliding_cache_update_logic(
+            return _sliding_cache_update(
                 k_cache,
                 v_cache,
                 key_states,
@@ -1816,7 +1816,7 @@ class HybridCache(Cache):
                 k_cache.shape[2],  # Use actual cache dim as max cache len
             )
         else:
-            return _static_cache_update_logic(k_cache, v_cache, key_states, value_states, cache_position)
+            return _static_cache_update(k_cache, v_cache, key_states, value_states, cache_position)
 
     def get_max_cache_shape(self) -> Optional[int]:
         return self.max_cache_len
