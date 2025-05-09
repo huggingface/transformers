@@ -27,21 +27,11 @@ from transformers.models.llava.modeling_llava import (
 )
 
 from ...activations import ACT2FN
-from ...utils import (
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    is_torchdynamo_compiling,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, is_torchdynamo_compiling, logging
 from .configuration_vipllava import VipLlavaConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-VIPLLAVA_INPUTS_DOCSTRING = None
-_CONFIG_FOR_DOC = "VipLlavaConfig"
 
 
 class VipLlavaModelOutputWithPast(LlavaModelOutputWithPast):
@@ -107,7 +97,7 @@ class VipLlavaModel(LlavaModel):
         image_features = self.multi_modal_projector(image_features)
         return image_features
 
-    @add_start_docstrings_to_model_forward(VIPLLAVA_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -124,6 +114,11 @@ class VipLlavaModel(LlavaModel):
         cache_position: Optional[torch.LongTensor] = None,
         **lm_kwargs,
     ) -> Union[Tuple, VipLlavaModelOutputWithPast]:
+        r"""
+        vision_feature_layers (`Union[int, List[int]]`, *optional*):
+            The vision feature layer, or the list of indexes of the layers to select
+            the vision feature.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -184,10 +179,6 @@ class VipLlavaModel(LlavaModel):
 
 
 class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
-    @can_return_tuple
-    @add_start_docstrings_to_model_forward(VIPLLAVA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=VipLlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -207,20 +198,13 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
         **lm_kwargs,
     ) -> Union[Tuple, VipLlavaCausalLMOutputWithPast]:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        vision_feature_layers (`Union[int, List[int]]`, *optional*):
+            The vision feature layer, or the list of indexes of the layers to select
+            the vision feature.
 
         Example:
 
