@@ -21,14 +21,13 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from .configuration_pixtral import PixtralVisionConfig
 
 
@@ -132,7 +131,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-# Copied from transformers.models.smolvlm.modeling_smolvlm.eager_attention_forward
+# Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -167,10 +166,11 @@ class PixtralAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-
         self.is_causal = False
 
-        self.scale = self.head_dim**-0.5
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+
         self.dropout = config.attention_dropout
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
@@ -211,28 +211,22 @@ class PixtralAttention(nn.Module):
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # Since we use packing, if Flash-Attn 2 is selected we rely on position_ids
-        if self.config._attn_implementation == "flash_attention_2":
-            kwargs["position_ids"] = kwargs["position_ids"].to(hidden_states.device, non_blocking=True)
-            attention_mask = None
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
             attention_mask,
-            scaling=self.scale,
             dropout=0.0 if not self.training else self.dropout,
-            is_causal=self.is_causal,
-            output_attentions=output_attentions,
+            scaling=self.scaling,
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(batch_size, patches, -1)
-
+        attn_output = attn_output.reshape(batch_size, patches, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
+        if not output_attentions:
+            attn_weights = None
         return attn_output, attn_weights
 
 
@@ -288,7 +282,7 @@ class PixtralAttentionLayer(nn.Module):
         attention_mask: torch.Tensor,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -341,7 +335,7 @@ class PixtralTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
         Args:
@@ -408,28 +402,16 @@ class PixtralTransformer(nn.Module):
         )
 
 
-PIXTRAL_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`PixtralVisionConfig`]):
-            Model configuration class with all the parameters of the vision encoder. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
+@auto_docstring
 class PixtralPreTrainedModel(PreTrainedModel):
     config_class = PixtralVisionConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _supports_attention_backend = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
     _no_split_modules = ["PixtralAttentionLayer"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -444,24 +426,6 @@ class PixtralPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
         elif isinstance(module, PixtralRMSNorm):
             module.weight.data.fill_(1.0)
-
-
-PIXTRAL_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`AutoImageProcessor.__call__`]
-            for details.
-        image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`, *optional*):
-            The sizes of the images in the batch, being (height, width) for each image.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
 
 
 def generate_block_attention_mask(patch_embeds_list, tensor):
@@ -480,10 +444,7 @@ def generate_block_attention_mask(patch_embeds_list, tensor):
     return causal_mask
 
 
-@add_start_docstrings(
-    "The bare Pixtral vision encoder outputting raw hidden-states without any specific head on top.",
-    PIXTRAL_START_DOCSTRING,
-)
+@auto_docstring
 class PixtralVisionModel(PixtralPreTrainedModel):
     base_model_prefix = "vision_encoder"
 
@@ -507,7 +468,8 @@ class PixtralVisionModel(PixtralPreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_conv
 
-    @add_start_docstrings_to_model_forward(PIXTRAL_INPUTS_DOCSTRING)
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -516,13 +478,8 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         *args,
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutput]:
-        """
-        Returns:
-            pixel_values: tensor of token features for
-                all tokens of all images of shape (N_toks, D)
-        """
         if image_sizes is None:
             batch_size, _, height, width = pixel_values.shape
             image_sizes = [(height, width)] * batch_size
@@ -550,17 +507,15 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             [p.shape[-2] * p.shape[-1] for p in patch_embeds_list], patch_embeds
         )
 
-        out = self.transformer(
+        return self.transformer(
             patch_embeds,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
-            return_dict=return_dict,
+            return_dict=True,
             **kwargs,
         )
-
-        return out
 
 
 __all__ = ["PixtralVisionModel", "PixtralPreTrainedModel"]

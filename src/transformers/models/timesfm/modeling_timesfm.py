@@ -32,18 +32,11 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, can_return_tuple, logging
 from .configuration_timesfm import TimesFmConfig
 
 
 logger = logging.get_logger(__name__)
-_CONFIG_FOR_DOC = "TimesFmConfig"
 
 
 @dataclass
@@ -309,30 +302,8 @@ class TimesFmDecoderLayer(nn.Module):
         return scores, hidden_states
 
 
-TIMESFM_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`TimesFmConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare TimesFM Model outputting raw hidden-states without any specific head on top.",
-    TIMESFM_START_DOCSTRING,
-)
+@auto_docstring
 class TimesFmPreTrainedModel(PreTrainedModel):
-    """handles the loading for all models."""
-
     config_class = TimesFmConfig
     base_model_prefix = "timesfm"
     _no_split_modules = ["TimesFmDecoderLayer"]
@@ -360,28 +331,8 @@ class TimesFmPreTrainedModel(PreTrainedModel):
             nn.init.ones_(module.scaling)
 
 
-TIMESFM_INPUTS_DOCSTRING = r"""
-    Args:
-        past_values: list of time series forecast contexts. Each context time series
-            can be a torch Tensor of potentially different context lengths.
-        freq: frequency of each context time series in the inputs. 0 for high frequency
-            (default), 1 for medium, and 2 for low.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail. tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-"""
-
-
-@add_start_docstrings(
-    "The bare TimesFM Model outputting raw hidden-states without any specific head on top.",
-    TIMESFM_START_DOCSTRING,
-)
+@auto_docstring
 class TimesFmModel(TimesFmPreTrainedModel):
-    """Patched time-series decoder without any specific output layer."""
-
     def __init__(self, config: TimesFmConfig):
         super().__init__(config)
 
@@ -422,7 +373,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         return outputs, (mu, sigma)
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(TIMESFM_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         past_values: torch.Tensor,
@@ -431,9 +382,13 @@ class TimesFmModel(TimesFmPreTrainedModel):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
     ) -> TimesFmOutput:
-        """
+        r"""
         past_values_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The padding indicator of the time series.
+        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Past values of the time series that serves as input to the model.
+        freq (`torch.LongTensor` of shape `(batch_size,)`):
+            Frequency indices for the time series data.
         """
         # Reshape into patches (using view for efficiency)
         bsize = past_values.shape[0]
@@ -729,8 +684,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         return torch.stack(losses).mean()
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(TIMESFM_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TimesFmOutputForPrediction, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         past_values: Sequence[torch.Tensor],
@@ -744,23 +698,25 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> TimesFmOutputForPrediction:
         r"""
-            window_size (`int`, *optional*):
-                Window size of trend + residual decomposition. If None then we do not do decomposition.
-            future_values (`torch.Tensor`, *optional*):
-                Optional future time series values to be used for loss computation.
-            forecast_context_len (`int`, *optional*):
-                Optional max context length.
-            return_forecast_on_context (`bool`, *optional*):
-                True to return the forecast on the context when available, i.e. after the first input patch.
-            truncate_negative (`bool`, *optional*):
-                Truncate to only non-negative values if any of the contexts have non-negative values,
-                otherwise do nothing.
-            output_attentions (`bool`, *optional*):
-                Whether to output the attentions.
-            output_hidden_states (`bool`, *optional*):
-                Whether to output the hidden states.
-
-        Returns:
+        window_size (`int`, *optional*):
+            Window size of trend + residual decomposition. If None then we do not do decomposition.
+        future_values (`torch.Tensor`, *optional*):
+            Optional future time series values to be used for loss computation.
+        forecast_context_len (`int`, *optional*):
+            Optional max context length.
+        return_forecast_on_context (`bool`, *optional*):
+            True to return the forecast on the context when available, i.e. after the first input patch.
+        truncate_negative (`bool`, *optional*):
+            Truncate to only non-negative values if any of the contexts have non-negative values,
+            otherwise do nothing.
+        output_attentions (`bool`, *optional*):
+            Whether to output the attentions.
+        output_hidden_states (`bool`, *optional*):
+            Whether to output the hidden states.
+        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Past values of the time series that serves as input to the model.
+        freq (`torch.LongTensor` of shape `(batch_size,)`):
+            Frequency indices for the time series data.
 
         Example:
 
