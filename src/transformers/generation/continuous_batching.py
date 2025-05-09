@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Deque, Dict, List, Optional, Union
 
 import torch
+from tqdm import tqdm
 
 
 from ..cache_utils import Cache
@@ -1128,6 +1129,7 @@ class ContinuousMixin:
         self,
         inputs: List[List[int]],
         generation_config: Optional[GenerationConfig] = None,
+        progress_bar: bool = False,
         **kwargs,
     ) -> List[List[int]]:
         """Generate sequences for a batch of prompts using continuous batching.
@@ -1155,36 +1157,38 @@ class ContinuousMixin:
         num_requests = len(inputs)
 
         try:
-            # Add all requests
-            for i, input_ids in enumerate(inputs):
-                # Assign a predictable request ID for ordering results later
-                req_id = f"batch_req_{i}"
-                manager.add_request(input_ids=input_ids, request_id=req_id, **kwargs)
-                request_ids[req_id] = i
+            with tqdm(total=num_requests, disable=(not progress_bar), desc=f"Generating {num_requests} requests") as pbar:
+                # Add all requests
+                for i, input_ids in enumerate(inputs):
+                    # Assign a predictable request ID for ordering results later
+                    req_id = f"batch_req_{i}"
+                    manager.add_request(input_ids=input_ids, request_id=req_id, **kwargs)
+                    request_ids[req_id] = i
 
-            # Collect results
-            finished_count = 0
-            while finished_count < num_requests:
-                result = manager.get_result(timeout=1.0)
-                if result:
-                    req_id = result["request_id"]
-                    if req_id in request_ids:
-                        original_idx = request_ids[req_id]
-                        if result["status"] == "finished":
-                            results[original_idx] = result 
-                        else:  # Failed
-                            logger.warning(f"Request {req_id} failed: {result.get('error', 'Unknown error')}")
-                            results[original_idx] = []
+                # Collect results
+                finished_count = 0
+                while finished_count < num_requests:
+                    result = manager.get_result(timeout=1.0)
+                    if result:
+                        req_id = result["request_id"]
+                        if req_id in request_ids:
+                            original_idx = request_ids[req_id]
+                            if result["status"] == "finished":
+                                results[original_idx] = result
+                            else:  # Failed
+                                logger.warning(f"Request {req_id} failed: {result.get('error', 'Unknown error')}")
+                                results[original_idx] = []
 
-                        finished_count += 1
+                            finished_count += 1
+                            pbar.update(1)
+                        else:
+                            # Log unexpected request IDs
+                            logger.warning(f"Received result for unknown request ID: {req_id}. Ignoring.")
                     else:
-                        # Log unexpected request IDs
-                        logger.warning(f"Received result for unknown request ID: {req_id}. Ignoring.")
-                else:
-                    # Check if the manager is still running
-                    if not manager.is_running():
-                        logger.error("Generation thread terminated unexpectedly.")
-                        break
+                        # Check if the manager is still running
+                        if not manager.is_running():
+                            logger.error("Generation thread terminated unexpectedly.")
+                            break
 
         except Exception as e:
             logger.error(f"Error during batch generation: {e}", exc_info=True)
