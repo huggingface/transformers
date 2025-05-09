@@ -1,5 +1,7 @@
 import re
+
 from transformers.pipelines import SUPPORTED_TASKS, Pipeline
+
 
 HEADER = """
 # fmt: off
