@@ -2753,7 +2753,7 @@ class Trainer:
                     shutil.rmtree(checkpoint, ignore_errors=True)
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
-        if self.args.do_predict:
+        if self.args.enable_profiler:
             self.profiler.stop()
         # Wait for the checkpoint to be uploaded.
         self._finish_current_push()
