@@ -70,16 +70,6 @@ DEFAULT_EXAMPLES = {
     "socks": {"text": "Why is it important to eat socks after meditating?"},
 }
 
-SUPPORTED_GENERATION_KWARGS = [
-    "max_new_tokens",
-    "do_sample",
-    "num_beams",
-    "temperature",
-    "top_p",
-    "top_k",
-    "repetition_penalty",
-]
-
 # Printed at the start of a chat session
 HELP_STRING_MINIMAL = """
 
@@ -102,10 +92,10 @@ Full command list:
 - **!help**: shows this help message
 - **!clear**: clears the current conversation and starts a new one
 - **!status**: shows the current status of the model and generation settings
-- **!example {{NAME}}**: loads example named `{{NAME}}` from the config and uses it as the user input. Available example
-names: `{"`, `".join(DEFAULT_EXAMPLES.keys())}`
-- **!set {{SETTING_NAME}}={{SETTING_VALUE}};**: changes the system prompt or generation settings (multiple settings are
-separated by a ';'). Available settings: `{"`, `".join(SUPPORTED_GENERATION_KWARGS)}`
+- **!example {{NAME}}**: loads example named `{{NAME}}` from the config and uses it as the user input.
+Available example names: `{"`, `".join(DEFAULT_EXAMPLES.keys())}`
+- **!set {{ARG_1}}={{VALUE_1}} {{ARG_2}}={{VALUE_2}}**: changes the system prompt or generation settings (multiple
+settings are separated by a space). Accepts the same flags and format as the `generate_flags` CLI argument.
 - **!save {{SAVE_NAME}} (optional)**: saves the current chat and settings to file by default to
 `./chat_history/{{MODEL_NAME}}/chat_{{DATETIME}}.yaml` or `{{SAVE_NAME}}` if provided
 - **!exit**: closes the interface
@@ -201,9 +191,11 @@ class RichInterface:
         self._console.print(Markdown(HELP_STRING_MINIMAL if minimal else HELP_STRING))
         self._console.print()
 
-    def print_status(self, model_name: str, generation_config: GenerationConfig):
+    def print_status(self, model_name: str, generation_config: GenerationConfig, model_kwargs: dict):
         """Prints the status of the model and generation settings to the console."""
         self._console.print(f"[bold blue]Model: {model_name}\n")
+        if model_kwargs:
+            self._console.print(f"[bold blue]Model kwargs: {model_kwargs}")
         self._console.print(f"[bold blue]{generation_config}")
         self._console.print()
 
@@ -243,6 +235,7 @@ class ChatArguments:
             ),
         },
     )
+    # Deprecated CLI args start here
     max_new_tokens: int = field(default=256, metadata={"help": "Maximum number of tokens to generate."})
     do_sample: bool = field(default=True, metadata={"help": "Whether to sample outputs during generation."})
     num_beams: int = field(default=1, metadata={"help": "Number of beams for beam search."})
@@ -258,6 +251,7 @@ class ChatArguments:
         default=None,
         metadata={"help": "EOS token IDs to stop the generation. If multiple they should be comma separated."},
     )
+    # Deprecated CLI args end here
 
     # Model loading
     model_revision: str = field(
@@ -365,14 +359,15 @@ class ChatCommand(BaseTransformersCLICommand):
                 has_warnings = True
                 warnings.warn(
                     f"The --{deprecated_arg} argument is deprecated will be removed in v4.54.0. There are two "
-                    "alternative solutions to specify this generation setting: \n"
-                    "1. Pass `--generation-config <path_to_file/repo>` to specify a generation config.\n"
+                    "alternative solutions to specify this generation option: \n"
+                    "1. Pass `--generation-config <path_to_file/Hub repo>` to specify a generation config.\n"
                     "2. Pass `generate` flags through positional arguments, e.g. `transformers chat <model_repo> "
                     f"{new_arg}={value}`",
+                    FutureWarning,
                 )
 
         if has_warnings:
-            print("\n(Press any key to continue)")
+            print("\n(Press enter to continue)")
             input()
         return args
 
@@ -467,78 +462,43 @@ class ChatCommand(BaseTransformersCLICommand):
             )
         return processed_generate_flags
 
-    def get_generation_parameterization(self, args: ChatArguments, tokenizer: AutoTokenizer) -> GenerationConfig:
+    def get_generation_parameterization(
+        self, args: ChatArguments, tokenizer: AutoTokenizer
+    ) -> tuple[GenerationConfig, dict]:
         """
-        Returns a GenerationConfig object holding the generation parameters.
+        Returns a GenerationConfig object holding the generation parameters for the CLI command.
         """
+        # No generation config arg provided -> use base generation config, apply CLI defaults
         if args.generation_config is None:
             generation_config = GenerationConfig()
+            # Apply deprecated CLI args on top of the default generation config
+            pad_token_id, eos_token_ids = self.parse_eos_tokens(tokenizer, args.eos_tokens, args.eos_token_ids)
+            deprecated_kwargs = {
+                "do_sample": args.do_sample,
+                "num_beams": args.num_beams,
+                "temperature": args.temperature,
+                "top_k": args.top_k,
+                "top_p": args.top_p,
+                "repetition_penalty": args.repetition_penalty,
+                "pad_token_id": pad_token_id,
+                "eos_token_id": eos_token_ids,
+            }
+            generation_config.update(**deprecated_kwargs)
+        # generation config arg provided -> use it as the base parameterization
         else:
-            generation_config = GenerationConfig.from_pretrained(args.generation_config)
-
-        # Parse and apply `generate_flags`
-        parsed_generate_flags = self.parse_generate_flags(args.generate_flags)
-        generation_config.update(**parsed_generate_flags)
-
-        # Deprecated kwargs
-        pad_token_id, eos_token_ids = self.parse_eos_tokens(tokenizer, args.eos_tokens, args.eos_token_ids)
-        deprecated_kwargs = {
-            "do_sample": args.do_sample,
-            "num_beams": args.num_beams,
-            "temperature": args.temperature,
-            "top_k": args.top_k,
-            "top_p": args.top_p,
-            "repetition_penalty": args.repetition_penalty,
-            "pad_token_id": pad_token_id,
-            "eos_token_id": eos_token_ids,
-        }
-        generation_config.update(**deprecated_kwargs)
-        return generation_config
-
-    @staticmethod
-    def parse_settings(
-        user_input: str, current_args: ChatArguments, interface: RichInterface
-    ) -> tuple[ChatArguments, bool]:
-        """Parses the settings from the user input into the CLI arguments."""
-        settings = user_input[4:].strip().split(";")
-        settings = [(setting.split("=")[0], setting[len(setting.split("=")[0]) + 1 :]) for setting in settings]
-        settings = dict(settings)
-        error = False
-
-        for name in settings:
-            if hasattr(current_args, name):
-                try:
-                    if isinstance(getattr(current_args, name), bool):
-                        if settings[name] == "True":
-                            settings[name] = True
-                        elif settings[name] == "False":
-                            settings[name] = False
-                        else:
-                            raise ValueError
-                    else:
-                        settings[name] = type(getattr(current_args, name))(settings[name])
-                except ValueError:
-                    error = True
-                    interface.print_color(
-                        text=f"Cannot cast setting {name} (={settings[name]}) to {type(getattr(current_args, name))}.",
-                        color="red",
-                    )
+            if ".json" in args.generation_config:  # is a local file
+                dirname = os.path.dirname(args.generation_config)
+                filename = os.path.basename(args.generation_config)
+                generation_config = GenerationConfig.from_pretrained(dirname, filename)
             else:
-                interface.print_color(text=f"There is no '{name}' setting.", color="red")
+                generation_config = GenerationConfig.from_pretrained(args.generation_config)
 
-        if error:
-            interface.print_color(
-                text="There was an issue parsing the settings. No settings have been changed.",
-                color="red",
-            )
-        else:
-            for name in settings:
-                setattr(current_args, name, settings[name])
-                interface.print_color(text=f"Set {name} to {settings[name]}.", color="green")
-
-            time.sleep(1.5)  # so the user has time to read the changes
-
-        return current_args, not error
+        # Finally: parse and apply `generate_flags`
+        parsed_generate_flags = self.parse_generate_flags(args.generate_flags)
+        model_kwargs = generation_config.update(**parsed_generate_flags)
+        # `model_kwargs` contain non-generation flags in `parsed_generate_flags` that should be passed directly to
+        # `generate`
+        return generation_config, model_kwargs
 
     @staticmethod
     def parse_eos_tokens(
@@ -562,36 +522,6 @@ class ChatCommand(BaseTransformersCLICommand):
             all_eos_token_ids.append(tokenizer.eos_token_id)
 
         return pad_token_id, all_eos_token_ids
-
-    @staticmethod
-    def is_valid_setting_command(s: str) -> bool:
-        # First check the basic structure
-        if not s.startswith("set ") or "=" not in s:
-            return False
-
-        # Split into individual assignments
-        assignments = [a.strip() for a in s[4:].split(";") if a.strip()]
-
-        for assignment in assignments:
-            # Each assignment should have exactly one '='
-            if assignment.count("=") != 1:
-                return False
-
-            key, value = assignment.split("=", 1)
-            key = key.strip()
-            value = value.strip()
-            if not key or not value:
-                return False
-
-            # Keys can only have alphabetic characters, spaces and underscores
-            if not set(key).issubset(ALLOWED_KEY_CHARS):
-                return False
-
-            # Values can have just about anything that isn't a semicolon
-            if not set(value).issubset(ALLOWED_VALUE_CHARS):
-                return False
-
-        return True
 
     # -----------------------------------------------------------------------------------------------------------------
     # Model loading and performance automation methods
@@ -649,8 +579,9 @@ class ChatCommand(BaseTransformersCLICommand):
         interface: RichInterface,
         examples: dict[str, dict[str, str]],
         generation_config: GenerationConfig,
+        model_kwargs: dict,
         chat: list[dict],
-    ) -> tuple[list[dict], GenerationConfig]:
+    ) -> tuple[list[dict], GenerationConfig, dict]:
         """
         Handles all user commands except for `!exit`. May update the chat history (e.g. reset it) or the
         generation config (e.g. set a new flag).
@@ -673,11 +604,27 @@ class ChatCommand(BaseTransformersCLICommand):
             filename = self.save_chat(chat, args, filename)
             interface.print_color(text=f"Chat saved in {filename}!", color="green")
 
-        elif self.is_valid_setting_command(user_input):
-            args, success = self.parse_settings(user_input, args, interface)
-            if success:
-                chat = []
-                interface.clear()
+        elif user_input.startswith("!set"):
+            # splits the new args into a list of strings, each string being a `flag=value` pair (same format as
+            # `generate_flags`)
+            new_generate_flags = user_input[4:].strip()
+            new_generate_flags = new_generate_flags.split()
+            # sanity check: each member in the list must have an =
+            for flag in new_generate_flags:
+                if "=" not in flag:
+                    interface.print_color(
+                        text=(
+                            f"Invalid flag format, missing `=` after `{flag}`. Please use the format "
+                            "`arg_1=value_1 arg_2=value_2 ...`."
+                        ),
+                        color="red",
+                    )
+                    break
+            else:
+                # parses the new args into a dictionary of `generate` kwargs, and updates the corresponding variables
+                parsed_new_generate_flags = self.parse_generate_flags(new_generate_flags)
+                new_model_kwargs = generation_config.update(**parsed_new_generate_flags)
+                model_kwargs.update(**new_model_kwargs)
 
         elif user_input.startswith("!example") and len(user_input.split()) == 2:
             example_name = user_input.split()[1]
@@ -696,13 +643,14 @@ class ChatCommand(BaseTransformersCLICommand):
             interface.print_status(
                 model_name=args.model_name_or_path_positional,
                 generation_config=generation_config,
+                model_kwargs=model_kwargs,
             )
 
         else:
             interface.print_color(text=f"'{user_input}' is not a valid command. Showing help message.", color="red")
             interface.print_help()
 
-        return chat, generation_config
+        return chat, generation_config, model_kwargs
 
     # -----------------------------------------------------------------------------------------------------------------
     # Main logic
@@ -726,7 +674,7 @@ class ChatCommand(BaseTransformersCLICommand):
 
         model, tokenizer = self.load_model_and_tokenizer(args)
         generation_streamer = TextIteratorStreamer(tokenizer, skip_special_tokens=True, skip_prompt=True)
-        generation_config = self.get_generation_parameterization(args, tokenizer)
+        generation_config, model_kwargs = self.get_generation_parameterization(args, tokenizer)
 
         interface = RichInterface(model_name=args.model_name_or_path_positional, user_name=user)
         interface.clear()
@@ -744,12 +692,14 @@ class ChatCommand(BaseTransformersCLICommand):
                     if user_input == "!exit":
                         break
                     else:
-                        chat, generation_config = self.handle_non_exit_user_commands(
+                        # MISSING: test loading generation config from file
+                        chat, generation_config, model_kwargs = self.handle_non_exit_user_commands(
                             user_input=user_input,
                             args=args,
                             interface=interface,
                             examples=examples,
                             generation_config=generation_config,
+                            model_kwargs=model_kwargs,
                             chat=chat,
                         )
                         continue
@@ -765,6 +715,7 @@ class ChatCommand(BaseTransformersCLICommand):
                     "attention_mask": attention_mask,
                     "streamer": generation_streamer,
                     "generation_config": generation_config,
+                    **model_kwargs,
                 }
 
                 thread = Thread(target=model.generate, kwargs=generation_kwargs)
