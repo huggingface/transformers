@@ -501,11 +501,11 @@ def flash_attention_mask(
             "Flash attention 2 cannot handle attention chunked attention, and the key-value length is larger than the chunk size "
             "so the chunked pattern cannot be respected. You should use another `attn_implementation` when instantiating the model"
         )
-    
+
     # Here we need to slice from the right (padding is always left)
     if sliding_window is not None or chunk_size is not None:
         if attention_mask is not None:
-            attention_mask = attention_mask[:, -kv_length :]
+            attention_mask = attention_mask[:, -kv_length:]
 
     # We only return an actual mask if there is at least 1 padding token, otherwise we return `None` and use `is_causal` in
     # FA2
@@ -601,7 +601,7 @@ def get_causal_masks(
     # For TGI/vLLM backends, or other custom attention without equivalent mask creation: we don't need a mask!
     if config._attn_implementation not in ALL_MASK_CREATION_FUNCTIONS:
         return [None] * num_layers
-    
+
     batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
 
     # If using a cache, it can give all informations about mask size and patterns based on seen tokens
