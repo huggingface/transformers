@@ -1,6 +1,6 @@
 import types
 import warnings
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
 import numpy as np
 
@@ -217,7 +217,15 @@ class TokenClassificationPipeline(ChunkPipeline):
                     )
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, inputs: Union[str, List[str]], **kwargs):
+    @overload
+    def __call__(self, inputs: str, **kwargs: Any) -> List[Dict[str, str]]: ...
+
+    @overload
+    def __call__(self, inputs: List[str], **kwargs: Any) -> List[List[Dict[str, str]]]: ...
+
+    def __call__(
+        self, inputs: Union[str, List[str]], **kwargs: Any
+    ) -> Union[List[Dict[str, str]], List[List[Dict[str, str]]]]:
         """
         Classify each token of the text(s) given as inputs.
 
