@@ -466,7 +466,12 @@ setup(
     package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx", "py.typed"]},
     zip_safe=False,
     extras_require=extras,
-    entry_points={"console_scripts": ["transformers=transformers.commands.transformers_cli:main", "transformers-cli=transformers.commands.transformers_cli:main_cli"]},
+    entry_points={
+        "console_scripts": [
+            "transformers=transformers.commands.transformers_cli:main",
+            "transformers-cli=transformers.commands.transformers_cli:main_cli",
+        ]
+    },
     python_requires=">=3.9.0",
     install_requires=list(install_requires),
     classifiers=[
@@ -479,6 +484,9 @@ setup(
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},

@@ -28,9 +28,7 @@ from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     logging,
 )
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
@@ -60,9 +58,6 @@ is_fast_path_available = all(
         causal_conv1d_update,
     )
 )
-
-_CHECKPOINT_FOR_DOC = "mistralai/mamba-codestral-7B-v0.1"
-_CONFIG_FOR_DOC = "Mamba2Config"
 
 
 # Helper methods for segment sum computation
@@ -715,12 +710,8 @@ class Mamba2Block(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class Mamba2PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = Mamba2Config
     base_model_prefix = "backbone"
     _no_split_modules = ["Mamba2Block"]
@@ -825,65 +816,7 @@ class Mamba2CausalLMOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-MAMBA2_START_DOCSTRING = r"""
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Mamba2Config`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-MAMBA2_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            Indices of input sequence tokens in the vocabulary.
-
-            If `cache_params.seqlen_offset>0`, only `input_ids` that do not have their past calculated should be passed as
-            `input_ids`.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        cache_params (`Mamba2Cache`, *optional*):
-            If passed along, the model uses the previous state in all the blocks (which will give the output for the
-            `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
-        use_cache (`bool`, *optional*):
-            If set to `True`, the `cache_params` is returned and can be used to quickly generate the next logits.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            The position of the current input in the cache. This is used to ensure that the cache is correctly updated.
-            If `cache_params` is passed, `cache_position` should also be passed.
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-"""
-
-
-@add_start_docstrings(
-    "The bare MAMBA2 Model transformer outputting raw hidden-states without any specific head on top.",
-    MAMBA2_START_DOCSTRING,
-)
+@auto_docstring
 class Mamba2Model(Mamba2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -909,12 +842,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings = new_embeddings
 
-    @add_start_docstrings_to_model_forward(MAMBA2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Mamba2Output,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -927,6 +855,16 @@ class Mamba2Model(Mamba2PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[Tuple, Mamba2Output]:
+        r"""
+        cache_params (`Mamba2Cache`, *optional*):
+            If passed along, the model uses the previous state in all the blocks (which will give the output for the
+            `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
+        use_cache (`bool`, *optional*):
+            If set to `True`, the `cache_params` is returned and can be used to quickly generate the next logits.
+        cache_position (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            The position of the current input in the cache. This is used to ensure that the cache is correctly updated.
+            If `cache_params` is passed, `cache_position` should also be passed.
+        """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -993,12 +931,11 @@ class Mamba2Model(Mamba2PreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     The MAMBA2 Model transformer with a language modeling head on top (linear layer with weights not tied to the input
     embeddings).
-    """,
-    MAMBA2_START_DOCSTRING,
+    """
 )
 class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = []
@@ -1069,12 +1006,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         )
         return model_inputs
 
-    @add_start_docstrings_to_model_forward(MAMBA2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Mamba2CausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1089,10 +1021,18 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         **kwargs,  # for now we need this for generation
     ) -> Union[Tuple, Mamba2CausalLMOutput]:
         r"""
+        cache_params (`Mamba2Cache`, *optional*):
+            If passed along, the model uses the previous state in all the blocks (which will give the output for the
+            `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+        use_cache (`bool`, *optional*):
+            If set to `True`, the `cache_params` is returned and can be used to quickly generate the next logits.
+        cache_position (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            The position of the current input in the cache. This is used to ensure that the cache is correctly updated.
+            If `cache_params` is passed, `cache_position` should also be passed.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
