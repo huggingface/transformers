@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Union, overload
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
 from .base import Pipeline, build_pipeline_init_args
@@ -16,11 +16,10 @@ if is_torch_available():
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     )
 
+if TYPE_CHECKING:
+    from PIL import Image
+
 logger = logging.get_logger(__name__)
-
-
-Prediction = Dict[str, Any]
-Predictions = List[Prediction]
 
 
 @add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
@@ -69,7 +68,15 @@ class ObjectDetectionPipeline(Pipeline):
             postprocess_kwargs["threshold"] = kwargs["threshold"]
         return preprocess_params, {}, postprocess_kwargs
 
-    def __call__(self, *args, **kwargs) -> Union[Predictions, List[Prediction]]:
+    @overload
+    def __call__(self, image: Union[str, "Image.Image"], *args: Any, **kwargs: Any) -> List[Dict[str, Any]]: ...
+
+    @overload
+    def __call__(
+        self, image: Union[List[str], List["Image.Image"]], *args: Any, **kwargs: Any
+    ) -> List[List[Dict[str, Any]]]: ...
+
+    def __call__(self, *args, **kwargs) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
         """
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
 
