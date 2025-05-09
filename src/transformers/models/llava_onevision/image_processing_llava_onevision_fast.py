@@ -25,8 +25,6 @@ import torch
 
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     divide_to_patches,
@@ -44,7 +42,7 @@ from ...image_utils import (
     make_flat_list_of_images,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, add_start_docstrings, is_torchvision_v2_available
+from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
 
 
 if is_torchvision_v2_available():
@@ -54,23 +52,21 @@ else:
 
 
 class LlavaOnevisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    image_grid_pinpoints (`List[List[int]]`, *optional*):
+        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
+        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
+        method.
+    do_pad (`bool`, *optional*):
+        Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
+        number of patches in the batch. Padding will be applied to the bottom and right with zeros.
+    """
+
     image_grid_pinpoints: Optional[List[List[int]]]
     do_pad: Optional[bool]
 
 
-@add_start_docstrings(
-    "Constructs a fast ConvNeXT image processor. Based on [`SiglipImageProcessor`] with incorporation of processing each video frame.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        image_grid_pinpoints (`List[List[int]]`, *optional*):
-            A list of possible resolutions to use for processing high resolution images. The best resolution is selected
-            based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
-            method. Not used for processing videos.
-        do_pad (`bool`, *optional*):
-            Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-            number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-    """,
-)
+@auto_docstring
 class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
@@ -91,17 +87,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[LlavaOnevisionFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            image_grid_pinpoints (`List`, *optional*):
-                A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
-                of the form `(height, width)`.
-            do_pad (`bool`, *optional*):
-                Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-                number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
