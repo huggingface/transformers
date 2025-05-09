@@ -22,7 +22,7 @@ from torch import nn
 from ...cache_utils import DynamicCache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 from ..idefics3.modeling_idefics3 import (
@@ -242,6 +242,17 @@ class SmolVLMModel(Idefics3Model):
         return image_hidden_states
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="""
+        Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
+        the model have image padding -> (batch_size, max_num_images, 3, max_heights, max_widths) where
+        max_num_images is the maximum number of images among the batch_size samples in the batch.
+        Padding images are not needed beyond padding the pixel_values at the entrance of the model.
+        For efficiency, we only pass through the vision_model's forward the real images by
+        discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
+        image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
+        """
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
