@@ -46,7 +46,7 @@ class VideoLlavaProcessor(ProcessorMixin):
             Patch size from the vision tower.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
-            Shoudl be same as in model's config
+            Should be same as in model's config
         image_token (`str`, *optional*, defaults to `"<image>"`):
             Special token used to denote image location.
         video_token (`str`, *optional*, defaults to `"<video>"`):
@@ -176,11 +176,6 @@ class VideoLlavaProcessor(ProcessorMixin):
                     one_video = to_numpy_array(one_video)
                 height, width = get_image_size(one_video[0])
                 num_frames = one_video.shape[0]  # frame dim is always after batch dim
-
-            num_image_tokens = (height // self.patch_size) * (
-                width // self.patch_size
-            ) + self.num_additional_image_tokens
-            num_video_tokens = num_image_tokens * num_frames
 
             num_image_tokens = (height // self.patch_size) * (
                 width // self.patch_size

@@ -91,11 +91,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         """
         Quantizes weights to FP8 format using Block-wise quantization
         """
-        from accelerate.utils import set_module_tensor_to_device
+        from ..modeling_utils import _load_parameter_into_model
 
-        set_module_tensor_to_device(model, param_name, target_device, param_value)
-
-        module, tensor_name = get_module_from_name(model, param_name)
+        param_value = param_value.to(target_device)
 
         # Get FP8 min/max values
         fp8_min = torch.finfo(torch.float8_e4m3fn).min
@@ -131,8 +129,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         # Reshape scale to match the number of blocks
         scale = scale.reshape(scale_orig_shape).squeeze().reciprocal()
 
-        module._buffers[tensor_name] = quantized_param.to(target_device)
-        module._buffers["weight_scale_inv"] = scale.to(target_device)
+        # Load into the model
+        _load_parameter_into_model(model, param_name, quantized_param)
+        _load_parameter_into_model(model, param_name.rsplit(".", 1)[0] + ".weight_scale_inv", scale)
 
     def check_quantized_param(
         self,
@@ -195,9 +194,38 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                         not_missing_keys.append(missing)
         return [k for k in missing_keys if k not in not_missing_keys]
 
+    def update_tp_plan(self, config):
+        if "Qwen3" in config.__class__.__name__:
+            text_plan = {
+                "layers.*.self_attn.q_proj.weight": "local_colwise",
+                "layers.*.self_attn.q_proj.weight_scale_inv": "local_colwise",
+                "layers.*.self_attn.k_proj.weight": "local_colwise",
+                "layers.*.self_attn.k_proj.weight_scale_inv": "local_colwise",
+                "layers.*.self_attn.v_proj.weight": "local_colwise",
+                "layers.*.self_attn.v_proj.weight_scale_inv": "local_colwise",
+                "layers.*.self_attn.o_proj.weight": "local_rowwise",
+                "layers.*.self_attn.o_proj.weight_scale_inv": "local_rowwise",
+                "layers.*.self_attn": "gather",
+                "layers.*.mlp.gate_proj.weight": "local_colwise",
+                "layers.*.mlp.gate_proj.weight_scale_inv": "local_colwise",
+                "layers.*.mlp.up_proj.weight": "local_colwise",
+                "layers.*.mlp.up_proj.weight_scale_inv": "local_colwise",
+                "layers.*.mlp.down_proj.weight": "local_rowwise",
+                "layers.*.mlp.down_proj.weight_scale_inv": "local_rowwise",
+                "layers.*.mlp": "gather",
+            }
+
+            config.base_model_tp_plan = text_plan
+
+            return config
+
     def is_serializable(self, safe_serialization=None):
         return True
 
     @property
     def is_trainable(self) -> bool:
         return False
+
+    def get_cuda_warm_up_factor(self):
+        # Pre-processing is done cleanly, so we can allocate everything here
+        return 2

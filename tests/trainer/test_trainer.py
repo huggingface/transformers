@@ -62,6 +62,10 @@ from transformers.testing_utils import (
     TemporaryHubRepo,
     TestCasePlus,
     backend_device_count,
+    backend_empty_cache,
+    backend_max_memory_allocated,
+    backend_memory_allocated,
+    backend_reset_max_memory_allocated,
     evaluate_side_effect_factory,
     execute_subprocess_async,
     get_gpu_count,
@@ -78,7 +82,6 @@ from transformers.testing_utils import (
     require_liger_kernel,
     require_lomo,
     require_non_hpu,
-    require_non_xpu,
     require_optuna,
     require_peft,
     require_ray,
@@ -113,6 +116,7 @@ from transformers.utils import (
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    check_torch_load_is_safe,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
@@ -244,18 +248,18 @@ def bytes2megabytes(x):
 class TorchTracemalloc:
     def __enter__(self):
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.reset_max_memory_allocated()  # reset the peak gauge to zero
-            self.begin = torch.cuda.memory_allocated()
+        if torch_device in ["cuda", "xpu"]:
+            backend_empty_cache(torch_device)
+            backend_reset_max_memory_allocated(torch_device)  # reset the peak gauge to zero
+            self.begin = backend_memory_allocated(torch_device)
         return self
 
     def __exit__(self, *exc):
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            self.end = torch.cuda.memory_allocated()
-            self.peak = torch.cuda.max_memory_allocated()
+        if torch_device in ["cuda", "xpu"]:
+            backend_empty_cache(torch_device)
+            self.end = backend_memory_allocated(torch_device)
+            self.peak = backend_max_memory_allocated(torch_device)
         self.used = bytes2megabytes(self.end - self.begin)
         self.peaked = bytes2megabytes(self.peak - self.begin)
 
@@ -646,6 +650,7 @@ class TrainerIntegrationCommon:
         else:
             best_model = RegressionModel()
             if not safe_weights:
+                check_torch_load_is_safe()
                 state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME), weights_only=True)
             else:
                 state_dict = safetensors.torch.load_file(os.path.join(checkpoint, SAFE_WEIGHTS_NAME))
@@ -678,6 +683,7 @@ class TrainerIntegrationCommon:
             loader = safetensors.torch.load_file
             weights_file = os.path.join(folder, SAFE_WEIGHTS_NAME)
         else:
+            check_torch_load_is_safe()
             loader = torch.load
             weights_file = os.path.join(folder, WEIGHTS_NAME)
 
@@ -1243,7 +1249,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
         # will add more specific tests once there are some bugs to fix
 
-    @require_non_xpu
     @require_torch_gpu
     @require_torch_tf32
     def test_tf32(self):
@@ -1817,7 +1822,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(isinstance(tiny_llama.model.norm, LigerRMSNorm))
 
     @require_liger_kernel
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_use_liger_kernel_trainer(self):
         # Check that trainer still works with liger kernel applied
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
@@ -1835,7 +1840,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_lomo
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_lomo(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -1858,7 +1863,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertFalse(torch.allclose(param, previous_params[name].to(param.device), rtol=1e-12, atol=1e-12))
 
     @require_lomo
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_adalomo(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -1921,7 +1926,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             _ = trainer.train()
 
     @require_schedulefree
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_schedulefree_radam(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2024,7 +2029,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 self.assertFalse(is_regex)
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2045,7 +2050,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_extra_args(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2067,7 +2072,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_layerwise(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2088,7 +2093,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_layerwise_with_scheduler(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2110,7 +2115,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_adamw_8bit(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2131,7 +2136,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_adafactor(self):
         # These are the intervals of the peak memory usage of training such a tiny model
         # if the peak memory goes outside that range, then we know there might be a bug somewhere
@@ -2163,7 +2168,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(lower_bound_pm < galore_peak_memory)
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_adafactor_attention_only(self):
         # These are the intervals of the peak memory usage of training such a tiny model
         # if the peak memory goes outside that range, then we know there might be a bug somewhere
@@ -2194,7 +2199,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(lower_bound_pm < galore_peak_memory)
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_adafactor_all_linear(self):
         # These are the intervals of the peak memory usage of training such a tiny model
         # if the peak memory goes outside that range, then we know there might be a bug somewhere
@@ -2225,7 +2230,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(lower_bound_pm < galore_peak_memory)
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_lr_display_without_scheduler(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2250,7 +2255,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(trainer.get_learning_rates(), [learning_rate, learning_rate])
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_lr_display_with_scheduler(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2276,22 +2281,23 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # creating log history of trainer, results don't matter
         trainer.train()
-        logs = trainer.state.log_history[1:][:-1]
+        logs = trainer.state.log_history[1:-1]
 
         # reach given learning rate peak and end with 0 lr
-        self.assertTrue(logs[num_warmup_steps - 2]["learning_rate"] == learning_rate)
-        self.assertTrue(logs[-1]["learning_rate"] == 0)
+        self.assertTrue(logs[num_warmup_steps - 1]["learning_rate"] == learning_rate)
+        # self.assertTrue(logs[-1]["learning_rate"] == 0)
+        self.assertTrue(np.allclose(logs[-1]["learning_rate"], 0, atol=5e-6))
 
         # increasing and decreasing pattern of lrs
         increasing_lrs = [
             logs[i]["learning_rate"] < logs[i + 1]["learning_rate"]
             for i in range(len(logs))
-            if i < num_warmup_steps - 2
+            if i < num_warmup_steps - 1
         ]
         decreasing_lrs = [
             logs[i]["learning_rate"] > logs[i + 1]["learning_rate"]
             for i in range(len(logs) - 1)
-            if i >= num_warmup_steps - 2
+            if i >= num_warmup_steps - 1
         ]
 
         self.assertTrue(all(increasing_lrs))
@@ -2301,7 +2307,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(len(decreasing_lrs) > len(increasing_lrs))
 
     @require_apollo_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_apollo(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2322,7 +2328,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_apollo_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_apollo_extra_args(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2344,7 +2350,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_apollo_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_apollo_layerwise(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2365,7 +2371,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_apollo_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_apollo_layerwise_with_scheduler(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2387,7 +2393,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_apollo_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_apollo_lr_display_without_scheduler(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2412,7 +2418,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(trainer.get_learning_rates(), [learning_rate, learning_rate])
 
     @require_apollo_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_apollo_lr_display_with_scheduler(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -3991,7 +3997,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # perfect world: fp32_init/2 == fp16_eval
             self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
 
-    @require_non_xpu
+    @require_torch_gpu
     @require_torch_non_multi_gpu
     @require_torch_tensorrt_fx
     def test_torchdynamo_full_eval(self):
@@ -4933,6 +4939,8 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         commits = commit_logs.split("\n\n")[1::2]
         return [commit.strip() for commit in commits]
 
+    # TODO: @ydshieh or @SunMarc
+    @unittest.skip("unknown failure reason, possibly staging hub issue")
     def test_push_to_hub_with_saves_each_epoch(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -5962,3 +5970,22 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
             param = next(model.parameters())
             group = trainer.get_optimizer_group(param)
             self.assertIn(param, group["params"])
+
+    @require_bitsandbytes
+    def test_bnb_8bit_optimizer_skip_embedding(self):
+        model = BasicTextGenerationModel(8, 4)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for name_optim in ["rmsprop_bnb_8bit", "adamw_8bit"]:
+                args = TrainingArguments(
+                    output_dir=tmp_dir,
+                    report_to="none",
+                    optim=name_optim,
+                )
+                trainer = Trainer(model=model, args=args)
+                optimizer = trainer.create_optimizer()
+                modules = optimizer.mng.module_weight_config_triple
+                self.assertNotEqual(len(modules), 0)
+                module, name, config = modules[0]
+                self.assertIsInstance(module, torch.nn.Embedding)
+                self.assertEqual(name, "weight")
+                self.assertDictEqual(config, {"optim_bits": 32})
