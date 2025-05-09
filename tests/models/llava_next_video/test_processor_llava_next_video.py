@@ -88,12 +88,15 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
     def test_image_token_filling(self):
-        processor = AutoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
         processor.patch_size = 14
         processor.vision_feature_select_strategy = "default"
+        processor.image_processor.crop_size = {"height": 336, "width": 336}
+        processor.image_processor.size = {"shortest_edge": 336}
+        processor.image_processor.image_grid_pinpoints = [[672, 336]]
         # Important to check with non square image
-        image = torch.randint(0, 2, (3, 500, 316))
-        expected_image_tokens = 1526
+        image = torch.randint(0, 2, (3, 503, 316))
+        expected_image_tokens = 1575
         image_token_index = processor.image_token_id
 
         messages = [
