@@ -90,7 +90,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 CONTEXT_LENGTH = 131072
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -234,7 +234,7 @@ def write_model(
     text_rope_theta = params["rope_theta"]
     cross_attention_num_layers = params["vision_num_cross_attention_layers"]
 
-    # some constans from original code
+    # some constants from original code
     rope_scaling = {
         "rope_type": "llama3",
         "factor": 8.0,
@@ -342,10 +342,15 @@ def write_model(
             path = os.path.join(input_base_path, "consolidated.00.pth")
         else:
             path = os.path.join(input_base_path, "consolidated.pth")
-        loaded = [torch.load(path, map_location="cpu", mmap=True)]
+        loaded = [torch.load(path, map_location="cpu", mmap=True, weights_only=True)]
     else:
         loaded = [
-            torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pth"), map_location="cpu", mmap=True)
+            torch.load(
+                os.path.join(input_base_path, f"consolidated.{i:02d}.pth"),
+                map_location="cpu",
+                mmap=True,
+                weights_only=True,
+            )
             for i in range(num_shards)
         ]
 

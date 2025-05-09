@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from functools import partial
 from typing import Callable, Optional, Tuple
 
 import torch
@@ -23,15 +22,12 @@ import torch.utils.checkpoint
 from ...cache_utils import Cache, HybridCache
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import (
-    logging,
-)
+from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from ..cohere.modeling_cohere import (
     CohereAttention,
     CohereDecoderLayer,
@@ -351,6 +347,7 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
         self.is_sliding = (layer_idx + 1) % self.config.sliding_window_pattern != 0
         self.sliding_window = config.sliding_window
 
+    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -360,7 +357,6 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        last_cache_position: int = 0,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -381,7 +377,6 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
                 (see `past_key_values`).
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence
-            last_cache_position (`int`): equivalent to `cache_position[-1]` but allow indexing without breaking dynamo tracing
         """
 
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
@@ -400,11 +395,16 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
                 )
                 attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
                 # In case we are beyond the sliding window, we need to correctly offset the mask slicing
-                # `last_cache_position` is equivalent to `cache_position[-1]` but without breaking dynamo
-                offset = last_cache_position - effective_seq_len
+                offset = cache_position[-1] - effective_seq_len + 1
                 # Should only be used when beyond the sliding window (i.e. offset > 0)
-                offset = max(0, offset)
-                attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]
+                offset = torch.clamp(offset, min=0)
+                # equivalent to: `attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]`,
+                # but without data-dependent slicing (i.e. torch.compile friendly)
+                mask_indexes = torch.arange(
+                    min(effective_seq_len, attention_mask.shape[-1]), device=attention_mask.device
+                )
+                mask_indexes += offset
+                attention_mask = attention_mask[:, :, :, mask_indexes]
 
         residual = hidden_states
 
@@ -441,12 +441,6 @@ class Cohere2PreTrainedModel(CoherePreTrainedModel):
 
 
 class Cohere2Model(Gemma2Model):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Cohere2DecoderLayer`]
-    Args:
-        config: Cohere2Config
-    """
-
     def __init__(self, config: Cohere2Config):
         super().__init__(config)
         self.norm = Cohere2LayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
@@ -463,7 +457,6 @@ class Cohere2Model(Gemma2Model):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -503,16 +496,6 @@ class Cohere2Model(Gemma2Model):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
-        # (retrieving the same value from `cache_position` later on would crash dynamo)
-        if last_cache_position is None:
-            last_cache_position = 0
-            if attention_mask is not None:
-                # In case a 4d mask is passed directly without using `generate`, we have to rely on cache_position
-                # It will break dynamo tracing but there are no way around it (and it should never happen in practice)
-                last_cache_position = (
-                    attention_mask.shape[-1] if attention_mask.dim() == 2 else cache_position[-1].item()
-                )
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
@@ -530,30 +513,16 @@ class Cohere2Model(Gemma2Model):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    partial(decoder_layer.__call__, **flash_attn_kwargs),
-                    hidden_states,
-                    position_embeddings,
-                    causal_mask,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    last_cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    position_embeddings=position_embeddings,
-                    attention_mask=causal_mask,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    last_cache_position=last_cache_position,
-                    **flash_attn_kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=causal_mask,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                **flash_attn_kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -624,10 +593,6 @@ class Cohere2ForCausalLM(CohereForCausalLM):
         else:
             # The clone here is for the same reason as for `position_ids`.
             model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
-
-        # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
-        # (retrieving the same value from `cache_position` later on would crash dynamo)
-        model_inputs["last_cache_position"] = attention_mask.shape[-1] if attention_mask is not None else 0
 
         if (
             isinstance(past_key_values, HybridCache)

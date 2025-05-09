@@ -36,14 +36,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import auto_docstring, logging, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_beit import BeitConfig
 
@@ -51,10 +44,8 @@ from .configuration_beit import BeitConfig
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "BeitConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "microsoft/beit-base-patch16-224-pt22k"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
@@ -663,7 +654,7 @@ class BeitEncoder(nn.Module):
             self.relative_position_bias = BeitRelativePositionBias(config, window_size=window_size)
 
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
         self.layer = nn.ModuleList(
             [
                 BeitLayer(
@@ -741,12 +732,8 @@ class BeitEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class BeitPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = BeitConfig
     base_model_prefix = "beit"
     main_input_name = "pixel_values"
@@ -784,48 +771,13 @@ class BeitPreTrainedModel(PreTrainedModel):
                 module.lambda_2.data.fill_(self.config.layer_scale_init_value)
 
 
-BEIT_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`BeitConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-BEIT_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`BeitImageProcessor.__call__`] for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare Beit Model transformer outputting raw hidden-states without any specific head on top.",
-    BEIT_START_DOCSTRING,
-)
+@auto_docstring
 class BeitModel(BeitPreTrainedModel):
     def __init__(self, config: BeitConfig, add_pooling_layer: bool = True) -> None:
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        """
         super().__init__(config)
         self.config = config
 
@@ -851,14 +803,7 @@ class BeitModel(BeitPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BeitModelOutputWithPooling,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -933,12 +878,13 @@ class BeitPooler(nn.Module):
         return pooled_output
 
 
-@add_start_docstrings(
-    """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
+@auto_docstring(
+    custom_intro="""
+    Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
     visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
     predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
-    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
-    BEIT_START_DOCSTRING,
+    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.
+    """
 )
 class BeitForMaskedImageModeling(BeitPreTrainedModel):
     def __init__(self, config: BeitConfig) -> None:
@@ -954,8 +900,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -970,13 +915,10 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
 
         Examples:
 
@@ -1035,12 +977,11 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Beit Model transformer with an image classification head on top (a linear layer on top of the average of the final
     hidden states of the patch tokens) e.g. for ImageNet.
-    """,
-    BEIT_START_DOCSTRING,
+    """
 )
 class BeitForImageClassification(BeitPreTrainedModel):
     def __init__(self, config: BeitConfig) -> None:
@@ -1055,13 +996,7 @@ class BeitForImageClassification(BeitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -1361,12 +1296,7 @@ class BeitFCNHead(nn.Module):
         return output
 
 
-@add_start_docstrings(
-    """
-    Beit Model transformer with a semantic segmentation head on top e.g. for ADE20k, CityScapes.
-    """,
-    BEIT_START_DOCSTRING,
-)
+@auto_docstring
 class BeitForSemanticSegmentation(BeitPreTrainedModel):
     def __init__(self, config: BeitConfig) -> None:
         super().__init__(config)
@@ -1419,8 +1349,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
 
         return loss
 
-    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -1435,8 +1364,6 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
-        Returns:
 
         Examples:
 
@@ -1514,11 +1441,10 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     BEiT backbone, to be used with frameworks like DETR and MaskFormer.
-    """,
-    BEIT_START_DOCSTRING,
+    """
 )
 class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
     def __init__(self, config):
@@ -1554,8 +1480,7 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Tensor,
@@ -1563,9 +1488,7 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
-        """
-        Returns:
-
+        r"""
         Examples:
 
         ```python

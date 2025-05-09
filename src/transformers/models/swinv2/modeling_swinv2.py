@@ -23,37 +23,17 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import Tensor, nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_swinv2 import Swinv2Config
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "Swinv2Config"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "microsoft/swinv2-tiny-patch4-window8-256"
-_EXPECTED_OUTPUT_SHAPE = [1, 64, 768]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "microsoft/swinv2-tiny-patch4-window8-256"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
 # drop_path, Swinv2PatchEmbeddings, Swinv2PatchMerging and Swinv2DropPath are from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/swin_transformer_v2.py.
@@ -878,7 +858,7 @@ class Swinv2Encoder(nn.Module):
         self.config = config
         if self.config.pretrained_window_sizes is not None:
             pretrained_window_sizes = config.pretrained_window_sizes
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
 
         layers = []
         for i_layer in range(self.num_layers):
@@ -976,12 +956,8 @@ class Swinv2Encoder(nn.Module):
         )
 
 
+@auto_docstring
 class Swinv2PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = Swinv2Config
     base_model_prefix = "swinv2"
     main_input_name = "pixel_values"
@@ -1008,48 +984,16 @@ class Swinv2PreTrainedModel(PreTrainedModel):
             module.logit_scale.data.fill_(math.log(10))
 
 
-SWINV2_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`Swinv2Config`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-SWINV2_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
-            for details.
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*, default `False`):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare Swinv2 Model transformer outputting raw hidden-states without any specific head on top.",
-    SWINV2_START_DOCSTRING,
-)
+@auto_docstring
 # Copied from transformers.models.swin.modeling_swin.SwinModel with SWIN->SWINV2,Swin->Swinv2
 class Swinv2Model(Swinv2PreTrainedModel):
     def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+        r"""
+        add_pooling_layer (`bool`, *optional*, defaults to `True`):
+            Whether or not to apply pooling layer.
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+            Whether or not to create and apply mask tokens in the embedding layer.
+        """
         super().__init__(config)
         self.config = config
         self.num_layers = len(config.depths)
@@ -1075,14 +1019,7 @@ class Swinv2Model(Swinv2PreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(SWINV2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Swinv2ModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1148,18 +1085,18 @@ class Swinv2Model(Swinv2PreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """Swinv2 Model with a decoder on top for masked image modeling, as proposed in
-[SimMIM](https://arxiv.org/abs/2111.09886).
+@auto_docstring(
+    custom_intro="""
+        Swinv2 Model with a decoder on top for masked image modeling, as proposed in
+    [SimMIM](https://arxiv.org/abs/2111.09886).
 
-    <Tip>
+        <Tip>
 
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
+        Note that we provide a script to pre-train this model on custom data in our [examples
+        directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
 
-    </Tip>
-    """,
-    SWINV2_START_DOCSTRING,
+        </Tip>
+    """
 )
 # Copied from transformers.models.swin.modeling_swin.SwinForMaskedImageModeling with swin->swinv2, base-simmim-window6-192->tiny-patch4-window8-256,SWIN->SWINV2,Swin->Swinv2,192->256
 class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
@@ -1179,8 +1116,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(SWINV2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Swinv2MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1194,8 +1130,6 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
-        Returns:
 
         Examples:
         ```python
@@ -1268,8 +1202,8 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Swinv2 Model transformer with an image classification head on top (a linear layer on top of the final hidden state
     of the [CLS] token) e.g. for ImageNet.
 
@@ -1280,8 +1214,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
         position embeddings to the higher resolution.
 
     </Tip>
-    """,
-    SWINV2_START_DOCSTRING,
+    """
 )
 # Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with SWIN->SWINV2,Swin->Swinv2,swin->swinv2
 class Swinv2ForImageClassification(Swinv2PreTrainedModel):
@@ -1299,13 +1232,7 @@ class Swinv2ForImageClassification(Swinv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(SWINV2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=Swinv2ImageClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1339,26 +1266,7 @@ class Swinv2ForImageClassification(Swinv2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=logits, config=self.config)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1373,11 +1281,10 @@ class Swinv2ForImageClassification(Swinv2PreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Swinv2 backbone, to be used with frameworks like DETR and MaskFormer.
-    """,
-    SWINV2_START_DOCSTRING,
+    """
 )
 class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
     def __init__(self, config):
@@ -1394,8 +1301,7 @@ class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @add_start_docstrings_to_model_forward(SWINV2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Tensor,
@@ -1403,9 +1309,7 @@ class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
-        """
-        Returns:
-
+        r"""
         Examples:
 
         ```python

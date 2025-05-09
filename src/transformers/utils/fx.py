@@ -61,10 +61,7 @@ from ..models.auto.modeling_auto import (
 )
 from .import_utils import (
     ENV_VARS_TRUE_VALUES,
-    TORCH_FX_REQUIRED_VERSION,
-    get_torch_version,
     is_peft_available,
-    is_torch_fx_available,
 )
 
 
@@ -122,6 +119,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "albert",
     "bart",
     "bert",
+    "bitnet",
     "blenderbot",
     "blenderbot-small",
     "bloom",
@@ -890,12 +888,6 @@ class HFTracer(Tracer):
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
         super().__init__(autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions)
-
-        if not is_torch_fx_available():
-            raise ImportError(
-                f"Found an incompatible version of torch. Found version {get_torch_version()}, but only version "
-                f"{TORCH_FX_REQUIRED_VERSION} is supported."
-            )
 
     def _generate_dummy_input(
         self, model: "PreTrainedModel", input_name: str, shape: list[int], input_names: list[str]

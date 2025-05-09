@@ -20,17 +20,13 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...modeling_utils import ModelOutput, PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring, logging
 from .configuration_univnet import UnivNetConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "UnivNetConfig"
-
-_CHECKPOINT_FOR_DOC = "dg845/univnet-dev"
 
 
 @dataclass
@@ -426,56 +422,7 @@ class UnivNetLvcBlock(nn.Module):
             layer.remove_weight_norm()
 
 
-UNIVNET_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`UnivNetConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-UNIVNET_INPUTS_DOCSTRING = r"""
-    Converts a noise waveform and a conditioning spectrogram to a speech waveform. Passing a batch of log-mel
-    spectrograms returns a batch of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a
-    single, un-batched speech waveform.
-
-    Args:
-        input_features (`torch.FloatTensor`):
-            Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
-            config.num_mel_channels)`, or un-batched and of shape `(sequence_length, config.num_mel_channels)`.
-        noise_sequence (`torch.FloatTensor`, *optional*):
-            Tensor containing a noise sequence of standard Gaussian noise. Can be batched and of shape `(batch_size,
-            sequence_length, config.model_in_channels)`, or un-batched and of shape (sequence_length,
-            config.model_in_channels)`. If not supplied, will be randomly generated.
-        padding_mask (`torch.BoolTensor`, *optional*):
-            Mask indicating which parts of each sequence are padded. Mask values are selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**
-            - 0 for tokens that are **masked**
-
-            The mask can be batched and of shape `(batch_size, sequence_length)` or un-batched and of shape
-            `(sequence_length,)`.
-        generator (`torch.Generator`, *optional*):
-            A [torch generator](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make generation
-            deterministic.
-        return_dict:
-            Whether to return a [`~utils.ModelOutput`] subclass instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    """UnivNet GAN vocoder.""",
-    UNIVNET_START_DOCSTRING,
-)
+@auto_docstring
 class UnivNetModel(PreTrainedModel):
     config_class = UnivNetConfig
     main_input_name = "input_features"
@@ -519,8 +466,7 @@ class UnivNetModel(PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(UNIVNET_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=UnivNetModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_features: torch.FloatTensor,
@@ -530,7 +476,26 @@ class UnivNetModel(PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], UnivNetModelOutput]:
         r"""
-        Returns:
+        input_features (`torch.FloatTensor`):
+            Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
+            config.num_mel_channels)`, or un-batched and of shape `(sequence_length, config.num_mel_channels)`.
+        noise_sequence (`torch.FloatTensor`, *optional*):
+            Tensor containing a noise sequence of standard Gaussian noise. Can be batched and of shape `(batch_size,
+            sequence_length, config.model_in_channels)`, or un-batched and of shape (sequence_length,
+            config.model_in_channels)`. If not supplied, will be randomly generated.
+        padding_mask (`torch.BoolTensor`, *optional*):
+            Mask indicating which parts of each sequence are padded. Mask values are selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**
+            - 0 for tokens that are **masked**
+
+            The mask can be batched and of shape `(batch_size, sequence_length)` or un-batched and of shape
+            `(sequence_length,)`.
+        generator (`torch.Generator`, *optional*):
+            A [torch generator](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make generation
+            deterministic.
+            return_dict:
+            Whether to return a [`~utils.ModelOutput`] subclass instead of a plain tuple.
 
         Example:
 

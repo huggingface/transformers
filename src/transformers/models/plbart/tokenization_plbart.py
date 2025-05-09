@@ -21,6 +21,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, BatchEncoding, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -46,6 +47,7 @@ FAIRSEQ_LANGUAGE_CODES_MAP = {
 }
 
 
+@requires(backends=("sentencepiece",))
 class PLBartTokenizer(PreTrainedTokenizer):
     """
     Construct an PLBART tokenizer.
