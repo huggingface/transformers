@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import subprocess
-from typing import Union
+from typing import Any, Dict, List, Union
 
 import numpy as np
 import requests
@@ -27,7 +27,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
+def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.ndarray:
     """
     Helper function to read an audio file through ffmpeg.
     """
@@ -103,11 +103,7 @@ class AudioClassificationPipeline(Pipeline):
 
         self.check_model_type(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES)
 
-    def __call__(
-        self,
-        inputs: Union[np.ndarray, bytes, str],
-        **kwargs,
-    ):
+    def __call__(self, inputs: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> List[Dict[str, Any]]:
         """
         Classify the sequence(s) given as inputs. See the [`AutomaticSpeechRecognitionPipeline`] documentation for more
         information.
