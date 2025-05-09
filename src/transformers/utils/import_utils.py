@@ -1895,7 +1895,7 @@ class _LazyModule(ModuleType):
         import_structure: IMPORT_STRUCTURE_T,
         module_spec: Optional[importlib.machinery.ModuleSpec] = None,
         extra_objects: Optional[Dict[str, object]] = None,
-        explicit_import_shortcut: Dict[str, List[str]] = None,
+        explicit_import_shortcut: Optional[Dict[str, List[str]]] = None,
     ):
         super().__init__(name)
 
