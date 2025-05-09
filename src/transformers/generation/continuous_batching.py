@@ -329,7 +329,7 @@ def compute_optimal_blocks(
         available_memory = total_memory - max(allocated_memory, reserved_memory)
     elif device.type == "mps":
         logger.warning("MPS memory estimation is approximate. Using conservative defaults.")
-        return 32, 128
+        return 2048, 256
     else:
         logger.warning(f"Unsupported device type {device.type} for optimal block calculation. Using defaults.")
         return 32, 128
