@@ -22,7 +22,7 @@ This guide will help you understand the different decoding strategies available 
 
 ## Basic decoding methods
 
-These are well established decoding methods, and should be you starting point for text generation tasks.
+These are well established decoding methods, and should be your starting point for text generation tasks.
 
 ### Greedy search
 
