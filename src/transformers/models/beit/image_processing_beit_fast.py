@@ -142,7 +142,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         images,
         **kwargs,
     ):
-        """Preprocesses a single image."""
+        """Preprocesses images."""
         kwargs["do_reduce_labels"] = False
         processed_images = self._preprocess(images=images, **kwargs)
         return processed_images
@@ -152,7 +152,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         segmentation_maps,
         **kwargs,
     ):
-        """Preprocesses a single segmentation map."""
+        """Preprocesses segmentation maps."""
         processed_segmentation_maps = []
         for segmentation_map in segmentation_maps:
             segmentation_map = self._process_image(
