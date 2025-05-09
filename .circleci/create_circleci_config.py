@@ -398,7 +398,12 @@ def create_circleci_config(folder=None):
         "parameters": {
             # Only used to accept the parameters from the trigger
             "nightly": {"type": "boolean", "default": False},
-            "tests_to_run": {"type": "string", "default": ''},
+            # Only used to accept the parameters from GitHub Actions trigger
+            "GHA_Actor": {"type": "string", "default": ""},
+            "GHA_Action": {"type": "string", "default": ""},
+            "GHA_Event": {"type": "string", "default": ""},
+            "GHA_Meta": {"type": "string", "default": ""},
+            "tests_to_run": {"type": "string", "default": ""},
             **{j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs},
             **{j.job_name + "_parallelism":{"type":"integer", "default":1} for j in jobs},
         },
