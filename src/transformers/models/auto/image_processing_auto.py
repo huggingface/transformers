@@ -56,13 +56,13 @@ if TYPE_CHECKING:
 else:
     IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
-            ("align", ("EfficientNetImageProcessor",)),
-            ("aria", ("AriaImageProcessor",)),
-            ("beit", ("BeitImageProcessor",)),
+            ("align", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
+            ("aria", ("AriaImageProcessor")),
+            ("beit", ("BeitImageProcessor", "BeitImageProcessorFast")),
             ("bit", ("BitImageProcessor", "BitImageProcessorFast")),
             ("blip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("blip-2", ("BlipImageProcessor", "BlipImageProcessorFast")),
-            ("bridgetower", ("BridgeTowerImageProcessor",)),
+            ("bridgetower", ("BridgeTowerImageProcessor", "BridgeTowerImageProcessorFast")),
             ("chameleon", ("ChameleonImageProcessor",)),
             ("chinese_clip", ("ChineseCLIPImageProcessor", "ChineseCLIPImageProcessorFast")),
             ("clip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
@@ -71,7 +71,7 @@ else:
             ("convnext", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("convnextv2", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("cvt", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
-            ("data2vec-vision", ("BeitImageProcessor",)),
+            ("data2vec-vision", ("BeitImageProcessor", "BeitImageProcessorFast")),
             ("deformable_detr", ("DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast")),
             ("deit", ("DeiTImageProcessor", "DeiTImageProcessorFast")),
             ("depth_anything", ("DPTImageProcessor",)),
@@ -83,7 +83,7 @@ else:
             ("donut-swin", ("DonutImageProcessor", "DonutImageProcessorFast")),
             ("dpt", ("DPTImageProcessor",)),
             ("efficientformer", ("EfficientFormerImageProcessor",)),
-            ("efficientnet", ("EfficientNetImageProcessor",)),
+            ("efficientnet", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
             ("flava", ("FlavaImageProcessor", "FlavaImageProcessorFast")),
             ("focalnet", ("BitImageProcessor", "BitImageProcessorFast")),
             ("fuyu", ("FuyuImageProcessor",)),
@@ -101,6 +101,7 @@ else:
             ("imagegpt", ("ImageGPTImageProcessor",)),
             ("instructblip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("instructblipvideo", ("InstructBlipVideoImageProcessor",)),
+            ("janus", ("JanusImageProcessor")),
             ("kosmos-2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("layoutlmv2", ("LayoutLMv2ImageProcessor", "LayoutLMv2ImageProcessorFast")),
             ("layoutlmv3", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
@@ -116,7 +117,7 @@ else:
             ("mistral3", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("mlcd", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("mllama", ("MllamaImageProcessor",)),
-            ("mobilenet_v1", ("MobileNetV1ImageProcessor",)),
+            ("mobilenet_v1", ("MobileNetV1ImageProcessor", "MobileNetV1ImageProcessorFast")),
             ("mobilenet_v2", ("MobileNetV2ImageProcessor", "MobileNetV2ImageProcessorFast")),
             ("mobilevit", ("MobileViTImageProcessor",)),
             ("mobilevitv2", ("MobileViTImageProcessor",)),
@@ -130,16 +131,17 @@ else:
             ("phi4_multimodal", "Phi4MultimodalImageProcessorFast"),
             ("pix2struct", ("Pix2StructImageProcessor",)),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
-            ("poolformer", ("PoolFormerImageProcessor",)),
+            ("poolformer", ("PoolFormerImageProcessor", "PoolFormerImageProcessorFast")),
             ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor",)),
-            ("pvt", ("PvtImageProcessor",)),
-            ("pvt_v2", ("PvtImageProcessor",)),
+            ("pvt", ("PvtImageProcessor", "PvtImageProcessorFast")),
+            ("pvt_v2", ("PvtImageProcessor", "PvtImageProcessorFast")),
             ("qwen2_5_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("qwen2_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("regnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("resnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("rt_detr", ("RTDetrImageProcessor", "RTDetrImageProcessorFast")),
             ("sam", ("SamImageProcessor",)),
+            ("sam_hq", ("SamImageProcessor",)),
             ("segformer", ("SegformerImageProcessor",)),
             ("seggpt", ("SegGptImageProcessor",)),
             ("shieldgemma2", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
@@ -148,7 +150,7 @@ else:
             ("superglue", ("SuperGlueImageProcessor",)),
             ("swiftformer", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("swin", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("swin2sr", ("Swin2SRImageProcessor",)),
+            ("swin2sr", ("Swin2SRImageProcessor", "Swin2SRImageProcessorFast")),
             ("swinv2", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("table-transformer", ("DetrImageProcessor",)),
             ("timesformer", ("VideoMAEImageProcessor",)),
@@ -165,7 +167,7 @@ else:
             ("vit_hybrid", ("ViTHybridImageProcessor",)),
             ("vit_mae", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("vit_msn", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("vitmatte", ("VitMatteImageProcessor",)),
+            ("vitmatte", ("VitMatteImageProcessor", "VitMatteImageProcessorFast")),
             ("xclip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("yolos", ("YolosImageProcessor", "YolosImageProcessorFast")),
             ("zoedepth", ("ZoeDepthImageProcessor",)),
@@ -326,7 +328,7 @@ def _warning_fast_image_processor_available(fast_class):
     )
 
 
-@requires(backends=("vision", "torchvision"))
+@requires(backends=("vision",))
 class AutoImageProcessor:
     r"""
     This is a generic image processor class that will be instantiated as one of the image processor classes of the

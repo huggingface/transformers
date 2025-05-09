@@ -26,21 +26,11 @@ from torch.nn import CrossEntropyLoss, SmoothL1Loss
 
 from ...activations import ACT2FN, gelu
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_lxmert import LxmertConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "unc-nlp/lxmert-base-uncased"
-_CONFIG_FOR_DOC = "LxmertConfig"
 
 
 class GeLU(nn.Module):
@@ -764,12 +754,8 @@ class LxmertPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+@auto_docstring
 class LxmertPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = LxmertConfig
     load_tf_weights = load_tf_weights_in_lxmert
     base_model_prefix = "lxmert"
@@ -794,90 +780,7 @@ class LxmertPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-LXMERT_START_DOCSTRING = r"""
-
-    The LXMERT model was proposed in [LXMERT: Learning Cross-Modality Encoder Representations from
-    Transformers](https://arxiv.org/abs/1908.07490) by Hao Tan and Mohit Bansal. It's a vision and language transformer
-    model, pretrained on a variety of multi-modal datasets comprising of GQA, VQAv2.0, MSCOCO captions, and Visual
-    genome, using a combination of masked language modeling, region of interest feature regression, cross entropy loss
-    for question answering attribute prediction, and object tag prediction.
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`LxmertConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-LXMERT_INPUTS_DOCSTRING = r"""
-
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        visual_feats (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
-            This input represents visual features. They ROI pooled object features from bounding boxes using a
-            faster-RCNN model)
-
-            These are currently not provided by the transformers library.
-        visual_pos (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_pos_dim)`):
-            This input represents spacial features corresponding to their relative (via index) visual features. The
-            pre-trained LXMERT model expects these spacial features to be normalized bounding boxes on a scale of 0 to
-            1.
-
-            These are currently not provided by the transformers library.
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        visual_attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare Lxmert Model transformer outputting raw hidden-states without any specific head on top.",
-    LXMERT_START_DOCSTRING,
-)
+@auto_docstring
 class LxmertModel(LxmertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -893,12 +796,7 @@ class LxmertModel(LxmertPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings.word_embeddings = new_embeddings
 
-    @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=LxmertModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -912,6 +810,26 @@ class LxmertModel(LxmertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[LxmertModelOutput, Tuple[torch.FloatTensor]]:
+        r"""
+        visual_feats (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
+            This input represents visual features. They ROI pooled object features from bounding boxes using a
+            faster-RCNN model)
+
+            These are currently not provided by the transformers library.
+        visual_pos (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_pos_dim)`):
+            This input represents spatial features corresponding to their relative (via index) visual features. The
+            pre-trained LXMERT model expects these spatial features to be normalized bounding boxes on a scale of 0 to
+            1.
+
+            These are currently not provided by the transformers library.
+        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1012,10 +930,7 @@ class LxmertModel(LxmertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """Lxmert Model with a specified pretraining head on top.""",
-    LXMERT_START_DOCSTRING,
-)
+@auto_docstring
 class LxmertForPreTraining(LxmertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight"]
 
@@ -1166,8 +1081,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
         return new_qa_logit_layer
 
-    @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=LxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1187,6 +1101,24 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         **kwargs,
     ) -> Union[LxmertForPreTrainingOutput, Tuple[torch.FloatTensor]]:
         r"""
+        visual_feats (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
+            This input represents visual features. They ROI pooled object features from bounding boxes using a
+            faster-RCNN model)
+
+            These are currently not provided by the transformers library.
+        visual_pos (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_pos_dim)`):
+            This input represents spatial features corresponding to their relative (via index) visual features. The
+            pre-trained LXMERT model expects these spatial features to be normalized bounding boxes on a scale of 0 to
+            1.
+
+            These are currently not provided by the transformers library.
+        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
@@ -1203,8 +1135,6 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             - 1 indicates that the sentence does match the image.
         ans (`Torch.Tensor` of shape `(batch_size)`, *optional*):
             a one hot representation hof the correct answer *optional*
-
-        Returns:
         """
 
         if "masked_lm_labels" in kwargs:
@@ -1301,9 +1231,10 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """Lxmert Model with a visual-answering head on top for downstream QA tasks""",
-    LXMERT_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    Lxmert Model with a visual-answering head on top for downstream QA tasks
+    """
 )
 class LxmertForQuestionAnswering(LxmertPreTrainedModel):
     def __init__(self, config):
@@ -1397,12 +1328,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
 
         return new_qa_logit_layer
 
-    @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=LxmertForQuestionAnsweringOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1418,6 +1344,24 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[LxmertForQuestionAnsweringOutput, Tuple[torch.FloatTensor]]:
         r"""
+        visual_feats (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
+            This input represents visual features. They ROI pooled object features from bounding boxes using a
+            faster-RCNN model)
+
+            These are currently not provided by the transformers library.
+        visual_pos (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_pos_dim)`):
+            This input represents spatial features corresponding to their relative (via index) visual features. The
+            pre-trained LXMERT model expects these spatial features to be normalized bounding boxes on a scale of 0 to
+            1.
+
+            These are currently not provided by the transformers library.
+        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
         labels (`Torch.Tensor` of shape `(batch_size)`, *optional*):
             A one-hot representation of the correct answer
         """

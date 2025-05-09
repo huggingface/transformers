@@ -149,7 +149,7 @@ _deps = [
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
-    "pytest>=7.2.0,<8.0.0",
+    "pytest>=7.2.0",
     "pytest-asyncio",
     "pytest-rerunfailures",
     "pytest-timeout",
@@ -163,6 +163,9 @@ _deps = [
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff==0.11.2",
+    # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
+    # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
+    # `Trainer` tests (see references to `run_translation.py`).
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "safetensors>=0.4.3",
@@ -186,7 +189,7 @@ _deps = [
     "tiktoken",
     "timm<=1.0.11",
     "tokenizers>=0.21,<0.22",
-    "torch>=2.1",
+    "torch>=2.1,<2.7",  # Installing torch 2.7 results in slower compiled LLMs. Pinned while we investigate.
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -344,7 +347,6 @@ extras["testing"] = (
         "evaluate",
         "pytest-timeout",
         "ruff",
-        "sacrebleu",
         "rouge-score",
         "nltk",
         "GitPython",
@@ -354,6 +356,7 @@ extras["testing"] = (
         "tensorboard",
         "pydantic",
         "sentencepiece",
+        "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
     )
     + extras["retrieval"]
     + extras["modelcreation"]
@@ -463,7 +466,12 @@ setup(
     package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx", "py.typed"]},
     zip_safe=False,
     extras_require=extras,
-    entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
+    entry_points={
+        "console_scripts": [
+            "transformers=transformers.commands.transformers_cli:main",
+            "transformers-cli=transformers.commands.transformers_cli:main_cli",
+        ]
+    },
     python_requires=">=3.9.0",
     install_requires=list(install_requires),
     classifiers=[
@@ -476,6 +484,9 @@ setup(
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},

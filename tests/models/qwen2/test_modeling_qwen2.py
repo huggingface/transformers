@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils.import_utils import is_torch_greater_or_equal
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -303,10 +304,6 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip(reason="Qwen2 uses GQA on all models so the KV cache is a non standard format")
-    def test_past_key_values_format(self):
-        pass
-
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
@@ -494,7 +491,8 @@ class Qwen2IntegrationTest(unittest.TestCase):
         max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
 
         # Static Cache + export
-        exported_program = convert_and_export_with_cache(model)
+        strict = is_torch_greater_or_equal("2.7.0")  # Due to https://github.com/pytorch/pytorch/issues/150994
+        exported_program = convert_and_export_with_cache(model, strict=strict)
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )

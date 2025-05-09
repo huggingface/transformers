@@ -1055,7 +1055,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             from_block_size: int. size of block in from sequence.
             to_block_size: int. size of block in to sequence.
             num_heads: int. total number of heads.
-            plan_from_length: list. plan from length where num_random_blocks are choosen from.
+            plan_from_length: list. plan from length where num_random_blocks are chosen from.
             plan_num_rand_blocks: list. number of rand blocks within the plan.
             indices_prng_key: jax.random.PRNGKey. PRNG key that is used to perform random jax operations.
             deterministic: bool. When False random attention will be used.
@@ -1104,7 +1104,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             if plan_idx > 0:
                 # set the row for all from_blocks starting from 0 to
                 # plan_block_length[plan_idx-1]
-                # column indx start fromm plan_block_length[plan_idx-1] and ends at
+                # column indx start from plan_block_length[plan_idx-1] and ends at
                 # plan_block_length[plan_idx]
                 if plan_num_rand_blocks[plan_idx] > 0:
                     rnd_r_cnt = int(sum(plan_num_rand_blocks[:plan_idx]))
@@ -1725,14 +1725,14 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: Optional[jax.random.PRNGKey] = None,
         indices_rng: Optional[jax.random.PRNGKey] = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        past_key_values: dict = None,
+        past_key_values: Optional[dict] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2442,7 +2442,7 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
         position_ids=None,
         head_mask=None,
         question_lengths=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: Optional[jax.random.PRNGKey] = None,
         indices_rng: Optional[jax.random.PRNGKey] = None,
         train: bool = False,
