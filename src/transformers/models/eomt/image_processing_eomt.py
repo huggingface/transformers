@@ -372,7 +372,7 @@ class EoMTImageProcessor(BaseImageProcessor):
         output_logits = []
 
         for i, (sums, counts) in enumerate(zip(logit_sums, logit_counts)):
-            combined = sums / counts.clamp(min=1)  # avoid division by zero
+            combined = sums / counts.clamp(min=1)
             combined = F.interpolate(combined[None, ...], size=original_image_sizes[i], mode="bilinear")[0]
             output_logits.append(combined)
 
@@ -389,7 +389,7 @@ class EoMTImageProcessor(BaseImageProcessor):
 
         return output_logits
 
-    def postprocess_semnatic_segmentation(self, outputs, origins, original_image_sizes):
+    def postprocess_semantic_segmentation(self, outputs, origins, original_image_sizes):
         masks_queries_logits = torch.tensor(outputs[0])  # [batch_size, num_queries, height, width]
         class_queries_logits = torch.tensor(outputs[1])  # [batch_size, num_queries, num_classes+1]
 

@@ -28,14 +28,8 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...file_utils import requires_backends
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import (
-    can_return_tuple,
-    is_accelerate_available,
-    is_scipy_available,
-    logging,
-)
+from ...utils import is_accelerate_available, is_scipy_available, logging
 from .configuration_eomt import EoMTConfig
 
 
@@ -46,6 +40,8 @@ if is_accelerate_available():
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 logger = logging.get_logger(__name__)
+
+# Add copied comment here for all the funcitons
 
 
 # Adapted from https://github.com/facebookresearch/detectron2/blob/main/projects/PointRend/point_rend/point_features.py
@@ -671,18 +667,6 @@ class EoMTEmbeddings(nn.Module):
         return embeddings
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -693,17 +677,21 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
 
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
+    # Normalize the attention scores to probabilities.
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+
+    # This is actually dropping out entire tokens to attend to, which might
+    # seem a bit unusual, but is taken from the original Transformer paper.
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
+
+    # Mask heads if we want to
+    if attention_mask is not None:
+        attn_weights = attn_weights * attention_mask
+
+    attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
@@ -725,7 +713,6 @@ class EoMTAttention(nn.Module):
                 f" {self.num_heads})."
             )
 
-        self.num_key_value_groups = 1
         self.scaling = self.head_dim**-0.5
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
@@ -866,25 +853,26 @@ class EoMTLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        # Later use Modular as its a common pattern.
+        normalized_hidden_states = self.norm1(hidden_states)
         self_attention_outputs = self.attention(
-            self.norm1(hidden_states),  # In EoMT, layernorm is applied before self-attention
+            normalized_hidden_states,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
         attention_output = self.layer_scale1(attention_output)
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
-        # first residual connection
         hidden_states = self.drop_path(attention_output) + hidden_states
 
-        # In EoMT, layernorm is also applied after self-attention
         layer_output = self.norm2(hidden_states)
         layer_output = self.mlp(layer_output)
         layer_output = self.layer_scale2(layer_output)
 
-        # second residual connection
         layer_output = self.drop_path(layer_output) + hidden_states
 
         outputs = (layer_output,) + outputs
@@ -940,56 +928,6 @@ class EoMTScaleBlock(nn.Module):
         return hidden_states
 
 
-class EoMTEncoder(nn.Module):
-    def __init__(self, config: EoMTConfig) -> None:
-        super().__init__()
-        self.config = config
-        self.query = nn.Embedding(config.num_queries, config.hidden_size)
-        self.layers = nn.ModuleList([EoMTLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    @can_return_tuple
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-    ) -> Union[tuple, BaseModelOutput]:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        for i, layer_module in enumerate(self.layers):
-            if i == len(self.layers) - self.config.num_blocks:
-                query = self.query.weight[None, :, :].expand(hidden_states.shape[0], -1, -1)
-                hidden_states = torch.cat((query, hidden_states), dim=1)
-
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, output_attentions)
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
-
-
 class MaskHead(nn.Module):
     def __init__(self, config: EoMTConfig):
         super().__init__()
@@ -1042,72 +980,40 @@ class EoMTPreTrainedModel(PreTrainedModel):
             module.lambda1.data.fill_(self.config.layerscale_value)
 
 
-class EoMTModel(EoMTPreTrainedModel):
-    def __init__(self, config: EoMTConfig):
-        super().__init__(config)
+# ToDo: How to add gradient checkpointing to the model?
+class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
+    def __init__(self, config: EoMTConfig) -> None:
+        super().__init__()
         self.config = config
-
+        self.attention_mask_prob = config.attention_mask_prob
+        self.num_hidden_layers = config.num_hidden_layers
         self.embeddings = EoMTEmbeddings(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.encoder = EoMTEncoder(config)
+
+        self.query = nn.Embedding(config.num_queries, config.hidden_size)
+        self.layers = nn.ModuleList([EoMTLayer(config) for _ in range(config.num_hidden_layers)])
+
         self.upscale_block = EoMTScaleBlock(config)
         self.mask_head = MaskHead(config)
 
-        # Initialize weights and apply final processing
-        self.post_init()
+        self.class_predictor = nn.Linear(config.hidden_dim, config.num_labels + 1)
 
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
-
-    def forward(
-        self,
-        pixel_values: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        embedding_output = self.embeddings(pixel_values)
-
-        encoder_outputs = self.encoder(
-            embedding_output,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-        sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
-
-        return BaseModelOutput(
-            last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-
-class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
-    main_input_name = "pixel_values"
-
-    def __init__(self, config: EoMTConfig):
-        super().__init__(config)
-        self.config = config
-        self.model = EoMTModel(config)
-
+        self.grid_size = self.embeddings.patch_embeddings.grid_size
         self.weight_dict: Dict[str, float] = {
             "loss_cross_entropy": config.class_weight,
             "loss_mask": config.mask_weight,
             "loss_dice": config.dice_weight,
         }
 
-        self.class_predictor = nn.Linear(config.hidden_dim, config.num_labels + 1)
-
         self.criterion = Mask2FormerLoss(config=config, weight_dict=self.weight_dict)
+
+        self.register_buffer("attn_mask_probs", torch.ones(config.num_blocks))
+
+        # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embeddings.patch_embeddings
 
     def get_loss_dict(
         self,
@@ -1117,6 +1023,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         class_labels: Tensor,
         auxiliary_predictions: Dict[str, Tensor],
     ) -> Dict[str, Tensor]:
+        """Perform weighted loss computation."""
         loss_dict: Dict[str, Tensor] = self.criterion(
             masks_queries_logits=masks_queries_logits,
             class_queries_logits=class_queries_logits,
@@ -1125,7 +1032,6 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
             auxiliary_predictions=auxiliary_predictions,
         )
 
-        # weight each loss by `self.weight_dict[<LOSS_NAME>]` including auxiliary losses
         for key, weight in self.weight_dict.items():
             for loss_key, loss in loss_dict.items():
                 if key in loss_key:
@@ -1136,48 +1042,113 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
     def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
 
-    # A better place to add this func
     def _predict(self, logits: torch.Tensor):
         query_tokens = logits[:, : self.config.num_queries, :]
         class_logits = self.class_predictor(query_tokens)
 
-        prefix_tokens = logits[:, self.config.num_queries + self.model.embeddings.num_prefix_tokens :, :]
+        prefix_tokens = logits[:, self.config.num_queries + self.embeddings.num_prefix_tokens :, :]
         prefix_tokens = prefix_tokens.transpose(1, 2)
 
-        grid_size = self.model.embeddings.patch_embeddings.grid_size
-        prefix_tokens = prefix_tokens.reshape(prefix_tokens.shape[0], -1, *grid_size)
+        prefix_tokens = prefix_tokens.reshape(prefix_tokens.shape[0], -1, *self.grid_size)
 
-        query_tokens = self.model.mask_head(query_tokens)
-        prefix_tokens = self.model.upscale_block(prefix_tokens)
+        query_tokens = self.mask_head(query_tokens)
+        prefix_tokens = self.upscale_block(prefix_tokens)
 
         mask_logits = torch.einsum("bqc, bchw -> bqhw", query_tokens, prefix_tokens)
 
         return mask_logits, class_logits
+
+    @staticmethod
+    def _disable_attention_mask(attn_mask, prob, num_query_tokens, encoder_start_tokens, device):
+        if prob < 1:
+            # Generate random queries to disable based on the probs
+            random_queries = torch.rand(attn_mask.shape[0], num_query_tokens, device=device) > prob
+
+            # Disable attention to the query tokens, considering the prefix tokens
+            attn_mask[:, :, :num_query_tokens, encoder_start_tokens:][random_queries] = 1
+
+        return attn_mask
 
     def forward(
         self,
         pixel_values: Tensor,
         mask_labels: Optional[List[Tensor]] = None,
         class_labels: Optional[List[Tensor]] = None,
-        pixel_mask: Optional[Tensor] = None,
         output_hidden_states: Optional[bool] = None,
-        output_auxiliary_logits: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        masks_queries_logits_per_layer = ()
+        class_queries_logits_per_layer = ()
 
-        outputs = self.model(
-            pixel_values=pixel_values,
-            output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions,
-        )
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
 
-        masks_queries_logits, class_queries_logits = self._predict(outputs.last_hidden_state)
+        hidden_states = self.embeddings(pixel_values)
+
+        for idx, layer_module in enumerate(self.layers):
+            if idx == self.num_hidden_layers - self.config.num_blocks:
+                query = self.query.weight[None, :, :].expand(hidden_states.shape[0], -1, -1)
+                hidden_states = torch.cat((query, hidden_states), dim=1)
+
+            if self.training and idx >= self.num_hidden_layers - self.config.num_blocks:
+                hidden_states = self.layernorm(hidden_states)
+                masks_queries_logits, class_queries_logits = self._predict(hidden_states)
+
+                masks_queries_logits_per_layer.append(masks_queries_logits)
+                class_queries_logits_per_layer.append(class_queries_logits)
+
+                attention_mask = torch.ones(
+                    hidden_states.shape[0],
+                    hidden_states.shape[1],
+                    hidden_states.shape[1],
+                    device=hidden_states.device,
+                    dtype=torch.bool,
+                )
+
+                interpolated_logits = F.interpolate(masks_queries_logits, size=self.grid_size, mode="bilinear")
+                interpolated_logits = interpolated_logits.view(
+                    interpolated_logits.size(0), interpolated_logits.size(1), -1
+                )
+
+                num_query_tokens = self.config.num_queries
+                encoder_start_tokens = num_query_tokens + self.embeddings.num_prefix_tokens
+
+                # Set attention mask for queries to focus on encoder tokens based on interpolated logits
+                attention_mask[:, :num_query_tokens, encoder_start_tokens:] = interpolated_logits > 0
+
+                # Disable attention mask for random query tokens.
+                attention_mask = self._disable_attention_mask(
+                    attention_mask,
+                    prob=self.attn_mask_probs[idx - self.num_hidden_layers + self.config.num_blocks],
+                    num_queries=num_query_tokens,
+                    encoder_start_tokens=encoder_start_tokens,
+                    device=attention_mask.device,
+                )
+
+            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
+            hidden_states = layer_outputs[0]
+
+        sequence_output = self.layernorm(hidden_states)
+
+        masks_queries_logits, class_queries_logits = self._predict(sequence_output)
+        masks_queries_logits_per_layer.append(masks_queries_logits)
+        class_queries_logits_per_layer.append(class_queries_logits)
+
+        loss = None
+        if mask_labels is not None and class_labels is not None:
+            loss = 0.0
+            for masks_queries_logits, class_queries_logits in zip(
+                masks_queries_logits_per_layer, class_queries_logits_per_layer
+            ):
+                loss_dict = self.get_loss_dict(
+                    masks_queries_logits=masks_queries_logits,
+                    class_queries_logits=class_queries_logits,
+                    mask_labels=mask_labels,
+                    class_labels=class_labels,
+                )
+                loss += self.get_loss(loss_dict)
 
         return masks_queries_logits, class_queries_logits
 
 
-__all__ = ["EoMTModel", "EoMTForUniversalSegmentation"]
+__all__ = ["EoMTForUniversalSegmentation"]
