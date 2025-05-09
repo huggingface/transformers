@@ -16,14 +16,8 @@
 
 from typing import List, Optional, Union
 
-from ...image_processing_utils import (
-    BatchFeature,
-    ChannelDimension,
-    get_image_size,
-)
+from ...image_processing_utils import BatchFeature, ChannelDimension, get_image_size
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
@@ -33,7 +27,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -51,20 +45,18 @@ if is_torchvision_available():
 
 
 class Swin2SRFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    do_pad (`bool`, *optional*, defaults to `True`):
+        Whether to pad the image to make the height and width divisible by `window_size`.
+    pad_size (`int`, *optional*, defaults to `8`):
+        The size of the sliding window for the local attention.
+    """
+
     do_pad: Optional[bool]
     pad_size: Optional[int]
 
 
-@add_start_docstrings(
-    "Constructs a fast Swin2SR image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image to make the height and width divisible by `window_size`.
-        pad_size (`int`, *optional*, defaults to `8`):
-            The size of the sliding window for the local attention.
-    """,
-)
+@auto_docstring
 class Swin2SRImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     rescale_factor = 1 / 255
@@ -75,15 +67,6 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Swin2SRFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            do_pad (`bool`, *optional*, defaults to `True`):
-                Whether to pad the image to make the height and width divisible by `window_size`.
-            pad_size (`int`, *optional*, defaults to `8`):
-                The size of the sliding window for the local attention.
-        """,
-    )
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Swin2SRFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
