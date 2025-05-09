@@ -1,6 +1,6 @@
 import warnings
 from collections import UserDict
-from typing import List, Union
+from typing import Any, Dict, List, Union, overload
 
 from ..utils import (
     add_end_docstrings,
@@ -74,7 +74,22 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             else MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES
         )
 
-    def __call__(self, image: Union[str, List[str], "Image", List["Image"]] = None, **kwargs):
+    @overload
+    def __call__(
+        self, image: Union[str, "Image.Image"], candidate_labels: List[str], **kwargs: Any
+    ) -> List[Dict[str, Any]]: ...
+
+    @overload
+    def __call__(
+        self, image: Union[List[str], List["Image.Image"]], candidate_labels: List[str], **kwargs: Any
+    ) -> List[List[Dict[str, Any]]]: ...
+
+    def __call__(
+        self,
+        image: Union[str, List[str], "Image.Image", List["Image.Image"]],
+        candidate_labels: List[str],
+        **kwargs: Any,
+    ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
         """
         Assign labels to the image(s) passed as inputs.
 
@@ -110,7 +125,7 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             image = kwargs.pop("images")
         if image is None:
             raise ValueError("Cannot call the zero-shot-image-classification pipeline without an images argument!")
-        return super().__call__(image, **kwargs)
+        return super().__call__(image, candidate_labels=candidate_labels, **kwargs)
 
     def _sanitize_parameters(self, tokenizer_kwargs=None, **kwargs):
         preprocess_params = {}
