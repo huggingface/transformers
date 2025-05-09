@@ -33,21 +33,11 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_funnel import FunnelConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "FunnelConfig"
-_CHECKPOINT_FOR_DOC = "funnel-transformer/small"
 
 
 INF = 1e6
@@ -768,12 +758,8 @@ class FunnelDiscriminatorPredictions(nn.Module):
         return logits
 
 
+@auto_docstring
 class FunnelPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = FunnelConfig
     load_tf_weights = load_tf_weights_in_funnel
     base_model_prefix = "funnel"
@@ -846,70 +832,11 @@ class FunnelForPreTrainingOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-FUNNEL_START_DOCSTRING = r"""
-
-    The Funnel Transformer model was proposed in [Funnel-Transformer: Filtering out Sequential Redundancy for Efficient
-    Language Processing](https://arxiv.org/abs/2006.03236) by Zihang Dai, Guokun Lai, Yiming Yang, Quoc V. Le.
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`FunnelConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-FUNNEL_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     The base Funnel Transformer Model transformer outputting raw hidden-states without upsampling head (also called
     decoder) or any task-specific head on top.
-    """,
-    FUNNEL_START_DOCSTRING,
+    """
 )
 class FunnelBaseModel(FunnelPreTrainedModel):
     def __init__(self, config: FunnelConfig) -> None:
@@ -927,12 +854,7 @@ class FunnelBaseModel(FunnelPreTrainedModel):
     def set_input_embeddings(self, new_embeddings: nn.Embedding) -> None:
         self.embeddings.word_embeddings = new_embeddings
 
-    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint="funnel-transformer/small-base",
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -983,10 +905,7 @@ class FunnelBaseModel(FunnelPreTrainedModel):
         return encoder_outputs
 
 
-@add_start_docstrings(
-    "The bare Funnel Transformer Model transformer outputting raw hidden-states without any specific head on top.",
-    FUNNEL_START_DOCSTRING,
-)
+@auto_docstring
 class FunnelModel(FunnelPreTrainedModel):
     def __init__(self, config: FunnelConfig) -> None:
         super().__init__(config)
@@ -1004,12 +923,7 @@ class FunnelModel(FunnelPreTrainedModel):
     def set_input_embeddings(self, new_embeddings: nn.Embedding) -> None:
         self.embeddings.word_embeddings = new_embeddings
 
-    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1085,15 +999,12 @@ class FunnelModel(FunnelPreTrainedModel):
         )
 
 
-add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Funnel Transformer model with a binary classification head on top as used during pretraining for identifying
     generated tokens.
-    """,
-    FUNNEL_START_DOCSTRING,
+    """
 )
-
-
 class FunnelForPreTraining(FunnelPreTrainedModel):
     def __init__(self, config: FunnelConfig) -> None:
         super().__init__(config)
@@ -1103,8 +1014,7 @@ class FunnelForPreTraining(FunnelPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=FunnelForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1123,8 +1033,6 @@ class FunnelForPreTraining(FunnelPreTrainedModel):
 
             - 0 indicates the token is an original token,
             - 1 indicates the token was replaced.
-
-        Returns:
 
         Examples:
 
@@ -1176,7 +1084,7 @@ class FunnelForPreTraining(FunnelPreTrainedModel):
         )
 
 
-@add_start_docstrings("""Funnel Transformer Model with a `language modeling` head on top.""", FUNNEL_START_DOCSTRING)
+@auto_docstring
 class FunnelForMaskedLM(FunnelPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1195,13 +1103,7 @@ class FunnelForMaskedLM(FunnelPreTrainedModel):
     def set_output_embeddings(self, new_embeddings: nn.Embedding) -> None:
         self.lm_head = new_embeddings
 
-    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        mask="<mask>",
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1251,12 +1153,11 @@ class FunnelForMaskedLM(FunnelPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Funnel Transformer Model with a sequence classification/regression head on top (two linear layer on top of the
     first timestep of the last hidden state) e.g. for GLUE tasks.
-    """,
-    FUNNEL_START_DOCSTRING,
+    """
 )
 class FunnelForSequenceClassification(FunnelPreTrainedModel):
     def __init__(self, config: FunnelConfig) -> None:
@@ -1269,12 +1170,7 @@ class FunnelForSequenceClassification(FunnelPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint="funnel-transformer/small-base",
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1343,13 +1239,7 @@ class FunnelForSequenceClassification(FunnelPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    Funnel Transformer Model with a multiple choice classification head on top (two linear layer on top of the first
-    timestep of the last hidden state, and a softmax) e.g. for RocStories/SWAG tasks.
-    """,
-    FUNNEL_START_DOCSTRING,
-)
+@auto_docstring
 class FunnelForMultipleChoice(FunnelPreTrainedModel):
     def __init__(self, config: FunnelConfig) -> None:
         super().__init__(config)
@@ -1359,12 +1249,7 @@ class FunnelForMultipleChoice(FunnelPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint="funnel-transformer/small-base",
-        output_type=MultipleChoiceModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1426,13 +1311,7 @@ class FunnelForMultipleChoice(FunnelPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    Funnel Transformer Model with a token classification head on top (a linear layer on top of the hidden-states
-    output) e.g. for Named-Entity-Recognition (NER) tasks.
-    """,
-    FUNNEL_START_DOCSTRING,
-)
+@auto_docstring
 class FunnelForTokenClassification(FunnelPreTrainedModel):
     def __init__(self, config: FunnelConfig) -> None:
         super().__init__(config)
@@ -1445,12 +1324,7 @@ class FunnelForTokenClassification(FunnelPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1499,13 +1373,7 @@ class FunnelForTokenClassification(FunnelPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    Funnel Transformer Model with a span classification head on top for extractive question-answering tasks like SQuAD
-    (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    FUNNEL_START_DOCSTRING,
-)
+@auto_docstring
 class FunnelForQuestionAnswering(FunnelPreTrainedModel):
     def __init__(self, config: FunnelConfig) -> None:
         super().__init__(config)
@@ -1517,12 +1385,7 @@ class FunnelForQuestionAnswering(FunnelPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=QuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1535,16 +1398,6 @@ class FunnelForQuestionAnswering(FunnelPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.funnel(

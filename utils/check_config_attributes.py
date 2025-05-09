@@ -183,6 +183,22 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_loss_coefficient",
         "mask_loss_coefficient",
     ],
+    "DFineConfig": [
+        "eos_coefficient",
+        "focal_loss_alpha",
+        "focal_loss_gamma",
+        "matcher_alpha",
+        "matcher_bbox_cost",
+        "matcher_class_cost",
+        "matcher_gamma",
+        "matcher_giou_cost",
+        "use_focal_loss",
+        "weight_loss_bbox",
+        "weight_loss_giou",
+        "weight_loss_vfl",
+        "weight_loss_fgl",
+        "weight_loss_ddf",
+    ],
     "GroundingDinoConfig": [
         "bbox_cost",
         "bbox_loss_coefficient",
@@ -362,8 +378,8 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "rope_theta",
         "partial_rotary_factor",
         "pretraining_tp",
-        "boi_token_index",
-        "eoi_token_index",
+        "boi_token_id",
+        "eoi_token_id",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 
