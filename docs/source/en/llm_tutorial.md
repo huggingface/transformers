@@ -23,7 +23,7 @@ Text generation is the most popular application for large language models (LLMs)
 In Transformers, the [`~GenerationMixin.generate`] API handles text generation, and it is available for all models with generative capabilities. This guide will show you the basics of text generation with [`~GenerationMixin.generate`] and some common pitfalls to avoid.
 
 > [!TIP]
-> If you're looking to quickly experiment with a text generation model, have a try out out `chat` CLI ([reference](./conversations.md#transformers-cli))
+> You can also chat with a model directly from the command line. ([reference](./conversations.md#transformers-cli))
 > ```shell
 > transformers chat Qwen/Qwen2.5-0.5B-Instruct
 > ```
