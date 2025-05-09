@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-import copy
 import json
 import os
 import platform
@@ -43,7 +42,13 @@ if is_rich_available():
 if is_torch_available():
     import torch
 
-    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TextIteratorStreamer
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        BitsAndBytesConfig,
+        GenerationConfig,
+        TextIteratorStreamer,
+    )
 
 
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
@@ -81,9 +86,10 @@ HELP_STRING_MINIMAL = """
 **TRANSFORMERS CHAT INTERFACE**
 
 Chat interface to try out a model. Besides chatting with the model, here are some basic commands:
-- **help**: shows all available commands
-- **clear**: clears the current conversation and starts a new one
-- **exit**: closes the interface
+- **!help**: shows all available commands
+- **!status**: shows the current status of the model and generation settings
+- **!clear**: clears the current conversation and starts a new one
+- **!exit**: closes the interface
 """
 
 
@@ -93,16 +99,16 @@ HELP_STRING = f"""
 **TRANSFORMERS CHAT INTERFACE HELP**
 
 Full command list:
-- **help**: shows this help message
-- **clear**: clears the current conversation and starts a new one
-- **example {{NAME}}**: loads example named `{{NAME}}` from the config and uses it as the user input. Available example
+- **!help**: shows this help message
+- **!clear**: clears the current conversation and starts a new one
+- **!status**: shows the current status of the model and generation settings
+- **!example {{NAME}}**: loads example named `{{NAME}}` from the config and uses it as the user input. Available example
 names: `{"`, `".join(DEFAULT_EXAMPLES.keys())}`
-- **set {{SETTING_NAME}}={{SETTING_VALUE}};**: changes the system prompt or generation settings (multiple settings are
+- **!set {{SETTING_NAME}}={{SETTING_VALUE}};**: changes the system prompt or generation settings (multiple settings are
 separated by a ';'). Available settings: `{"`, `".join(SUPPORTED_GENERATION_KWARGS)}`
-- **reset**: same as clear but also resets the generation configs to defaults if they have been changed by **set**
-- **save {{SAVE_NAME}} (optional)**: saves the current chat and settings to file by default to
+- **!save {{SAVE_NAME}} (optional)**: saves the current chat and settings to file by default to
 `./chat_history/{{MODEL_NAME}}/chat_{{DATETIME}}.yaml` or `{{SAVE_NAME}}` if provided
-- **exit**: closes the interface
+- **!exit**: closes the interface
 """
 
 # format: (optional CLI arg being deprecated, its current default, corresponding `generate` flag)
@@ -193,6 +199,12 @@ class RichInterface:
     def print_help(self, minimal: bool = False):
         """Prints the help message to the console."""
         self._console.print(Markdown(HELP_STRING_MINIMAL if minimal else HELP_STRING))
+        self._console.print()
+
+    def print_status(self, model_name: str, generation_config: GenerationConfig):
+        """Prints the status of the model and generation settings to the console."""
+        self._console.print(f"[bold blue]Model: {model_name}\n")
+        self._console.print(f"[bold blue]{generation_config}")
         self._console.print()
 
 
@@ -311,9 +323,10 @@ class ChatCommand(BaseTransformersCLICommand):
             type=str,
             default=None,
             help=(
-                "Flags to pass to `generate`. See the docs for your selected model, `GenerationConfig` and `generate` "
-                "for more details. Usage: `arg_1=value_1 arg_2=value_2 ...`. Example: "
-                "`max_new_tokens=100 do_sample=False eos_token_id=[1,2] foo=bar`."
+                "Flags to pass to `generate`, using a space as a separator between flags. Accepts booleans, numbers, "
+                "and lists of integers, more advanced parameterization should be set through --generation-config. "
+                "See the docs for your selected model, `GenerationConfig`, and `generate` for available flags."
+                "Example: `transformers chat <model_repo> max_new_tokens=100 do_sample=False eos_token_id=[1,2]`."
             ),
             nargs="*",
         )
@@ -408,9 +421,11 @@ class ChatCommand(BaseTransformersCLICommand):
         if len(generate_flags) == 0:
             return {}
 
-        # Assumption: `generate_flags` is a list of strings that can be parsed into a json string if we:
+        # Assumption: `generate_flags` is a list of strings, each string being a `flag=value` pair, that can be parsed
+        # into a json string if we:
         # 1. Add quotes around each flag name
         generate_flags_as_dict = {'"' + flag.split("=")[0] + '"': flag.split("=")[1] for flag in generate_flags}
+
         # 2. Handle types:
         # 2. a. booleans should be lowercase, None should be null
         generate_flags_as_dict = {
@@ -424,24 +439,61 @@ class ChatCommand(BaseTransformersCLICommand):
 
         generate_flags_as_dict = {k: f'"{v}"' if not is_number(v) else v for k, v in generate_flags_as_dict.items()}
         # 2. c. [no processing needed] lists are lists of ints because `generate` doesn't take lists of strings :)
+        # We also mention in the help message that we only accept lists of ints for now.
 
         # 3. Join the the result into a comma separated string
         generate_flags_string = ", ".join([f"{k}: {v}" for k, v in generate_flags_as_dict.items()])
+
         # 4. Add the opening/closing brackets
         generate_flags_string = "{" + generate_flags_string + "}"
+
         # 5. Remove quotes around boolean/null and around lists
         generate_flags_string = generate_flags_string.replace('"null"', "null")
         generate_flags_string = generate_flags_string.replace('"true"', "true")
         generate_flags_string = generate_flags_string.replace('"false"', "false")
         generate_flags_string = generate_flags_string.replace('"[', "[")
         generate_flags_string = generate_flags_string.replace(']"', "]")
+
         # 6. Replace the `=` with `:`
         generate_flags_string = generate_flags_string.replace("=", ":")
+
         try:
-            processed_flags = json.loads(generate_flags_string)
+            processed_generate_flags = json.loads(generate_flags_string)
         except json.JSONDecodeError:
-            raise ValueError(f"Invalid generate flags: {generate_flags_string}")
-        return processed_flags
+            raise ValueError(
+                "Failed to convert `generate_flags` into a valid JSON object."
+                "\n`generate_flags` = {generate_flags}"
+                "\nConverted JSON string = {generate_flags_string}"
+            )
+        return processed_generate_flags
+
+    def get_generation_parameterization(self, args: ChatArguments, tokenizer: AutoTokenizer) -> GenerationConfig:
+        """
+        Returns a GenerationConfig object holding the generation parameters.
+        """
+        if args.generation_config is None:
+            generation_config = GenerationConfig()
+        else:
+            generation_config = GenerationConfig.from_pretrained(args.generation_config)
+
+        # Parse and apply `generate_flags`
+        parsed_generate_flags = self.parse_generate_flags(args.generate_flags)
+        generation_config.update(**parsed_generate_flags)
+
+        # Deprecated kwargs
+        pad_token_id, eos_token_ids = self.parse_eos_tokens(tokenizer, args.eos_tokens, args.eos_token_ids)
+        deprecated_kwargs = {
+            "do_sample": args.do_sample,
+            "num_beams": args.num_beams,
+            "temperature": args.temperature,
+            "top_k": args.top_k,
+            "top_p": args.top_p,
+            "repetition_penalty": args.repetition_penalty,
+            "pad_token_id": pad_token_id,
+            "eos_token_id": eos_token_ids,
+        }
+        generation_config.update(**deprecated_kwargs)
+        return generation_config
 
     @staticmethod
     def parse_settings(
@@ -589,6 +641,70 @@ class ChatCommand(BaseTransformersCLICommand):
         return model, tokenizer
 
     # -----------------------------------------------------------------------------------------------------------------
+    # User commands
+    def handle_non_exit_user_commands(
+        self,
+        user_input: str,
+        args: ChatArguments,
+        interface: RichInterface,
+        examples: dict[str, dict[str, str]],
+        generation_config: GenerationConfig,
+        chat: list[dict],
+    ) -> tuple[list[dict], GenerationConfig]:
+        """
+        Handles all user commands except for `!exit`. May update the chat history (e.g. reset it) or the
+        generation config (e.g. set a new flag).
+        """
+
+        if user_input == "!clear":
+            chat = self.clear_chat_history(args.system_prompt)
+            interface.clear()
+
+        elif user_input == "!help":
+            interface.print_help()
+
+        elif user_input.startswith("!save") and len(user_input.split()) < 2:
+            split_input = user_input.split()
+
+            if len(split_input) == 2:
+                filename = split_input[1]
+            else:
+                filename = None
+            filename = self.save_chat(chat, args, filename)
+            interface.print_color(text=f"Chat saved in {filename}!", color="green")
+
+        elif self.is_valid_setting_command(user_input):
+            args, success = self.parse_settings(user_input, args, interface)
+            if success:
+                chat = []
+                interface.clear()
+
+        elif user_input.startswith("!example") and len(user_input.split()) == 2:
+            example_name = user_input.split()[1]
+            if example_name in examples:
+                interface.clear()
+                chat = []
+                interface.print_user_message(examples[example_name]["text"])
+                user_input = examples[example_name]["text"]
+            else:
+                example_error = (
+                    f"Example {example_name} not found in list of available examples: {list(examples.keys())}."
+                )
+                interface.print_color(text=example_error, color="red")
+
+        elif user_input == "!status":
+            interface.print_status(
+                model_name=args.model_name_or_path_positional,
+                generation_config=generation_config,
+            )
+
+        else:
+            interface.print_color(text=f"'{user_input}' is not a valid command. Showing help message.", color="red")
+            interface.print_help()
+
+        return chat, generation_config
+
+    # -----------------------------------------------------------------------------------------------------------------
     # Main logic
     def run(self):
         if not is_rich_available():
@@ -597,14 +713,11 @@ class ChatCommand(BaseTransformersCLICommand):
             raise ImportError("You need to install torch to use the chat interface. (`pip install torch`)")
 
         args = self.args
-        args.generate_flags = self.parse_generate_flags(args.generate_flags)
         if args.examples_path is None:
             examples = DEFAULT_EXAMPLES
         else:
             with open(args.examples_path) as f:
                 examples = yaml.safe_load(f)
-
-        current_args = copy.deepcopy(args)
 
         if args.user is None:
             user = self.get_username()
@@ -613,12 +726,11 @@ class ChatCommand(BaseTransformersCLICommand):
 
         model, tokenizer = self.load_model_and_tokenizer(args)
         generation_streamer = TextIteratorStreamer(tokenizer, skip_special_tokens=True, skip_prompt=True)
-
-        pad_token_id, eos_token_ids = self.parse_eos_tokens(tokenizer, args.eos_tokens, args.eos_token_ids)
+        generation_config = self.get_generation_parameterization(args, tokenizer)
 
         interface = RichInterface(model_name=args.model_name_or_path_positional, user_name=user)
         interface.clear()
-        chat = self.clear_chat_history(current_args.system_prompt)
+        chat = self.clear_chat_history(args.system_prompt)
 
         # Starts the session with a minimal help message at the top, so that a user doesn't get stuck
         interface.print_help(minimal=True)
@@ -626,54 +738,20 @@ class ChatCommand(BaseTransformersCLICommand):
             try:
                 user_input = interface.input()
 
-                if user_input == "clear":
-                    chat = self.clear_chat_history(current_args.system_prompt)
-                    interface.clear()
-                    continue
-
-                if user_input == "help":
-                    interface.print_help()
-                    continue
-
-                if user_input == "exit":
-                    break
-
-                if user_input == "reset":
-                    interface.clear()
-                    current_args = copy.deepcopy(args)
-                    chat = self.clear_chat_history(current_args.system_prompt)
-                    continue
-
-                if user_input.startswith("save") and len(user_input.split()) < 2:
-                    split_input = user_input.split()
-
-                    if len(split_input) == 2:
-                        filename = split_input[1]
+                # User commands
+                if user_input.startswith("!"):
+                    # `!exit` is special, it breaks the loop
+                    if user_input == "!exit":
+                        break
                     else:
-                        filename = None
-                    filename = self.save_chat(chat, current_args, filename)
-                    interface.print_color(text=f"Chat saved in {filename}!", color="green")
-                    continue
-
-                if self.is_valid_setting_command(user_input):
-                    current_args, success = self.parse_settings(user_input, current_args, interface)
-                    if success:
-                        chat = []
-                        interface.clear()
-                        continue
-
-                if user_input.startswith("example") and len(user_input.split()) == 2:
-                    example_name = user_input.split()[1]
-                    if example_name in examples:
-                        interface.clear()
-                        chat = []
-                        interface.print_user_message(examples[example_name]["text"])
-                        user_input = examples[example_name]["text"]
-                    else:
-                        example_error = (
-                            f"Example {example_name} not found in list of available examples: {list(examples.keys())}."
+                        chat, generation_config = self.handle_non_exit_user_commands(
+                            user_input=user_input,
+                            args=args,
+                            interface=interface,
+                            examples=examples,
+                            generation_config=generation_config,
+                            chat=chat,
                         )
-                        interface.print_color(text=example_error, color="red")
                         continue
 
                 chat.append({"role": "user", "content": user_input})
@@ -686,15 +764,7 @@ class ChatCommand(BaseTransformersCLICommand):
                     "inputs": inputs,
                     "attention_mask": attention_mask,
                     "streamer": generation_streamer,
-                    "max_new_tokens": current_args.max_new_tokens,
-                    "do_sample": current_args.do_sample,
-                    "num_beams": current_args.num_beams,
-                    "temperature": current_args.temperature,
-                    "top_k": current_args.top_k,
-                    "top_p": current_args.top_p,
-                    "repetition_penalty": current_args.repetition_penalty,
-                    "pad_token_id": pad_token_id,
-                    "eos_token_id": eos_token_ids,
+                    "generation_config": generation_config,
                 }
 
                 thread = Thread(target=model.generate, kwargs=generation_kwargs)
