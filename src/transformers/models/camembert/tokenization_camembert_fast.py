@@ -175,7 +175,7 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not self.vocab_file or not os.path.isfile(self.vocab_file):
+        if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
                 "tokenizer."

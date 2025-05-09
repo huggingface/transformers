@@ -203,7 +203,7 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
 
     # Copied from transformers.models.xlnet.tokenization_xlnet_fast.XLNetTokenizerFast.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not self.vocab_file or not os.path.isfile(self.vocab_file):
+        if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
                 "tokenizer."
