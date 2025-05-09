@@ -38,7 +38,7 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
 
     Return:
         `torch.BoolTensor`. (`torch.BoolTensor` of shape `(batch_size, 1)`), where `True` indicates we stop generation
-            for a particular row, `True` indicates we should continue.
+            for a particular row, `False` indicates we should continue.
 
 """
 
