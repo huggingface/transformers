@@ -31,35 +31,15 @@ from transformers.models.llava_next_video.modeling_llava_next_video import (
     unpad_image,
 )
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    PILImageResampling,
-)
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
-from ...utils import add_start_docstrings, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 
 
 logger = logging.get_logger(__name__)
 
-LLAVA_ONEVISION_INPUTS_DOCSTRING = None
 
-
-@add_start_docstrings(
-    "Constructs a fast ConvNeXT image processor. Based on [`SiglipImageProcessor`] with incorporation of processing each video frame.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        image_grid_pinpoints (`List[List[int]]`, *optional*):
-            A list of possible resolutions to use for processing high resolution images. The best resolution is selected
-            based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
-            method. Not used for processing videos.
-        do_pad (`bool`, *optional*):
-            Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-            number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-    """,
-)
 class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
@@ -220,8 +200,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         return video_features
 
-    @can_return_tuple
-    @add_start_docstrings(LLAVA_ONEVISION_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -243,6 +221,21 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, LlavaOnevisionModelOutputWithPast]:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, frames, num_channels, image_size, image_size)):
+            The tensors corresponding to the input videos. Pixel values can be obtained using
+            [`LlavaNextVideoProcessor`]. See [`LlavaNextVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
+            [`LlavaNextVideoProcessor`] for processing videos.
+        image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
+            The sizes of the videos in the batch, being (height, width) for each frame in the video.
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
+            If `"full"`, the full vision features are used.
+        vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
+            Aspect ratio used when processong image features. The default value is "anyres_max_9".
+        """
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -347,7 +340,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
 class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGeneration):
     @can_return_tuple
-    @add_start_docstrings(LLAVA_ONEVISION_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -372,21 +365,22 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, LlavaOnevisionCausalLMOutputWithPast]:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-
-        Returns:
-            [`~LlavaOnevisionCausalLMOutputWithPast`] (if `return_dict=True`) or a `tuple`.
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, frames, num_channels, image_size, image_size)):
+            The tensors corresponding to the input videos. Pixel values can be obtained using
+            [`LlavaNextVideoProcessor`]. See [`LlavaNextVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
+            [`LlavaNextVideoProcessor`] for processing videos.
+        image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
+            The sizes of the videos in the batch, being (height, width) for each frame in the video.
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
+            If `"full"`, the full vision features are used.
+        vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
+            Aspect ratio used when processong image features. The default value is "anyres_max_9".
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 

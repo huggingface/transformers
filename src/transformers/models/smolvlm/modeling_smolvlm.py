@@ -33,44 +33,15 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    LossKwargs,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
 from .configuration_smolvlm import SmolVLMConfig, SmolVLMVisionConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "SmolVLMConfig"
 
-
-SMOLVLM_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`SmolVLMConfig`] or [`SmolVLMVisionConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare SmolVLM Model outputting raw hidden-states without any specific head on top.",
-    SMOLVLM_START_DOCSTRING,
-)
+@auto_docstring
 class SmolVLMPreTrainedModel(PreTrainedModel):
     config_class = SmolVLMConfig
     base_model_prefix = "model"
@@ -404,26 +375,10 @@ class SmolVLMEncoder(nn.Module):
         )
 
 
-SMOLVLM_VISION_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`SmolVLMVisionConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The SmolVLM Vision Transformer Model outputting raw image embedding.",
-    SMOLVLM_VISION_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The SmolVLM Vision Transformer Model outputting raw image embedding.
+    """
 )
 class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
     config_class = SmolVLMVisionConfig
@@ -578,9 +533,10 @@ class SmolVLMConnector(nn.Module):
         return image_hidden_states
 
 
-@add_start_docstrings(
-    """SmolVLM model consisting of a SIGLIP vision encoder and Llama3 language decoder""",
-    SMOLVLM_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    SmolVLM model consisting of a SIGLIP vision encoder and Llama3 language decoder
+    """
 )
 class SmolVLMModel(SmolVLMPreTrainedModel):
     """
@@ -677,6 +633,17 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         return merged_embeds
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="""
+        Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
+        the model have image padding -> (batch_size, max_num_images, 3, max_heights, max_widths) where
+        max_num_images is the maximum number of images among the batch_size samples in the batch.
+        Padding images are not needed beyond padding the pixel_values at the entrance of the model.
+        For efficiency, we only pass through the vision_model's forward the real images by
+        discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
+        image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
+        """
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -694,6 +661,12 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, SmolVLMBaseModelOutputWithPast]:
+        r"""
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -848,90 +821,12 @@ class SmolVLMCausalLMOutputWithPast(ModelOutput):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
-SMOLVLM_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
-
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-            The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
-            [`CLIPImageProcessor`] for processing images).
-        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
-            Mask to avoid performing attention on padding pixel indices.
-        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The hidden states of the image encoder after modality projection.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
-
-
-@add_start_docstrings(
-    """The SmolVLM Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top. """,
-    SMOLVLM_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The SmolVLM Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top.
+    """
 )
 class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
-    """
-    A subclass of Idefics3ForConditionalGeneration that uses SmolVLMModel
-    instead of the default Idefics3Model.
-    """
-
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -975,8 +870,7 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         self.lm_head = new_embeddings
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(SMOLVLM_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SmolVLMCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -997,13 +891,15 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, SmolVLMCausalLMOutputWithPast]:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `SmolVLMForConditionalGeneration`).
-                Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
-                computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        Returns:
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `SmolVLMForConditionalGeneration`).
+            Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
+            computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
