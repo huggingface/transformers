@@ -29,14 +29,7 @@ from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask,
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_torch_flex_attn_available,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_mimi import MimiConfig
 
 
@@ -50,10 +43,6 @@ if is_torch_flex_attn_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-# General docstring
-_CONFIG_FOR_DOC = "MimiConfig"
 
 
 @dataclass
@@ -1437,12 +1426,8 @@ class MimiSplitResidualVectorQuantizer(nn.Module):
         return quantized_out
 
 
+@auto_docstring
 class MimiPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = MimiConfig
     base_model_prefix = "mimi"
     main_input_name = "input_values"
@@ -1472,58 +1457,10 @@ class MimiPreTrainedModel(PreTrainedModel):
             module.scale.data.fill_(self.config.layer_scale_initial_scale)
 
 
-MIMI_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`MimiConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-MIMI_INPUTS_DOCSTRING = r"""
-    Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
-            Raw audio input converted to Float.
-        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
-            for *masked*.
-        num_quantizers (`int`, *optional*):
-            Number of quantizers (i.e codebooks) to use. By default, all quantizers are used.
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-            Discret code embeddings computed using `model.encode`.
-        encoder_past_key_values (`Cache`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
-            This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-            The model will output the same cache format that is fed as input.
-
-            If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
-            have their past key value states given to this model).
-        decoder_past_key_values (`Cache`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
-            This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-            The model will output the same cache format that is fed as input.
-
-            If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
-            have their past key value states given to this model).
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The Mimi neural audio codec model.",
-    MIMI_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The Mimi neural audio codec model.
+    """
 )
 class MimiModel(MimiPreTrainedModel):
     def __init__(self, config: MimiConfig):
@@ -1766,8 +1703,7 @@ class MimiModel(MimiPreTrainedModel):
             )
         return MimiDecoderOutput(audio_values, decoder_past_key_values)
 
-    @add_start_docstrings_to_model_forward(MIMI_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MimiOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor,
@@ -1779,7 +1715,31 @@ class MimiModel(MimiPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], MimiOutput]:
         r"""
-        Returns:
+        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
+            Raw audio input converted to Float.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
+            for *masked*.
+        num_quantizers (`int`, *optional*):
+            Number of quantizers (i.e codebooks) to use. By default, all quantizers are used.
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
+            Discret code embeddings computed using `model.encode`.
+        encoder_past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
+            This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+            The model will output the same cache format that is fed as input.
+
+            If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
+            have their past key value states given to this model).
+        decoder_past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
+            This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+            The model will output the same cache format that is fed as input.
+
+            If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
+            have their past key value states given to this model).
 
         Examples:
 

@@ -21,6 +21,17 @@ from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEME
 from packaging import version
 
 from .. import __version__
+from .args_doc import (
+    ClassAttrs,
+    ClassDocstring,
+    ImageProcessorArgs,
+    ModelArgs,
+    auto_class_docstring,
+    auto_docstring,
+    parse_docstring,
+    set_min_indent,
+    source_args_doc,
+)
 from .backbone_utils import BackboneConfigMixin, BackboneMixin
 from .chat_template_utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 from .constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
