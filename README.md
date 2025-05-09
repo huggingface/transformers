@@ -2,7 +2,7 @@
 
 # Transformers
 
-[![Build PR Documentation](https://github.com/nodoubtz/transformers/actions/workflows/build_pr_documentation.yml/badge.svg)](https://github.com/nodoubtz/transformers/actions/workflows/build_pr_documentation.yml)
+[![Self-hosted runner (nightly-past-ci-caller)](https://github.com/nodoubtz/transformers/actions/workflows/self-nightly-past-ci-caller.yml/badge.svg)](https://github.com/nodoubtz/transformers/actions/workflows/self-nightly-past-ci-caller.yml)
 
 Transformers is a powerful library designed for natural language processing (NLP) tasks. It provides pre-trained models and tools to fine-tune and deploy state-of-the-art transformer-based architectures.
 
