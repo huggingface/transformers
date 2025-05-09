@@ -49,10 +49,6 @@ if is_torch_available():
     )
 
 
-if is_bitsandbytes_available():
-    pass
-
-
 class Mistral3VisionText2TextModelTester:
     def __init__(
         self,
