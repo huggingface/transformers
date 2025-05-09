@@ -17,15 +17,9 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
 
 from ...utils import logging
-from ..llama.modeling_llama import (
-    LlamaAttention,
-    LlamaForCausalLM,
-    LlamaForSequenceClassification,
-    LlamaForTokenClassification,
-)
+from ..llama.modeling_llama import LlamaAttention
 from ..phi3.modeling_phi3 import Phi3MLP
 from .configuration_glm import GlmConfig
 
@@ -94,22 +88,12 @@ class GlmAttention(LlamaAttention):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
 
-class GlmForCausalLM(LlamaForCausalLM):
+class GlmModel(LlamaModel):
     pass
 
-
-class GlmForSequenceClassification(LlamaForSequenceClassification):
-    pass
-
-
-class GlmForTokenClassification(LlamaForTokenClassification):
-    pass
 
 
 __all__ = [
     "GlmPreTrainedModel",  # noqa: F822
     "GlmModel",  # noqa: F822
-    "GlmForCausalLM",
-    "GlmForSequenceClassification",
-    "GlmForTokenClassification",
 ]

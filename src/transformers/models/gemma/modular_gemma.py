@@ -26,9 +26,6 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 from ..llama.modeling_llama import (
-    LlamaForCausalLM,
-    LlamaForSequenceClassification,
-    LlamaForTokenClassification,
     LlamaMLP,
     LlamaModel,
 )
@@ -462,43 +459,9 @@ class GemmaModel(LlamaModel):
             attentions=all_self_attns,
         )
 
-
-class GemmaForCausalLM(LlamaForCausalLM):
-    def forward(**super_kwargs):
-        r"""
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, GemmaForCausalLM
-
-        >>> model = GemmaForCausalLM.from_pretrained("google/gemma-7b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-7b")
-
-        >>> prompt = "What is your favorite condiment?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "What is your favorite condiment?"
-        ```"""
-        return super().forward(**super_kwargs)
-
-
-class GemmaForSequenceClassification(LlamaForSequenceClassification):
-    pass
-
-
-class GemmaForTokenClassification(LlamaForTokenClassification):
-    pass
-
-
 __all__ = [
     "GemmaConfig",
     "GemmaTokenizer",
     "GemmaModel",
-    "GemmaForCausalLM",
-    "GemmaForSequenceClassification",
-    "GemmaForTokenClassification",
     "GemmaPreTrainedModel",  # noqa: F822
 ]

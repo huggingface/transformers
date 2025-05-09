@@ -12,10 +12,6 @@ from ...utils import logging
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
-    LlamaForCausalLM,
-    LlamaForQuestionAnswering,
-    LlamaForSequenceClassification,
-    LlamaForTokenClassification,
     LlamaMLP,
     LlamaPreTrainedModel,
     apply_rotary_pos_emb,
@@ -123,27 +119,7 @@ class Qwen2Model(MistralModel):
     pass
 
 
-class Qwen2ForCausalLM(LlamaForCausalLM):
-    pass
-
-
-class Qwen2ForSequenceClassification(LlamaForSequenceClassification):
-    pass
-
-
-class Qwen2ForTokenClassification(LlamaForTokenClassification):
-    pass
-
-
-class Qwen2ForQuestionAnswering(LlamaForQuestionAnswering):
-    pass
-
-
 __all__ = [
     "Qwen2PreTrainedModel",
     "Qwen2Model",
-    "Qwen2ForCausalLM",
-    "Qwen2ForSequenceClassification",
-    "Qwen2ForTokenClassification",
-    "Qwen2ForQuestionAnswering",
 ]

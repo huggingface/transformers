@@ -309,21 +309,9 @@ class PhiModel(LlamaModel):
 class PhiForCausalLM(LlamaForCausalLM):
     def __init__(self, config):
         super().__init__(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
-
-
-class PhiForSequenceClassification(LlamaForSequenceClassification):
-    pass
-
-
-class PhiForTokenClassification(LlamaForTokenClassification):
-    pass
-
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=True) # TODO add config.bias to lm head param
 
 __all__ = [
     "PhiPreTrainedModel",
     "PhiModel",
-    "PhiForCausalLM",
-    "PhiForSequenceClassification",
-    "PhiForTokenClassification",
 ]

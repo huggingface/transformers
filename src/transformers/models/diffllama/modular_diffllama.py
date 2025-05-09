@@ -28,9 +28,6 @@ from ...utils import logging
 from ..gemma.modeling_gemma import GemmaForCausalLM
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
-    LlamaForQuestionAnswering,
-    LlamaForSequenceClassification,
-    LlamaForTokenClassification,
     LlamaModel,
     LlamaPreTrainedModel,
     apply_rotary_pos_emb,
@@ -454,27 +451,7 @@ class DiffLlamaModel(LlamaModel):
     pass
 
 
-class DiffLlamaForCausalLM(GemmaForCausalLM):
-    pass
-
-
-class DiffLlamaForSequenceClassification(LlamaForSequenceClassification):
-    pass
-
-
-class DiffLlamaForQuestionAnswering(LlamaForQuestionAnswering):
-    pass
-
-
-class DiffLlamaForTokenClassification(LlamaForTokenClassification):
-    pass
-
-
 __all__ = [
     "DiffLlamaPreTrainedModel",
     "DiffLlamaModel",  # noqa: F822
-    "DiffLlamaForCausalLM",
-    "DiffLlamaForSequenceClassification",
-    "DiffLlamaForQuestionAnswering",
-    "DiffLlamaForTokenClassification",
 ]
