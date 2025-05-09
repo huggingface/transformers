@@ -15,6 +15,7 @@
 """PyTorch EoMT model."""
 
 import collections
+from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -24,17 +25,18 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...file_utils import (
+    ModelOutput,
     requires_backends,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import (
+    can_return_tuple,
     is_accelerate_available,
     is_scipy_available,
     logging,
 )
 from ..dinov2.modeling_dinov2 import (
     Dinov2DropPath,
-    Dinov2Layer,
     Dinov2LayerScale,
     Dinov2MLP,
     Dinov2PatchEmbeddings,
@@ -51,9 +53,45 @@ if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 logger = logging.get_logger(__name__)
 
-# Add copied comment here for all the funcitons
 
-# Adapted from https://github.com/facebookresearch/detectron2/blob/main/projects/PointRend/point_rend/point_features.py
+@dataclass
+class EoMTForUniversalSegmentationOutput(ModelOutput):
+    """
+    Class for outputs of [`EoMTForUniversalSegmentationOutput`].
+
+    This output can be directly passed to [`~EoMTFormerImageProcessor.post_process_semantic_segmentation`] or
+    [`~EoMTFormerImageProcessor.post_process_instance_segmentation`] or
+    [`~EoMTFormerImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
+    [`~EoMTFormerImageProcessor] for details regarding usage.
+
+    Args:
+        loss (`torch.Tensor`, *optional*):
+            The computed loss, returned when labels are present.
+        class_queries_logits (`torch.FloatTensor`):
+            A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
+            query. Note the `+ 1` is needed because we incorporate the null class.
+        masks_queries_logits (`torch.FloatTensor`):
+            A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
+            query.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Last hidden states (final feature map) of the last layer.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states all layers of the model.
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Self and Cross Attentions weights from transformer decoder.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    class_queries_logits: Optional[torch.FloatTensor] = None
+    masks_queries_logits: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+# Copied from transformers.models.mask2former.modeling_mask2former.sample_point
 def sample_point(
     input_features: torch.Tensor, point_coordinates: torch.Tensor, add_dim=False, **kwargs
 ) -> torch.Tensor:
@@ -117,6 +155,7 @@ def dice_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
     return loss
 
 
+# Copied from transformers.models.mask2former.modeling_mask2former.sigmoid_cross_entropy_loss
 def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_masks: int) -> torch.Tensor:
     r"""
     Args:
@@ -136,7 +175,7 @@ def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_m
     return loss
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer.pair_wise_dice_loss
+# Copied from transformers.models.mask2former.modeling_mask2former.pair_wise_dice_loss
 def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     """
     A pair wise version of the dice loss, see `dice_loss` for usage.
@@ -159,6 +198,7 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     return loss
 
 
+# Copied from transformers.models.mask2former.modeling_mask2former.pair_wise_sigmoid_cross_entropy_loss
 def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
     r"""
     A pair wise version of the cross entropy loss, see `sigmoid_cross_entropy_loss` for usage.
@@ -186,7 +226,7 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     return loss
 
 
-# Adapted from https://github.com/facebookresearch/Mask2Former/blob/main/mask2former/modeling/matcher.py
+# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerHungarianMatcher
 class Mask2FormerHungarianMatcher(nn.Module):
     """This class computes an assignment between the labels and the predictions of the network.
 
@@ -293,7 +333,7 @@ class Mask2FormerHungarianMatcher(nn.Module):
         return matched_indices
 
 
-# Adapted from https://github.com/facebookresearch/Mask2Former/blob/main/mask2former/modeling/criterion.py
+# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerLoss
 class Mask2FormerLoss(nn.Module):
     def __init__(self, config: EoMTConfig, weight_dict: Dict[str, float]):
         """
@@ -748,7 +788,7 @@ class EoMTDropPath(Dinov2DropPath):
     pass
 
 
-class EoMTLayer(Dinov2Layer, nn.Module):
+class EoMTLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(self, config: EoMTConfig) -> None:
@@ -982,6 +1022,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
 
         return attn_mask
 
+    @can_return_tuple
     def forward(
         self,
         pixel_values: Tensor,
@@ -1061,7 +1102,14 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
                 )
                 loss += self.get_loss(loss_dict)
 
-        return masks_queries_logits, class_queries_logits
+        return EoMTForUniversalSegmentationOutput(
+            loss=loss,
+            class_queries_logits=class_queries_logits_per_layer[-1],
+            masks_queries_logits=masks_queries_logits_per_layer[-1],
+            last_hidden_state=sequence_output,
+            hidden_states=(),
+            attentions=(),
+        )
 
 
 __all__ = ["EoMTForUniversalSegmentation"]

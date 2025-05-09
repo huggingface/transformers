@@ -41,10 +41,8 @@ if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 logger = logging.get_logger(__name__)
 
-# Add copied comment here for all the funcitons
 
-
-# Adapted from https://github.com/facebookresearch/detectron2/blob/main/projects/PointRend/point_rend/point_features.py
+# Copied from transformers.models.mask2former.modeling_mask2former.sample_point
 def sample_point(
     input_features: torch.Tensor, point_coordinates: torch.Tensor, add_dim=False, **kwargs
 ) -> torch.Tensor:
@@ -77,7 +75,7 @@ def sample_point(
     return point_features
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer.pair_wise_dice_loss
+# Copied from transformers.models.mask2former.modeling_mask2former.pair_wise_dice_loss
 def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     """
     A pair wise version of the dice loss, see `dice_loss` for usage.
@@ -100,6 +98,7 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     return loss
 
 
+# Copied from transformers.models.mask2former.modeling_mask2former.pair_wise_sigmoid_cross_entropy_loss
 def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
     r"""
     A pair wise version of the cross entropy loss, see `sigmoid_cross_entropy_loss` for usage.
@@ -127,7 +126,7 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     return loss
 
 
-# Adapted from https://github.com/facebookresearch/Mask2Former/blob/main/mask2former/modeling/matcher.py
+# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerHungarianMatcher
 class Mask2FormerHungarianMatcher(nn.Module):
     """This class computes an assignment between the labels and the predictions of the network.
 
@@ -265,6 +264,7 @@ def dice_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
     return loss
 
 
+# Copied from transformers.models.mask2former.modeling_mask2former.sigmoid_cross_entropy_loss
 def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_masks: int) -> torch.Tensor:
     r"""
     Args:
@@ -284,7 +284,7 @@ def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_m
     return loss
 
 
-# Adapted from https://github.com/facebookresearch/Mask2Former/blob/main/mask2former/modeling/criterion.py
+# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerLoss
 class Mask2FormerLoss(nn.Module):
     def __init__(self, config: EoMTConfig, weight_dict: Dict[str, float]):
         """
@@ -839,7 +839,7 @@ class EoMTLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(self, config: EoMTConfig) -> None:
-        super().__init__()
+        nn.Module().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = EoMTAttention(config)

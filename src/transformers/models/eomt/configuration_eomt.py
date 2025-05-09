@@ -45,6 +45,13 @@ class EoMTConfig(PretrainedConfig):
         attention_dropout=0.0,
         projection_dropout=0.0,
         num_blocks=4,
+        no_object_weight: float = 0.1,
+        class_weight: float = 2.0,
+        mask_weight: float = 5.0,
+        dice_weight: float = 5.0,
+        train_num_points: int = 12544,
+        oversample_ratio: float = 3.0,
+        importance_sample_ratio: float = 0.75,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -70,6 +77,13 @@ class EoMTConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.projection_dropout = projection_dropout
         self.num_blocks = num_blocks
+        self.no_object_weight = no_object_weight
+        self.class_weight = class_weight
+        self.mask_weight = mask_weight
+        self.dice_weight = dice_weight
+        self.train_num_points = train_num_points
+        self.oversample_ratio = oversample_ratio
+        self.importance_sample_ratio = importance_sample_ratio
 
 
 __all__ = ["EoMTConfig"]
