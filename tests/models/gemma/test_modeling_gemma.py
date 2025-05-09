@@ -66,6 +66,11 @@ class GemmaModelTester(CausalLMModelTester):
 
 @require_torch
 class GemmaModelTest(CausalLMModelTest, unittest.TestCase):
+    all_model_classes = (
+        (GemmaModel, GemmaForCausalLM, GemmaForSequenceClassification, GemmaForTokenClassification)
+        if is_torch_available()
+        else ()
+    )
     model_tester_class = GemmaModelTester
 
     # used in `test_torch_compile_for_training`
