@@ -25,29 +25,25 @@ from typing import Deque, Dict, List, Optional, Union
 import torch
 
 
-if False:
-    from flash_attn import flash_attn_varlen_func
-
 from ..cache_utils import Cache
 from ..configuration_utils import PretrainedConfig
 from ..generation.configuration_utils import GenerationConfig
 from ..generation.utils import GenerationMixin
 from ..utils import (
-    is_accelerate_available,
     logging,
 )
 
 
 logger = logging.get_logger(__name__)
 
-if is_accelerate_available():
-    pass
 
-
-# Request State Tracking
 @dataclass
 class RequestState:
-    """Tracks the state of a generation request through its lifecycle."""
+    """Tracks the state of a generation request through its lifecycle.
+
+    Attributes:
+        status (str): can be one of 'pending', 'prefilling', 'prefilling_split', 'split_pending_remainder', 'decoding', 'finished', 'failed'
+    """
 
     # Required fields
     request_id: str
@@ -58,9 +54,7 @@ class RequestState:
     remaining_prompt_ids: List[int] = field(default_factory=list)  # For split requests
     allocated_blocks: List[int] = field(default_factory=list)
     position_offset: int = 0  # Current position in the sequence for position_ids
-    status: str = (
-        "pending"  # pending, prefilling, prefilling_split, split_pending_remainder, decoding, finished, failed
-    )
+    status: str = "pending"
     max_new_tokens: int = 20
     eos_token_id: int = -1
     created_time: float = field(default_factory=time.time)
@@ -97,6 +91,9 @@ class RequestState:
             return True
 
         return False
+
+    def __repr__(self):
+        return f"RequestState(request_id={self.request_id}, status={self.status}, generated_len={self.generated_len()}, current_len={self.current_len()})"
 
 
 class PagedAttentionCache(Cache):
@@ -136,7 +133,7 @@ class PagedAttentionCache(Cache):
         if num_blocks is None or block_size is None:
             logger.info("Calculating optimal block size and number...")
             num_blocks, block_size = compute_optimal_blocks(
-                device, config, generation_config, initial_prompt_shapes or [], dtype, median_prefill_length=50
+                device, config, generation_config, initial_prompt_shapes or [], dtype, median_prefill_length=200
             )
             logger.info(f"Using calculated num_blocks={num_blocks}, block_size={block_size}")
 
@@ -226,7 +223,6 @@ class PagedAttentionCache(Cache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cumulative_seqlens_k: torch.Tensor,
         cache_index,
         **kwargs,
     ) -> (torch.Tensor, torch.Tensor):
@@ -296,76 +292,13 @@ class PagedAttentionCache(Cache):
                 raise e
 
 
-def paged_attention_forward(
-    module: torch.nn.Module,
-    q: torch.Tensor,
-    k: torch.Tensor,
-    v: torch.Tensor,
-    cumulative_seqlens_q=None,
-    cumulative_seqlens_k=None,
-    max_seqlen_q=None,
-    max_seqlen_k=None,
-    block_table: Optional[torch.Tensor] = None,
-    cache: Optional[PagedAttentionCache] = None,
-    **kwargs,
-) -> torch.Tensor:
-    r"""Perform the forward pass of attention with paged key-value cache.
-
-    This function handles the cache updates and performs the attention computation
-    using the flash_attn_varlen_func for efficient processing.
-
-    Args:
-        q: (total_q, nheads, headdim), where total_q = total number of query tokens in the batch.
-        k: (total_k, nheads_k, headdim), where total_k = total number of key tokens in the batch.  but if there is a block table it can be the full k
-        v: (total_k, nheads_k, headdim), where total_k = total number of key tokens in the batch.  but if there is a block table it can be the full v
-        cumulative_seqlens_q: (batch_size + 1,), dtype torch.int32. The cumulative sequence lengths
-           of the sequences in the batch, used to index into q.
-        cumulative_seqlens_k: (batch_size + 1,), dtype torch.int32. The cumulative sequence lengths
-           of the sequences in the batch, used to index into kv.
-        max_seqlen_q: int. Maximum query sequence length in the batch.
-        max_seqlen_k: int. Maximum key sequence length in the batch.
-        dropout_p: float. Dropout probability.
-        softmax_scale: float. The scaling of QK^T before applying softmax.
-            Default to 1 / sqrt(headdim).
-        causal: bool. Whether to apply causal attention mask (e.g., for auto-regressive modeling).
-        window_size: (left, right). If not (-1, -1), implements sliding window local attention.
-        softcap: float. Anything > 0 activates softcapping attention.
-        block_table [optional]: (num_blocks, max_num_blocks_per_seq), dtype torch.int32. This array should be used to index into
-            the cache. Here, you already pass concatenated K and V. k[block_table] gives the cache the positions in cache that we need to fill?
-            If we use with_kv_cache as it supports paged attention, it means it supports writing in a paged cache. But it does not support computing with
-            ragged input.
-            Whiile flash_attn_varlen_func, supports ragged inputs, but it does not write into the kv_cache.
-            Paged <==> fragmented cache, helpful for very long sequences.
-            continuous <==> ragged inputs -> no padding
-    """
-    k, v = cache.update(k, v, module.layer_idx, cumulative_seqlens_q, cumulative_seqlens_k)
-
-    attn_output = flash_attn_varlen_func(
-        q,
-        k,
-        v,
-        cumulative_seqlens_q,
-        cumulative_seqlens_k,
-        max_seqlen_q,
-        max_seqlen_k,
-        block_table=block_table,
-        softmax_scale=None,
-        causal=False,
-        window_size=(-1, -1),  # -1 means infinite context window
-        rotary_interleaved=True,
-        **kwargs,
-    )
-
-    return attn_output
-
-
 def compute_optimal_blocks(
     device: torch.device,
     config: PretrainedConfig,
     generation_config: GenerationConfig,
     inputs: List[List[int]],
     dtype: torch.dtype = torch.bfloat16,
-    safety_margin: float = 0.8,  # Reduced from 0.9 to be more conservative
+    safety_margin: float = 0.9,
     median_prefill_length: Optional[int] = None,
 ):
     """Calculate optimal number and size of blocks for the KV cache.
@@ -531,12 +464,6 @@ class ContinuousBatchProcessor:
                     self._handle_request_error("Empty input_ids provided", request_id)
                     continue
 
-                if len(input_ids) > self.max_context_len:
-                    logger.warning(
-                        f"Request {request_id} prompt length ({len(input_ids)}) exceeds max context length ({self.max_context_len}). Truncating."
-                    )
-                    input_ids = input_ids[-self.max_context_len :]  # Keep the end
-
                 state = RequestState(
                     request_id=request_id,
                     prompt_ids=list(input_ids),
@@ -553,9 +480,19 @@ class ContinuousBatchProcessor:
 
     def _handle_request_error(self, error, request_id):
         """Handle general request processing error."""
-        self.output_queue.put(
-            {"request_id": request_id, "status": "failed", "error": f"Error processing request: {str(error)}"}
-        )
+        error_response = {
+            "request_id": request_id,
+            "status": "failed",
+            "error": f"Error processing request: {str(error)}",
+        }
+
+        # Include any generated tokens if this is an active request
+        if isinstance(request_id, str) and request_id in self.active_requests:
+            error_response["output_ids"] = self.active_requests[request_id].output_ids
+        else:
+            error_response["output_ids"] = []
+
+        self.output_queue.put(error_response)
 
     def _schedule_batch(self) -> List[str]:
         """Select requests for the next processing batch."""
@@ -570,12 +507,15 @@ class ContinuousBatchProcessor:
             # Start with the max batch tokens
             available_slots = self.max_batch_tokens
             selected_requests.extend(decoding_requests[:available_slots])
-            batch_token_count += min(len(decoding_requests), available_slots)  # 1 token per request
+            if len(selected_requests) == available_slots:
+                return selected_requests
+            batch_token_count += len(decoding_requests)  # 1 token per request
 
-        # Next, try to add new requests from waiting queue and split requests
-        candidates: List[RequestState] = list(self.waiting_requests)
-        split_waiting = [state for state in self.active_requests.values() if state.status == "split_pending_remainder"]
-        candidates.extend(split_waiting)
+        # priortise requests for which we already started prefilling
+        candidates: List[RequestState] = [
+            state for state in self.active_requests.values() if state.status == "split_pending_remainder"
+        ]
+        candidates.extend(list(self.waiting_requests))
 
         request_ids_to_remove_from_waiting = set()
 
@@ -823,6 +763,14 @@ class ContinuousBatchProcessor:
                     state.status = "decoding"
                     state.prompt_ids = []
 
+                    token = generated_ids[token_idx].item()
+                    token_idx += 1
+
+                    if state.update_with_token(token):
+                        finished_request_ids.append(req_id)
+
+                    self._send_output(state, token)
+
             elif state.status == "decoding":
                 if token_idx >= len(generated_ids):
                     error_msg = f"Token index {token_idx} out of bounds for generated_ids (len {len(generated_ids)}) for request {req_id}."
@@ -863,6 +811,31 @@ class ContinuousBatchProcessor:
     def has_pending_requests(self) -> bool:
         """Check if there are any active or waiting requests."""
         return bool(self.active_requests or self.waiting_requests)
+
+    def handle_batch_error(self, error):
+        """Handle errors during batch processing."""
+        failed_ids = self.requests_to_process_next
+        for req_id in failed_ids:
+            if req_id in self.active_requests:
+                self._handle_request_error(error, req_id)
+                self.cache.free_blocks(req_id)
+                del self.active_requests[req_id]
+
+    def fail_all_requests(self, error):
+        """Fail all active requests with the given error.
+
+        Args:
+            error: The error to report in the failure message
+        """
+        for req_id, state in list(self.active_requests.items()):
+            self._handle_request_error(error, req_id)
+            self.cache.free_blocks(req_id)
+            del self.active_requests[req_id]
+
+        # Also fail any requests in the waiting queue
+        while self.waiting_requests:
+            state = self.waiting_requests.popleft()
+            self._handle_request_error(error, state.request_id)
 
 
 # Manager Class (User Interface)
@@ -1035,10 +1008,15 @@ class ContinuousBatchingManager:
                 self.model.dtype,
                 self.streaming,
             )
+            first = True
+            # Capture the graph
+            graph = torch.cuda.CUDAGraph()
+            static_batch_data = {} 
+            static_input_ids = torch.empty(1, paged_attention_cache.cache_shape[1], self.model.config.vocab_size, device=self.model.device, dtype=torch.long)
+            static_position_ids = torch.empty(1, paged_attention_cache.cache_shape[1], device=self.model.device, dtype=torch.long)
 
             while not self.stop_event.is_set() or batch_processor.has_pending_requests():
                 batch_data = batch_processor.prepare_next_batch()
-
                 if batch_data is None:
                     if self.stop_event.is_set() and not batch_processor.has_pending_requests():
                         break  # No more work to do
@@ -1047,16 +1025,37 @@ class ContinuousBatchingManager:
 
                 input_ids, position_ids, model_kwargs = batch_data
 
-                try:
-                    with torch.no_grad():
-                        outputs = self.model.forward(
-                            input_ids=input_ids,
-                            position_ids=position_ids,
-                            **model_kwargs,
+                if first:
+                    # get first request
+                    static_batch_data.update(model_kwargs)
+                    with torch.cuda.graph(graph):
+                        static_outputs = self.model.forward(
+                            input_ids=static_input_ids,
+                            position_ids=static_position_ids,
+                            **batch_data,
                         )
+                    first = False
+                try:
+                    # === Copy input data into static tensors ===
+                    static_input_ids.copy_(input_ids)
+                    static_position_ids.copy_(position_ids)
+                    for key in static_batch_data:
+                        static_batch_data[key].copy_(model_kwargs[key])
+
+                    # === Replay captured CUDA graph ===
+                    graph.replay()
+
+                    outputs = static_outputs  # Already computed by graph.replay()
+
+                    # with torch.no_grad():
+                    #     outputs = self.model.forward(
+                    #         input_ids=input_ids,
+                    #         position_ids=position_ids,
+                    #         **model_kwargs,
+                    #     )
                 except Exception as e:
                     logger.error(f"Model forward pass failed: {e}", exc_info=True)
-                    self._handle_batch_error(batch_processor, e)
+                    batch_processor.handle_batch_error(e)
                     continue
 
                 # Get next token logits and sample next tokens
@@ -1073,20 +1072,6 @@ class ContinuousBatchingManager:
         finally:
             logger.info("Generation loop finished.")
 
-    # XXX: this should be handled by the batch processor
-    def _handle_batch_error(self, batch_processor, error):
-        """Handle errors during batch processing."""
-        failed_ids = batch_processor.requests_to_process_next
-        for req_id in failed_ids:
-            if req_id in batch_processor.active_requests:
-                state = batch_processor.active_requests[req_id]
-                state.status = "failed"
-                self.output_queue.put(
-                    {"request_id": req_id, "output_ids": state.output_ids, "status": "failed", "error": str(error)}
-                )
-                batch_processor.cache.free_blocks(req_id)
-                del batch_processor.active_requests[req_id]
-
     def _handle_critical_error(self, error, batch_processor: Optional[ContinuousBatchProcessor]):
         """Handle critical errors that terminate the generation loop."""
         # Signal stop
@@ -1096,27 +1081,13 @@ class ContinuousBatchingManager:
         try:
             while True:
                 req_data = self.input_queue.get_nowait()
-                if req_data and "request_id" in req_data:
-                    self.output_queue.put(
-                        {
-                            "request_id": req_data["request_id"],
-                            "output_ids": [],
-                            "status": "failed",
-                            "error": str(error),
-                        }
-                    )
+                self._handle_request_error(error, getattr(req_data, "request_id", None))
         except queue.Empty:
             pass
 
         # Fail active requests
-        # XXX: this should be handled by the batch processor
         if batch_processor is not None:
-            for req_id, state in list(batch_processor.active_requests.items()):
-                self.output_queue.put(
-                    {"request_id": req_id, "output_ids": state.output_ids, "status": "failed", "error": str(error)}
-                )
-                batch_processor.cache.free_blocks(req_id)
-                del batch_processor.active_requests[req_id]
+            batch_processor.fail_all_requests(error)
 
 
 class ContinuousMixin:
@@ -1205,7 +1176,9 @@ class ContinuousMixin:
                             results[original_idx] = []
 
                         finished_count += 1
-                    # XXX: what happens if req_id is not in request_ids?
+                    else:
+                        # Log unexpected request IDs
+                        logger.warning(f"Received result for unknown request ID: {req_id}. Ignoring.")
                 else:
                     # Check if the manager is still running
                     if not manager.is_running():
