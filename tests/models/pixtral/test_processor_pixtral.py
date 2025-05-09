@@ -14,6 +14,7 @@
 import shutil
 import tempfile
 import unittest
+from io import BytesIO
 
 import requests
 import torch
@@ -37,11 +38,11 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.url_0 = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        cls.image_0 = Image.open(requests.get(cls.url_0, stream=True).raw)
+        cls.image_0 = Image.open(BytesIO(requests.get(cls.url_0, stream=True).content))
         cls.url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        cls.image_1 = Image.open(requests.get(cls.url_1, stream=True).raw)
+        cls.image_1 = Image.open(BytesIO(requests.get(cls.url_1, stream=True).content))
         cls.url_2 = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
-        cls.image_2 = Image.open(requests.get(cls.url_2, stream=True).raw)
+        cls.image_2 = Image.open(BytesIO(requests.get(cls.url_2, stream=True).content))
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
