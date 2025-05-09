@@ -110,8 +110,6 @@ class MagmaConfig(PretrainedConfig):
             The config object or dictionary of the text backbone.
         image_token_id (`int`, *optional*, defaults to 128257):
             The image token index to encode the image prompt.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import MagmaForCausalLM, MagmaConfig
@@ -134,7 +132,6 @@ class MagmaConfig(PretrainedConfig):
         vision_config=None,
         text_config=None,
         image_token_id=None,
-        tie_word_embeddings=False,
         **kwargs,
     ):
         
@@ -156,7 +153,6 @@ class MagmaConfig(PretrainedConfig):
         self.text_config = text_config
 
         super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
 

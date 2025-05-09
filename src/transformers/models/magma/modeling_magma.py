@@ -256,7 +256,7 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
         self.vocab_size = config.text_config.vocab_size
         if hasattr(config.text_config, 'auto_map'):
             del config.text_config.auto_map
-
+        
         try:
             self.language_model = AutoModelForCausalLM.from_config(
                 config.text_config, 
