@@ -214,6 +214,7 @@ if TYPE_CHECKING:
             EarlyExitCandidateGenerator,
             PromptLookupCandidateGenerator,
         )
+        from .continuous_batching import ContinuousMixin
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
             ClassifierFreeGuidanceLogitsProcessor,
@@ -275,7 +276,6 @@ if TYPE_CHECKING:
             SampleDecoderOnlyOutput,
             SampleEncoderDecoderOutput,
         )
-        from .continuous_batching import ContinuousMixin
         from .watermarking import (
             BayesianDetectorConfig,
             BayesianDetectorModel,

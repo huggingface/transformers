@@ -25,7 +25,6 @@ from typing import Deque, Dict, List, Optional, Union
 import torch
 from tqdm import tqdm
 
-
 from ..cache_utils import Cache
 from ..configuration_utils import PretrainedConfig
 from ..generation.configuration_utils import GenerationConfig
@@ -455,7 +454,7 @@ class ContinuousBatchProcessor:
         # Get batch size parameters from generation config
         self._configure_batch_parameters()
         self.setup_static_tensors()
-    
+
     def setup_static_tensors(self):
         T = self.max_batch_tokens
         max_token_budget = self.cache.num_blocks * self.cache.block_size
@@ -700,12 +699,9 @@ class ContinuousBatchProcessor:
                 if not self._allocate_blocks_if_needed(state, state.current_len() + 1):
                     continue
 
-                read_logical_indices = list(range(state.current_len()))
-                write_logical_index = state.current_len()
-
                 # Map logical indices to physical block indices for this request
-                physical_read_indices = self.cache._get_physical_indices(state.request_id, read_logical_indices)
-                physical_write_index = self.cache._get_physical_indices(state.request_id, [write_logical_index])[0]
+                read_indices = self.cache._get_physical_indices(state.request_id, state.current_len())
+                write_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))[0]
 
                 seq_len_q = 1  # Query length is 1 for generation
                 seq_len_k = state.current_len() + 1  # Key length includes context
@@ -718,14 +714,14 @@ class ContinuousBatchProcessor:
                     continue
 
                 # Get physical indices
-                write_logical_indices = positions_to_add
-                physical_write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
+                read_indices = positions_to_add
+                write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
 
                 seq_len_q = seq_len_k = len(next_input_ids)
             else:
                 logger.warning(f"Request {state.request_id} in unexpected state '{state.status}'. Skipping.")
                 continue
-            
+
             tensor_metadata = {"dtype": torch.long, "device": self.model_device}
             self.input_ids_tensor[token_position : token_position + len(next_input_ids)].copy_(
                 torch.tensor(next_input_ids, **tensor_metadata)
@@ -733,11 +729,11 @@ class ContinuousBatchProcessor:
             self.position_ids_tensor[token_position : token_position + len(positions_to_add)].copy_(
                 torch.tensor(positions_to_add, **tensor_metadata)
             )
-            self.read_index[cache_read_pos : cache_read_pos + len(physical_read_indices)].copy_(
-                torch.tensor(physical_read_indices, **tensor_metadata)
+            self.read_index[read_position : read_position + len(read_indices)].copy_(
+                torch.tensor(read_indices, **tensor_metadata)
             )
-            self.write_index[cache_read_pos : cache_read_pos + len(physical_write_indices)].copy_(
-                torch.tensor(physical_write_indices, **tensor_metadata)
+            self.write_index[write_position : write_position + len(write_indices)].copy_(
+                torch.tensor(write_indices, **tensor_metadata)
             )
             self.cumulative_seqlens_q[cumq_ptr : cumq_ptr + seq_len_q].copy_(
                 torch.tensor([cumulative_seqlens_q[-1] + seq_len_q], **tensor_metadata)
@@ -746,22 +742,22 @@ class ContinuousBatchProcessor:
                 torch.tensor([cumulative_seqlens_k[-1] + seq_len_k], **tensor_metadata)
             )
             token_position += len(next_input_ids)
-            read_position += len(physical_read_indices)
-            write_position += len(physical_write_indices)
+            read_position += len(read_indices)
+            write_position += len(write_indices)
             cumq_ptr += 1
-            cumk_ptr += 1 
+            cumk_ptr += 1
 
             self.max_seqlen_q = max(max_seqlen_q, seq_len_q)
             self.max_seqlen_k = max(max_seqlen_k, seq_len_k)
             self.logits_indices_tensor[cumk_ptr].copy_(torch.tensor(cumulative_seqlens_q[-1] - 1))
-            state.position_offset += len(token[-len(next_input_ids) :])
+            state.position_offset += len(token_position[-len(next_input_ids) :])
 
-        if not batch_input_ids:
+        if not token_position:
             return None
 
         # Calculate max total sequence length in the batch
         self.max_seqlen_k = max(state.current_len() for state in requests_in_batch)
-        return input_ids_tensor, position_ids_tensor, self.get_model_kwargs().to_dict()
+        return self.get_model_kwargs().to_dict()
 
     def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
         """Helper function to allocate blocks for a request."""
@@ -1075,11 +1071,11 @@ class ContinuousBatchingManager:
                     logger.error(f"Model forward pass failed: {e}", exc_info=True)
                     batch_processor.handle_batch_error(e)
                     continue
-                
+
                 # TODO this should also be part of the graph
                 # TODO we can leverage logits processors
                 # Get next token logits and sample next tokens
-                next_token_logits = outputs.logits[:, model_kwargs["logits_indices"], :]
+                next_token_logits = outputs.logits[:, batch_data.logits_indices, :]
                 generated_ids = torch.argmax(next_token_logits, dim=-1).squeeze(0)
                 batch_processor.update_batch(generated_ids)
 

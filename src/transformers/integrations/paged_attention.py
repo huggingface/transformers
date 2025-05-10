@@ -2,7 +2,6 @@ import torch
 
 from ..generation.continuous_batching import PagedAttentionCache
 from ..utils import is_flash_attn_2_available
-from ..utils.import_utils import _torch_version
 
 
 if is_flash_attn_2_available():
