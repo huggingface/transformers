@@ -33,22 +33,10 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils import (
-    PreTokenizedInput,
-    TextInput,
-)
-from ...utils import (
-    LossKwargs,
-    TensorType,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    logging,
-    replace_return_docstrings,
-)
+from ...tokenization_utils import PreTokenizedInput, TextInput
+from ...utils import LossKwargs, TensorType, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
@@ -74,11 +62,6 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
     from torch import nn
-
-
-_CONFIG_FOR_DOC = "AriaConfig"
-_CONFIG_FOR_TEXT_DOC = "AriaTextConfig"
-ARIA_TEXT_INPUTS_DOCSTRING = None
 
 
 def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
@@ -1229,11 +1212,8 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
         self.mlp = AriaTextMoELayer(config)
 
 
+@auto_docstring
 class AriaTextPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
-    """
-
     config_class = AriaTextConfig
     base_model_prefix = "model"
     _no_split_modules = ["AriaTextDecoderLayer", "AriaGroupedExpertsGemm"]
@@ -1297,17 +1277,6 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
-    """
-    Aria model for causal language modeling tasks.
-
-    This class extends `LlamaForCausalLM` to incorporate the Mixture of Experts (MoE) approach,
-    allowing for more efficient and scalable language modeling.
-
-    Args:
-        config (`AriaTextConfig`):
-            Configuration object for the model.
-    """
-
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: AriaTextConfig):
@@ -1319,8 +1288,7 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(ARIA_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_TEXT_DOC)
+    @auto_docstring
     def forward(self, **super_kwargs):
         super().forward(self, **super_kwargs)
 
@@ -1331,58 +1299,6 @@ class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 
 class AriaModelOutputWithPast(LlavaModelOutputWithPast):
     pass
-
-
-ARIA_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor`, *optional*):
-            Input token IDs.
-        pixel_values (`torch.FloatTensor`, *optional*):
-            Pixel values of the images.
-        pixel_mask (`torch.LongTensor`, *optional*):
-            Mask for the pixel values.
-        attention_mask (`torch.Tensor`, *optional*):
-            Attention mask.
-        position_ids (`torch.LongTensor`, *optional*):
-            Position IDs.
-        past_key_values (`List[torch.FloatTensor]`, *optional*):
-            Past key values for efficient processing.
-        inputs_embeds (`torch.FloatTensor`, *optional*):
-            Input embeddings.
-        labels (`torch.LongTensor`, *optional*):
-            Labels for computing the language modeling loss.
-        use_cache (`bool`, *optional*):
-            Whether to use the model's cache mechanism.
-        output_attentions (`bool`, *optional*):
-            Whether to output attention weights.
-        output_hidden_states (`bool`, *optional*):
-            Whether to output hidden states.
-        return_dict (`bool`, *optional*):
-            Whether to return a `ModelOutput` object.
-        logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-            If an `int`, calculate logits for the last `logits_to_keep` tokens, or all `input_ids` if `0`.
-            Otherwise, slice according to the 1D tensor in the sequence length dimension
-        cache_position (`torch.LongTensor`, *optional*):
-            Cache positions.
-        **loss_kwargs:
-            Additional keyword arguments for loss calculation.
-"""
-
-ARIA_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config (`AriaConfig`):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
 
 
 class AriaModel(LlavaModel):
@@ -1440,8 +1356,6 @@ class AriaModel(LlavaModel):
         image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
         return image_features
 
-    @can_return_tuple
-    @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1515,16 +1429,17 @@ class AriaModel(LlavaModel):
         )
 
 
-@add_start_docstrings(
-    """Aria model for conditional generation tasks.
+@auto_docstring(
+    custom_intro="""
+    Aria model for conditional generation tasks.
+
     This model combines a vision tower, a multi-modal projector, and a language model
-    to perform tasks that involve both image and text inputs.""",
-    ARIA_START_DOCSTRING,
+    to perform tasks that involve both image and text inputs.
+    """
 )
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1544,12 +1459,11 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `Idefics3ForConditionalGeneration`).
-                Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
-                computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `AriaForConditionalGeneration`).
+            Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
+            computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
