@@ -774,6 +774,11 @@ class ContinuousBatchProcessor:
 
     def update_batch(self, generated_ids: torch.Tensor):
         """Update request states based on generated tokens."""
+        # TODO I think many slowdowns can come from here
+        # this should be probably vectorized
+        # we need to batch adding the tokens
+        # and potentially have a tensor with values containing the status
+
         token_idx = 0
         finished_request_ids = []
 
