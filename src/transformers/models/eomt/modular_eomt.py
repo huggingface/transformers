@@ -332,7 +332,7 @@ class Mask2FormerHungarianMatcher(nn.Module):
         return matched_indices
 
 
-# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerLoss
+# Slight diff in cos_class pased to Hungarian loss from mask2former.
 class Mask2FormerLoss(nn.Module):
     def __init__(self, config: EoMTConfig, weight_dict: Dict[str, float]):
         """
@@ -363,7 +363,7 @@ class Mask2FormerLoss(nn.Module):
         self.importance_sample_ratio = config.importance_sample_ratio
 
         self.matcher = Mask2FormerHungarianMatcher(
-            cost_class=1.0,
+            cost_class=2.0,
             cost_dice=config.dice_weight,
             cost_mask=config.mask_weight,
             num_points=self.num_points,
@@ -938,7 +938,7 @@ class EoMTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["EoMTSwiGLUFFN"]
+    _no_split_modules = ["EoMTMLP"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
 
