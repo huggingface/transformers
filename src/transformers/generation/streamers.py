@@ -29,7 +29,7 @@ class BaseStreamer:
     Base class from which `.generate()` streamers should inherit.
     """
 
-    def put(self, value):
+    def put(self, value, score=None):
         """Function that is called by `.generate()` to push new tokens"""
         raise NotImplementedError()
 
@@ -79,13 +79,16 @@ class TextStreamer(BaseStreamer):
 
         # variables used in the streaming process
         self.token_cache = []
+        self.with_scores = False
         self.print_len = 0
         self.next_tokens_are_prompt = True
 
-    def put(self, value):
+    def put(self, value, score=None):
         """
         Receives tokens, decodes them, and prints them to stdout as soon as they form entire words.
         """
+        self.with_scores = score is not None
+
         if len(value.shape) > 1 and value.shape[0] > 1:
             raise ValueError("TextStreamer only supports batch size 1")
         elif len(value.shape) > 1:
@@ -114,7 +117,7 @@ class TextStreamer(BaseStreamer):
             printable_text = text[self.print_len : text.rfind(" ") + 1]
             self.print_len += len(printable_text)
 
-        self.on_finalized_text(printable_text)
+        self.on_finalized_text(printable_text, score)
 
     def end(self):
         """Flushes any remaining cache and prints a newline to stdout."""
@@ -128,9 +131,12 @@ class TextStreamer(BaseStreamer):
             printable_text = ""
 
         self.next_tokens_are_prompt = True
-        self.on_finalized_text(printable_text, stream_end=True)
+        score = None
+        if self.with_scores:
+            score = 0.0
+        self.on_finalized_text(printable_text, score=score, stream_end=True)
 
-    def on_finalized_text(self, text: str, stream_end: bool = False):
+    def on_finalized_text(self, text: str, score: Optional[float] = None, stream_end: bool = False):
         """Prints the new text to stdout. If the stream is ending, also prints a newline."""
         print(text, flush=True, end="" if not stream_end else None)
 
@@ -157,6 +163,82 @@ class TextStreamer(BaseStreamer):
             return True
 
         return False
+
+
+class ImmediateTextStreamer(BaseStreamer):
+    """
+    Simple text streamer that prints the token(s) to stdout as soon as they are generated.
+
+    <Tip warning={true}>
+
+    The API for the streamer classes is still under development and may change in the future.
+
+    </Tip>
+
+    Parameters:
+        tokenizer (`AutoTokenizer`):
+            The tokenized used to decode the tokens.
+        skip_prompt (`bool`, *optional*, defaults to `False`):
+            Whether to skip the prompt to `.generate()` or not. Useful e.g. for chatbots.
+        decode_kwargs (`dict`, *optional*):
+            Additional keyword arguments to pass to the tokenizer's `decode` method.
+
+    Examples:
+
+        ```python
+        >>> from transformers import AutoModelForCausalLM, AutoTokenizer, ImmediateTextStreamer
+
+        >>> tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+        >>> inputs = tok(["An increasing sequence: one,"], return_tensors="pt")
+        >>> streamer = ImmediateTextStreamer(tok)
+
+        >>> # Despite returning the usual output, the streamer will also print the generated text to stdout.
+        >>> _ = model.generate(**inputs, streamer=streamer, max_new_tokens=20)
+        An increasing sequence: one, two, three, four, five, six, seven, eight, nine, ten, eleven,
+        ```
+    """
+
+    def __init__(self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, **decode_kwargs):
+        self.tokenizer = tokenizer
+        self.skip_prompt = skip_prompt
+        self.decode_kwargs = decode_kwargs
+
+        # variables used in the streaming process
+        self.with_scores = False
+        self.next_tokens_are_prompt = True
+
+    def put(self, value, score=None):
+        """
+        Receives tokens, decodes them, and prints them to stdout as soon as they are generated.
+        """
+        self.with_scores = score is not None
+
+        if len(value.shape) > 1 and value.shape[0] > 1:
+            raise ValueError("ImmediateTextStreamer only supports batch size 1")
+        elif len(value.shape) > 1:
+            value = value[0]
+
+        if self.skip_prompt and self.next_tokens_are_prompt:
+            self.next_tokens_are_prompt = False
+            return
+
+        # Add the new token to the cache and decodes the entire thing.
+        text = self.tokenizer.decode(value.tolist(), **self.decode_kwargs)
+
+        self.on_token(text, score)
+
+    def end(self):
+        """Flushes any remaining cache and prints a newline to stdout."""
+        self.next_tokens_are_prompt = True
+        score = None
+        if self.with_scores:
+            score = 0.0
+        self.on_token("", score=score, stream_end=True)
+
+    def on_token(self, text: str, score: Optional[float] = None, stream_end: bool = False):
+        """Prints the new text to stdout. If the stream is ending, also prints a newline."""
+        print(text, flush=True, end="" if not stream_end else None)
 
 
 class TextIteratorStreamer(TextStreamer):
@@ -213,9 +295,82 @@ class TextIteratorStreamer(TextStreamer):
         self.stop_signal = None
         self.timeout = timeout
 
-    def on_finalized_text(self, text: str, stream_end: bool = False):
+    def on_finalized_text(self, text: str, score: Optional[float] = None, stream_end: bool = False):
         """Put the new text in the queue. If the stream is ending, also put a stop signal in the queue."""
-        self.text_queue.put(text, timeout=self.timeout)
+        if score is not None:
+            self.text_queue.put((text, score), timeout=self.timeout)
+        else:
+            self.text_queue.put(text, timeout=self.timeout)
+
+        if stream_end:
+            self.text_queue.put(self.stop_signal, timeout=self.timeout)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        value = self.text_queue.get(timeout=self.timeout)
+        if value == self.stop_signal:
+            raise StopIteration()
+        else:
+            return value
+
+
+class ImmediateTextIteratorStreamer(ImmediateTextStreamer):
+    """
+    Streamer that stores tokens in a queue as soon as they are available, to be used by a downstream application as an iterator.
+
+    <Tip warning={true}>
+
+    The API for the streamer classes is still under development and may change in the future.
+
+    </Tip>
+
+    Parameters:
+        tokenizer (`AutoTokenizer`):
+            The tokenized used to decode the tokens.
+        skip_prompt (`bool`, *optional*, defaults to `False`):
+            Whether to skip the prompt to `.generate()` or not. Useful e.g. for chatbots.
+        decode_kwargs (`dict`, *optional*):
+            Additional keyword arguments to pass to the tokenizer's `decode` method.
+
+    Examples:
+
+        ```python
+        >>> from transformers import AutoModelForCausalLM, AutoTokenizer, ImmediateTextIteratorStreamer
+
+        >>> tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+        >>> inputs = tok(["An increasing sequence: one,"], return_tensors="pt")
+        >>> streamer = ImmediateTextIteratorStreamer(tok)
+
+        >>> # Run the generation in a separate thread, so that we can fetch the generated text in a non-blocking way.
+        >>> generation_kwargs = dict(inputs, streamer=streamer, max_new_tokens=20)
+        >>> thread = Thread(target=model.generate, kwargs=generation_kwargs)
+        >>> thread.start()
+        >>> generated_text = ""
+        >>> for new_text in streamer:
+        ...     generated_text += new_text
+        >>> generated_text
+        'An increasing sequence: one, two, three, four, five, six, seven, eight, nine, ten, eleven,'
+        ```
+    """
+
+    def __init__(
+        self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, timeout: Optional[float] = None, **decode_kwargs
+    ):
+        super().__init__(tokenizer, skip_prompt, **decode_kwargs)
+        self.text_queue = Queue()
+        self.stop_signal = None
+        self.timeout = timeout
+
+    def on_token(self, text: str, score: Optional[float] = None, stream_end: bool = False):
+        """Put the new text in the queue. If the stream is ending, also put a stop signal in the queue."""
+        if score is not None:
+            self.text_queue.put((text, score), timeout=self.timeout)
+        else:
+            self.text_queue.put(text, timeout=self.timeout)
+
         if stream_end:
             self.text_queue.put(self.stop_signal, timeout=self.timeout)
 
@@ -293,9 +448,13 @@ class AsyncTextIteratorStreamer(TextStreamer):
         self.loop = asyncio.get_running_loop()
         self.has_asyncio_timeout = hasattr(asyncio, "timeout")
 
-    def on_finalized_text(self, text: str, stream_end: bool = False):
+    def on_finalized_text(self, text: str, score: Optional[float] = None, stream_end: bool = False):
         """Put the new text in the queue. If the stream is ending, also put a stop signal in the queue."""
-        self.loop.call_soon_threadsafe(self.text_queue.put_nowait, text)
+        if score is not None:
+            self.loop.call_soon_threadsafe(self.text_queue.put_nowait, (text, score))
+        else:
+            self.loop.call_soon_threadsafe(self.text_queue.put_nowait, text)
+
         if stream_end:
             self.loop.call_soon_threadsafe(self.text_queue.put_nowait, self.stop_signal)
 
