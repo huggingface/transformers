@@ -29,14 +29,7 @@ from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask,
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_torch_flex_attn_available,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_mimi import MimiConfig
 
 
@@ -50,10 +43,6 @@ if is_torch_flex_attn_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-# General docstring
-_CONFIG_FOR_DOC = "MimiConfig"
 
 
 @dataclass
@@ -216,6 +205,32 @@ class MimiConv1d(nn.Module):
         end = padded.shape[-1] - extra_pad
         return padded[..., :end]
 
+    def _get_output_length(self, input_length: torch.LongTensor) -> torch.LongTensor:
+        """
+        Return the length of the output of the MimiConv1d.
+        """
+        # padding size
+        n_frames = (input_length - self.kernel_size + self.padding_total) / self.stride + 1
+        n_frames = torch.ceil(n_frames).to(torch.int64) - 1
+        ideal_length = n_frames * self.stride + self.kernel_size - self.padding_total
+        extra_padding = ideal_length - input_length
+
+        if self.causal:
+            padding_left = self.padding_total
+            padding_right = extra_padding
+        else:
+            padding_left = self.padding_left
+            padding_right = self.padding_right + extra_padding
+
+        # padding
+        input_length = input_length + padding_left + padding_right
+
+        # conv
+        output_lenght = (
+            input_length + 2 * self.conv.padding[0] - self.conv.dilation[0] * (self.conv.kernel_size[0] - 1) - 1
+        ) // self.conv.stride[0] + 1
+        return output_lenght
+
     def forward(self, hidden_states):
         extra_padding = self._get_extra_padding_for_conv1d(hidden_states)
 
@@ -331,21 +346,28 @@ class MimiEncoder(nn.Module):
         model = [MimiConv1d(config, config.audio_channels, config.num_filters, config.kernel_size)]
         scaling = 1
 
+        # keep track of MimiConv1d submodule layer names for easy encoded length computation
+        mimiconv1d_layer_names = ["layers.0"]
+
         # Downsample to raw audio scale
         for ratio in reversed(config.upsampling_ratios):
             current_scale = scaling * config.num_filters
             # Add residual layers
             for j in range(config.num_residual_layers):
+                mimiconv1d_layer_names.extend([f"layers.{len(model)}.block.1", f"layers.{len(model)}.block.3"])
                 model += [MimiResnetBlock(config, current_scale, [config.dilation_growth_rate**j, 1])]
             # Add downsampling layers
             model += [nn.ELU()]
+            mimiconv1d_layer_names.append(f"layers.{len(model)}")
             model += [MimiConv1d(config, current_scale, current_scale * 2, kernel_size=ratio * 2, stride=ratio)]
             scaling *= 2
 
         model += [nn.ELU()]
+        mimiconv1d_layer_names.append(f"layers.{len(model)}")
         model += [MimiConv1d(config, scaling * config.num_filters, config.hidden_size, config.last_kernel_size)]
 
         self.layers = nn.ModuleList(model)
+        self._mimiconv1d_layer_names = mimiconv1d_layer_names
 
     # Copied from transformers.models.encodec.modeling_encodec.EncodecEncoder.forward
     def forward(self, hidden_states):
@@ -1404,12 +1426,8 @@ class MimiSplitResidualVectorQuantizer(nn.Module):
         return quantized_out
 
 
+@auto_docstring
 class MimiPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = MimiConfig
     base_model_prefix = "mimi"
     main_input_name = "input_values"
@@ -1439,58 +1457,10 @@ class MimiPreTrainedModel(PreTrainedModel):
             module.scale.data.fill_(self.config.layer_scale_initial_scale)
 
 
-MIMI_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`MimiConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-MIMI_INPUTS_DOCSTRING = r"""
-    Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
-            Raw audio input converted to Float.
-        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
-            for *masked*.
-        num_quantizers (`int`, *optional*):
-            Number of quantizers (i.e codebooks) to use. By default, all quantizers are used.
-        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
-            Discret code embeddings computed using `model.encode`.
-        encoder_past_key_values (`Cache`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
-            This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-            The model will output the same cache format that is fed as input.
-
-            If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
-            have their past key value states given to this model).
-        decoder_past_key_values (`Cache`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
-            This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-            The model will output the same cache format that is fed as input.
-
-            If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
-            have their past key value states given to this model).
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The Mimi neural audio codec model.",
-    MIMI_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The Mimi neural audio codec model.
+    """
 )
 class MimiModel(MimiPreTrainedModel):
     def __init__(self, config: MimiConfig):
@@ -1566,6 +1536,38 @@ class MimiModel(MimiPreTrainedModel):
         codes = self.quantizer.encode(embeddings, num_quantizers)
         codes = codes.transpose(0, 1)
         return codes, past_key_values
+
+    def get_encoded_length(self, input_length: torch.LongTensor) -> torch.LongTensor:
+        """
+        Return the number of frames of the encoded audio waveform.
+        """
+        output_length = input_length
+
+        # encoder
+        for layer_name in self.encoder._mimiconv1d_layer_names:
+            output_length = self.encoder.get_submodule(layer_name)._get_output_length(output_length)
+
+        # downsample
+        output_length = self.downsample._get_output_length(output_length)
+
+        return output_length
+
+    def get_audio_codes_mask(self, padding_mask: torch.Tensor, padding_side: str = "right"):
+        """
+        Get the mask for the audio codes from the original padding mask.
+        """
+        encoded_lengths = self.get_encoded_length(padding_mask.sum(dim=-1))
+
+        audio_codes_mask = torch.arange(encoded_lengths.max(), device=encoded_lengths.device).expand(
+            len(encoded_lengths), -1
+        )
+        audio_codes_mask = audio_codes_mask < encoded_lengths.unsqueeze(1)
+        audio_codes_mask = audio_codes_mask.to(padding_mask.device)
+
+        if padding_side == "right":
+            return audio_codes_mask
+        else:
+            return audio_codes_mask.flip(dims=[-1])
 
     def encode(
         self,
@@ -1701,8 +1703,7 @@ class MimiModel(MimiPreTrainedModel):
             )
         return MimiDecoderOutput(audio_values, decoder_past_key_values)
 
-    @add_start_docstrings_to_model_forward(MIMI_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MimiOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor,
@@ -1714,7 +1715,31 @@ class MimiModel(MimiPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], MimiOutput]:
         r"""
-        Returns:
+        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
+            Raw audio input converted to Float.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
+            for *masked*.
+        num_quantizers (`int`, *optional*):
+            Number of quantizers (i.e codebooks) to use. By default, all quantizers are used.
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
+            Discret code embeddings computed using `model.encode`.
+        encoder_past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.
+            This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+            The model will output the same cache format that is fed as input.
+
+            If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
+            have their past key value states given to this model).
+        decoder_past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
+            This typically consists in the `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+            The model will output the same cache format that is fed as input.
+
+            If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
+            have their past key value states given to this model).
 
         Examples:
 

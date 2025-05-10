@@ -315,6 +315,10 @@ model = AutoModelForImageTextToText.from_pretrained(
 
 [[autodoc]] LlavaNextProcessor
 
+## LlavaNextModel
+
+[[autodoc]] LlavaNextModel
+
 ## LlavaNextForConditionalGeneration
 
 [[autodoc]] LlavaNextForConditionalGeneration
