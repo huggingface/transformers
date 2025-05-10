@@ -1057,8 +1057,6 @@ class ContinuousBatchingManager:
                 self.streaming,
             )
             first = True
-            # Capture the graph
-            # graph = torch.cuda.CUDAGraph()
             while not self.stop_event.is_set() or batch_processor.has_pending_requests():
                 batch_data: PagedAttentionArgs = batch_processor.prepare_next_batch()
                 if batch_data is None:
@@ -1077,13 +1075,12 @@ class ContinuousBatchingManager:
                     logger.error(f"Model forward pass failed: {e}", exc_info=True)
                     batch_processor.handle_batch_error(e)
                     continue
-
+                
+                # TODO this should also be part of the graph
+                # TODO we can leverage logits processors
                 # Get next token logits and sample next tokens
                 next_token_logits = outputs.logits[:, model_kwargs["logits_indices"], :]
-
-                # Simple argmax sampling (can be extended with other sampling methods)
                 generated_ids = torch.argmax(next_token_logits, dim=-1).squeeze(0)
-
                 batch_processor.update_batch(generated_ids)
 
         except Exception as e:
