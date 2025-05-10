@@ -87,7 +87,7 @@ class MagmaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 # wrap up model.stem and model stages with clip_vision_model
-class ClipVisionModel(nn.Module):
+class ConvNextVisionModelTrunk(nn.Module):
     def __init__(self, model_name="convnext_xxlarge"):
         super().__init__()
         self.trunk = timm.create_model(model_name, pretrained=False)
@@ -102,7 +102,7 @@ class ConvNextVisionModel(nn.Module):
         else:
             self.model_name = config['vision_backbone']
         assert 'xxlarge' in self.model_name.lower(), f"Only convnext-xxlarge backbone is supported for Magma model, but got {self.model_name.lower()}"        
-        self.clip_vision_model = ClipVisionModel()
+        self.clip_vision_model = ConvNextVisionModelTrunk()
 
     def extract_features_convnext(self, x, gradient_checkpointing=False):
         out = {}
@@ -126,41 +126,6 @@ class ConvNextVisionModel(nn.Module):
     @property
     def size_divisibility(self):
         return 32
-
-class MagmaImageTower(ConvNextVisionModel):
-    r"""
-    Constructs a Magma image processor. Based on [`CLIPImageProcessor`] with incorporation of additional techniques
-    for processing high resolution images as explained in the [InternLM-XComposer2-4KHD](https://arxiv.org/pdf/2404.06512)
-
-    Args:
-        config (dict): Configuration dictionary containing the keys for the image processor.
-    """
-
-    def __init__(
-        self,
-        config, 
-        **kwargs
-    ) -> None:
-        super().__init__(config, **kwargs)
-        self.config = config
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        r"""
-        Args:
-            x (torch.Tensor): A tensor of shape (N, C, H, W) representing an image.
-
-        Returns:
-            torch.Tensor: A tensor of shape (N, C, H, W) representing the processed image.
-        """
-        return super().forward(x)
-    
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA or not.
-        """
-        return False
     
 class MagmaMultiModalProjector(nn.Module):
     def __init__(self, config):
@@ -323,7 +288,7 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
     def __init__(self, config: MagmaConfig):
         super().__init__(config)
 
-        self.vision_tower = MagmaImageTower(config.vision_config, require_pretrained=False)
+        self.vision_tower = ConvNextVisionModel(config.vision_config, require_pretrained=False)
         config.vision_config.mm_hidden_size = config.vision_config.mm_hidden_size \
             if 'mm_hidden_size' in config.vision_config else self.vision_tower.hidden_size
         config.vision_config.hidden_size = config.vision_config.hidden_size \
