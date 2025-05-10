@@ -13,12 +13,13 @@
 # limitations under the License.
 
 
+import time
 import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import is_flaky, require_torch, require_vision
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_video_inputs
 
@@ -30,6 +31,9 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import VideoMAEImageProcessor
+
+    if is_torchvision_available():
+        from transformers import VideoMAEImageProcessorFast
 
 
 class VideoMAEImageProcessingTester:
@@ -96,6 +100,7 @@ class VideoMAEImageProcessingTester:
 @require_vision
 class VideoMAEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = VideoMAEImageProcessor if is_vision_available() else None
+    fast_image_processing_class = VideoMAEImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -106,13 +111,14 @@ class VideoMAEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "do_center_crop"))
-        self.assertTrue(hasattr(image_processing, "size"))
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "do_center_crop"))
+            self.assertTrue(hasattr(image_processing, "size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
@@ -212,3 +218,61 @@ class VideoMAEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(
             tuple(encoded_videos.shape), (self.image_processor_tester.batch_size, *expected_output_video_shape)
         )
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence_batched(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+            self.skipTest(
+                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+            )
+
+        dummy_images = self.image_processor_tester.prepare_video_inputs(equal_resolution=True, torchify=True)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
+
+        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
+        self.assertLessEqual(
+            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
+        )
+
+    @require_vision
+    @require_torch
+    @is_flaky()
+    def test_fast_is_faster_than_slow(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping speed test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping speed test as one of the image processors is not defined")
+
+        def measure_time(image_processor, image):
+            # Warmup
+            for _ in range(5):
+                _ = image_processor(image, return_tensors="pt")
+            all_times = []
+            for _ in range(10):
+                start = time.time()
+                _ = image_processor(image, return_tensors="pt")
+                all_times.append(time.time() - start)
+            # Take the average of the fastest 3 runs
+            avg_time = sum(sorted(all_times[:3])) / 3.0
+            return avg_time
+
+        dummy_images = self.image_processor_tester.prepare_video_inputs(equal_resolution=True, torchify=True)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        fast_time = measure_time(image_processor_fast, dummy_images)
+        slow_time = measure_time(image_processor_slow, dummy_images)
+
+        self.assertLessEqual(fast_time, slow_time)
