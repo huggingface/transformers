@@ -389,8 +389,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
                 default_to_square=False,
                 input_data_format=ChannelDimension.FIRST,
             )
-        elif size.max_height and size.max_width:
-            new_size = get_image_size_for_max_height_width(image.size()[-2:], size.max_height, size.max_width)
         elif ensure_multiple_of > 1:
             new_size = get_output_image_size_for_ensure_multiple(
                 image, (size.height, size.width), keep_aspect_ratio=keep_aspect_ratio, multiple=ensure_multiple_of
