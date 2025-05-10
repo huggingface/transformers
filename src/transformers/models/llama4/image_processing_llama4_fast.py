@@ -21,8 +21,6 @@ from typing import List, Optional, Set, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
@@ -36,7 +34,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -107,11 +105,6 @@ def get_max_res_without_distortion(
         new_width = min(math.floor(original_width * scale_h), target_width)
 
     return new_height, new_width
-
-
-class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    max_patches: Optional[int]
-    resize_to_max_canvas: Optional[bool]
 
 
 def split_to_tiles(images: torch.Tensor, num_tiles_height: int, num_tiles_width: int) -> torch.Tensor:
@@ -330,20 +323,23 @@ def get_best_fit(
     return tuple(optimal_canvas.tolist())
 
 
-@add_start_docstrings(
-    "Constructs a fast Llama4 image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
-        max_patches (`int`, *optional*, defaults to 16):
-            The maximum number of patches to be extracted from the image.
-            Can be overridden by the `max_patches` parameter in the `preprocess` method.
-        resize_to_max_canvas (`bool`, *optional*, defaults to False):
-            Whether to resize the image to the maximum canvas size.
-            If True, picks the canvas the allows the largest resizing without distortion.
-            If False, downsample as little as possible, including no resizing at all,
-            but never upsample, unless the image is smaller than the patch size.
-    """,
-)
+    max_patches (`int`, *optional*, defaults to 16):
+        The maximum number of patches to be extracted from the image.
+        Can be overridden by the `max_patches` parameter in the `preprocess` method.
+    resize_to_max_canvas (`bool`, *optional*, defaults to False):
+        Whether to resize the image to the maximum canvas size.
+        If True, picks the canvas the allows the largest resizing without distortion.
+        If False, downsample as little as possible, including no resizing at all,
+        but never upsample, unless the image is smaller than the patch size.
+    """
+
+    max_patches: Optional[int]
+    resize_to_max_canvas: Optional[bool]
+
+
+@auto_docstring
 class Llama4ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = [0.5, 0.5, 0.5]
@@ -383,19 +379,7 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
 
         return images
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-        max_patches (`int`, *optional*, defaults to 16):
-            The maximum number of patches to be extracted from the image.
-            Can be overridden by the `max_patches` parameter in the `preprocess` method.
-        resize_to_max_canvas (`bool`, *optional*, defaults to False):
-            Whether to resize the image to the maximum canvas size.
-            If True, picks the canvas the allows the largest resizing without distortion.
-            If False, downsample as little as possible, including no resizing at all,
-            but never upsample, unless the image is smaller than the patch size.
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Llama4ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 

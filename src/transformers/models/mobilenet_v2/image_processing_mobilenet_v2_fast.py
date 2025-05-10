@@ -16,19 +16,16 @@
 
 from typing import List, Optional, Tuple
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
-from ...utils import add_start_docstrings, is_torch_available, is_torch_tensor
+from ...utils import auto_docstring, is_torch_available, is_torch_tensor
 
 
 if is_torch_available():
     import torch
 
 
-@add_start_docstrings(
-    "Constructs a fast MobileNetV2 image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
