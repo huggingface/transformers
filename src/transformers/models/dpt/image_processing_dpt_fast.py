@@ -39,7 +39,6 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     get_image_size,
-    is_pil_image,
     make_list_of_images,
 )
 from ...utils import (
@@ -50,6 +49,7 @@ from ...utils import (
     is_torchvision_v2_available,
     requires_backends,
 )
+
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
@@ -108,26 +108,29 @@ def get_output_image_size_for_ensure_multiple(
 
 class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
-        ensure_multiple_of (`int`, *optional*, defaults to 1):
-            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
-            by `ensure_multiple_of` in `preprocess`.
-        size_divisor (`int`, *optional*):
-            If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
-            DINOv2 paper, which uses the model in combination with DPT.
-        do_pad (`bool`, *optional*, defaults to `False`):
-            Whether to apply center padding. This was introduced in the DINOv2 paper, which uses the model in
-            combination with DPT.
-        keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
-            If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
-            be overidden by `keep_aspect_ratio` in `preprocess`.
-        segmentation_maps (`ImageInput`, *optional*):
-            Segmentation map to preprocess.
+    ensure_multiple_of (`int`, *optional*, defaults to 1):
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
+        by `ensure_multiple_of` in `preprocess`.
+    size_divisor (`int`, *optional*):
+        If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
+        DINOv2 paper, which uses the model in combination with DPT.
+    do_pad (`bool`, *optional*, defaults to `False`):
+        Whether to apply center padding. This was introduced in the DINOv2 paper, which uses the model in
+        combination with DPT.
+    keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
+        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
+        be overidden by `keep_aspect_ratio` in `preprocess`.
+    segmentation_maps (`ImageInput`, *optional*):
+        Segmentation map to preprocess.
     """
+
     ensure_multiple_of: Optional[int]
     size_divisor: Optional[int]
     do_pad: Optional[bool]
     keep_aspect_ratio: Optional[bool]
     segmentation_maps: Optional[ImageInput] = (None,)
+
+
 @auto_docstring
 class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
     resample = PILImageResampling.BICUBIC
@@ -159,7 +162,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
     ) -> BatchFeature:
         processed_images = self._preprocess_images(
             images=images,
-
             return_tensors=return_tensors,
             **kwargs,
         )
@@ -230,7 +232,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return processed_images
-    
+
     def _preprocess_segmentation_maps(
         self,
         segmentation_maps,
@@ -251,18 +253,19 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
         kwargs["input_data_format"] = ChannelDimension.FIRST
         processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
 
-        processed_segmentation_maps = processed_segmentation_maps['pixel_values'].squeeze(1)
+        processed_segmentation_maps = processed_segmentation_maps["pixel_values"].squeeze(1)
 
         processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
         return processed_segmentation_maps
 
+    @auto_docstring
     def pad_image(
         self,
         image: "torch.Tensor",
         size_divisor: int,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> "torch.Tensor":
-        """
+        r"""
         Center pad a batch of images to be a multiple of `size_divisor`.
 
         Args:
@@ -270,12 +273,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
                 Image to pad.  Can be a batch of images of dimensions (N, C, H, W) or a single image of dimensions (C, H, W).
             size_divisor (`int`):
                 The width and height of the image will be padded to a multiple of this number.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
 
         """
         if image.ndim >= 4:
