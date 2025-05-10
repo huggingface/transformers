@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import collections.abc
+from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -27,9 +28,9 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...file_utils import requires_backends
+from ...file_utils import ModelOutput, requires_backends
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import is_accelerate_available, is_scipy_available, logging
+from ...utils import can_return_tuple, is_accelerate_available, is_scipy_available, logging
 from .configuration_eomt import EoMTConfig
 
 
@@ -40,6 +41,43 @@ if is_accelerate_available():
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 logger = logging.get_logger(__name__)
+
+
+@dataclass
+class EoMTForUniversalSegmentationOutput(ModelOutput):
+    """
+    Class for outputs of [`EoMTForUniversalSegmentationOutput`].
+
+    This output can be directly passed to [`~EoMTFormerImageProcessor.post_process_semantic_segmentation`] or
+    [`~EoMTFormerImageProcessor.post_process_instance_segmentation`] or
+    [`~EoMTFormerImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
+    [`~EoMTFormerImageProcessor] for details regarding usage.
+
+    Args:
+        loss (`torch.Tensor`, *optional*):
+            The computed loss, returned when labels are present.
+        class_queries_logits (`torch.FloatTensor`):
+            A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
+            query. Note the `+ 1` is needed because we incorporate the null class.
+        masks_queries_logits (`torch.FloatTensor`):
+            A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
+            query.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Last hidden states (final feature map) of the last layer.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states all layers of the model.
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Self and Cross Attentions weights from transformer decoder.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    class_queries_logits: Optional[torch.FloatTensor] = None
+    masks_queries_logits: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.mask2former.modeling_mask2former.sample_point
@@ -839,7 +877,7 @@ class EoMTLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(self, config: EoMTConfig) -> None:
-        nn.Module().__init__()
+        super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = EoMTAttention(config)
@@ -983,9 +1021,8 @@ class EoMTPreTrainedModel(PreTrainedModel):
 # ToDo: How to add gradient checkpointing to the model?
 class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
     def __init__(self, config: EoMTConfig) -> None:
-        super().__init__()
+        super().__init__(config)
         self.config = config
-        self.attention_mask_prob = config.attention_mask_prob
         self.num_hidden_layers = config.num_hidden_layers
         self.embeddings = EoMTEmbeddings(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -996,7 +1033,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         self.upscale_block = EoMTScaleBlock(config)
         self.mask_head = MaskHead(config)
 
-        self.class_predictor = nn.Linear(config.hidden_dim, config.num_labels + 1)
+        self.class_predictor = nn.Linear(config.hidden_size, config.num_labels + 1)
 
         self.grid_size = self.embeddings.patch_embeddings.grid_size
         self.weight_dict: Dict[str, float] = {
@@ -1069,6 +1106,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
 
         return attn_mask
 
+    @can_return_tuple
     def forward(
         self,
         pixel_values: Tensor,
@@ -1079,6 +1117,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
     ):
         masks_queries_logits_per_layer = ()
         class_queries_logits_per_layer = ()
+        attention_mask = None
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -1094,8 +1133,8 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
                 hidden_states = self.layernorm(hidden_states)
                 masks_queries_logits, class_queries_logits = self._predict(hidden_states)
 
-                masks_queries_logits_per_layer.append(masks_queries_logits)
-                class_queries_logits_per_layer.append(class_queries_logits)
+                masks_queries_logits_per_layer += masks_queries_logits
+                class_queries_logits_per_layer += class_queries_logits
 
                 attention_mask = torch.ones(
                     hidden_states.shape[0],
@@ -1131,8 +1170,8 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         sequence_output = self.layernorm(hidden_states)
 
         masks_queries_logits, class_queries_logits = self._predict(sequence_output)
-        masks_queries_logits_per_layer.append(masks_queries_logits)
-        class_queries_logits_per_layer.append(class_queries_logits)
+        masks_queries_logits_per_layer += (masks_queries_logits,)
+        class_queries_logits_per_layer += (class_queries_logits,)
 
         loss = None
         if mask_labels is not None and class_labels is not None:
@@ -1148,7 +1187,14 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
                 )
                 loss += self.get_loss(loss_dict)
 
-        return masks_queries_logits, class_queries_logits
+        return EoMTForUniversalSegmentationOutput(
+            loss=loss,
+            class_queries_logits=class_queries_logits_per_layer[-1],
+            masks_queries_logits=masks_queries_logits_per_layer[-1],
+            last_hidden_state=sequence_output,
+            hidden_states=(),
+            attentions=(),
+        )
 
 
 __all__ = ["EoMTForUniversalSegmentation"]

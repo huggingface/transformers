@@ -792,7 +792,7 @@ class EoMTLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(self, config: EoMTConfig) -> None:
-        nn.Module().__init__()
+        super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = EoMTAttention(config)
@@ -936,9 +936,8 @@ class EoMTPreTrainedModel(PreTrainedModel):
 # ToDo: How to add gradient checkpointing to the model?
 class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
     def __init__(self, config: EoMTConfig) -> None:
-        super().__init__()
+        super().__init__(config)
         self.config = config
-        self.attention_mask_prob = config.attention_mask_prob
         self.num_hidden_layers = config.num_hidden_layers
         self.embeddings = EoMTEmbeddings(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -949,7 +948,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         self.upscale_block = EoMTScaleBlock(config)
         self.mask_head = MaskHead(config)
 
-        self.class_predictor = nn.Linear(config.hidden_dim, config.num_labels + 1)
+        self.class_predictor = nn.Linear(config.hidden_size, config.num_labels + 1)
 
         self.grid_size = self.embeddings.patch_embeddings.grid_size
         self.weight_dict: Dict[str, float] = {
@@ -1033,6 +1032,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
     ):
         masks_queries_logits_per_layer = ()
         class_queries_logits_per_layer = ()
+        attention_mask = None
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -1048,8 +1048,8 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
                 hidden_states = self.layernorm(hidden_states)
                 masks_queries_logits, class_queries_logits = self._predict(hidden_states)
 
-                masks_queries_logits_per_layer.append(masks_queries_logits)
-                class_queries_logits_per_layer.append(class_queries_logits)
+                masks_queries_logits_per_layer+= masks_queries_logits
+                class_queries_logits_per_layer+=(class_queries_logits)
 
                 attention_mask = torch.ones(
                     hidden_states.shape[0],
@@ -1085,8 +1085,8 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         sequence_output = self.layernorm(hidden_states)
 
         masks_queries_logits, class_queries_logits = self._predict(sequence_output)
-        masks_queries_logits_per_layer.append(masks_queries_logits)
-        class_queries_logits_per_layer.append(class_queries_logits)
+        masks_queries_logits_per_layer+=(masks_queries_logits,)
+        class_queries_logits_per_layer+=(class_queries_logits,)
 
         loss = None
         if mask_labels is not None and class_labels is not None:
