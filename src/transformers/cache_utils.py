@@ -95,8 +95,8 @@ def _sliding_cache_update(
     # Sliding window logic for generation phase or prefill < window
     slicing = torch.arange(max_cache_len, device=value_states.device)
     current_seq_len = cache_position[-1] + 1  # Use last position to determine current length
-    should_shift = current_seq_len > max_cache_len
-    indices = (slicing + should_shift.sum()) % max_cache_len
+    to_shift = current_seq_len > max_cache_len
+    indices = (slicing + to_shift.sum()) % max_cache_len
 
     k_out_shifted = k_cache[:, :, indices]
     v_out_shifted = v_cache[:, :, indices]
@@ -1396,9 +1396,9 @@ class SlidingWindowCache(StaticCache):
     if true(which means the cache can not hold all the old key value states and new states together because of the sliding window constraint),
     we need to do a cycle shift based on `indices` to replace the oldest states by the new key value states passed in.
 
-    The `should_shift` is only true once we are above sliding_window. Thus with `sliding_window==64`:
+    The `to_shift` is only true once we are above sliding_window. Thus with `sliding_window==64`:
 
-    indices = (slicing + should_shift[-1].sum()-1) % self.config.sliding_window
+    indices = (slicing + to_shift[-1].sum()-1) % self.config.sliding_window
     tensor([ 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
         19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
         37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54,
