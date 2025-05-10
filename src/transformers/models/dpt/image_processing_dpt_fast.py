@@ -107,30 +107,27 @@ def get_output_image_size_for_ensure_multiple(
 
 
 class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+        ensure_multiple_of (`int`, *optional*, defaults to 1):
+            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
+            by `ensure_multiple_of` in `preprocess`.
+        size_divisor (`int`, *optional*):
+            If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
+            DINOv2 paper, which uses the model in combination with DPT.
+        do_pad (`bool`, *optional*, defaults to `False`):
+            Whether to apply center padding. This was introduced in the DINOv2 paper, which uses the model in
+            combination with DPT.
+        keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
+            If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
+            be overidden by `keep_aspect_ratio` in `preprocess`.
+        segmentation_maps (`ImageInput`, *optional*):
+            Segmentation map to preprocess.
+    """
+    ensure_multiple_of: Optional[int]
     size_divisor: Optional[int]
     do_pad: Optional[bool]
-    ensure_multiple_of: Optional[int]
     keep_aspect_ratio: Optional[bool]
     segmentation_maps: Optional[ImageInput] = (None,)
-
-
-DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING = r"""
- Args:
-    ensure_multiple_of (`int`, *optional*, defaults to 1):
-        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
-    by `ensure_multiple_of` in `preprocess`.
-    size_divisor (`int`, *optional*):
-        If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
-        DINOv2 paper, which uses the model in combination with DPT.
-    do_pad (`bool`, *optional*, defaults to `False`):
-        Whether to apply center padding. This was introduced in the DINOv2 paper, which uses the model in
-        combination with DPT.
-    keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
-        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
-        be overidden by `keep_aspect_ratio` in `preprocess`.
-    segmentation_maps (`ImageInput`, *optional*):
-        Segmentation map to preprocess.
-"""
 @auto_docstring
 class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
     resample = PILImageResampling.BICUBIC
@@ -198,7 +195,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         size_divisor: Optional[int],
-        # TODO should be able to remove kwargs
         **kwargs,
     ) -> "torch.Tensor":
         # Group images by size for batched resizing
