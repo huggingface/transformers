@@ -179,43 +179,46 @@ class LlavaNextProcessor(ProcessorMixin):
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
+        image_grid_pinpoints = self.image_processor.image_grid_pinpoints
+
+        height_best_resolution, width_best_resolution = select_best_resolution(
+            [orig_height, orig_width], image_grid_pinpoints
+        )
+        scale_height, scale_width = height_best_resolution // height, width_best_resolution // width
+
         patches_height = height // self.patch_size
         patches_width = width // self.patch_size
-        unpadded_features, newline_features = self._get_unpadded_features(orig_height, orig_width)
+        unpadded_features, newline_features = self._get_unpadded_features(
+            orig_height, orig_width, patches_height, patches_width, scale_height, scale_width
+        )
         # The base patch covers the entire image (+1 for the CLS)
         base_features = patches_height * patches_width + self.num_additional_image_tokens
         num_image_tokens = unpadded_features + newline_features + base_features
         return num_image_tokens
 
-    def _get_unpadded_features(self, height, width):
+    def _get_unpadded_features(self, height, width, patches_height, patches_width, scale_height, scale_width):
         """
         Get number of features for a given image with height/width. LLaVA-NeXT is different from LLaVA
         because it divided each image into patches depending on its resolution. Therefore we need to calculate how many
         patches an image is divided into and get the number of features from that.
         """
-        image_grid_pinpoints = self.image_processor.image_grid_pinpoints
-        current_height, current_width = select_best_resolution([height, width], image_grid_pinpoints)
-        num_patches_height = current_height // self.patch_size
-        num_patches_width = current_width // self.patch_size
+        current_height = patches_height * scale_height
+        current_width = patches_width * scale_width
 
         original_aspect_ratio = width / height
         current_aspect_ratio = current_width / current_height
         if original_aspect_ratio > current_aspect_ratio:
             scale_factor = current_width / width
             new_height = min(math.ceil(height * scale_factor), current_height)
-            padding, r = divmod(current_height - new_height, 2)
-            num_padding_patches = padding // self.patch_size + (padding + r) // self.patch_size
-            num_patches_height -= num_padding_patches
+            current_height = new_height
         else:
             scale_factor = current_height / height
             new_width = min(math.ceil(width * scale_factor), current_width)
-            padding, r = divmod(current_width - new_width, 2)
-            num_padding_patches = padding // self.patch_size + (padding + r) // self.patch_size
-            num_patches_width -= num_padding_patches
+            current_width = new_width
 
-        unpadded_features = num_patches_height * num_patches_width
-        newline_features = num_patches_height
-        return unpadded_features, newline_features
+        unpadded_features = current_height * current_width
+        newline_features = current_height
+        return (unpadded_features, newline_features)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

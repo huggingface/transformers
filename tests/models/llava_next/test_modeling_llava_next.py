@@ -300,12 +300,12 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
         # Test case width is padded
         pixel_values = floats_tensor([3, 400, 601])
-        unpadded_tensor = unpad_image(pixel_values, original_size, 1)
+        unpadded_tensor = unpad_image(pixel_values, original_size)
         self.assertEqual(unpadded_tensor.shape[1:], original_size)
 
         # Test case height is padded
         pixel_values = floats_tensor([3, 503, 400])
-        unpadded_tensor = unpad_image(pixel_values, original_size, 1)
+        unpadded_tensor = unpad_image(pixel_values, original_size)
         self.assertEqual(unpadded_tensor.shape[1:], original_size)
 
     def test_compare_padding_unpadding(self):
@@ -331,9 +331,11 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         padded_image = image_processor._pad_for_patching(
             resized_image, best_resolution, input_data_format=input_data_format
         )
-        padding_h, r_h = divmod(padded_image.shape[1] - resized_image.shape[1], 2)
-        num_padding_top = padding_h // patch_size
-        num_padding_bottom = (padding_h + r_h) // patch_size
+        pad_h = padded_image.shape[1] - resized_image.shape[1]
+        pad_h, r_h = divmod(pad_h, 2)
+        pad_top, pad_bottom = pad_h, pad_h + r_h
+        num_patch_pad_top = pad_top // patch_size
+        num_patch_pad_bottom = pad_bottom // patch_size
 
         # prepare model config
         config = self.model_tester.get_config()
@@ -373,11 +375,11 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
             )
             image_feature = reshape_image(image_feature, num_patch_height, num_patch_width, height, width)
             current_height = image_feature.shape[1]
-            image_feature = unpad_image(image_feature, image_sizes[image_idx], config.vision_config.patch_size)
+            image_feature = unpad_image(image_feature, image_sizes[image_idx])
             new_height = image_feature.shape[1]
 
             # verify that the padding size and unpadding size are the same
-            self.assertEqual(num_padding_top + num_padding_bottom, current_height - new_height)
+            self.assertEqual(num_patch_pad_top + num_patch_pad_bottom, current_height - new_height)
 
     @parameterized.expand(
         [

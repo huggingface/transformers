@@ -136,7 +136,7 @@ def reshape_image(image_feature, num_patch_height, num_patch_width, height, widt
     return image_feature
 
 
-def unpad_image(tensor, original_size, patch_size):
+def unpad_image(tensor, original_size):
     """
     Unpads a PyTorch tensor of a padded and resized image.
 
@@ -145,8 +145,6 @@ def unpad_image(tensor, original_size, patch_size):
             The image tensor, assumed to be of shape (num_channels, height, width).
         original_size (`tuple`):
             The original size of the image (height, width).
-        patch_size (`int`):
-            The size of each patch.
 
     Returns:
         `torch.Tensor`: The unpadded image tensor.
@@ -158,8 +156,7 @@ def unpad_image(tensor, original_size, patch_size):
             )
         original_size = original_size.tolist()
     original_height, original_width = original_size
-    num_patches_height, num_patches_width = tensor.shape[1:]
-    current_height, current_width = num_patches_height * patch_size, num_patches_width * patch_size
+    current_height, current_width = tensor.shape[1:]
 
     original_aspect_ratio = original_width / original_height
     current_aspect_ratio = current_width / current_height
@@ -168,14 +165,12 @@ def unpad_image(tensor, original_size, patch_size):
         scale_factor = current_width / original_width
         new_height = min(math.ceil(original_height * scale_factor), current_height)
         padding, r = divmod(current_height - new_height, 2)
-        num_padding_top, num_padding_bottom = padding // patch_size, (padding + r) // patch_size
-        unpadded_tensor = tensor[:, num_padding_top : num_patches_height - num_padding_bottom, :]
+        unpadded_tensor = tensor[:, padding : current_height - (padding + r), :]
     else:
         scale_factor = current_height / original_height
         new_width = min(math.ceil(original_width * scale_factor), current_width)
         padding, r = divmod(current_width - new_width, 2)
-        num_padding_left, num_padding_right = padding // patch_size, (padding + r) // patch_size
-        unpadded_tensor = tensor[:, :, num_padding_left : num_patches_width - num_padding_right]
+        unpadded_tensor = tensor[:, :, padding : current_width - (padding + r)]
 
     return unpadded_tensor
 
@@ -467,9 +462,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
                     )
 
                 image_feature = reshape_image(image_feature, num_patch_height, num_patch_width, height, width)
-                image_feature = unpad_image(
-                    image_feature, image_sizes[image_idx], self.config.vision_config.patch_size
-                )
+                image_feature = unpad_image(image_feature, image_sizes[image_idx])
                 if image_newline is not None:
                     image_feature = torch.cat(
                         (
