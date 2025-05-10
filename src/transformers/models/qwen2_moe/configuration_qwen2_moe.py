@@ -51,6 +51,8 @@ class Qwen2MoeConfig(PretrainedConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
+        head_dim (`int`, *optional*):
+            Dimension of the attention heads. If not specified, it will be set to `hidden_size // num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 32768):
@@ -134,6 +136,8 @@ class Qwen2MoeConfig(PretrainedConfig):
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
+        _attn_implementation (`str`, *optional*, defaults to `"eager"`):
+            The implementation of attention mechanism.
     ```python
     >>> from transformers import Qwen2MoeModel, Qwen2MoeConfig
 
@@ -174,6 +178,7 @@ class Qwen2MoeConfig(PretrainedConfig):
         num_hidden_layers=24,
         num_attention_heads=16,
         num_key_value_heads=16,
+        head_dim=None,
         hidden_act="silu",
         max_position_embeddings=32768,
         initializer_range=0.02,
@@ -196,6 +201,7 @@ class Qwen2MoeConfig(PretrainedConfig):
         router_aux_loss_coef=0.001,
         mlp_only_layers=None,
         qkv_bias=True,
+        _attn_implementation="eager",
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -204,9 +210,9 @@ class Qwen2MoeConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if use_sliding_window else None
-        self.max_window_layers = max_window_layers
+        self.head_dim = head_dim
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
 
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
@@ -215,6 +221,9 @@ class Qwen2MoeConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
+        self.use_sliding_window = use_sliding_window
+        self.sliding_window = sliding_window
+        self.max_window_layers = max_window_layers
         self.attention_dropout = attention_dropout
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
@@ -233,6 +242,7 @@ class Qwen2MoeConfig(PretrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
         self.qkv_bias = qkv_bias
+        self._attn_implementation = _attn_implementation
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,

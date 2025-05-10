@@ -276,6 +276,17 @@ _import_structure = {
         "TorchAoConfig",
         "VptqConfig",
     ],
+    "models": {
+        "qwen2_moe": [
+            "Qwen2MoeConfig",
+            "Qwen2MoeForCausalLM",
+            "Qwen2MoeForQuestionAnswering",
+            "Qwen2MoeForSequenceClassification",
+            "Qwen2MoeForTokenClassification",
+            "Qwen2MoeModel",
+            "Qwen2MoePreTrainedModel",
+        ],
+    },
 }
 
 # tokenizers-backed objects

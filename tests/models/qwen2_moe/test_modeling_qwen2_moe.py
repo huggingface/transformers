@@ -375,6 +375,71 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # This is to mimic torch.testing.assert_not_close
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
+    def test_head_dim_manual_setting(self):
+        """Test that manually setting head_dim works correctly."""
+        config = Qwen2MoeConfig(
+            hidden_size=2048,
+            num_attention_heads=16,
+            head_dim=128,  # Manually set head_dim
+        )
+        
+        # Verify head_dim is set correctly
+        assert config.head_dim == 128
+        
+        # Create model with manual head_dim
+        model = Qwen2MoeModel(config)
+        
+        # Verify attention layer uses correct head_dim
+        attention_layer = model.layers[0].self_attn
+        assert attention_layer.head_dim == 128
+        
+        # Test forward pass
+        input_ids = torch.tensor([[1, 2, 3, 4]])
+        output = model(input_ids)
+        assert output.last_hidden_state.shape == (1, 4, 2048)  # batch_size, seq_len, hidden_size
+
+    def test_head_dim_auto_calculation(self):
+        """Test that head_dim is calculated correctly when not manually set."""
+        config = Qwen2MoeConfig(
+            hidden_size=2048,
+            num_attention_heads=16,
+        )
+        
+        # Verify head_dim is calculated correctly
+        assert config.head_dim == 128  # 2048 / 16 = 128
+        
+        # Create model with auto-calculated head_dim
+        model = Qwen2MoeModel(config)
+        
+        # Verify attention layer uses correct head_dim
+        attention_layer = model.layers[0].self_attn
+        assert attention_layer.head_dim == 128
+        
+        # Test forward pass
+        input_ids = torch.tensor([[1, 2, 3, 4]])
+        output = model(input_ids)
+        assert output.last_hidden_state.shape == (1, 4, 2048)  # batch_size, seq_len, hidden_size
+
+    def test_head_dim_validation(self):
+        """Test that invalid head_dim values are caught."""
+        # Test head_dim that doesn't divide hidden_size
+        with pytest.raises(ValueError):
+            config = Qwen2MoeConfig(
+                hidden_size=2048,
+                num_attention_heads=16,
+                head_dim=129,  # Invalid: 129 * 16 != 2048
+            )
+            Qwen2MoeModel(config)
+        
+        # Test head_dim that's too large
+        with pytest.raises(ValueError):
+            config = Qwen2MoeConfig(
+                hidden_size=2048,
+                num_attention_heads=16,
+                head_dim=2049,  # Invalid: larger than hidden_size
+            )
+            Qwen2MoeModel(config)
+
 
 @require_torch
 class Qwen2MoeIntegrationTest(unittest.TestCase):
