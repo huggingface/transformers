@@ -50,7 +50,7 @@ class RequestState:
     prompt_ids: List[int]
 
     # Optional/generated fields
-    output_ids: List[int] = field(default_factory=list)
+    static_outputs: List[int] = field(default_factory=list)
     remaining_prompt_ids: List[int] = field(default_factory=list)  # For split requests
     allocated_blocks: List[int] = field(default_factory=list)
     position_offset: int = 0  # Current position in the sequence for position_ids
@@ -65,7 +65,7 @@ class RequestState:
 
     def generated_len(self) -> int:
         """Get the number of tokens generated so far."""
-        return len(self.output_ids)
+        return len(self.static_outputs)
 
     def update_with_token(self, token_id: int) -> bool:
         """Update the request with a newly generated token and check for completion.
@@ -81,7 +81,7 @@ class RequestState:
             return False
 
         # Add the token to output
-        self.output_ids.append(token_id)
+        self.static_outputs.append(token_id)
 
         is_eos = token_id == self.eos_token_id and self.eos_token_id != -1
         is_max_len = self.generated_len() >= self.max_new_tokens
@@ -399,7 +399,7 @@ def compute_optimal_blocks(
 
 @dataclass
 class PagedAttentionArgs:
-    innput_ids: torch.Tensor
+    input_ids: torch.Tensor
     position_ids: torch.Tensor
     cumulative_seqlens_q: torch.Tensor
     cumulative_seqlens_k: torch.Tensor
@@ -461,6 +461,7 @@ class ContinuousBatchProcessor:
         tensor_metadata = {"dtype": torch.long, "device": self.model_device}
         self.tensor_metadata = tensor_metadata
         self.input_ids              = torch.zeros((1, T), **tensor_metadata)
+        self.static_outputs         = torch.zeros((1, T), **tensor_metadata)
         self.position_ids           = torch.zeros((1, T), **tensor_metadata)
         self.cumulative_seqlens_q   = torch.zeros((T+1,),  **tensor_metadata)
         self.cumulative_seqlens_k   = torch.zeros((T+1,),  **tensor_metadata)
@@ -565,9 +566,9 @@ class ContinuousBatchProcessor:
 
         # Include any generated tokens if this is an active request
         if isinstance(request_id, str) and request_id in self.active_requests:
-            error_response["output_ids"] = self.active_requests[request_id].output_ids
+            error_response["static_outputs"] = self.active_requests[request_id].static_outputs
         else:
-            error_response["output_ids"] = []
+            error_response["static_outputs"] = []
 
         self.output_queue.put(error_response)
 
@@ -694,7 +695,7 @@ class ContinuousBatchProcessor:
         cumk_ptr        = 1
         for state in requests_in_batch:
             if state.status == "decoding":
-                next_input_ids = [state.output_ids[-1]]
+                next_input_ids = [state.static_outputs[-1]]
                 positions_to_add = [state.current_len()]
 
                 if not self._allocate_blocks_if_needed(state, state.current_len() + 1):
@@ -747,17 +748,16 @@ class ContinuousBatchProcessor:
             cumq_ptr += 1
             cumk_ptr += 1
 
-            self.max_seqlen_q = max(max_seqlen_q, seq_len_q)
-            self.max_seqlen_k = max(max_seqlen_k, seq_len_k)
+            self.max_seqlen_q = max(self.max_seqlen_q, seq_len_q)
+            self.max_seqlen_k = max(self.max_seqlen_k, seq_len_k)
             self.logits_indices[cumk_ptr].copy_(torch.tensor(self.cumulative_seqlens_q[-1] - 1, **self.tensor_metadata))
-            state.position_offset += len(token_position[-len(next_input_ids) :])
+            state.position_offset += token_position - len(next_input_ids)
 
         if not token_position:
             return None
 
         # Calculate max total sequence length in the batch
-        self.max_seqlen_k = max(state.current_len() for state in requests_in_batch)
-        return self.get_model_kwargs().to_dict()
+        return self.get_model_kwargs().__dict__
 
     def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
         """Helper function to allocate blocks for a request."""
@@ -772,7 +772,7 @@ class ContinuousBatchProcessor:
             state.allocated_blocks.extend(allocated)
         return True
 
-    def update_batch(self, generated_ids: torch.Tensor):
+    def update_batch(self, generated_ids: torch.Tensor, batch_data: PagedAttentionArgs= None):
         """Update request states based on generated tokens."""
         # TODO I think many slowdowns can come from here
         # this should be probably vectorized
@@ -780,8 +780,10 @@ class ContinuousBatchProcessor:
         # and potentially have a tensor with values containing the status
 
         token_idx = 0
-        finished_request_ids = []
-
+        has_eos = generated_ids == self.eos_token_id
+        is_max_len = batch_data.cumulative_seqlens_q + 1 >= self.max_context_len
+        to_remove = has_eos | is_max_len
+        tokens_to_keep = torch.where(to_remove) # can get request ids with this
         for req_id in self.requests_to_process_next:
             if req_id not in self.active_requests:
                 logger.warning(f"Request {req_id} not found in active requests during update.")
@@ -793,13 +795,15 @@ class ContinuousBatchProcessor:
                 state.status = "decoding"
                 # state.prompt_ids = []  # Clear prompt as it's now in cache
 
-                token = generated_ids[token_idx].item()
+                token = generated_ids[token_idx]
                 token_idx += 1
 
-                if state.update_with_token(token):
+                if state.update_with_token(token): 
+                    # TODO optimize this, we have access to cum_seq_len_q for max len
+                    # have acces to tensor of tokens for eos, we should directly update the next input ids for decoding
                     finished_request_ids.append(req_id)
 
-                self._send_output(state, token)
+                self._maybe_send_output(state, token)
 
             elif state.status == "prefilling_split":
                 token_idx += 1  # Skip the token
@@ -817,7 +821,7 @@ class ContinuousBatchProcessor:
                     if state.update_with_token(token):
                         finished_request_ids.append(req_id)
 
-                    self._send_output(state, token)
+                    self._maybe_send_output(state, token)
 
             elif state.status == "decoding":
                 if token_idx >= len(generated_ids):
@@ -831,7 +835,7 @@ class ContinuousBatchProcessor:
                     if state.update_with_token(token):
                         finished_request_ids.append(req_id)
 
-                    self._send_output(state, token)
+                    self._maybe_send_output(state, token)
 
             elif state.status == "split_pending_remainder":
                 logger.warning(f"Request {req_id} in 'split_pending_remainder' state during update.")
@@ -841,7 +845,7 @@ class ContinuousBatchProcessor:
                 self.cache.free_blocks(req_id)
                 del self.active_requests[req_id]
 
-    def _send_output(self, state: RequestState, token: int):
+    def _maybe_send_output(self, state: RequestState, token: int):
         """Send output to the queue based on streaming mode and request state."""
         output = {
             "request_id": state.request_id,
@@ -854,7 +858,7 @@ class ContinuousBatchProcessor:
             self.output_queue.put(output)
 
         elif state.status == "finished":
-            output["output_ids"] = state.output_ids
+            output["static_outputs"] = state.static_outputs
             self.output_queue.put(output)
 
     def has_pending_requests(self) -> bool:
@@ -1019,6 +1023,41 @@ class ContinuousBatchingManager:
             if result is not None:
                 yield result
 
+    def warmup(self, batch_processor):
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream):
+            # Warmup the model with a dummy forward pass
+            self._generation_step(batch_processor)
+        torch.cuda.current_stream().wait_stream(stream)
+
+        self.graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(self.graph):
+            self._generation_step(batch_processor)
+
+    def _generation_step(self, batch_processor: ContinuousBatchProcessor):
+        """Perform a single generation step. This is cuda graphed"""
+        batch_data = batch_processor.get_model_kwargs()
+        with torch.no_grad():
+            model_outputs = self.model(**batch_data)
+            # Copy is needed to avoid keeping a hanging ref
+            logits = model_outputs.logits[batch_data.logits_indices].to(copy=True, dtype=torch.float32, device=input_ids.device)
+            if self.log_prob_generation:
+                self.output_probs.copy_(logits)
+
+            # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
+            # `temperature`, ...), and add new logprobs to existing running logprobs scores.
+            log_probs = nn.functional.log_softmax(logits, dim=-1)
+            next_token_scores = logits_processor(batch_data.input_ids, log_probs)
+
+            if do_sample:  # sample
+                probs = nn.functional.softmax(next_token_scores, dim=-1)
+                next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+            else:  # argmax
+                next_tokens = torch.argmax(next_token_scores, dim=-1)
+
+            self.generated_ids.copy_(next_tokens)
+
     def _run_generation_loop(self):
         """Main processing loop running in the background thread."""
         batch_processor = None
@@ -1042,30 +1081,19 @@ class ContinuousBatchingManager:
             )
             first = True
             while not self.stop_event.is_set() or batch_processor.has_pending_requests():
-                batch_data: PagedAttentionArgs = batch_processor.prepare_next_batch()
-                if batch_data is None:
-                    if self.stop_event.is_set() and not batch_processor.has_pending_requests():
-                        break  # No more work to do
-                    time.sleep(0.005)  # Prevent CPU spinning
-                    continue
-
+                batch_processor.prepare_next_batch()
                 if first:
-                    self.graph = self.warmup(batch_data)
+                    self.warmup(batch_processor, batch_data)
                     first = False
                 try:
                     self.graph.replay()
-                    outputs = self.static_outputs
                 except Exception as e:
                     logger.error(f"Model forward pass failed: {e}", exc_info=True)
                     batch_processor.handle_batch_error(e)
                     continue
 
-                # TODO this should also be part of the graph
-                # TODO we can leverage logits processors
-                # Get next token logits and sample next tokens
-                next_token_logits = outputs.logits[:, batch_data.logits_indices, :]
-                generated_ids = torch.argmax(next_token_logits, dim=-1).squeeze(0)
-                batch_processor.update_batch(generated_ids)
+                batch_processor.update_batch(self.generated_ids.clone().detach())
+                batch_processor._maybe_send_output()
 
         except Exception as e:
             logger.error(f"Error in generation loop: {e}", exc_info=True)
@@ -1178,6 +1206,4 @@ class ContinuousMixin:
                     results[i] = []
         finally:
             manager.stop(block=True, timeout=5.0)
-
-        # Return results in the original order
         return results
