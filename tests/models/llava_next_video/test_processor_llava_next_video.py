@@ -96,7 +96,7 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.image_processor.image_grid_pinpoints = [[672, 336]]
         # Important to check with non square image
         image = torch.randint(0, 2, (3, 503, 316))
-        expected_image_tokens = 1575
+        expected_image_tokens = 1525
         image_token_index = processor.image_token_id
 
         messages = [

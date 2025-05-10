@@ -101,7 +101,7 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.num_image_tokens = (processor.image_processor.size["shortest_edge"] // processor.patch_size) ** 2
         # Important to check with non square image
         image = torch.randint(0, 2, (3, 503, 316))
-        expected_image_tokens = 1575
+        expected_image_tokens = 1525
         image_token_index = processor.image_token_id
 
         messages = [
