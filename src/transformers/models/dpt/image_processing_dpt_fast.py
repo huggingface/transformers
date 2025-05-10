@@ -165,7 +165,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
             return_tensors=return_tensors,
             **kwargs,
         )
-
         data = {"pixel_values": processed_images}
 
         if segmentation_maps is not None:
