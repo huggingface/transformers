@@ -36,8 +36,10 @@ from ...utils import (
     replace_return_docstrings,
 )
 from transformers import AutoConfig, AutoModelForCausalLM
+from transformers.configuration_utils import PretrainedConfig
 from .configuration_magma import MagmaConfig
-from .image_tower_magma import MagmaImageTower
+import torch.utils.checkpoint as checkpoint
+import timm
 
 logger = logging.get_logger(__name__)
 
@@ -84,7 +86,82 @@ class MagmaCausalLMOutputWithPast(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
+# wrap up model.stem and model stages with clip_vision_model
+class ClipVisionModel(nn.Module):
+    def __init__(self, model_name="convnext_xxlarge"):
+        super().__init__()
+        self.trunk = timm.create_model(model_name, pretrained=False)
+        # remove self.trunk.head
+        self.trunk.head = nn.Identity()
 
+class ConvNextVisionModel(nn.Module):
+    def __init__(self, config, **kwargs):    
+        super().__init__()
+        if isinstance(config, PretrainedConfig):
+            self.model_name = config.vision_backbone
+        else:
+            self.model_name = config['vision_backbone']
+        assert 'xxlarge' in self.model_name.lower(), f"Only convnext-xxlarge backbone is supported for Magma model, but got {self.model_name.lower()}"        
+        self.clip_vision_model = ClipVisionModel()
+
+    def extract_features_convnext(self, x, gradient_checkpointing=False):
+        out = {}
+        x = self.clip_vision_model.trunk.stem(x)
+        if gradient_checkpointing:
+            x = checkpoint.checkpoint(self.clip_vision_model.trunk.stages, x)
+        else:
+            x = self.clip_vision_model.trunk.stages(x)
+        out['clip_vis_dense'] = x
+        return out
+            
+    def forward(self, x, gradient_checkpointing=False):
+        """
+        Args:
+            x: Tensor of shape (N,C,H,W). H, W must be a multiple of ``self.size_divisibility``.
+        Returns:
+            dict[str->Tensor]: names and the corresponding features
+        """
+        return self.extract_features_convnext(x, gradient_checkpointing=gradient_checkpointing)      
+
+    @property
+    def size_divisibility(self):
+        return 32
+
+class MagmaImageTower(ConvNextVisionModel):
+    r"""
+    Constructs a Magma image processor. Based on [`CLIPImageProcessor`] with incorporation of additional techniques
+    for processing high resolution images as explained in the [InternLM-XComposer2-4KHD](https://arxiv.org/pdf/2404.06512)
+
+    Args:
+        config (dict): Configuration dictionary containing the keys for the image processor.
+    """
+
+    def __init__(
+        self,
+        config, 
+        **kwargs
+    ) -> None:
+        super().__init__(config, **kwargs)
+        self.config = config
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        r"""
+        Args:
+            x (torch.Tensor): A tensor of shape (N, C, H, W) representing an image.
+
+        Returns:
+            torch.Tensor: A tensor of shape (N, C, H, W) representing the processed image.
+        """
+        return super().forward(x)
+    
+    @property
+    def _supports_sdpa(self):
+        """
+        Retrieve language_model's attribute to check whether the model supports
+        SDPA or not.
+        """
+        return False
+    
 class MagmaMultiModalProjector(nn.Module):
     def __init__(self, config):
         super().__init__()
