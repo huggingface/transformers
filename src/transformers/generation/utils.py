@@ -3320,9 +3320,7 @@ class GenerationMixin:
             if streamer is not None:
                 if output_scores:
                     score = processed_logit_for_next_step[range(batch_size), selected_idx].item()
-                    streamer.put(
-                        next_tokens.cpu(), score=score
-                    )
+                    streamer.put(next_tokens.cpu(), score=score)
                 else:
                     streamer.put(next_tokens.cpu())
 
@@ -3526,9 +3524,7 @@ class GenerationMixin:
             if streamer is not None:
                 if output_scores:
                     score = next_token_scores[range(batch_size), next_tokens].item()
-                    streamer.put(
-                        next_tokens.cpu(), score=score
-                    )
+                    streamer.put(next_tokens.cpu(), score=score)
                 else:
                     streamer.put(next_tokens.cpu())
 

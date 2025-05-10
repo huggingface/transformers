@@ -331,6 +331,8 @@ class ImmediateTextIteratorStreamer(ImmediateTextStreamer):
             The tokenized used to decode the tokens.
         skip_prompt (`bool`, *optional*, defaults to `False`):
             Whether to skip the prompt to `.generate()` or not. Useful e.g. for chatbots.
+        timeout (`float`, *optional*):
+            The timeout for the text queue. If `None`, the queue will block indefinitely. Useful to handle exceptions
         decode_kwargs (`dict`, *optional*):
             Additional keyword arguments to pass to the tokenizer's `decode` method.
 
