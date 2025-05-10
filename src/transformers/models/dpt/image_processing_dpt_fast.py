@@ -27,7 +27,6 @@ from transformers.image_transforms import (
 )
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     SemanticSegmentationMixin,
@@ -40,18 +39,17 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     get_image_size,
-    get_image_size_for_max_height_width,
     is_pil_image,
+    make_list_of_images,
 )
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
     requires_backends,
 )
-
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
@@ -133,13 +131,7 @@ DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING = r"""
     segmentation_maps (`ImageInput`, *optional*):
         Segmentation map to preprocess.
 """
-
-
-@add_start_docstrings(
-    "Constructs a fast DPT image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    DPT_IMAGE_PROCESSOR_FAST_KWARGS_DOCSTRING,
-)
+@auto_docstring
 class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
@@ -164,67 +156,27 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        do_resize: bool,
-        size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
-        do_center_crop: bool,
-        crop_size: SizeDict,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]],
-        size_divisor: Optional[int],
-        do_pad: bool,
-        ensure_multiple_of: Optional[int],
-        keep_aspect_ratio: bool = False,
         segmentation_maps: Optional[ImageInput] = None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = self._preprocess_images(
             images=images,
-            do_resize=do_resize,
-            size=size,
-            interpolation=interpolation,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
+
             return_tensors=return_tensors,
-            size_divisor=size_divisor,
-            do_pad=do_pad,
-            ensure_multiple_of=ensure_multiple_of,
-            keep_aspect_ratio=keep_aspect_ratio,
             **kwargs,
         )
 
         data = {"pixel_values": processed_images}
 
         if segmentation_maps is not None:
-            segmentation_maps = self._prepare_segmentation_maps(segmentation_maps)
-            processed_maps = self._preprocess_images(
-                images=segmentation_maps,
-                do_resize=do_resize,
-                size=size,
-                interpolation=interpolation,
-                do_center_crop=do_center_crop,
-                crop_size=crop_size,
-                do_rescale=False,
-                rescale_factor=rescale_factor,
-                do_normalize=False,
-                image_mean=image_mean,
-                image_std=image_std,
+            segmentation_maps = make_list_of_images(images=segmentation_maps, expected_ndims=2)
+            segmentation_maps = self._preprocess_segmentation_maps(
+                segmentation_maps=segmentation_maps,
                 return_tensors=return_tensors,
-                size_divisor=size_divisor,
-                do_pad=do_pad,
-                ensure_multiple_of=ensure_multiple_of,
-                keep_aspect_ratio=keep_aspect_ratio,
+                **kwargs,
             )
-            data["labels"] = processed_maps.long()
+            data["labels"] = segmentation_maps
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
@@ -246,6 +198,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         size_divisor: Optional[int],
+        # TODO should be able to remove kwargs
         **kwargs,
     ) -> "torch.Tensor":
         # Group images by size for batched resizing
@@ -281,27 +234,31 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return processed_images
+    
+    def _preprocess_segmentation_maps(
+        self,
+        segmentation_maps,
+        **kwargs,
+    ):
+        """Preprocesses segmentation maps."""
+        processed_segmentation_maps = []
+        for segmentation_map in segmentation_maps:
+            segmentation_map = self._process_image(
+                segmentation_map, do_convert_rgb=False, input_data_format=ChannelDimension.FIRST
+            )
+            if segmentation_map.ndim == 2:
+                segmentation_map = segmentation_map[None, ...]
+            processed_segmentation_maps.append(segmentation_map)
 
-    def _prepare_segmentation_maps(self, segmentation_maps: ImageInput) -> "torch.Tensor":
-        """
-        Prepares segmentation maps for processing. Leverages _prepare_input_images,
-        hence to use that we need to add and remove a dimension which corresponds to the missing batch dimension.
-        """
-        isBatched = False
-        if isinstance(segmentation_maps, list):
-            isBatched = True
-            if not is_pil_image(segmentation_maps[0]) and segmentation_maps[0].ndim == 2:
-                segmentation_maps = [map.unsqueeze(0) for map in segmentation_maps]
-        elif not is_pil_image(segmentation_maps) and segmentation_maps.ndim == 2:
-            segmentation_maps = segmentation_maps.unsqueeze(0)
+        kwargs["do_normalize"] = False
+        kwargs["do_rescale"] = False
+        kwargs["input_data_format"] = ChannelDimension.FIRST
+        processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
 
-        segmentation_maps = self._prepare_input_images(segmentation_maps)
+        processed_segmentation_maps = processed_segmentation_maps['pixel_values'].squeeze(1)
 
-        if isBatched:
-            segmentation_maps = [map.squeeze(0) for map in segmentation_maps]
-        else:
-            segmentation_maps = segmentation_maps[0]
-        return segmentation_maps
+        processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
+        return processed_segmentation_maps
 
     def pad_image(
         self,
@@ -351,7 +308,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
         antialias: bool = True,
         ensure_multiple_of: Optional[int] = None,
         keep_aspect_ratio: bool = False,
-        **kwargs,
     ) -> "torch.Tensor":
         """
         Resize an image to `(size["height"], size["width"])`.
