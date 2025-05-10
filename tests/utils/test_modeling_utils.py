@@ -1571,6 +1571,14 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(hub_model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
+    @require_tf
+    def test_torch_from_tf(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            _ = BertModel.from_pretrained(tmp_dir, from_tf=True)
+
     @require_safetensors
     def test_safetensors_torch_from_torch_sharded(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
