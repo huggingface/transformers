@@ -30,30 +30,31 @@ from transformers import EoMTConfig, EoMTForUniversalSegmentation
 # fmt: off
 MAPPINGS = {
     # Embeddings
-    r"network.encoder.backbone.cls_token"                : r"model.embeddings.cls_token",
-    r"network.encoder.backbone.reg_token"                : r"model.embeddings.register_tokens",
-    r"network.encoder.backbone.pos_embed"                : r"model.embeddings.position_embeddings.weight",
-    r"network.encoder.backbone.patch_embed.proj"         : r"model.embeddings.patch_embeddings.projection",
+    r"network.encoder.backbone.cls_token"                : r"embeddings.cls_token",
+    r"network.encoder.backbone.reg_token"                : r"embeddings.register_tokens",
+    r"network.encoder.backbone.pos_embed"                : r"embeddings.position_embeddings.weight",
+    r"network.encoder.backbone.patch_embed.proj"         : r"embeddings.patch_embeddings.projection",
 
     # Encoder Block
-    r"network.encoder.backbone.blocks.(\d+).norm1"       : r"model.encoder.layers.\1.norm1",
-    r"network.encoder.backbone.blocks.(\d+).attn.proj"   : r"model.encoder.layers.\1.attention.proj_out",
-    r"network.encoder.backbone.blocks.(\d+).ls1.gamma"   : r"model.encoder.layers.\1.layer_scale1.lambda1",
-    r"network.encoder.backbone.blocks.(\d+).norm2"       : r"model.encoder.layers.\1.norm2",
-    r"network.encoder.backbone.blocks.(\d+).mlp"         : r"model.encoder.layers.\1.mlp",
-    r"network.encoder.backbone.blocks.(\d+).ls2.gamma"   : r"model.encoder.layers.\1.layer_scale2.lambda1",
-    r"network.encoder.backbone.blocks.(\d+).attn"        : r"model.encoder.layers.\1.attention",
+    r"network.encoder.backbone.blocks.(\d+).norm1"       : r"layers.\1.norm1",
+    r"network.encoder.backbone.blocks.(\d+).attn.proj"   : r"layers.\1.attention.proj_out",
+    r"network.encoder.backbone.blocks.(\d+).ls1.gamma"   : r"layers.\1.layer_scale1.lambda1",
+    r"network.encoder.backbone.blocks.(\d+).norm2"       : r"layers.\1.norm2",
+    r"network.encoder.backbone.blocks.(\d+).mlp"         : r"layers.\1.mlp",
+    r"network.encoder.backbone.blocks.(\d+).ls2.gamma"   : r"layers.\1.layer_scale2.lambda1",
+    r"network.encoder.backbone.blocks.(\d+).attn"        : r"layers.\1.attention",
 
     # Others
-    r"network.q.weight"                                  : r"model.encoder.query.weight",
+    r"network.q.weight"                                  : r"query.weight",
     r"network.class_head"                                : r"class_predictor",
-    r"network.upscale.(\d+).conv1"                       : r"model.upscale_block.block.\1.conv1",
-    r"network.upscale.(\d+).conv2"                       : r"model.upscale_block.block.\1.conv2",
-    r"network.upscale.(\d+).norm"                        : r"model.upscale_block.block.\1.layernorm2d",
-    r"network.mask_head.0"                               : r"model.mask_head.fc1",
-    r"network.mask_head.2"                               : r"model.mask_head.fc2",
-    r"network.mask_head.4"                               : r"model.mask_head.fc3",
-    r"network.encoder.backbone.norm"                     : r"model.layernorm",
+    r"network.upscale.(\d+).conv1"                       : r"upscale_block.block.\1.conv1",
+    r"network.upscale.(\d+).conv2"                       : r"upscale_block.block.\1.conv2",
+    r"network.upscale.(\d+).norm"                        : r"upscale_block.block.\1.layernorm2d",
+    r"network.mask_head.0"                               : r"mask_head.fc1",
+    r"network.mask_head.2"                               : r"mask_head.fc2",
+    r"network.mask_head.4"                               : r"mask_head.fc3",
+    r"network.encoder.backbone.norm"                     : r"layernorm",
+    r"network.attn_mask_probs"                           : r"attn_mask_probs",
 }
 # fmt: on
 
@@ -95,15 +96,13 @@ def convert_state_dict_to_hf(state_dict):
 
     # Drop for now as not needed for inference.
     for i in [
-        "network.attn_mask_probs",
         "network.encoder.pixel_mean",
         "network.encoder.pixel_std",
-        "criterion.empty_weight",
     ]:
         converted_state_dict.pop(i)
 
     # Embeddings will not have initial dimension
-    pos_embed_key = "model.embeddings.position_embeddings.weight"
+    pos_embed_key = "embeddings.position_embeddings.weight"
     converted_state_dict[pos_embed_key] = converted_state_dict[pos_embed_key].squeeze(0)
 
     return converted_state_dict
