@@ -94,7 +94,6 @@ def convert_state_dict_to_hf(state_dict):
             else:
                 converted_state_dict[new_key] = state_dict[old_key]
 
-    # Drop for now as not needed for inference.
     for i in [
         "network.encoder.pixel_mean",
         "network.encoder.pixel_std",

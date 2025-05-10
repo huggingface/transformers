@@ -40,7 +40,6 @@ from ..dinov2.modeling_dinov2 import (
     Dinov2LayerScale,
     Dinov2MLP,
     Dinov2PatchEmbeddings,
-    eager_attention_forward,
 )
 from .configuration_eomt import EoMTConfig
 
@@ -700,6 +699,32 @@ class EoMTEmbeddings(nn.Module):
         return embeddings
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+
+    # This is the change from Dinov2 func.
+    if attention_mask is not None:
+        attn_weights = attn_weights * attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class EoMTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -743,6 +768,11 @@ class EoMTAttention(nn.Module):
         query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        # Expand attention mask to 4d mask.
+        if attention_mask is not None:
+            attention_mask = attention_mask[:, None, ...].expand(-1, self.num_heads, -1, -1)
+            attention_mask = attention_mask.to(dtype=query_states.dtype)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -1017,7 +1047,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
             random_queries = torch.rand(attn_mask.shape[0], num_query_tokens, device=device) > prob
 
             # Disable attention to the query tokens, considering the prefix tokens
-            attn_mask[:, :, :num_query_tokens, encoder_start_tokens:][random_queries] = 1
+            attn_mask[:, :num_query_tokens, encoder_start_tokens:][random_queries] = 1
 
         return attn_mask
 
@@ -1045,11 +1075,11 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
                 hidden_states = torch.cat((query, hidden_states), dim=1)
 
             if self.training and idx >= self.num_hidden_layers - self.config.num_blocks:
-                hidden_states = self.layernorm(hidden_states)
-                masks_queries_logits, class_queries_logits = self._predict(hidden_states)
+                norm_hidden_states = self.layernorm(hidden_states)
+                masks_queries_logits, class_queries_logits = self._predict(norm_hidden_states)
 
-                masks_queries_logits_per_layer+= masks_queries_logits
-                class_queries_logits_per_layer+=(class_queries_logits)
+                masks_queries_logits_per_layer += (masks_queries_logits,)
+                class_queries_logits_per_layer += (class_queries_logits,)
 
                 attention_mask = torch.ones(
                     hidden_states.shape[0],
@@ -1074,7 +1104,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
                 attention_mask = self._disable_attention_mask(
                     attention_mask,
                     prob=self.attn_mask_probs[idx - self.num_hidden_layers + self.config.num_blocks],
-                    num_queries=num_query_tokens,
+                    num_query_tokens=num_query_tokens,
                     encoder_start_tokens=encoder_start_tokens,
                     device=attention_mask.device,
                 )
@@ -1085,8 +1115,8 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         sequence_output = self.layernorm(hidden_states)
 
         masks_queries_logits, class_queries_logits = self._predict(sequence_output)
-        masks_queries_logits_per_layer+=(masks_queries_logits,)
-        class_queries_logits_per_layer+=(class_queries_logits,)
+        masks_queries_logits_per_layer += (masks_queries_logits,)
+        class_queries_logits_per_layer += (class_queries_logits,)
 
         loss = None
         if mask_labels is not None and class_labels is not None:
@@ -1099,13 +1129,15 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
                     class_queries_logits=class_queries_logits,
                     mask_labels=mask_labels,
                     class_labels=class_labels,
+                    auxiliary_predictions=None,
                 )
                 loss += self.get_loss(loss_dict)
 
+        # Probably later only return last state
         return EoMTForUniversalSegmentationOutput(
             loss=loss,
-            class_queries_logits=class_queries_logits_per_layer[-1],
-            masks_queries_logits=masks_queries_logits_per_layer[-1],
+            masks_queries_logits=masks_queries_logits_per_layer,
+            class_queries_logits=class_queries_logits_per_layer,
             last_hidden_state=sequence_output,
             hidden_states=(),
             attentions=(),
