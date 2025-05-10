@@ -458,26 +458,27 @@ class ContinuousBatchProcessor:
     def setup_static_tensors(self):
         T = self.max_batch_tokens
         max_token_budget = self.cache.num_blocks * self.cache.block_size
+        tensor_metadata = {"dtype": torch.long, "device": self.model_device}
+        self.tensor_metadata = tensor_metadata
         self.input_ids              = torch.zeros((1, T), **tensor_metadata)
-        self.position_ids           = torch.zeros((1, T), dtype=torch.uint32, device=self.model_device)
-        self.cumulative_seqlens_q   = torch.zeros((T+1,), dtype=torch.uint32, device=self.model_device)
-        self.cumulative_seqlens_k   = torch.zeros((T+1,), dtype=torch.uint32, device=self.model_device)
-        self.write_index            = torch.zeros((T,), dtype=torch.uint32, device=self.model_device)
-        self.read_index             = torch.zeros((max_token_budget,), dtype=torch.uint32, device=self.model_device)
-        self.logits_indices         = torch.zeros((T,), dtype=torch.uint32, device=self.model_device)
+        self.position_ids           = torch.zeros((1, T), **tensor_metadata)
+        self.cumulative_seqlens_q   = torch.zeros((T+1,),  **tensor_metadata)
+        self.cumulative_seqlens_k   = torch.zeros((T+1,),  **tensor_metadata)
+        self.write_index            = torch.zeros((T,),  **tensor_metadata)
+        self.read_index             = torch.zeros((max_token_budget,), **tensor_metadata)
+        self.logits_indices         = torch.zeros((T,),  **tensor_metadata)
         self.max_seqlen_q           = 0
         self.max_seqlen_k           = 0
 
-    @torch.compile
     def reset_static_tensors(self):
         """Reset static tensors for the next batch."""
-        self.input_ids_tensor.fill_(0)
-        self.position_ids_tensor.fill_(0)
-        self.cumulative_seqlens_q.fill_(0)
-        self.cumulative_seqlens_k.fill_(0)
-        self.write_index.fill_(0)
-        self.read_index.fill_(0)
-        self.logits_indices_tensor.fill_(0)
+        self.input_ids.zero_()
+        self.position_ids.zero_()
+        self.cumulative_seqlens_q.zero_()
+        self.cumulative_seqlens_k.zero_()
+        self.write_index.zero_()
+        self.read_index.zero_()
+        self.logits_indices.zero_()
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
 
@@ -492,7 +493,7 @@ class ContinuousBatchProcessor:
             max_seqlen_k=self.max_seqlen_k,
             write_index=self.write_index,
             read_index=self.read_index,
-            logits_indices=self.logits_indices_tensor,
+            logits_indices=self.logits_indices,
             block_tables=self.cache._block_tables,
             cache=self.cache,
             use_cache=True,
@@ -722,24 +723,23 @@ class ContinuousBatchProcessor:
                 logger.warning(f"Request {state.request_id} in unexpected state '{state.status}'. Skipping.")
                 continue
 
-            tensor_metadata = {"dtype": torch.long, "device": self.model_device}
-            self.input_ids_tensor[token_position : token_position + len(next_input_ids)].copy_(
-                torch.tensor(next_input_ids, **tensor_metadata)
+            self.input_ids[:, token_position : token_position + len(next_input_ids)].copy_(
+                torch.tensor(next_input_ids, **self.tensor_metadata)
             )
-            self.position_ids_tensor[token_position : token_position + len(positions_to_add)].copy_(
-                torch.tensor(positions_to_add, **tensor_metadata)
+            self.position_ids[:, token_position : token_position + len(positions_to_add)].copy_(
+                torch.tensor(positions_to_add, **self.tensor_metadata)
             )
             self.read_index[read_position : read_position + len(read_indices)].copy_(
-                torch.tensor(read_indices, **tensor_metadata)
+                torch.tensor(read_indices, **self.tensor_metadata)
             )
             self.write_index[write_position : write_position + len(write_indices)].copy_(
-                torch.tensor(write_indices, **tensor_metadata)
+                torch.tensor(write_indices, **self.tensor_metadata)
             )
-            self.cumulative_seqlens_q[cumq_ptr : cumq_ptr + seq_len_q].copy_(
-                torch.tensor([cumulative_seqlens_q[-1] + seq_len_q], **tensor_metadata)
+            self.cumulative_seqlens_q[cumq_ptr].copy_(
+                torch.tensor(self.cumulative_seqlens_q[-1] + seq_len_q, **self.tensor_metadata)
             )
-            self.cumulative_seqlens_k[cumk_ptr : cumk_ptr + seq_len_k].copy_(
-                torch.tensor([cumulative_seqlens_k[-1] + seq_len_k], **tensor_metadata)
+            self.cumulative_seqlens_k[cumk_ptr].copy_(
+                torch.tensor(self.cumulative_seqlens_k[-1] + seq_len_k, **self.tensor_metadata)
             )
             token_position += len(next_input_ids)
             read_position += len(read_indices)
@@ -749,7 +749,7 @@ class ContinuousBatchProcessor:
 
             self.max_seqlen_q = max(max_seqlen_q, seq_len_q)
             self.max_seqlen_k = max(max_seqlen_k, seq_len_k)
-            self.logits_indices_tensor[cumk_ptr].copy_(torch.tensor(cumulative_seqlens_q[-1] - 1))
+            self.logits_indices[cumk_ptr].copy_(torch.tensor(self.cumulative_seqlens_q[-1] - 1, **self.tensor_metadata))
             state.position_offset += len(token_position[-len(next_input_ids) :])
 
         if not token_position:
@@ -916,17 +916,6 @@ class ContinuousBatchingManager:
         self._generation_thread = None
         self._request_counter = 0
         self._request_lock = threading.Lock()
-        self._initial_prompt_shapes = []  # Cache sizing hints
-
-    def add_initial_prompts(self, prompts: List[List[int]]):
-        """Provide initial prompts to help determine optimal cache size before starting.
-
-        Args:
-            prompts: List of token sequences to use for cache size estimation
-        """
-        if self._generation_thread is not None:
-            raise RuntimeError("Cannot add initial prompts after the manager has started.")
-        self._initial_prompt_shapes = prompts
 
     def start(self):
         """Start the background generation thread."""
@@ -986,25 +975,21 @@ class ContinuousBatchingManager:
         Returns:
             str: The request ID
         """
-        if self.stop_event.is_set():
-            raise RuntimeError("Manager is stopping or has stopped.")
-
-        if self._generation_thread is None:
-            raise RuntimeError("Manager has not been started yet. Call start() first.")
-
-        # Generate request ID if not provided
         if request_id is None:
             with self._request_lock:
                 request_id = f"req_{self._request_counter}"
                 self._request_counter += 1
 
-        # Create request data
         req_data = {"request_id": request_id, "input_ids": input_ids, **kwargs}
-
-        # Use block=True with timeout to handle backpressure if queue is full
         self.input_queue.put(req_data, block=True, timeout=10)  # XXX: pass timeout as fn arg?
         logger.debug(f"Added request {request_id} to queue.")
         return request_id
+
+    def add_requests(self, inputs: List[List[int]], **kwargs):
+        for i, input_ids in enumerate(inputs):
+            # Assign a predictable request ID for ordering results later
+            req_id = f"batch_req_{i}"
+            self.add_request(input_ids, request_id=req_id, **kwargs)
 
     def get_result(self, timeout=None) -> Optional[Dict]:
         """Retrieve one result from the output queue.
@@ -1019,7 +1004,7 @@ class ContinuousBatchingManager:
             return None
 
         try:
-            result = self.output_queue.get(block=True, timeout=timeout)
+            result = self.output_queue.get(block=True, timeout=timeout) # TODO Pop here rather?
             logger.debug(f"Retrieved result for request {result.get('request_id')}")
             return result
         except queue.Empty:
@@ -1043,9 +1028,7 @@ class ContinuousBatchingManager:
                 self.generation_config,
                 self.model.device,
                 self.model.dtype,
-                initial_prompt_shapes=self._initial_prompt_shapes,
             )
-            self._initial_prompt_shapes = None  # Clear after use
 
             batch_processor = ContinuousBatchProcessor(
                 paged_attention_cache,
@@ -1165,43 +1148,25 @@ class ContinuousMixin:
 
         # Initialize manager with the batch inputs
         manager = self.init_continuous_batching(generation_config=generation_config)
-        manager.add_initial_prompts(inputs)
-        manager.start()
-
         results = {}
-        request_ids = {}
         num_requests = len(inputs)
-
         try:
             with tqdm(total=num_requests, disable=(not progress_bar), desc=f"Generating {num_requests} requests") as pbar:
-                # Add all requests
-                for i, input_ids in enumerate(inputs):
-                    # Assign a predictable request ID for ordering results later
-                    req_id = f"batch_req_{i}"
-                    manager.add_request(input_ids=input_ids, request_id=req_id, **kwargs)
-                    request_ids[req_id] = i
-
-                # Collect results
+                manager.add_requests(inputs, **kwargs)
+                manager.start() # we don't want to start before adding all requests
                 finished_count = 0
                 while finished_count < num_requests:
                     result = manager.get_result(timeout=1.0)
                     if result:
                         req_id = result["request_id"]
-                        if req_id in request_ids:
-                            original_idx = request_ids[req_id]
-                            if result["status"] == "finished":
-                                results[original_idx] = result
-                            else:  # Failed
-                                logger.warning(f"Request {req_id} failed: {result.get('error', 'Unknown error')}")
-                                results[original_idx] = []
-
-                            finished_count += 1
-                            pbar.update(1)
-                        else:
-                            # Log unexpected request IDs
-                            logger.warning(f"Received result for unknown request ID: {req_id}. Ignoring.")
+                        if result["status"] == "finished":
+                            results[req_id] = result
+                        else:  # Failed
+                            logger.warning(f"Request {req_id} failed: {result.get('error', 'Unknown error')}")
+                            results[req_id] = []
+                        finished_count += 1
+                        pbar.update(1)
                     else:
-                        # Check if the manager is still running
                         if not manager.is_running():
                             logger.error("Generation thread terminated unexpectedly.")
                             break
@@ -1215,4 +1180,4 @@ class ContinuousMixin:
             manager.stop(block=True, timeout=5.0)
 
         # Return results in the original order
-        return [results.get(i, []) for i in range(num_requests)]
+        return results
