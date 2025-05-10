@@ -996,7 +996,6 @@ class EoMTPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["EoMTMLP"]
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -1116,8 +1115,15 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
     ):
-        masks_queries_logits_per_layer = ()
-        class_queries_logits_per_layer = ()
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
+        masks_queries_logits_per_layer, class_queries_logits_per_layer = (), ()
         attention_mask = None
 
         if pixel_values is None:
@@ -1168,6 +1174,11 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
             layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
             hidden_states = layer_outputs[0]
 
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+            if output_attentions:
+                all_attentions += (layer_outputs[1],)
+
         sequence_output = self.layernorm(hidden_states)
 
         masks_queries_logits, class_queries_logits = self._predict(sequence_output)
@@ -1189,14 +1200,14 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
                 )
                 loss += self.get_loss(loss_dict)
 
-        # Probably later only return last state
+        # Probably later only return last state for mask and class logits
         return EoMTForUniversalSegmentationOutput(
             loss=loss,
             masks_queries_logits=masks_queries_logits_per_layer,
             class_queries_logits=class_queries_logits_per_layer,
             last_hidden_state=sequence_output,
-            hidden_states=(),
-            attentions=(),
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
 
