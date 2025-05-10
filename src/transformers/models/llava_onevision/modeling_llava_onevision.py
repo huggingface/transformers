@@ -109,32 +109,6 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
     return num_patches
 
 
-# Copied from transformers.models.llava_next.modeling_llava_next.reshape_image
-def reshape_image(image_feature, num_patch_height, num_patch_width, height, width):
-    """
-    Reshape the image feature tensor to recover height and width dimensions.
-
-    Args:
-        image_feature (`torch.Tensor`):
-            The image feature tensor to reshape.
-        num_patch_height (`int`):
-            The number of patches in the height dimension.
-        num_patch_width (`int`):
-            The number of patches in the width dimension.
-        height (`int`):
-            The height of each patch.
-        width (`int`):
-            The width of each patch.
-
-    Returns:
-        `torch.Tensor`: The reshaped image feature tensor.
-    """
-    image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
-    image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
-    image_feature = image_feature.flatten(1, 2).flatten(2, 3)
-    return image_feature
-
-
 # Copied from transformers.models.llava_next.modeling_llava_next.unpad_image
 def unpad_image(tensor, original_size):
     """
@@ -454,7 +428,9 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
                     self.config.image_grid_pinpoints,
                     self.config.vision_config.image_size,
                 )
-                image_feature = reshape_image(image_feature, num_patch_height, num_patch_width, height, width)
+                image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
+                image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
+                image_feature = image_feature.flatten(1, 2).flatten(2, 3)
                 image_feature = unpad_image(image_feature, image_sizes[image_idx])
                 max_num_patches = int(vision_aspect_ratio.strip("anyres_max_"))
                 channels, curr_height, curr_width = image_feature.shape
