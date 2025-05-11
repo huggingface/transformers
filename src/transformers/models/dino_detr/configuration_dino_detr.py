@@ -304,13 +304,13 @@ class DinoDetrConfig(PretrainedConfig):
         ], "Unknown param {} of two_stage_type".format(two_stage_type)
         if dec_layer_number is not None:
             if two_stage_type != "no" or num_patterns == 0:
-                assert (
-                    dec_layer_number[0] == num_queries
-                ), f"dec_layer_number[0]({dec_layer_number[0]}) != num_queries({num_queries})"
+                assert dec_layer_number[0] == num_queries, (
+                    f"dec_layer_number[0]({dec_layer_number[0]}) != num_queries({num_queries})"
+                )
             else:
-                assert (
-                    dec_layer_number[0] == num_queries * num_patterns
-                ), f"dec_layer_number[0]({dec_layer_number[0]}) != num_queries({num_queries}) * num_patterns({num_patterns})"
+                assert dec_layer_number[0] == num_queries * num_patterns, (
+                    f"dec_layer_number[0]({dec_layer_number[0]}) != num_queries({num_queries}) * num_patterns({num_patterns})"
+                )
         if dec_detach:
             assert isinstance(dec_detach, list)
             assert any(i in ["enc_ref", "enc_tgt", "dec"] for i in dec_detach)
