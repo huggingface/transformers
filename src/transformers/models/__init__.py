@@ -70,6 +70,7 @@ if TYPE_CHECKING:
     from .cpmant import *
     from .csm import *
     from .ctrl import *
+    from .confidenet import *
     from .cvt import *
     from .d_fine import *
     from .dab_detr import *
