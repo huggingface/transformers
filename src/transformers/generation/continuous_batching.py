@@ -737,7 +737,7 @@ class ContinuousBatchProcessor:
             state.allocated_blocks.extend(allocated)
         return True
 
-    def update_batch(self, batch_data: PagedAttentionArgs= None):
+    def update_batch(self):
         """Update request states based on generated tokens."""
         # TODO I think many slowdowns can come from here
         # this should be probably vectorized
@@ -747,9 +747,11 @@ class ContinuousBatchProcessor:
         # TODO I ANM HERE NEED TO FIGURE LOGIC OPTIAML HERE
         token_idx = 0
         has_eos = self.output_ids == self.eos_token_id
-        is_max_len = batch_data.cumulative_seqlens_q + 1 >= self.max_context_len
+        is_max_len = self.cumulative_seqlens_q[1:] + 1 >= self.max_context_len
         to_remove = has_eos | is_max_len
-        tokens_to_keep = torch.where(to_remove) # can get request ids with this
+        tokens_to_keep = torch.where(~to_remove & self.output_ids.bool())[1] # can get request ids with this
+        out_tokens = self.output_ids[tokens_to_keep].cpu().detach().tolist()
+        finished_request_ids = []
         for req_id in self.requests_to_process_next:
             if req_id not in self.active_requests:
                 logger.warning(f"Request {req_id} not found in active requests during update.")
@@ -761,7 +763,7 @@ class ContinuousBatchProcessor:
                 state.status = "decoding"
                 # state.prompt_ids = []  # Clear prompt as it's now in cache
 
-                token = generated_ids[token_idx]
+                token = out_tokens[token_idx]
                 token_idx += 1
 
                 if state.update_with_token(token): 
@@ -781,7 +783,7 @@ class ContinuousBatchProcessor:
                     state.status = "decoding"
                     # state.prompt_ids = []
 
-                    token = generated_ids[token_idx].item()
+                    token = out_tokens[token_idx].item()
                     token_idx += 1
 
                     if state.update_with_token(token):
@@ -795,7 +797,7 @@ class ContinuousBatchProcessor:
                     logger.error(error_msg)
                     raise IndexError(error_msg)
                 else:
-                    token = generated_ids[token_idx].item()
+                    token = out_tokens[token_idx].item()
                     token_idx += 1
 
                     if state.update_with_token(token):
@@ -1023,7 +1025,8 @@ class ContinuousBatchingManager:
                 next_tokens = torch.multinomial(logits[0], num_samples=1).squeeze(1)
             else:
                 next_tokens = torch.argmax(logits, dim=-1)
-            batch_processor.output_ids[:, batch_data.logits_indices].copy_(next_tokens)
+            batch_processor.output_ids.copy_(next_tokens)
+            batch_processor.output_ids.masked_fill_(~(batch_data.logits_indices).bool(), 0)
 
     def _run_generation_loop(self):
         """Main processing loop running in the background thread."""
