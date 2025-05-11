@@ -2624,6 +2624,12 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                     {"logits": a, "pred_boxes": b} for a, b in zip(enc_outputs_class, enc_outputs_coord)
                 ]
         # End remove
+        encoder_hidden_states = (
+            encoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None
+        )
+        decoder_hidden_states = (
+            decoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None
+        )
 
         if not return_dict:
             return tuple(
@@ -2639,8 +2645,8 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                     outputs_coord_list[-1],
                     out_aux_loss,
                     denoising_meta,
-                    (encoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None),
-                    (decoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None),
+                    (encoder_hidden_states),
+                    (decoder_hidden_states),
                     encoder_attentions,
                     decoder_attentions,
                 ]
@@ -2657,12 +2663,8 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
             pred_boxes=outputs_coord_list[-1],
             auxiliary_outputs=out_aux_loss,
             denoising_meta=denoising_meta,
-            encoder_hidden_states=(
-                encoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None
-            ),
-            decoder_hidden_states=(
-                decoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None
-            ),
+            encoder_hidden_states=(encoder_hidden_states),
+            decoder_hidden_states=(decoder_hidden_states),
             encoder_attentions=encoder_attentions,
             decoder_attentions=decoder_attentions,
         )
@@ -2687,20 +2689,35 @@ class DinoDetrImageProcessor(DetrImageProcessor):
         conf_threshold=0.3,
         nms_iou_threshold=-1,
     ):
-        """Perform the computation
-        Outputs are in xyxy unnormalized format
-        Parameters:
-            outputs: raw outputs of the model
-            target_sizes: tensor of dimension [batch_size x 2] containing the size of each images of the batch
-                        For evaluation, this must be the original image size (before any data augmentation)
-                        For visualization, this should be the image size after data augment, but before padding
+        """
+        Post-processes the outputs of the model for object detection.
 
+        Args:
+            outputs (`torch.Tensor`):
+                Raw outputs of the model, containing logits and predicted bounding boxes.
+            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
+                Tensor containing the size of each image in the batch. For evaluation, this must be the original image
+                size (before any data augmentation). For visualization, this should be the image size after data
+                augmentation but before padding.
+            not_to_xyxy (`bool`, *optional*, defaults to `False`):
+                If `True`, the bounding boxes are not converted to the `[x_min, y_min, x_max, y_max]` format.
+            test (`bool`, *optional*, defaults to `False`):
+                If `True`, adjusts the bounding boxes to represent width and height instead of absolute coordinates.
+            num_select (`int`, *optional*, defaults to `300`):
+                Number of top predictions to select based on confidence scores.
+            conf_threshold (`float`, *optional*, defaults to `0.3`):
+                Confidence threshold to filter predictions.
+            nms_iou_threshold (`float`, *optional*, defaults to `-1`):
+                IoU threshold for non-maximum suppression. If set to a value greater than 0, NMS is applied.
+
+        Returns:
+            `List[Dict[str, torch.Tensor]]`: A list of dictionaries, each containing:
+                - **scores** (`torch.Tensor`): Confidence scores of the selected predictions.
+                - **labels** (`torch.Tensor`): Class labels of the selected predictions.
+                - **boxes** (`torch.Tensor`): Bounding boxes of the selected predictions in absolute coordinates.
         """
         num_select = num_select
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
-
-        assert len(out_logits) == len(target_sizes)
-        assert target_sizes.shape[1] == 2
 
         prob = out_logits.sigmoid()
         topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), num_select, dim=1)
@@ -2713,7 +2730,6 @@ class DinoDetrImageProcessor(DetrImageProcessor):
             boxes = center_to_corners_format(out_bbox)
 
         if test:
-            assert not not_to_xyxy
             boxes[:, :, 2:] = boxes[:, :, 2:] - boxes[:, :, :2]
         boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
 

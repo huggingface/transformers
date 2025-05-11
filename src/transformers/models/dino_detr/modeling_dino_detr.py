@@ -3023,6 +3023,12 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                     {"logits": a, "pred_boxes": b} for a, b in zip(enc_outputs_class, enc_outputs_coord)
                 ]
         # End remove
+        encoder_hidden_states = (
+            encoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None
+        )
+        decoder_hidden_states = (
+            decoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None
+        )
 
         if not return_dict:
             return tuple(
@@ -3038,8 +3044,8 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
                     outputs_coord_list[-1],
                     out_aux_loss,
                     denoising_meta,
-                    (encoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None),
-                    (decoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None),
+                    (encoder_hidden_states),
+                    (decoder_hidden_states),
                     encoder_attentions,
                     decoder_attentions,
                 ]
@@ -3056,12 +3062,8 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
             pred_boxes=outputs_coord_list[-1],
             auxiliary_outputs=out_aux_loss,
             denoising_meta=denoising_meta,
-            encoder_hidden_states=(
-                encoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None
-            ),
-            decoder_hidden_states=(
-                decoder_hidden_states if output_hidden_states or self.model.output_hidden_states else None
-            ),
+            encoder_hidden_states=(encoder_hidden_states),
+            decoder_hidden_states=(decoder_hidden_states),
             encoder_attentions=encoder_attentions,
             decoder_attentions=decoder_attentions,
         )
