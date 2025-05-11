@@ -240,11 +240,10 @@ class PagedAttentionCache(Cache):
         value_states: torch.Tensor,
         layer_idx: int,
         read_index,
+        write_index,
         **kwargs,
     ) -> (torch.Tensor, torch.Tensor):
         """Updates the key and value states in the cache at the specified indices."""
-        write_index = kwargs.get("write_index")
-
         if write_index is None or write_index.numel() == 0:
             # Nothing to write, return the current cache state
             return self.key_cache[layer_idx], self.value_cache[layer_idx]
@@ -259,16 +258,16 @@ class PagedAttentionCache(Cache):
         k_cache_flat, v_cache_flat = self._reshape_cache_for_update(layer_idx)
 
         # Ensure indices are on the same device as the cache
-        indices_device = write_index.to(k_cache_flat.device)
+        write_index = write_index.to(k_cache_flat.device)
 
         try:
             # Update cache with new key and value states
-            k_cache_flat[:, indices_device, :] = key_states.to(k_cache_flat.device, k_cache_flat.dtype)[0]
-            v_cache_flat[:, indices_device, :] = value_states.to(v_cache_flat.device, v_cache_flat.dtype)[0]
+            k_cache_flat[:, write_index, :] = key_states.to(k_cache_flat.device, k_cache_flat.dtype)[0]
+            v_cache_flat[:, write_index, :] = value_states.to(v_cache_flat.device, v_cache_flat.dtype)[0]
         except IndexError as e:
             logger.error(
                 f"IndexError during cache update. Fill indices shape: {indices_device.shape}, "
-                f"Max index: {indices_device.max() if indices_device.numel() > 0 else 'N/A'}, "
+                f"Max index: {write_index.max() if indices_device.numel() > 0 else 'N/A'}, "
                 f"Cache shape: {k_cache_flat.shape}"
             )
             raise e
@@ -276,36 +275,6 @@ class PagedAttentionCache(Cache):
         # Return the updated cache slices needed for attention
         k_cache_flat, v_cache_flat = self._reshape_cache_for_update(layer_idx)
         return k_cache_flat[:, read_index, :][None, ...], v_cache_flat[:, read_index, :][None, ...]
-
-    def write_to_cache(
-        self, request_id: str, key_states: torch.Tensor, value_states: torch.Tensor, logical_indices: List[int]
-    ):
-        """Writes key/value states to the cache at specified logical indices for a request."""
-        if not logical_indices:
-            return  # Nothing to write
-
-        physical_indices: torch.Tensor = self._get_physical_indices(request_id, logical_indices)
-
-        # Validate input shapes
-        if key_states.shape[0] != len(logical_indices) or value_states.shape[0] != len(logical_indices):
-            raise ValueError(
-                f"Mismatch between number of tokens to write ({key_states.shape[0]}) and number of indices ({len(logical_indices)})"
-            )
-
-        # Update each layer's cache
-        for layer_idx in range(self.num_hidden_layers):
-            k_cache_flat, v_cache_flat = self._reshape_cache_for_update(layer_idx)
-
-            try:
-                # Write states to cache
-                k_cache_flat[physical_indices] = key_states.to(k_cache_flat.device, k_cache_flat.dtype)
-                v_cache_flat[physical_indices] = value_states.to(v_cache_flat.device, v_cache_flat.dtype)
-            except IndexError as e:
-                logger.error(
-                    f"IndexError during cache write for request {request_id}. Physical indices: {physical_indices.tolist()}, Max index: {k_cache_flat.shape[0] - 1}"
-                )
-                raise e
-
 
 def compute_optimal_blocks(
     device: torch.device,
@@ -394,7 +363,6 @@ def compute_optimal_blocks(
     )
 
     return int(num_blocks), int(block_size)
-
 
 
 @dataclass
@@ -692,7 +660,7 @@ class ContinuousBatchProcessor:
         token_position = 0
         read_position  = 0
         write_position = 0
-        cumq_ptr        = 1
+        cumq_ptr        = 1 # because at 0 we always have 0?
         cumk_ptr        = 1
         for state in requests_in_batch:
             if state.status == "decoding":
@@ -734,13 +702,18 @@ class ContinuousBatchProcessor:
             self.read_index[read_position : read_position + len(read_indices)].copy_(
                 torch.tensor(read_indices, **self.tensor_metadata)
             )
+            read_position += len(read_indices)
+            self.read_index[read_position: read_position + len(write_indices)].copy_(
+                torch.tensor(write_indices, **self.tensor_metadata)
+            )
+            read_position += len(write_indices)
             self.write_index[write_position : write_position + len(write_indices)].copy_(write_indices)
-            self.cumulative_seqlens_q[cumq_ptr].copy_(self.cumulative_seqlens_q[-1] + seq_len_q)
-            self.cumulative_seqlens_k[cumk_ptr].copy_(self.cumulative_seqlens_k[-1] + seq_len_k)
+            self.cumulative_seqlens_q[cumq_ptr].copy_(self.cumulative_seqlens_q[cumq_ptr-1] + seq_len_q)
+            self.cumulative_seqlens_k[cumk_ptr].copy_(self.cumulative_seqlens_k[cumq_ptr-1] + seq_len_k)
 
             self.max_seqlen_q = max(self.max_seqlen_q, seq_len_q)
             self.max_seqlen_k = max(self.max_seqlen_k, seq_len_k)
-            self.logits_indices[cumq_ptr].copy_(self.cumulative_seqlens_q[cumq_ptr]-1)
+            self.logits_indices[cumq_ptr-1].copy_(self.cumulative_seqlens_q[cumq_ptr]-1)
 
             token_position += len(next_input_ids)
             read_position += len(read_indices)
@@ -749,11 +722,7 @@ class ContinuousBatchProcessor:
             cumk_ptr += 1
             state.position_offset += token_position - len(next_input_ids)
 
-        if not token_position:
-            return None
 
-        # Calculate max total sequence length in the batch
-        return self.get_model_kwargs().__dict__
 
     def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
         """Helper function to allocate blocks for a request."""
@@ -768,15 +737,16 @@ class ContinuousBatchProcessor:
             state.allocated_blocks.extend(allocated)
         return True
 
-    def update_batch(self, generated_ids: torch.Tensor, batch_data: PagedAttentionArgs= None):
+    def update_batch(self, batch_data: PagedAttentionArgs= None):
         """Update request states based on generated tokens."""
         # TODO I think many slowdowns can come from here
         # this should be probably vectorized
         # we need to batch adding the tokens
         # and potentially have a tensor with values containing the status
 
+        # TODO I ANM HERE NEED TO FIGURE LOGIC OPTIAML HERE
         token_idx = 0
-        has_eos = generated_ids == self.eos_token_id
+        has_eos = self.output_ids == self.eos_token_id
         is_max_len = batch_data.cumulative_seqlens_q + 1 >= self.max_context_len
         to_remove = has_eos | is_max_len
         tokens_to_keep = torch.where(to_remove) # can get request ids with this
@@ -1045,12 +1015,14 @@ class ContinuousBatchingManager:
 
             # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
-            probs = self.logit_processor(batch_data.input_ids, logits)
+            
+            # TODO re activate once the unpute prepartion is fixed
+            # probs = self.logit_processor(batch_data.input_ids, logits)
             if self.do_sample:  # sample
-                probs = nn.functional.softmax(probs, dim=-1)
-                next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+                probs = nn.functional.softmax(logits, dim=-1)
+                next_tokens = torch.multinomial(logits[0], num_samples=1).squeeze(1)
             else:
-                next_tokens = torch.argmax(probs, dim=-1)
+                next_tokens = torch.argmax(logits, dim=-1)
             batch_processor.output_ids[:, batch_data.logits_indices].copy_(next_tokens)
 
     def _run_generation_loop(self):
@@ -1090,8 +1062,7 @@ class ContinuousBatchingManager:
                 else:
                     self._generation_step(batch_processor)
 
-
-                batch_processor.update_batch(self.generated_ids.clone().detach())
+                batch_processor.update_batch()
                 batch_processor._maybe_send_output()
 
         except Exception as e:
