@@ -11,9 +11,6 @@ import warnings
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
 
 from transformers.modeling_outputs import ModelOutput
@@ -24,10 +21,17 @@ from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...utils import (
     is_timm_available,
+    is_torch_available,
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
 from .configuration_dino_detr import DinoDetrConfig
+
+
+if is_torch_available():
+    import torch
+    import torch.nn.functional as F
+    from torch import nn
 
 
 if is_timm_available():
