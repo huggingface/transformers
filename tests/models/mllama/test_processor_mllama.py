@@ -333,7 +333,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor(text=text, images=None, padding=True)
 
     def test_unstructured_kwargs_batched(self):
-        # Overriden because Mllama expects images in nested format. For 2 images it can't infer
+        # Overridden because Mllama expects images in nested format. For 2 images it can't infer
         # the correct nesting, so we better throw an error
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
@@ -360,3 +360,29 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
             and len(inputs[self.text_input_name][1]) < 76
         )
+
+    def test_special_mm_token_truncation(self):
+        """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
+
+        processor = self.get_processor()
+
+        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = [[image_input[0]], [image_input[1]]]
+        _ = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            truncation=None,
+            padding=True,
+        )
+
+        with self.assertRaises(ValueError):
+            _ = processor(
+                text=input_str,
+                images=image_input,
+                return_tensors="pt",
+                truncation=True,
+                padding=True,
+                max_length=3,
+            )

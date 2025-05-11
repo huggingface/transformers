@@ -64,7 +64,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             The number of FFT components to use. If `None`, this is determined using
             `transformers.audio_utils.optimal_fft_length`.
         max_length_s (`int`, *optional*, defaults to 10):
-            The maximum input lenght of the model in seconds. This is used to pad the audio.
+            The maximum input length of the model in seconds. This is used to pad the audio.
         fmin (`float`, *optional*, defaults to 0.0):
             Minimum mel frequency in Hz.
         fmax (`float`, *optional*):

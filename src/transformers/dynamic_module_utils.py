@@ -151,17 +151,24 @@ def get_imports(filename: Union[str, os.PathLike]) -> list[str]:
         content = f.read()
     imported_modules = set()
 
+    import transformers.utils
+
     def recursive_look_for_imports(node):
         if isinstance(node, ast.Try):
-            return  #  Don't recurse into Try blocks and ignore imports in them
+            return  # Don't recurse into Try blocks and ignore imports in them
         elif isinstance(node, ast.If):
             test = node.test
             for condition_node in ast.walk(test):
-                if isinstance(condition_node, ast.Call) and getattr(condition_node.func, "id", "").startswith(
-                    "is_flash_attn"
-                ):
-                    # Don't recurse into "if flash_attn_available()" blocks and ignore imports in them
-                    return
+                if isinstance(condition_node, ast.Call):
+                    check_function = getattr(condition_node.func, "id", "")
+                    if (
+                        check_function.endswith("available")
+                        and check_function.startswith("is_flash_attn")
+                        or hasattr(transformers.utils.import_utils, check_function)
+                    ):
+                        # Don't recurse into "if flash_attn_available()" or any "if library_available" blocks
+                        # that appears in `transformers.utils.import_utils` and ignore imports in them
+                        return
         elif isinstance(node, ast.Import):
             # Handle 'import x' statements
             for alias in node.names:

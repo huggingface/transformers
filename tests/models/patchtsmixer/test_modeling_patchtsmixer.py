@@ -27,6 +27,7 @@ from parameterized import parameterized
 from transformers import is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.utils import check_torch_load_is_safe
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -91,12 +92,12 @@ class PatchTSMixerModelTester:
         head_dropout: float = 0.2,
         # forecast related
         prediction_length: int = 16,
-        out_channels: int = None,
+        out_channels: Optional[int] = None,
         # Classification/regression related
         # num_labels: int = 3,
         num_targets: int = 3,
-        output_range: list = None,
-        head_aggregation: str = None,
+        output_range: Optional[list] = None,
+        head_aggregation: Optional[str] = None,
         # Trainer related
         batch_size=13,
         is_training=True,
@@ -451,6 +452,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 def prepare_batch(repo_id="ibm/patchtsmixer-etth1-test-data", file="pretrain_batch.pt"):
     # TODO: Make repo public
     file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
+    check_torch_load_is_safe()
     batch = torch.load(file, map_location=torch_device, weights_only=True)
     return batch
 

@@ -28,25 +28,12 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import (
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_tapas import TapasConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "TapasConfig"
-_CHECKPOINT_FOR_DOC = "google/tapas-base"
 
 
 EPSILON_ZERO_DIVISION = 1e-10
@@ -708,12 +695,8 @@ class TapasOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+@auto_docstring
 class TapasPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = TapasConfig
     base_model_prefix = "tapas"
     supports_gradient_checkpointing = True
@@ -739,68 +722,7 @@ class TapasPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-TAPAS_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its models (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`TapasConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-TAPAS_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0}, 7)`, *optional*):
-            Token indices that encode tabular structure. Indices can be obtained using [`AutoTokenizer`]. See this
-            class for more info.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. If
-            `reset_position_index_per_cell` of [`TapasConfig`] is set to `True`, relative position embeddings will be
-            used. Selected in the range `[0, config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`: - 1
-            indicates the head is **not masked**, - 0 indicates the head is **masked**.
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare Tapas Model transformer outputting raw hidden-states without any specific head on top.",
-    TAPAS_START_DOCSTRING,
-)
+@auto_docstring
 class TapasModel(TapasPreTrainedModel):
     """
     This class is a small change compared to [`BertModel`], taking into account the additional token type ids.
@@ -813,6 +735,10 @@ class TapasModel(TapasPreTrainedModel):
     """
 
     def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        """
         super().__init__(config)
         self.config = config
 
@@ -838,8 +764,7 @@ class TapasModel(TapasPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -855,7 +780,17 @@ class TapasModel(TapasPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-        Returns:
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, 7)`, *optional*):
+            Token indices that encode tabular structure. Indices can be obtained using [`AutoTokenizer`]. See this
+            class for more info.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. If
+            `reset_position_index_per_cell` of [`TapasConfig`] is set to `True`, relative position embeddings will be
+            used. Selected in the range `[0, config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
 
         Examples:
 
@@ -953,7 +888,7 @@ class TapasModel(TapasPreTrainedModel):
         )
 
 
-@add_start_docstrings("""Tapas Model with a `language modeling` head on top.""", TAPAS_START_DOCSTRING)
+@auto_docstring
 class TapasForMaskedLM(TapasPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
     config_class = TapasConfig
@@ -975,8 +910,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
-    @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -994,12 +928,21 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         **kwargs,
     ) -> Union[Tuple, MaskedLMOutput]:
         r"""
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, 7)`, *optional*):
+            Token indices that encode tabular structure. Indices can be obtained using [`AutoTokenizer`]. See this
+            class for more info.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. If
+            `reset_position_index_per_cell` of [`TapasConfig`] is set to `True`, relative position embeddings will be
+            used. Selected in the range `[0, config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-
-        Returns:
 
         Examples:
 
@@ -1063,13 +1006,12 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Tapas Model with a cell selection head and optional aggregation head on top for question-answering tasks on tables
     (linear layers on top of the hidden-states output to compute `logits` and optional `logits_aggregation`), e.g. for
     SQA, WTQ or WikiSQL-supervised tasks.
-    """,
-    TAPAS_START_DOCSTRING,
+    """
 )
 class TapasForQuestionAnswering(TapasPreTrainedModel):
     def __init__(self, config: TapasConfig):
@@ -1106,8 +1048,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TableQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1127,6 +1068,17 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, TableQuestionAnsweringOutput]:
         r"""
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, 7)`, *optional*):
+            Token indices that encode tabular structure. Indices can be obtained using [`AutoTokenizer`]. See this
+            class for more info.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. If
+            `reset_position_index_per_cell` of [`TapasConfig`] is set to `True`, relative position embeddings will be
+            used. Selected in the range `[0, config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
         table_mask (`torch.LongTensor` of shape `(batch_size, seq_length)`, *optional*):
             Mask for the table. Indicates which tokens belong to the table (1). Question tokens, table headers and
             padding are 0.
@@ -1136,7 +1088,6 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
 
             - 1 for tokens that are **part of the answer**,
             - 0 for tokens that are **not part of the answer**.
-
         aggregation_labels (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             Aggregation function index for every example in the batch for computing the aggregation loss. Indices
             should be in `[0, ..., config.num_aggregation_labels - 1]`. Only required in case of strong supervision for
@@ -1151,8 +1102,6 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         numeric_values_scale (`torch.FloatTensor` of shape `(batch_size, seq_length)`, *optional*):
             Scale of the numeric values of every token. Can be obtained using [`AutoTokenizer`]. Only required in case
             of weak supervision for aggregation (WTQ) to calculate the regression loss.
-
-        Returns:
 
         Examples:
 
@@ -1409,12 +1358,11 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Tapas Model with a sequence classification head on top (a linear layer on top of the pooled output), e.g. for table
     entailment tasks, such as TabFact (Chen et al., 2020).
-    """,
-    TAPAS_START_DOCSTRING,
+    """
 )
 class TapasForSequenceClassification(TapasPreTrainedModel):
     def __init__(self, config):
@@ -1428,8 +1376,7 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1444,13 +1391,22 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, 7)`, *optional*):
+            Token indices that encode tabular structure. Indices can be obtained using [`AutoTokenizer`]. See this
+            class for more info.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. If
+            `reset_position_index_per_cell` of [`TapasConfig`] is set to `True`, relative position embeddings will be
+            used. Selected in the range `[0, config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy). Note: this is called
             "classification_class_index" in the original implementation.
-
-        Returns:
 
         Examples:
 
@@ -1563,7 +1519,7 @@ class IndexMap:
                 batch dimensions. Segments in different batch elements are always distinct even if they have the same
                 index.
         """
-        self.indices = torch.as_tensor(indices)
+        self.indices = torch.as_tensor(indices, device=indices.device)
         self.num_segments = torch.as_tensor(num_segments, device=indices.device)
         self.batch_dims = batch_dims
 
@@ -1693,11 +1649,14 @@ def range_index_map(batch_shape, num_segments, name="range_index_map"):
     Returns:
         (`IndexMap`): IndexMap of shape batch_shape with elements equal to range(num_segments).
     """
+    device = num_segments.device if torch.is_tensor(num_segments) else "cpu"
     batch_shape = torch.as_tensor(
-        batch_shape, dtype=torch.long
+        batch_shape, dtype=torch.long, device=device
     )  # create a rank 1 tensor vector containing batch_shape (e.g. [2])
     assert len(batch_shape.size()) == 1
-    num_segments = torch.as_tensor(num_segments)  # create a rank 0 tensor (scalar) containing num_segments (e.g. 64)
+    num_segments = torch.as_tensor(
+        num_segments, device=device
+    )  # create a rank 0 tensor (scalar) containing num_segments (e.g. 64)
     assert len(num_segments.size()) == 0
 
     indices = torch.arange(
@@ -1711,7 +1670,7 @@ def range_index_map(batch_shape, num_segments, name="range_index_map"):
     new_shape = [int(x) for x in new_tensor.tolist()]
     indices = indices.view(new_shape)
 
-    multiples = torch.cat([batch_shape, torch.as_tensor([1])], dim=0)
+    multiples = torch.cat([batch_shape, torch.as_tensor([1], device=device)], dim=0)
     indices = indices.repeat(multiples.tolist())
     # equivalent (in Numpy:)
     # indices = torch.as_tensor(np.tile(indices.numpy(), multiples.tolist()))
@@ -1752,12 +1711,13 @@ def _segment_reduce(values, index, segment_reduce_fn, name):
         dim=0, index=flat_index.indices.long(), src=flat_values.float(), reduce=segment_reduce_fn, include_self=False
     )
 
+    device = index.num_segments.device
     # Unflatten the values.
     new_shape = torch.cat(
         [
-            torch.as_tensor(index.batch_shape(), dtype=torch.long),
-            torch.as_tensor([index.num_segments], dtype=torch.long),
-            torch.as_tensor(vector_shape, dtype=torch.long),
+            torch.as_tensor(index.batch_shape(), dtype=torch.long, device=device),
+            torch.as_tensor([index.num_segments], dtype=torch.long, device=device),
+            torch.as_tensor(vector_shape, dtype=torch.long, device=device),
         ],
         dim=0,
     )

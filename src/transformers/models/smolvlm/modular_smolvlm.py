@@ -20,9 +20,9 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import DynamicCache
-from ...utils import (
-    logging,
-)
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...processing_utils import Unpack
+from ...utils import logging
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 from ..idefics3.modeling_idefics3 import (
@@ -94,7 +94,20 @@ class SmolVLMVisionConfig(Idefics3VisionConfig):
 
 
 class SmolVLMPreTrainedModel(Idefics3PreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
 
 class SmolVLMVisionTransformer(Idefics3VisionTransformer):
@@ -197,6 +210,7 @@ class SmolVLMModel(Idefics3Model):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, SmolVLMBaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -297,12 +311,10 @@ class SmolVLMModel(Idefics3Model):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
+            **kwargs,
         )
-
-        if not return_dict:
-            return tuple(v for v in [*outputs, image_hidden_states] if v is not None)
 
         return SmolVLMBaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
@@ -314,11 +326,6 @@ class SmolVLMModel(Idefics3Model):
 
 
 class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
-    """
-    A subclass of Idefics3ForConditionalGeneration that uses SmolVLMModel
-    instead of the default Idefics3Model.
-    """
-
     def __init__(self, config):
         super().__init__(config)
         self.model = SmolVLMModel(config)
@@ -327,14 +334,6 @@ class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
 
     def forward(self, **super_kwargs):
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `SmolVLMForConditionalGeneration`).
-                Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
-                computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        Returns:
-
         Example:
 
         ```python

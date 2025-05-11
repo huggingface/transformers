@@ -259,8 +259,9 @@ _import_structure = {
     ],
     "utils.quantization_config": [
         "AqlmConfig",
+        "AutoRoundConfig",
         "AwqConfig",
-        "BitNetConfig",
+        "BitNetQuantConfig",
         "BitsAndBytesConfig",
         "CompressedTensorsConfig",
         "EetqConfig",
@@ -343,7 +344,6 @@ except OptionalDependencyNotAvailable:
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
     _import_structure["model_debugging_utils"] = [
-        "model_addition_debugger",
         "model_addition_debugger_context",
     ]
     _import_structure["activations"] = []
@@ -438,6 +438,7 @@ else:
     ]
 
     _import_structure["modeling_flash_attention_utils"] = []
+    _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update"]
     _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
@@ -753,8 +754,9 @@ if TYPE_CHECKING:
     # bitsandbytes config
     from .utils.quantization_config import (
         AqlmConfig,
+        AutoRoundConfig,
         AwqConfig,
-        BitNetConfig,
+        BitNetQuantConfig,
         BitsAndBytesConfig,
         CompressedTensorsConfig,
         EetqConfig,
@@ -909,9 +911,9 @@ if TYPE_CHECKING:
             convert_and_export_with_cache,
         )
         from .model_debugging_utils import (
-            model_addition_debugger,
             model_addition_debugger_context,
         )
+        from .modeling_layers import GradientCheckpointingLayer
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
         from .modeling_utils import AttentionInterface, PreTrainedModel
 

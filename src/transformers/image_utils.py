@@ -18,7 +18,8 @@ from collections.abc import Iterable
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import BytesIO
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import Callable, Optional, Union
+from urllib.parse import urlparse
 
 import numpy as np
 import requests
@@ -65,7 +66,7 @@ if is_vision_available():
         from torchvision.transforms import InterpolationMode
 
         pil_torch_interpolation_mapping = {
-            PILImageResampling.NEAREST: InterpolationMode.NEAREST,
+            PILImageResampling.NEAREST: InterpolationMode.NEAREST_EXACT,
             PILImageResampling.BOX: InterpolationMode.BOX,
             PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
             PILImageResampling.HAMMING: InterpolationMode.HAMMING,
@@ -76,9 +77,8 @@ if is_vision_available():
         pil_torch_interpolation_mapping = {}
 
 
-if TYPE_CHECKING:
-    if is_torch_available():
-        import torch
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -159,6 +159,15 @@ def is_valid_image(img):
 
 def is_valid_list_of_images(images: list):
     return images and all(is_valid_image(image) for image in images)
+
+
+def concatenate_list(input_list):
+    if isinstance(input_list[0], list):
+        return [item for sublist in input_list for item in sublist]
+    elif isinstance(input_list[0], np.ndarray):
+        return np.concatenate(input_list, axis=0)
+    elif isinstance(input_list[0], torch.Tensor):
+        return torch.cat(input_list, dim=0)
 
 
 def valid_images(imgs):
@@ -367,7 +376,7 @@ def infer_channel_dimension_format(
 
     if image.shape[first_dim] in num_channels and image.shape[last_dim] in num_channels:
         logger.warning(
-            f"The channel dimension is ambiguous. Got image shape {image.shape}. Assuming channels are the first dimension."
+            f"The channel dimension is ambiguous. Got image shape {image.shape}. Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension."
         )
         return ChannelDimension.FIRST
     elif image.shape[first_dim] in num_channels:
@@ -833,7 +842,7 @@ def load_video(
 
         sample_indices_fn = sample_indices_fn_func
 
-    if video.startswith("https://www.youtube.com") or video.startswith("http://www.youtube.com"):
+    if urlparse(video).netloc in ["www.youtube.com", "youtube.com"]:
         if not is_yt_dlp_available():
             raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
         # Lazy import from yt_dlp
