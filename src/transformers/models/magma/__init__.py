@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from .modeling_magma import *
     from .processing_magma import *
     from .image_processing_magma import *
+    from .image_processing_magma_fast import *
 else:
     import sys
 

@@ -24,11 +24,32 @@ from torch import nn
 from transformers.models.llava_next.modeling_llava_next import (
     LlavaNextCausalLMOutputWithPast,
     LlavaNextPreTrainedModel,
+    LlavaNextFastImageProcessorKwargs,
+    LlavaNextImageProcessorFast,
 )
 from ...configuration_utils import PretrainedConfig
 from ...utils import (
+    TensorType,
     is_torchdynamo_compiling,
     logging,
+)
+from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
+from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+    divide_to_patches,
+    group_images_by_shape,
+    reorder_images,
+)
+from ...image_utils import (
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    SizeDict,
+    get_image_size,
+    make_flat_list_of_images,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -163,6 +184,128 @@ class MagmaConfig(PretrainedConfig):
 
         super().__init__(
             **kwargs,
+        )
+
+class MagmaImageProcessorFast(LlavaNextImageProcessorFast):
+    size = {"shortest_edge": 512}
+    crop_size = {"height": 512, "width": 512}    
+    image_grid_pinpoints = [(512, 512), (512, 1024), (512, 1536), (512, 2048), (1024, 512), (1024, 1024), (1536, 512), (2048, 512)]    
+
+    def _get_image_patches(
+        self,
+        image: "torch.Tensor",
+        grid_pinpoints,
+        size: tuple,
+        patch_size: int,
+        interpolation: "F.InterpolationMode",
+    ) -> List["torch.Tensor"]:
+        """
+        Process an image with variable resolutions by dividing it into patches.
+
+        Args:
+            image ("torch.Tensor"):
+                The input image to be processed.
+            grid_pinpoints (List):
+                A string representation of a list of possible resolutions.
+            size (`tuple`):
+                Size to resize the original image to.
+            patch_size (`int`):
+                Size of the patches to divide the image into.
+            interpolation (`"InterpolationMode"`):
+                Resampling filter to use if resizing the image.
+
+        Returns:
+            List["torch.Tensor"]: A list of NumPy arrays containing the processed image patches.
+        """
+        if not isinstance(grid_pinpoints, list):
+            raise TypeError("grid_pinpoints must be a list of possible resolutions.")
+
+        possible_resolutions = grid_pinpoints
+
+        image_size = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+        best_resolution = select_best_resolution(image_size, possible_resolutions)
+        resized_image = self._resize_for_patching(
+            image, best_resolution, interpolation=interpolation, input_data_format=ChannelDimension.FIRST
+        )
+        padded_image = self._pad_for_patching(resized_image, best_resolution, input_data_format=ChannelDimension.FIRST)
+        patches = divide_to_patches(padded_image, patch_size=patch_size)
+
+        image_patches = patches
+        best_resolution_grid = (best_resolution[0] // patch_size, best_resolution[1] // patch_size)
+
+        return image_patches, best_resolution_grid
+
+    def _preprocess(
+        self,
+        images: List["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        image_grid_pinpoints: List[List[int]],
+        interpolation: Optional["F.InterpolationMode"],
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Optional[Union[float, List[float]]],
+        image_std: Optional[Union[float, List[float]]],
+        do_pad: bool,
+        return_tensors: Optional[Union[str, TensorType]],
+    ) -> BatchFeature:
+        processed_images = []
+        image_sizes = []
+        # Determine the size tuple
+        if size and size.height and size.width:
+            size_tuple = (size.height, size.width)
+        else:
+            size_tuple = (size.shortest_edge, size.shortest_edge)
+
+        # Determine the patch size
+        if crop_size and crop_size.height:
+            patch_size = crop_size.height
+        elif size and size.height:
+            patch_size = size.height
+        else:
+            patch_size = size.shortest_edge
+
+        for image in images:
+            image_patches, best_resolution_grid = self._get_image_patches(
+                image,
+                image_grid_pinpoints,
+                size=size_tuple,
+                patch_size=patch_size,
+                interpolation=interpolation,
+            )
+
+            # Group images by size for batched processing
+            processed_image_patches_grouped = {}
+            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(image_patches)
+            for shape, stacked_image_patches in grouped_image_patches.items():
+                if do_resize:
+                    stacked_image_patches = self.resize(
+                        image=stacked_image_patches,
+                        size=size,
+                        interpolation=interpolation,
+                    )
+                if do_center_crop:
+                    stacked_image_patches = self.center_crop(stacked_image_patches, crop_size)
+                # Fused rescale and normalize
+                stacked_image_patches = self.rescale_and_normalize(
+                    stacked_image_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                )
+                processed_image_patches_grouped[shape] = stacked_image_patches
+            processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
+            processed_image_patches = (
+                torch.stack(processed_image_patches, dim=0) if return_tensors else processed_image_patches
+            )
+            processed_images.append(processed_image_patches)
+            image_sizes.append(best_resolution_grid)
+
+        if do_pad:
+            processed_images = self._pad_for_batching(processed_images)
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
+        return BatchFeature(
+            data={"pixel_values": processed_images, "image_sizes": torch.tensor(image_sizes).unsqueeze(0)}, tensor_type=return_tensors
         )
 
 
