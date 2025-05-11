@@ -1,4 +1,13 @@
-from typing import Callable
+import copy
+import math
+import random
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional, Tuple
+
+from transformers.modeling_outputs import ModelOutput
+from transformers.modeling_utils import PreTrainedModel
+from transformers.models.detr.image_processing_detr import center_to_corners_format
+from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 
 from ...utils import (
     is_scipy_available,
@@ -14,19 +23,6 @@ from ..deformable_detr.modeling_deformable_detr import (
 )
 from ..detr.image_processing_detr import DetrImageProcessor
 from ..detr.modeling_detr import DetrConvModel, DetrFrozenBatchNorm2d, DetrMLPPredictionHead
-
-
-import copy
-import math
-import random
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
-
-from transformers.modeling_outputs import ModelOutput
-from transformers.modeling_utils import PreTrainedModel
-from transformers.models.detr.image_processing_detr import center_to_corners_format
-from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-
 from .configuration_dino_detr import DinoDetrConfig
 
 
@@ -56,8 +52,8 @@ class DinoDetrMultiscaleDeformableAttention(DeformableDetrMultiscaleDeformableAt
 
 if is_torch_available():
     import torch
-    from torch import nn
     import torch.nn.functional as F
+    from torch import nn
 
 if is_torchvision_available():
     from torchvision.ops.boxes import nms
