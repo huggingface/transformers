@@ -334,7 +334,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
-
 # PyTorch-backed objects
 try:
     if not is_torch_available():
