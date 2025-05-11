@@ -24,7 +24,7 @@ from typing import Deque, Dict, List, Optional, Union
 
 import torch
 from tqdm import tqdm
-
+import torch.nn as nn
 from ..cache_utils import Cache
 from ..configuration_utils import PretrainedConfig
 from ..generation.configuration_utils import GenerationConfig
@@ -733,20 +733,13 @@ class ContinuousBatchProcessor:
             self.read_index[read_position : read_position + len(read_indices)].copy_(
                 torch.tensor(read_indices, **self.tensor_metadata)
             )
-            self.write_index[write_position : write_position + len(write_indices)].copy_(
-                torch.tensor(write_indices, **self.tensor_metadata)
-            )
-            self.cumulative_seqlens_q[cumq_ptr].copy_(
-                torch.tensor(self.cumulative_seqlens_q[-1] + seq_len_q, **self.tensor_metadata)
-            )
-            self.cumulative_seqlens_k[cumk_ptr].copy_(
-                torch.tensor(self.cumulative_seqlens_k[-1] + seq_len_k, **self.tensor_metadata)
-            )
-
+            self.write_index[write_position : write_position + len(write_indices)].copy_(write_indices)
+            self.cumulative_seqlens_q[cumq_ptr].copy_(self.cumulative_seqlens_q[-1] + seq_len_q)
+            self.cumulative_seqlens_k[cumk_ptr].copy_(self.cumulative_seqlens_k[-1] + seq_len_k)
 
             self.max_seqlen_q = max(self.max_seqlen_q, seq_len_q)
             self.max_seqlen_k = max(self.max_seqlen_k, seq_len_k)
-            self.logits_indices[cumq_ptr].copy_(self.cumulative_seqlens_q[cumq_ptr-1])
+            self.logits_indices[cumq_ptr].copy_(self.cumulative_seqlens_q[cumq_ptr]-1)
 
             token_position += len(next_input_ids)
             read_position += len(read_indices)
@@ -918,10 +911,12 @@ class ContinuousBatchingManager:
         self.output_queue = queue.Queue()
         self.stop_event = threading.Event()
         self.streaming = streaming
-
+        self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
         self._generation_thread = None
         self._request_counter = 0
         self._request_lock = threading.Lock()
+        self.logit_processor = self.model._get_logits_processor(self.model.generation_config)
+        self.do_sample = getattr(generation_config, "do_sample", False)
 
     def start(self):
         """Start the background generation thread."""
@@ -1043,21 +1038,20 @@ class ContinuousBatchingManager:
         with torch.no_grad():
             model_outputs = self.model(**batch_data.__dict__)
             # Copy is needed to avoid keeping a hanging ref
-            logits = model_outputs.logits[batch_data.logits_indices].to(copy=True, dtype=torch.float32, device=input_ids.device)
+            logits = model_outputs.logits[:, batch_data.logits_indices].to(copy=True, dtype=torch.float32, device=self.model.device)
             if self.log_prob_generation:
-                self.output_probs.copy_(logits)
+                self.output_probs.copy_(logits) # TODO
 
             # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
-            log_probs = nn.functional.log_softmax(logits, dim=-1)
-            next_token_scores = logits_processor(batch_data.input_ids, log_probs)
+            if self.do_sample:  # sample
+                logits = nn.functional.softmax(logits, dim=-1)
 
-            if do_sample:  # sample
-                probs = nn.functional.softmax(next_token_scores, dim=-1)
-                next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
-            else:  # argmax
+            probs = self.logit_processor(batch_data.input_ids, logits)
+            if self.do_sample:
+                sampling = torch.multinomial(probs, num_samples=1).squeeze(1)
+            else:
                 next_tokens = torch.argmax(next_token_scores, dim=-1)
-
             self.generated_ids.copy_(next_tokens)
 
     def _run_generation_loop(self):
