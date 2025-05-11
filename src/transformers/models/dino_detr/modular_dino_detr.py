@@ -1,6 +1,12 @@
 from typing import Callable
 
-from ...utils import is_torchvision_available
+from ...utils import (
+    is_scipy_available,
+    is_timm_available,
+    is_torch_available,
+    is_torchvision_available,
+    is_vision_available,
+)
 from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrConvEncoder,
     DeformableDetrEncoderLayer,
@@ -10,18 +16,11 @@ from ..detr.image_processing_detr import DetrImageProcessor
 from ..detr.modeling_detr import DetrConvModel, DetrFrozenBatchNorm2d, DetrMLPPredictionHead
 
 
-if is_torchvision_available():
-    from torchvision.ops.boxes import nms
-
 import copy
 import math
 import random
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 from transformers.modeling_outputs import ModelOutput
 from transformers.modeling_utils import PreTrainedModel
@@ -52,6 +51,24 @@ class DinoDetrMLPPredictionHead(DetrMLPPredictionHead):
 
 
 class DinoDetrMultiscaleDeformableAttention(DeformableDetrMultiscaleDeformableAttention):
+    pass
+
+
+if is_torch_available():
+    import torch
+    from torch import nn
+    import torch.nn.functional as F
+
+if is_torchvision_available():
+    from torchvision.ops.boxes import nms
+
+if is_vision_available():
+    pass
+
+if is_scipy_available():
+    pass
+
+if is_timm_available():
     pass
 
 

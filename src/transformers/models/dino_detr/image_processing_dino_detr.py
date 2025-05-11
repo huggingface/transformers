@@ -11,8 +11,6 @@ from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
-import torch
-import torch.nn as nn
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
@@ -46,6 +44,7 @@ from ...image_utils import (
 )
 from ...utils import (
     TensorType,
+    is_torch_available,
     is_torch_tensor,
     is_torchvision_available,
     is_vision_available,
@@ -53,6 +52,10 @@ from ...utils import (
 )
 from ...utils.import_utils import requires
 
+
+if is_torch_available():
+    import torch
+    from torch import nn
 
 if is_torchvision_available():
     from torchvision.ops.boxes import nms
