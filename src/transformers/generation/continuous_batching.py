@@ -461,6 +461,7 @@ class ContinuousBatchProcessor:
         tensor_metadata = {"dtype": torch.long, "device": self.model_device}
         self.tensor_metadata = tensor_metadata
         self.input_ids              = torch.zeros((1, T), **tensor_metadata)
+        self.output_ids             = torch.zeros((1, T), **tensor_metadata)
         self.static_outputs         = torch.zeros((1, T), **tensor_metadata)
         self.position_ids           = torch.zeros((1, T), **tensor_metadata)
         self.cumulative_seqlens_q   = torch.zeros((T+1,),  **tensor_metadata)
@@ -1040,7 +1041,7 @@ class ContinuousBatchingManager:
             # Copy is needed to avoid keeping a hanging ref
             logits = model_outputs.logits[:, batch_data.logits_indices].to(copy=True, dtype=torch.float32, device=self.model.device)
             if self.log_prob_generation:
-                self.output_probs.copy_(logits) # TODO
+                batch_processor.output_probs.copy_(logits) # TODO
 
             # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
@@ -1050,7 +1051,7 @@ class ContinuousBatchingManager:
                 next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
             else:
                 next_tokens = torch.argmax(probs, dim=-1)
-            self.generated_ids.copy_(next_tokens)
+            batch_processor.output_ids[:, batch_data.logits_indices].copy_(next_tokens)
 
     def _run_generation_loop(self):
         """Main processing loop running in the background thread."""
