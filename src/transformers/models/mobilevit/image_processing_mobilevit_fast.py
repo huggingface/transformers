@@ -25,6 +25,7 @@ from ...image_processing_utils_fast import (
 from ...image_utils import PILImageResampling
 from ...utils import auto_docstring
 
+
 @auto_docstring
 class MobileViTImageProcessorFast(BaseImageProcessorFast):
     # This generated class can be used as a starting point for the fast image processor.
