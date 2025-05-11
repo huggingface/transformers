@@ -1613,35 +1613,34 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         nms_iou_threshold=-1,
     ):
         """
-                Converts the raw output of [`DinoDetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-                bottom_right_x, bottom_right_y) format. Only supports PyTorch.
+        Post-processes the outputs of the model for object detection.
 
-                Args:
-                    outputs ([`DinoDetrObjectDetectionOutput`]):
-                        Raw outputs of the model.
-                    threshold (`float`, *optional*):
-                        Score threshold to keep object detection predictions.
-                    target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
-                        Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
-                        `(height, width)` of each image in the batch. If unset, predictions will not be resized.
-                Returns:
-                    `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
-                    in the batch as predicted by the model.
+        Args:
+            outputs (`torch.Tensor`):
+                Raw outputs of the model, containing logits and predicted bounding boxes.
+            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
+                Tensor containing the size of each image in the batch. For evaluation, this must be the original image
+                size (before any data augmentation). For visualization, this should be the image size after data
+                augmentation but before padding.
+            not_to_xyxy (`bool`, *optional*, defaults to `False`):
+                If `True`, the bounding boxes are not converted to the `[x_min, y_min, x_max, y_max]` format.
+            test (`bool`, *optional*, defaults to `False`):
+                If `True`, adjusts the bounding boxes to represent width and height instead of absolute coordinates.
+            num_select (`int`, *optional*, defaults to `300`):
+                Number of top predictions to select based on confidence scores.
+            conf_threshold (`float`, *optional*, defaults to `0.3`):
+                Confidence threshold to filter predictions.
+            nms_iou_threshold (`float`, *optional*, defaults to `-1`):
+                IoU threshold for non-maximum suppression. If set to a value greater than 0, NMS is applied.
 
-        Perform the computation
-                Outputs are in xyxy unnormalized format
-                Parameters:
-                    outputs: raw outputs of the model
-                    target_sizes: tensor of dimension [batch_size x 2] containing the size of each images of the batch
-                                For evaluation, this must be the original image size (before any data augmentation)
-                                For visualization, this should be the image size after data augment, but before padding
-
+        Returns:
+            `List[Dict[str, torch.Tensor]]`: A list of dictionaries, each containing:
+                - **scores** (`torch.Tensor`): Confidence scores of the selected predictions.
+                - **labels** (`torch.Tensor`): Class labels of the selected predictions.
+                - **boxes** (`torch.Tensor`): Bounding boxes of the selected predictions in absolute coordinates.
         """
         num_select = num_select
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
-
-        assert len(out_logits) == len(target_sizes)
-        assert target_sizes.shape[1] == 2
 
         prob = out_logits.sigmoid()
         topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), num_select, dim=1)
@@ -1654,7 +1653,6 @@ class DinoDetrImageProcessor(BaseImageProcessor):
             boxes = center_to_corners_format(out_bbox)
 
         if test:
-            assert not not_to_xyxy
             boxes[:, :, 2:] = boxes[:, :, 2:] - boxes[:, :, :2]
         boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
 
