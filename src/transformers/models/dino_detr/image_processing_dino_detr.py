@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_dino_detr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
 import io
 import pathlib
 from collections import defaultdict
@@ -31,7 +30,6 @@ from ...image_utils import (
     AnnotationType,
     ChannelDimension,
     ImageInput,
-    PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
@@ -59,6 +57,9 @@ if is_torch_available():
 
 if is_torchvision_available():
     from torchvision.ops.boxes import nms
+
+if is_vision_available():
+    from ...image_utils import PILImageResampling
 
 
 if is_vision_available():
