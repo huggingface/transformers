@@ -13,7 +13,6 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-<<<<<<< HEAD
 from ..utils import _LazyModule
 from ..utils.import_utils import define_import_structure
 
