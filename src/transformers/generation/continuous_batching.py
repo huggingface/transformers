@@ -1044,14 +1044,12 @@ class ContinuousBatchingManager:
 
             # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
-            if self.do_sample:  # sample
-                logits = nn.functional.softmax(logits, dim=-1)
-
             probs = self.logit_processor(batch_data.input_ids, logits)
-            if self.do_sample:
-                sampling = torch.multinomial(probs, num_samples=1).squeeze(1)
+            if self.do_sample:  # sample
+                probs = nn.functional.softmax(probs, dim=-1)
+                next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
             else:
-                next_tokens = torch.argmax(next_token_scores, dim=-1)
+                next_tokens = torch.argmax(probs, dim=-1)
             self.generated_ids.copy_(next_tokens)
 
     def _run_generation_loop(self):
