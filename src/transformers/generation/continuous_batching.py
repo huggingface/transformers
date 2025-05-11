@@ -742,15 +742,17 @@ class ContinuousBatchProcessor:
             self.cumulative_seqlens_k[cumk_ptr].copy_(
                 torch.tensor(self.cumulative_seqlens_k[-1] + seq_len_k, **self.tensor_metadata)
             )
+
+
+            self.max_seqlen_q = max(self.max_seqlen_q, seq_len_q)
+            self.max_seqlen_k = max(self.max_seqlen_k, seq_len_k)
+            self.logits_indices[cumq_ptr].copy_(self.cumulative_seqlens_q[cumq_ptr-1])
+
             token_position += len(next_input_ids)
             read_position += len(read_indices)
             write_position += len(write_indices)
             cumq_ptr += 1
             cumk_ptr += 1
-
-            self.max_seqlen_q = max(self.max_seqlen_q, seq_len_q)
-            self.max_seqlen_k = max(self.max_seqlen_k, seq_len_k)
-            self.logits_indices[cumk_ptr].copy_(torch.tensor(self.cumulative_seqlens_q[-1] - 1, **self.tensor_metadata))
             state.position_offset += token_position - len(next_input_ids)
 
         if not token_position:
@@ -1039,7 +1041,7 @@ class ContinuousBatchingManager:
         """Perform a single generation step. This is cuda graphed"""
         batch_data = batch_processor.get_model_kwargs()
         with torch.no_grad():
-            model_outputs = self.model(**batch_data)
+            model_outputs = self.model(**batch_data.__dict__)
             # Copy is needed to avoid keeping a hanging ref
             logits = model_outputs.logits[batch_data.logits_indices].to(copy=True, dtype=torch.float32, device=input_ids.device)
             if self.log_prob_generation:
@@ -1082,15 +1084,19 @@ class ContinuousBatchingManager:
             first = True
             while not self.stop_event.is_set() or batch_processor.has_pending_requests():
                 batch_processor.prepare_next_batch()
-                if first:
-                    self.warmup(batch_processor, batch_data)
-                    first = False
-                try:
-                    self.graph.replay()
-                except Exception as e:
-                    logger.error(f"Model forward pass failed: {e}", exc_info=True)
-                    batch_processor.handle_batch_error(e)
-                    continue
+                if torch.cuda.is_available():
+                    if first:
+                        self.warmup(batch_processor)
+                        first = False
+                    try:
+                        self.graph.replay()
+                    except Exception as e:
+                        logger.error(f"Model forward pass failed: {e}", exc_info=True)
+                        batch_processor.handle_batch_error(e)
+                        continue
+                else:
+                    self._generation_step(batch_processor)
+
 
                 batch_processor.update_batch(self.generated_ids.clone().detach())
                 batch_processor._maybe_send_output()
