@@ -18,19 +18,14 @@ import torch
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
     group_images_by_shape,
     reorder_images,
 )
 from ...image_utils import PILImageResampling
-from ...utils import add_start_docstrings
+from ...utils import auto_docstring
 
-
-@add_start_docstrings(
-    "Constructs a fast MobileViT image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class MobileViTImageProcessorFast(BaseImageProcessorFast):
     # This generated class can be used as a starting point for the fast image processor.
     # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,
