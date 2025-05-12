@@ -32,6 +32,7 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
     _prepare_4d_causal_attention_mask_for_sdpa,
 )
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -42,7 +43,8 @@ from ...modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, is_torch_flex_attn_available, logging
+from ...processing_utils import Unpack
+from ...utils import LossKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_bart import BartConfig
 
 
@@ -173,7 +175,9 @@ class BartAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        **kwargs,
+        # TODO: we need a refactor so that the different attention modules can get their specific kwargs
+        # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -928,10 +932,6 @@ class BartDecoder(BartPreTrainedModel):
                         query_length=input_shape[-1],
                         is_causal=False,
                     )
-
-                    #encoder_attention_mask = _prepare_4d_attention_mask(
-                     #   encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-                    #)
             else:
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 encoder_attention_mask = _prepare_4d_attention_mask(

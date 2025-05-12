@@ -155,6 +155,7 @@ def make_flex_block_mask(
         attention masks.
         """
         document_mask = document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
+        # kv indexing is crucial in order to work correctly
         padding_mask = attention_mask_2d[batch_idx, kv_idx] > 0
         final_mask = padding_mask & document_mask
         return final_mask
