@@ -123,7 +123,7 @@ class RequestState:
 
     # Required fields
     request_id: str
-    prompt_ids: List[int]
+    prompt_ids: List[int] = None
 
     # Optional/generated fields
     static_outputs: List[int] = field(default_factory=list)
@@ -995,7 +995,7 @@ class ContinuousBatchProcessor:
 
         # TODO I ANM HERE NEED TO FIGURE LOGIC OPTIAML HERE
         token_idx = 0
-        has_eos = self.output_ids == self.eos_token_id
+        has_eos = self.output_ids == self.generation_config.eos_token_id
         is_max_len = self.cumulative_seqlens_q[1:] + 1 >= self.max_context_len
         to_remove = has_eos | is_max_len
         tokens_to_keep = torch.where(~to_remove & self.output_ids >= 0)[1]  # can get request ids with this
@@ -1315,11 +1315,12 @@ class ContinuousBatchingManager:
             # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
 
-            # TODO re activate once the unpute prepartion is fixed
-            probs = self.logit_processor(batch_data.input_ids, logits)
+            # TODO re activate once the unpute prepartion is fixed. Does not seem to work btw
+            # probs = self.logit_processor(batch_data.input_ids, logits)
+            probs = logits
             if self.do_sample:  # sample
                 probs = nn.functional.softmax(probs, dim=-1)
-                next_tokens = torch.multinomial(logits[0], num_samples=1).squeeze(1)
+                next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
             else:
                 next_tokens = torch.argmax(probs, dim=-1)
             batch_processor.output_ids.fill_(-1)
@@ -1463,7 +1464,7 @@ class ContinuousMixin:
                         if result.status == "finished":
                             results[req_id] = result
                         else:  # Failed
-                            logger.warning(f"Request {req_id} failed: {result.get('error', 'Unknown error')}")
+                            logger.warning(f"Request {req_id} failed: {result.error}")
                             results[req_id] = []
                         finished_count += 1
                         pbar.update(1)

@@ -47,7 +47,7 @@ generation_config = GenerationConfig(
 
 # Prepare data (using a smaller subset for demonstration)
 train_dataset = datasets.load_dataset("imdb", split="test")
-train_dataset = train_dataset.select(range(5))  # Use only 5 examples for the simple version
+# train_dataset = train_dataset.select(range(5))  # Use only 5 examples for the simple version
 
 
 def tokenize_function(examples):
