@@ -656,8 +656,8 @@ class GenerationMixin:
                 attention_mask = get_causal_masks(
                     self.config,
                     torch.empty(
-                        model_inputs[input_ids_key].shape[0], dtype=self.dtype
-                    ),  # we only need batch size and dtype here
+                        (batch_size, sequence_length), dtype=self.dtype
+                    ),  # we only need batch size, seq_length and dtype here - we don't care about the values
                     attention_mask,
                     cache_position,
                     past_key_values,
