@@ -380,10 +380,10 @@ print(tokenizer.batch_decode(gen_out)[0])
 If the custom method has pinned Python requirements that your environment doesn't meet, you'll get an exception about missing requirements. For instance, [joaogante/test_generate_from_hub_bad_requirements](https://huggingface.co/joaogante/test_generate_from_hub_bad_requirements) has an impossible set of requirements defined in its `custom_generate/requirements.txt` file, and you'll see the error message below if you try to run it.
 
 ```
-ValueError: Missing requirements for joaogante/test_generate_from_hub_bad_requirements:
+ImportError: Missing requirements in your local environment for `joaogante/test_generate_from_hub_bad_requirements`:
 foo (installed: None)
 bar==0.0.0 (installed: None)
-torch>=99.0 (installed: 2.6.0+cu126)
+torch>=99.0 (installed: 2.6.0)
 ```
 
 Updating your Python requirements accordingly will remove this error message.

@@ -41,6 +41,7 @@ from .utils import (
     is_offline_mode,
     logging,
 )
+from .utils.import_utils import VersionComparison, split_package_version
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -737,7 +738,7 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
 
 def check_python_requirements(path_or_repo_id, requirements_file="requirements.txt", **kwargs):
     """
-    Tries to locate `requirements_file` in a local folder and repo, and confirms that the environment has all the
+    Tries to locate `requirements_file` in a local folder or repo, and confirms that the environment has all the
     python dependencies installed.
 
     Args:
@@ -748,7 +749,7 @@ def check_python_requirements(path_or_repo_id, requirements_file="requirements.t
         kwargs (`Dict[str, Any]`, *optional*):
             Additional arguments to pass to `cached_file`.
     """
-    missing_requirements = []  # tuple of (requirement, delimiter, version, installed_version)
+    failed = []  # error messages regarding requirements
     try:
         requirements = cached_file(path_or_repo_id=path_or_repo_id, filename=requirements_file, **kwargs)
         with open(requirements, "r") as f:
@@ -756,58 +757,36 @@ def check_python_requirements(path_or_repo_id, requirements_file="requirements.t
 
         for requirement in requirements:
             requirement = requirement.strip()
-            if not requirement or requirement.startswith("#"):
+            if not requirement or requirement.startswith("#"):  # skip empty lines and comments
                 continue
 
-            for delimiter in ["==", ">=", "<=", ">", "<"]:
-                if delimiter in requirement:
-                    requirement_name, requirement_version = requirement.split(delimiter)
-                    break
-            else:
-                requirement_name = requirement
-                requirement_version = None
-                delimiter = None
+            try:
+                # e.g. "torch>2.6.0" -> "torch", ">", "2.6.0"
+                package_name, delimiter, version_number = split_package_version(requirement)
+            except ValueError:  # e.g. "torch", as opposed to "torch>2.6.0"
+                package_name = requirement
+                delimiter, version_number = None, None
 
             try:
-                installed_version = importlib.metadata.version(requirement_name)
+                local_package_version = importlib.metadata.version(package_name)
             except importlib.metadata.PackageNotFoundError:
-                missing_requirements.append((requirement_name, delimiter, requirement_version, None))
-            else:
-                if requirement_version is not None:
-                    installed = version.parse(installed_version).base_version
-                    required = version.parse(requirement_version).base_version
+                failed.append(f"{requirement} (installed: None)")
+                continue
 
-                    if delimiter == "==" and installed != required:
-                        missing_requirements.append(
-                            (requirement_name, delimiter, requirement_version, installed_version)
-                        )
-                    elif delimiter == ">=" and installed < required:
-                        missing_requirements.append(
-                            (requirement_name, delimiter, requirement_version, installed_version)
-                        )
-                    elif delimiter == "<=" and installed > required:
-                        missing_requirements.append(
-                            (requirement_name, delimiter, requirement_version, installed_version)
-                        )
-                    elif delimiter == ">" and installed <= required:
-                        missing_requirements.append(
-                            (requirement_name, delimiter, requirement_version, installed_version)
-                        )
-                    elif delimiter == "<" and installed >= required:
-                        missing_requirements.append(
-                            (requirement_name, delimiter, requirement_version, installed_version)
-                        )
+            if delimiter is not None and version_number is not None:
+                is_satisfied = VersionComparison.from_string(delimiter)(
+                    version.parse(local_package_version), version.parse(version_number)
+                )
+            else:
+                is_satisfied = True
+
+            if not is_satisfied:
+                failed.append(f"{requirement} (installed: {local_package_version})")
 
     except OSError:  # no requirements.txt
         pass
 
-    if missing_requirements:
-        missing_requirements_str = "\n".join(
-            [
-                f"{req[0]}{req[1]}{req[2]} (installed: {req[3]})"
-                if req[1] is not None
-                else f"{req[0]} (installed: {req[3]})"
-                for req in missing_requirements
-            ]
+    if failed:
+        raise ImportError(
+            f"Missing requirements in your local environment for `{path_or_repo_id}`:\n" + "\n".join(failed)
         )
-        raise ValueError(f"Missing requirements for {path_or_repo_id}:\n{missing_requirements_str}")
