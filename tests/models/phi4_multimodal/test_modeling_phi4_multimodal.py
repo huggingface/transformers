@@ -280,7 +280,9 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
     audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
 
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained(self.checkpoint_path, revision="refs/pr/70")
+        # Currently, the Phi-4 checkpoint on the hub is not working with the latest Phi-4 code, so the slow integration tests
+        # won't pass without using the correct revision (refs/pr/70)
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_path)
         self.generation_config = GenerationConfig(max_new_tokens=20, do_sample=False)
         self.user_token = "<|user|>"
         self.assistant_token = "<|assistant|>"
@@ -298,7 +300,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def test_text_only_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device, revision="refs/pr/70"
+            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}What is the answer for 1+1? Explain it.{self.end_token}{self.assistant_token}"
@@ -317,7 +319,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def test_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device, revision="refs/pr/70"
+            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}<|image|>What is shown in this image?{self.end_token}{self.assistant_token}"
@@ -336,7 +338,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def test_multi_image_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device, revision="refs/pr/70"
+            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
         )
 
         images = []
@@ -363,7 +365,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
     @require_soundfile
     def test_audio_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device, revision="refs/pr/70"
+            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}<|audio|>What is happening in this audio?{self.end_token}{self.assistant_token}"
