@@ -600,6 +600,16 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
+        if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
+            # if the first element is a list, we assume that all elements are lists
+            batch_num_images = [len(x) for x in images]
+        elif isinstance(images, (tuple, list)):
+            batch_num_images = [len(images)]
+        else:
+            batch_num_images = [1]
+        # only single image patching is supported
+        need_patching = [n == 1 for n in batch_num_images for _ in range(n)]
+
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
@@ -635,25 +645,37 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
+        size_tuple = (
+            (size["height"], size["width"])
+            if "height" in size and "width" in size
+            else (size["shortest_edge"], size["shortest_edge"])
+        )
+
         new_images = []
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
-        for image in images:
-            # convert image into a list of patches
-            # we intentionally use the same data format as the input data format
-            size_tuple = (
-                (size["height"], size["width"])
-                if "height" in size and "width" in size
-                else (size["shortest_edge"], size["shortest_edge"])
-            )
-            image_patches = self.get_image_patches(
-                image,
-                image_grid_pinpoints,
-                size=size_tuple,
-                patch_size=size["height"],
-                resample=resample,
-                data_format=input_data_format,
-                input_data_format=input_data_format,
-            )
+        for i, image in enumerate(images):
+            if need_patching[i]:
+                # convert image into a list of patches
+                # we intentionally use the same data format as the input data format
+                image_patches = self.get_image_patches(
+                    image,
+                    image_grid_pinpoints,
+                    size=size_tuple,
+                    patch_size=size["height"],
+                    resample=resample,
+                    data_format=input_data_format,
+                    input_data_format=input_data_format,
+                )
+            else:
+                longest_edge = max(image_sizes[i])
+                padding = self._get_padding_size(image_sizes[i], (longest_edge, longest_edge))
+                num_channels = image.shape[0] if input_data_format == ChannelDimension.FIRST else image.shape[-1]
+                constant_values = [int(x * 255) for x in self.image_mean]
+                padded_channels = [
+                    np.pad(image[..., c], padding, constant_values=constant_values[c]) for c in range(num_channels)
+                ]
+                padded_image = np.stack(padded_channels, axis=-1)
+                image_patches = [padded_image]
 
             # preprocess patches
             pixel_values = self._preprocess(
@@ -676,7 +698,8 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
             processed_images = self._pad_for_batching(new_images)
 
         return BatchFeature(
-            data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "image_sizes": image_sizes, "batch_num_images": batch_num_images},
+            tensor_type=return_tensors,
         )
 
 
