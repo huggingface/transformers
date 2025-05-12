@@ -233,7 +233,7 @@ VLMS = [
     "mllama",
     "paligemma",
     "qwen2_vl",
-    "qwem2_5_vl",
+    "qwen2_5_vl",
     "video_llava",
     "vipllava",
 ]
