@@ -323,7 +323,9 @@ Custom decoding methods enable specialized generation behavior such as the follo
 - handle special tokens with custom logic;
 - enhanced input preparation for advanced models;
 
-We enable custom decoding methods through model repositories, assuming a specific model tag and file structure (see subsection below). If a model repository holds a custom decoding method, the easiest way to try it out is to load the model and generate with it:
+We enable custom decoding methods through model repositories, assuming a specific model tag and file structure (see subsection below). This feature is an extension of [custom modeling code](./models.md#custom-models) and, like such, requires setting `trust_remote_code=True`.
+
+If a model repository holds a custom decoding method, the easiest way to try it out is to load the model and generate with it:
 
 <!-- TODO before merging: 1) better repo name (use a `generate-community` org?) 2) prettify the repo -->
 ```py
@@ -332,7 +334,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 # `joaogante/test_generate_from_hub_model` holds a copy of `Qwen/Qwen2.5-0.5B-Instruct`, but
 # with custom generation code -> calling `generate` uses the custom decoding method!
 tokenizer = AutoTokenizer.from_pretrained("joaogante/test_generate_from_hub_model")
-model = AutoModelForCausalLM.from_pretrained("joaogante/test_generate_from_hub_model", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(
+    "joaogante/test_generate_from_hub_model", device_map="auto", trust_remote_code=True
+)
 
 inputs = tokenizer(["The quick brown"], return_tensors="pt").to(model.device)
 # The custom decoding method is a minimal greedy decoding implementation. It also prints a custom message at run time.
@@ -353,7 +357,7 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct", devic
 inputs = tokenizer(["The quick brown"], return_tensors="pt").to(model.device)
 # `custom_generate` replaces the original `generate` by the custom decoding method defined in
 # `joaogante/test_generate_from_hub_model`
-gen_out = model.generate(**inputs, custom_generate="joaogante/test_generate_from_hub_model")
+gen_out = model.generate(**inputs, custom_generate="joaogante/test_generate_from_hub_model", trust_remote_code=True)
 print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
 'The quick brown fox jumps over a lazy dog, and the dog is a type of animal. Is'
 ```
@@ -366,7 +370,9 @@ You should read the `README.md` file of the repository containing the custom gen
 Consider the Hub repository [joaogante/test_generate_from_hub_model](https://huggingface.co/joaogante/test_generate_from_hub_model) as an example. The `README.md` states that it has an additional input argument, `left_padding`, which adds a number of padding tokens before the prompt.
 
 ```py
-gen_out = model.generate(**inputs, custom_generate="joaogante/test_generate_from_hub_model", left_padding=5)
+gen_out = model.generate(
+    **inputs, custom_generate="joaogante/test_generate_from_hub_model", trust_remote_code=True, left_padding=5
+)
 print(tokenizer.batch_decode(gen_out)[0])
 '<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>The quick brown fox jumps over the lazy dog.\n\nThe sentence "The quick'
 ```
