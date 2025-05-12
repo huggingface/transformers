@@ -1341,6 +1341,7 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
 
 @auto_docstring
 class Qwen2VLModel(Qwen2VLPreTrainedModel):
+    base_model_prefix = ""
     _checkpoint_conversion_mapping = {"^model": "language_model"}
 
     def __init__(self, config: Qwen2VLConfig):
