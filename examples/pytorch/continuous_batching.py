@@ -82,8 +82,8 @@ print(f"\nSimple batch generation took: {end_time_simple - start_time_simple:.2f
 # Decode and print results
 print("\nResults from simple generate_batch:")
 for i, output_ids in enumerate(batch_outputs):
-    input_text = tokenizer.decode(batch_outputs[output_ids]["prompt_token_ids"], skip_special_tokens=False)
-    output_text = tokenizer.decode(batch_outputs[output_ids]["static_outputs"], skip_special_tokens=False)
+    input_text = tokenizer.decode(batch_outputs[output_ids].prompt_ids, skip_special_tokens=False)
+    output_text = tokenizer.decode(batch_outputs[output_ids].static_outputs, skip_special_tokens=False)
     print("-" * 20)
     print(f"Result for Request {i}:")
     # print(f"  Input:  {input_text}")
