@@ -38,16 +38,15 @@ def sdpa_attention_paged_forward(
     query = query.contiguous()
     key = key.contiguous()
     value = value.contiguous()
-    with sdpa_kernel(backends=[SDPBackend.EFFICIENT_ATTENTION]):
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query,
-            key,
-            value,
-            attn_mask=causal_mask,
-            dropout_p=dropout,
-            scale=scaling,
-            is_causal=False,
-        )
+    attn_output = torch.nn.functional.scaled_dot_product_attention(
+        query,
+        key,
+        value,
+        attn_mask=causal_mask,
+        dropout_p=dropout,
+        scale=scaling,
+        is_causal=False,
+    )
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, None

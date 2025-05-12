@@ -54,7 +54,7 @@ def paged_attention_forward(
         max_seqlen_q,
         max_seqlen_k,
         softmax_scale=module.scaling,
-        causal=True,
+        causal=false,
         window_size=(-1, -1),  # -1 means infinite context window
         # rotary_interleaved=True,
         # **kwargs,

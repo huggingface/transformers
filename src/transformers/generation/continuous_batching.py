@@ -319,14 +319,7 @@ class PagedAttentionCache(Cache):
         physical_indices = physical_block_nums * block_size + block_offsets
         return physical_indices
 
-    def _reshape_cache_for_update(self, layer_idx: int):
-        """Reshapes K/V cache for easier indexing during updates."""
-        total_slots = self.num_blocks * self.block_size
-        k_cache = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
-        v_cache = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
-        return k_cache, v_cache
-
-    @traced
+    # @traced
     def update(
         self,
         key_states: torch.Tensor,
@@ -336,38 +329,15 @@ class PagedAttentionCache(Cache):
         write_index,
         **kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Updates the key and value states in the cache at the specified indices."""
-        if write_index is None or write_index.numel() == 0:
-            # Nothing to write, return the current cache state
-            return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
-        # Validate input shape
-        if key_states.shape[2] != write_index.numel() or value_states.shape[2] != write_index.numel():
-            raise ValueError(
-                f"Mismatch between number of tokens to write ({key_states.shape[0]}) and number of fill indices ({write_index.numel()})"
-            )
-
         # Reshape cache for easier indexing
-        k_cache_flat, v_cache_flat = self._reshape_cache_for_update(layer_idx)
+        total_slots = self.num_blocks * self.block_size
+        k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
+        v_cache_flat = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
 
-        # Ensure indices are on the same device as the cache
         write_index = write_index.to(k_cache_flat.device)
-
-        try:
-            # Update cache with new key and value states
-            k_cache_flat[:, write_index, :] = key_states.to(k_cache_flat.device, k_cache_flat.dtype)[0]
-            v_cache_flat[:, write_index, :] = value_states.to(v_cache_flat.device, v_cache_flat.dtype)[0]
-        except IndexError as e:
-            logger.error(
-                f"IndexError during cache update. Fill indices shape: {write_index.shape}, "
-                f"Max index: {write_index.max() if write_index.numel() > 0 else 'N/A'}, "
-                f"Cache shape: {k_cache_flat.shape}"
-            )
-            raise e
-
-        # Return the updated cache slices needed for attention
-        k_cache_flat, v_cache_flat = self._reshape_cache_for_update(layer_idx)
-        return k_cache_flat[:, read_index, :][None, ...], v_cache_flat[:, read_index, :][None, ...]
+        k_cache_flat[:, write_index, :] = key_states[0]
+        v_cache_flat[:, write_index, :] = value_states[0]
+        return k_cache_flat[None, :, read_index, :], v_cache_flat[None, :, read_index, :]
 
 
 def compute_optimal_blocks(
@@ -555,7 +525,7 @@ class ContinuousBatchProcessor:
         tensor_metadata = {"dtype": torch.long, "device": self.model_device}
         self.tensor_metadata = tensor_metadata
         self.input_ids = torch.zeros((1, T), **tensor_metadata)
-        self.output_ids = torch.zeros((1, T), **tensor_metadata)
+        self.output_ids = torch.ones((1, T), **tensor_metadata) * -1
         self.attention_mask = torch.zeros(
             (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
         )
@@ -564,7 +534,7 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_k = torch.zeros((T + 1,), **tensor_metadata)
         self.write_index = torch.zeros((T,), **tensor_metadata)
         self.read_index = torch.zeros((max_token_budget,), **tensor_metadata)
-        self.logits_indices = torch.zeros((T,), **tensor_metadata)
+        self.logits_indices = torch.ones((T,), **tensor_metadata) * -1
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
 
@@ -754,24 +724,21 @@ class ContinuousBatchProcessor:
                 logger.error(f"Error processing new request: {e}", exc_info=True)
                 state: RequestState = locals().get("state")
                 if state is not None:
-                    self._handle_request_error(e, state.request_id)
+                    self._handle_request_error(e, state)
 
     @traced
-    def _handle_request_error(self, error, request_id):
+    def _handle_request_error(self, error, state: RequestState):
         """Handle general request processing error."""
-        error_response = RequestState(
-            request_id=request_id,
-            status="failed",
-            error=str(error),
-        )
+        state.status="failed"
+        state.error=str(error)
 
         # Include any generated tokens if this is an active request
-        if isinstance(request_id, str) and request_id in self.active_requests:
-            error_response.static_outputs = self.active_requests[request_id].static_outputs
+        if isinstance(state.request_id, str) and state.request_id in self.active_requests:
+            state.static_outputs = self.active_requests[state.request_id].static_outputs
         else:
-            error_response.static_outputs = []
+            state.static_outputs = []
 
-        self.output_queue.put(error_response)
+        self.output_queue.put(state)
 
     @traced
     def _schedule_batch(self) -> List[str]:
@@ -860,6 +827,8 @@ class ContinuousBatchProcessor:
                 request_ids_to_remove_from_waiting.add(state.request_id)
             elif state.status == "split_pending_remainder":
                 state.status = "prefilling"
+                state.prompt_ids = state.remaining_prompt_ids
+                state.remaining_prompt_ids = []
         else:
             # Need to split the request
             if state.status == "pending":
@@ -897,7 +866,7 @@ class ContinuousBatchProcessor:
         write_position = 0
         cumq_ptr = 1  # because at 0 we always have 0?
         cumk_ptr = 1
-        generated_tokens = (self.output_ids != 0).sum()
+        generated_tokens = (self.output_ids >= 0).sum()
 
         position_ids = []
         input_ids = []
@@ -905,9 +874,9 @@ class ContinuousBatchProcessor:
         write_index = []
         cumulative_seqlens_q = [0]
         cumulative_seqlens_k = [0]
+        logits_to_track = 0
         logits_indices = []
-
-        self.input_ids[:, :generated_tokens].copy_(self.output_ids[self.output_ids != 0])
+        self.input_ids[:, :generated_tokens].copy_(self.output_ids[(self.output_ids >= 0)])
         self._record_batch_metrics(requests_in_batch)
 
         for state in requests_in_batch:
@@ -944,7 +913,9 @@ class ContinuousBatchProcessor:
             write_index.extend(write_indices)
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + seq_len_q)
             cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + seq_len_k)
-            logits_indices.append(cumulative_seqlens_q[-1] - 1)
+            if state.status != "prefilling_split":
+                logits_indices.append(cumulative_seqlens_q[-1] - 1)
+                logits_to_track += 1
 
             self.max_seqlen_q = max(self.max_seqlen_q, seq_len_q)
             self.max_seqlen_k = max(self.max_seqlen_k, seq_len_k)
@@ -955,8 +926,9 @@ class ContinuousBatchProcessor:
             cumq_ptr += 1
             cumk_ptr += 1
 
+        if self.input_ids[:, generated_tokens : generated_tokens + token_position].shape[1] != torch.tensor(input_ids, **self.tensor_metadata).shape[0]:
+            print("Scheduler did not do his job? token position - generated_tokens is off")
         # now if sdpa or eager, create the attention mask!
-
         self.input_ids[:, generated_tokens : generated_tokens + token_position].copy_(
             torch.tensor(input_ids, **self.tensor_metadata)
         )
@@ -965,7 +937,7 @@ class ContinuousBatchProcessor:
         self.read_index[:read_position].copy_(torch.tensor(read_index, **self.tensor_metadata))
         self.cumulative_seqlens_q[:cumq_ptr].copy_(torch.tensor(cumulative_seqlens_q, **self.tensor_metadata))
         self.cumulative_seqlens_k[:cumk_ptr].copy_(torch.tensor(cumulative_seqlens_k, **self.tensor_metadata))
-        self.logits_indices[: cumk_ptr - 1].copy_(torch.tensor(logits_indices, **self.tensor_metadata))
+        self.logits_indices[:logits_to_track].copy_(torch.tensor(logits_indices, **self.tensor_metadata))
 
         attention_mask = create_document_mask(self.cumulative_seqlens_q, self.cumulative_seqlens_k)
         causal_mask = torch.where(attention_mask, 0, torch.finfo(torch.bfloat16).min)
@@ -1114,14 +1086,14 @@ class ContinuousBatchProcessor:
             error: The error to report in the failure message
         """
         for req_id, state in list(self.active_requests.items()):
-            self._handle_request_error(error, req_id)
+            self._handle_request_error(error, state)
             self.cache.free_blocks(req_id)
             del self.active_requests[req_id]
 
         # Also fail any requests in the waiting queue
         while self.waiting_requests:
             state = self.waiting_requests.popleft()
-            self._handle_request_error(error, state.request_id)
+            self._handle_request_error(error, state)
 
 
 # Manager Class (User Interface)
@@ -1304,11 +1276,12 @@ class ContinuousBatchingManager:
         """Perform a single generation step. This is cuda graphed"""
         batch_data = batch_processor.get_model_kwargs()
         with torch.no_grad():
+            import time
+            start = time.time()
             model_outputs = self.model(**batch_data.__dict__)
+            print(f"Model forward pass took {time.time() - start:.2f} seconds")
             # Copy is needed to avoid keeping a hanging ref
-            logits = model_outputs.logits[:, batch_data.logits_indices].to(
-                copy=True, dtype=torch.float32, device=self.model.device
-            )
+            logits = model_outputs.logits[:, batch_data.logits_indices]
             if self.log_prob_generation:
                 batch_processor.output_probs.copy_(logits)  # TODO
 
@@ -1323,8 +1296,9 @@ class ContinuousBatchingManager:
                 next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
             else:
                 next_tokens = torch.argmax(probs, dim=-1)
+            next_tokens = next_tokens[:,batch_data.logits_indices!=-1]
             batch_processor.output_ids.fill_(-1)
-            batch_processor.output_ids.copy_(next_tokens)
+            batch_processor.output_ids[:, :next_tokens.shape[1]].copy_(next_tokens)
 
     @traced(span_name="generation_loop")
     def _run_generation_loop(self):
@@ -1461,11 +1435,7 @@ class ContinuousMixin:
                     result = manager.get_result(timeout=1.0)
                     if result:
                         req_id = result.request_id
-                        if result.status == "finished":
-                            results[req_id] = result
-                        else:  # Failed
-                            logger.warning(f"Request {req_id} failed: {result.error}")
-                            results[req_id] = []
+                        results[req_id] = result
                         finished_count += 1
                         pbar.update(1)
                     else:
@@ -1475,9 +1445,6 @@ class ContinuousMixin:
 
         except Exception as e:
             logger.error(f"Error during batch generation: {e}", exc_info=True)
-            for i in range(num_requests):
-                if i not in results:
-                    results[i] = []
         finally:
             manager.stop(block=True, timeout=5.0)
         return results
