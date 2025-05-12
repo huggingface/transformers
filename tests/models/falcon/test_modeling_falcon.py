@@ -47,10 +47,10 @@ if is_torch_available():
 class FalconModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = FalconConfig
-        model_class = FalconModel
-        for_causal_lm_class = FalconForCausalLM
-        for_sequence_class = FalconForSequenceClassification
-        for_token_class = FalconForTokenClassification
+        base_model_class = FalconModel
+        causal_lm_class = FalconForCausalLM
+        sequence_class = FalconForSequenceClassification
+        token_class = FalconForTokenClassification
     pipeline_model_mapping = (
         {
             "feature-extraction": FalconModel,

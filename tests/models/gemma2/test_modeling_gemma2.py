@@ -51,10 +51,10 @@ if is_torch_available():
 class Gemma2ModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = Gemma2Config
-        model_class = Gemma2Model
-        for_causal_lm_class = Gemma2ForCausalLM
-        for_sequence_class = Gemma2ForSequenceClassification
-        for_token_class = Gemma2ForTokenClassification
+        base_model_class = Gemma2Model
+        causal_lm_class = Gemma2ForCausalLM
+        sequence_class = Gemma2ForSequenceClassification
+        token_class = Gemma2ForTokenClassification
     pipeline_model_mapping = (
         {
             "feature-extraction": Gemma2Model,
