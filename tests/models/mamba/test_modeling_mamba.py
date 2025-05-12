@@ -32,9 +32,9 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MambaCache,
         MambaForCausalLM,
         MambaModel,
-        MambaCache,
     )
 
 
