@@ -171,7 +171,7 @@ class BitLinear(nn.Module):
         if use_rms_norm:
             if BitNetRMSNorm is None:
                 raise ImportError(
-                    "`with_rms_norm=True` requires the BitNet model code to be available in the current Transformers"
+                    "`use_rms_norm=True` requires the BitNet model code to be available in the current Transformers"
                     " installation. Please install the full `transformers` package or ensure the BitNet model files"
                     " are accessible."
                 )
@@ -286,7 +286,7 @@ class AutoBitLinear(nn.Linear):
         if use_rms_norm:
             if BitNetRMSNorm is None:
                 raise ImportError(
-                    "`with_rms_norm=True` requires the BitNet model code to be available in the current Transformers"
+                    "`use_rms_norm=True` requires the BitNet model code to be available in the current Transformers"
                     " installation. Please install the full `transformers` package or ensure the BitNet model files"
                     " are accessible."
                 )
@@ -365,7 +365,8 @@ def _replace_with_bitnet_linear(
                             device=module.weight.device,
                             dtype=module.weight.dtype,
                             online_quant=(quantization_config.quantization_mode == "online"),
-                            use_rms_norm=getattr(quantization_config, "with_rms_norm", False),
+                            use_rms_norm=getattr(quantization_config, "use_rms_norm", False),
+                            rms_norm_eps=getattr(quantization_config, "rms_norm_eps", 1e-6),
                         )
                         if quantization_config.quantization_mode == "offline":
                             model._modules[name].requires_grad_(False)
@@ -376,7 +377,8 @@ def _replace_with_bitnet_linear(
                             bias=module.bias is not None,
                             device=module.weight.device,
                             dtype=module.weight.dtype,
-                            use_rms_norm=getattr(quantization_config, "with_rms_norm", False),
+                            use_rms_norm=getattr(quantization_config, "use_rms_norm", False),
+                            rms_norm_eps=getattr(quantization_config, "rms_norm_eps", 1e-6),
                         )
                         model._modules[name].requires_grad_(False)
                     has_been_replaced = True
@@ -412,7 +414,7 @@ def replace_with_bitnet_linear(
         model (`torch.nn.Module`):
             Input model or `torch.nn.Module` as the function is run recursively.
         modules_to_not_convert (`List[`str`]`, *optional*, defaults to `["lm_head"]`):
-            Names of the modules to not convert in `EetqLinear`. In practice we keep the `lm_head` in full precision
+            Names of the modules to not convert in `BitLinear`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
         current_key_name (`List[`str`]`, *optional*):
             An array to track the current key of the recursion. This is used to check whether the current key (part of
@@ -439,3 +441,4 @@ def replace_with_bitnet_linear(
         )
 
     return model
+
