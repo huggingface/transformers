@@ -3301,6 +3301,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 --num_train_epochs 1
                 --output_dir {tmpdir}
                 --auto_find_batch_size 0
+                --report_to none
                 """.split()
             with self.assertRaises(RuntimeError):
                 with patch.object(sys, "argv", testargs):
