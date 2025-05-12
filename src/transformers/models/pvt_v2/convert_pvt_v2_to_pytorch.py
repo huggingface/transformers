@@ -35,7 +35,7 @@ logger = logging.get_logger(__name__)
 def create_rename_keys(config):
     rename_keys = []
     for i in range(config.num_encoder_blocks):
-        # Remane embedings' paramters
+        # Rename embeddings' parameters
         rename_keys.append(
             (f"patch_embed{i + 1}.proj.weight", f"pvt_v2.encoder.layers.{i}.patch_embedding.proj.weight")
         )
@@ -203,12 +203,11 @@ def convert_pvt_v2_checkpoint(pvt_v2_size, pvt_v2_checkpoint, pytorch_dump_folde
         config_path = "OpenGVLab/pvt_v2_b5"
     else:
         raise ValueError(
-            f"Available model sizes: 'b0', 'b1', 'b2', 'b2-linear', 'b3', 'b4', 'b5', but "
-            f"'{pvt_v2_size}' was given"
+            f"Available model sizes: 'b0', 'b1', 'b2', 'b2-linear', 'b3', 'b4', 'b5', but '{pvt_v2_size}' was given"
         )
     config = PvtV2Config.from_pretrained(config_path)
     # load original model from https://github.com/whai362/PVT
-    state_dict = torch.load(pvt_v2_checkpoint, map_location="cpu")
+    state_dict = torch.load(pvt_v2_checkpoint, map_location="cpu", weights_only=True)
 
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
@@ -248,9 +247,9 @@ def convert_pvt_v2_checkpoint(pvt_v2_size, pvt_v2_checkpoint, pytorch_dump_folde
                 f"'{pvt_v2_size}' was given"
             )
 
-        assert torch.allclose(
-            logits[0, :3], expected_slice_logits, atol=1e-4
-        ), "ImageNet weights not converted successfully."
+        assert torch.allclose(logits[0, :3], expected_slice_logits, atol=1e-4), (
+            "ImageNet weights not converted successfully."
+        )
 
         print("ImageNet weights verified, conversion successful.")
 

@@ -12,6 +12,10 @@ specific language governing permissions and limitations under the License.
 
 # ViTMatte
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The ViTMatte model was proposed in [Boosting Image Matting with Pretrained Plain Vision Transformers](https://arxiv.org/abs/2305.15272) by Jingfeng Yao, Xinggang Wang, Shusheng Yang, Baoyuan Wang.
@@ -47,6 +51,11 @@ The model expects both the image and trimap (concatenated) as input. Use [`ViTMa
 ## VitMatteImageProcessor
 
 [[autodoc]] VitMatteImageProcessor
+    - preprocess
+
+## VitMatteImageProcessorFast
+
+[[autodoc]] VitMatteImageProcessorFast
     - preprocess
 
 ## VitMatteForImageMatting

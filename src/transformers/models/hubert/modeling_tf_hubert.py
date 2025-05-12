@@ -587,7 +587,7 @@ class TFHubertFeatureEncoder(keras.layers.Layer):
 
         if config.feat_extract_norm == "group":
             conv_layers = [TFHubertGroupNormConvLayer(config, layer_id=0, name=f"conv_layers.{0}")] + [
-                TFHubertNoLayerNormConvLayer(config, layer_id=i + 1, name=f"conv_layers.{i+1}")
+                TFHubertNoLayerNormConvLayer(config, layer_id=i + 1, name=f"conv_layers.{i + 1}")
                 for i in range(config.num_feat_extract_layers - 1)
             ]
         elif config.feat_extract_norm == "layer":
@@ -1425,7 +1425,7 @@ HUBERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare TFHubert Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare TFHubert Model transformer outputting raw hidden-states without any specific head on top.",
     HUBERT_START_DOCSTRING,
 )
 class TFHubertModel(TFHubertPreTrainedModel):

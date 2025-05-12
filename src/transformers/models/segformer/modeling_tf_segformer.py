@@ -325,8 +325,8 @@ class TFSegformerMixFFN(keras.layers.Layer):
         self,
         config: SegformerConfig,
         in_features: int,
-        hidden_features: int = None,
-        out_features: int = None,
+        hidden_features: Optional[int] = None,
+        out_features: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)

@@ -17,7 +17,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Tuple
+from typing import Optional
 from unittest.mock import patch
 
 from parameterized import parameterized
@@ -186,7 +186,7 @@ class TestTrainerExt(TestCasePlus):
     def test_run_seq2seq_bnb(self):
         from transformers.training_args import OptimizerNames
 
-        def train_and_return_metrics(optim: str) -> Tuple[int, float]:
+        def train_and_return_metrics(optim: str) -> tuple[int, float]:
             extra_args = "--skip_memory_metrics 0"
 
             output_dir = self.run_trainer(
@@ -271,13 +271,13 @@ class TestTrainerExt(TestCasePlus):
         learning_rate: float = 3e-3,
         optim: str = "adafactor",
         distributed: bool = False,
-        extra_args_str: str = None,
+        extra_args_str: Optional[str] = None,
         eval_steps: int = 0,
         predict_with_generate: bool = True,
         do_train: bool = True,
         do_eval: bool = True,
         do_predict: bool = True,
-        n_gpus_to_use: int = None,
+        n_gpus_to_use: Optional[int] = None,
     ):
         data_dir = self.test_file_dir / "../fixtures/tests_samples/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()

@@ -1,4 +1,4 @@
-<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -16,27 +16,27 @@ rendered properly in your Markdown viewer.
 
 # Fine-grained FP8
 
-With FP8 quantization method, you can quantize your model in FP8 (W8A8):
-- the weights will be quantized in 8bit (FP8) per 2D block (e.g. weight_block_size=(128, 128)) which is inspired from the deepseek implementation
-- Activations are quantized to 8 bits (FP8) per group per token, with the group value matching that of the weights in the input channels (128 by default)
+Fine-grained FP8 quantization quantizes the weights and activations to fp8.
 
-It's implemented to add support for DeepSeek-V3 and DeepSeek-R1 models, you can see the paper [here](https://arxiv.org/pdf/2412.19437), and the image below explains the quantization scheme : 
+- The weights are quantized to 8-bits for each 2D block (`weight_block_size=(128, 128)`).
+- The activations are quantized to 8-bits for each group per token. The group value matches the weights in the input channel (128 by default).
 
-![](https://huggingface.co/datasets/huggingface/documentation-images/resolve/b7b3b34bf826a6423ea82ffc57ecac80c46c3c76/transformers/quantization/quantization_deepseek.png)
+FP8 quantization enables support for [DeepSeek-V3](https://hf.co/papers/2412.19437) and DeepSeek-R1.
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/b7b3b34bf826a6423ea82ffc57ecac80c46c3c76/transformers/quantization/quantization_deepseek.png">
+</div>
 
 > [!TIP]
-> You need a GPU with compute capability>=9 (e.g. H100) 
+> You need a GPU with Compute Capability>=9 (H100), and install a PyTorch version compatible with the CUDA version of your GPU.
 
-Before you begin, make sure the following libraries are installed with their latest version:
+Install Accelerate and upgrade to the latest version of PyTorch.
 
 ```bash
 pip install --upgrade accelerate torch
 ```
-> [!TIP]
-> You need to install a torch version compatible with the cuda version of your GPU.
 
-
-By default, the weights are loaded in full precision (torch.float32) regardless of the actual data type the weights are stored in such as torch.float16. Set `torch_dtype="auto"` to load the weights in the data type defined in a model's `config.json` file to automatically load the most memory-optimal data type.
+Create a [`FineGrainedFP8Config`] class and pass it to [`~PreTrainedModel.from_pretrained`] to quantize it. The weights are loaded in full precision (`torch.float32`) by default regardless of the actual data type the weights are stored in. Set `torch_dtype="auto"` to load the weights in the data type defined in a models `config.json` file to automatically load the most memory-optiomal data type.
 
 ```py
 from transformers import FineGrainedFP8Config, AutoModelForCausalLM, AutoTokenizer
@@ -53,7 +53,7 @@ output = quantized_model.generate(**input_ids, max_new_tokens=10)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-A quantized model can be saved via "saved_pretrained" and be reused again via the "from_pretrained".
+Use [`~PreTrainedModel.save_pretrained`] to save the quantized model and reload it with [`~PreTrainedModel.from_pretrained`].
 
 ```py
 quant_path = "/path/to/save/quantized/model"

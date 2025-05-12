@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 from math import ceil
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -58,7 +56,9 @@ def to_channel_dimension_format(
     input_channel_dim: Optional[Union[ChannelDimension, str]] = None,
 ) -> np.ndarray:
     """
-    Converts `image` to the channel dimension format specified by `channel_dim`.
+    Converts `image` to the channel dimension format specified by `channel_dim`. The input
+    can have arbitrary number of leading dimensions. Only last three dimension will be permuted
+    to format the `image`.
 
     Args:
         image (`numpy.ndarray`):
@@ -82,11 +82,13 @@ def to_channel_dimension_format(
         return image
 
     if target_channel_dim == ChannelDimension.FIRST:
-        image = image.transpose((2, 0, 1))
+        axes = list(range(image.ndim - 3)) + [image.ndim - 1, image.ndim - 3, image.ndim - 2]
+        image = image.transpose(axes)
     elif target_channel_dim == ChannelDimension.LAST:
-        image = image.transpose((1, 2, 0))
+        axes = list(range(image.ndim - 3)) + [image.ndim - 2, image.ndim - 1, image.ndim - 3]
+        image = image.transpose(axes)
     else:
-        raise ValueError("Unsupported channel dimension format: {}".format(channel_dim))
+        raise ValueError(f"Unsupported channel dimension format: {channel_dim}")
 
     return image
 
@@ -192,7 +194,7 @@ def to_pil_image(
     elif is_jax_tensor(image):
         image = np.array(image)
     elif not isinstance(image, np.ndarray):
-        raise ValueError("Input image type not supported: {}".format(type(image)))
+        raise ValueError(f"Input image type not supported: {type(image)}")
 
     # If the channel has been moved to first dim, we put it back at the end.
     image = to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format)
@@ -210,7 +212,7 @@ def to_pil_image(
     return PIL.Image.fromarray(image, mode=image_mode)
 
 
-def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
+def get_size_with_aspect_ratio(image_size, size, max_size=None) -> tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size.
 
@@ -252,7 +254,7 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
 # Logic adapted from torchvision resizing logic: https://github.com/pytorch/vision/blob/511924c1ced4ce0461197e5caa64ce5b9e558aab/torchvision/transforms/functional.py#L366
 def get_resize_output_image_size(
     input_image: np.ndarray,
-    size: Union[int, Tuple[int, int], List[int], Tuple[int]],
+    size: Union[int, tuple[int, int], list[int], tuple[int]],
     default_to_square: bool = True,
     max_size: Optional[int] = None,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -319,7 +321,7 @@ def get_resize_output_image_size(
 
 def resize(
     image: np.ndarray,
-    size: Tuple[int, int],
+    size: tuple[int, int],
     resample: "PILImageResampling" = None,
     reducing_gap: Optional[int] = None,
     data_format: Optional[ChannelDimension] = None,
@@ -451,10 +453,9 @@ def normalize(
 
 def center_crop(
     image: np.ndarray,
-    size: Tuple[int, int],
+    size: tuple[int, int],
     data_format: Optional[Union[str, ChannelDimension]] = None,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    return_numpy: Optional[bool] = None,
 ) -> np.ndarray:
     """
     Crops the `image` to the specified `size` using a center crop. Note that if the image is too small to be cropped to
@@ -475,21 +476,10 @@ def center_crop(
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
             If unset, will use the inferred format of the input image.
-        return_numpy (`bool`, *optional*):
-            Whether or not to return the cropped image as a numpy array. Used for backwards compatibility with the
-            previous ImageFeatureExtractionMixin method.
-                - Unset: will return the same type as the input image.
-                - `True`: will return a numpy array.
-                - `False`: will return a `PIL.Image.Image` object.
     Returns:
         `np.ndarray`: The cropped image.
     """
     requires_backends(center_crop, ["vision"])
-
-    if return_numpy is not None:
-        warnings.warn("return_numpy is deprecated and will be removed in v.4.33", FutureWarning)
-
-    return_numpy = True if return_numpy is None else return_numpy
 
     if not isinstance(image, np.ndarray):
         raise TypeError(f"Input image must be of type np.ndarray, got {type(image)}")
@@ -542,9 +532,6 @@ def center_crop(
     new_image = new_image[..., max(0, top) : min(new_height, bottom), max(0, left) : min(new_width, right)]
     new_image = to_channel_dimension_format(new_image, output_data_format, ChannelDimension.FIRST)
 
-    if not return_numpy:
-        new_image = to_pil_image(new_image)
-
     return new_image
 
 
@@ -585,7 +572,7 @@ def center_to_corners_format(bboxes_center: TensorType) -> TensorType:
 
     center format: contains the coordinate for the center of the box and its width, height dimensions
         (center_x, center_y, width, height)
-    corners format: contains the coodinates for the top-left and bottom-right corners of the box
+    corners format: contains the coordinates for the top-left and bottom-right corners of the box
         (top_left_x, top_left_y, bottom_right_x, bottom_right_y)
     """
     # Function is used during model forward pass, so we use the input framework if possible, without
@@ -705,7 +692,7 @@ class PaddingMode(ExplicitEnum):
 
 def pad(
     image: np.ndarray,
-    padding: Union[int, Tuple[int, int], Iterable[Tuple[int, int]]],
+    padding: Union[int, tuple[int, int], Iterable[tuple[int, int]]],
     mode: PaddingMode = PaddingMode.CONSTANT,
     constant_values: Union[float, Iterable[float]] = 0.0,
     data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -768,7 +755,7 @@ def pad(
         values = ((0, 0), *values) if input_data_format == ChannelDimension.FIRST else (*values, (0, 0))
 
         # Add additional padding if there's a batch dimension
-        values = (0, *values) if image.ndim == 4 else values
+        values = ((0, 0), *values) if image.ndim == 4 else values
         return values
 
     padding = _expand_for_data_format(padding)
@@ -855,8 +842,8 @@ def _cast_tensor_to_float(x):
 
 
 def group_images_by_shape(
-    images: List["torch.Tensor"],
-) -> Tuple[Dict[Tuple[int, int], List["torch.Tensor"]], Dict[int, Tuple[Tuple[int, int], int]]]:
+    images: list["torch.Tensor"],
+) -> tuple[dict[tuple[int, int], list["torch.Tensor"]], dict[int, tuple[tuple[int, int], int]]]:
     """
     Groups images by shape.
     Returns a dictionary with the shape as key and a list of images with that shape as value,
@@ -876,8 +863,8 @@ def group_images_by_shape(
 
 
 def reorder_images(
-    processed_images: Dict[Tuple[int, int], "torch.Tensor"], grouped_images_index: Dict[int, Tuple[int, int]]
-) -> List["torch.Tensor"]:
+    processed_images: dict[tuple[int, int], "torch.Tensor"], grouped_images_index: dict[int, tuple[int, int]]
+) -> list["torch.Tensor"]:
     """
     Reconstructs a list of images in the original order.
     """

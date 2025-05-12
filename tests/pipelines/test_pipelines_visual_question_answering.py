@@ -131,7 +131,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
             model_kwargs={"torch_dtype": torch.float16},
             device=torch_device,
         )
-        self.assertEqual(vqa_pipeline.model.device, torch.device("{}:0".format(torch_device)))
+        self.assertEqual(vqa_pipeline.model.device, torch.device(f"{torch_device}:0"))
         self.assertEqual(vqa_pipeline.model.language_model.dtype, torch.float16)
         self.assertEqual(vqa_pipeline.model.vision_model.dtype, torch.float16)
 
@@ -173,7 +173,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
             model_kwargs={"torch_dtype": torch.float16},
             device=torch_device,
         )
-        self.assertEqual(vqa_pipeline.model.device, torch.device("{}:0".format(torch_device)))
+        self.assertEqual(vqa_pipeline.model.device, torch.device(f"{torch_device}:0"))
         self.assertEqual(vqa_pipeline.model.language_model.dtype, torch.float16)
 
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"

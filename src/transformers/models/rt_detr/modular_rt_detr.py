@@ -1,20 +1,10 @@
 import pathlib
 from typing import Dict, List, Optional, Tuple, Union
 
-from transformers.models.detr.image_processing_detr_fast import (
-    DetrFastImageProcessorInitKwargs,
-    DetrFastImageProcessorPreprocessKwargs,
-    DetrImageProcessorFast,
-)
+from transformers.models.detr.image_processing_detr_fast import DetrFastImageProcessorKwargs, DetrImageProcessorFast
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    BaseImageProcessorFast,
-    SizeDict,
-    add_start_docstrings,
-    get_max_height_width,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, get_max_height_width
 from ...image_transforms import center_to_corners_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -112,11 +102,7 @@ def prepare_coco_detection_annotation(
     return new_target
 
 
-class RTDetrFastImageProcessorInitKwargs(DetrFastImageProcessorInitKwargs):
-    pass
-
-
-class RTDetrFastImageProcessorPreprocessKwargs(DetrFastImageProcessorPreprocessKwargs):
+class RTDetrFastImageProcessorKwargs(DetrFastImageProcessorKwargs):
     pass
 
 
@@ -133,10 +119,9 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
     size = {"height": 640, "width": 640}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_init_kwargs = RTDetrFastImageProcessorInitKwargs
-    valid_preprocess_kwargs = RTDetrFastImageProcessorPreprocessKwargs
+    valid_kwargs = RTDetrFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorInitKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorKwargs]) -> None:
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations", None)
         do_normalize = kwargs.get("do_normalize", None)
@@ -145,52 +130,21 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
 
         BaseImageProcessorFast.__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-        annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
-            List of annotations associated with the image or batch of images. If annotation is for object
-            detection, the annotations should be a dictionary with the following keys:
-            - "image_id" (`int`): The image id.
-            - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
-                dictionary. An image can have no annotations, in which case the list should be empty.
-            If annotation is for segmentation, the annotations should be a dictionary with the following keys:
-            - "image_id" (`int`): The image id.
-            - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
-                An image can have no segments, in which case the list should be empty.
-            - "file_name" (`str`): The file name of the image.
-        format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-            Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-        do_convert_annotations (`bool`, *optional*, defaults to `True`):
-            Controls whether to convert the annotations to the format expected by the DETR model. Converts the
-            bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-            Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-            method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-            If `pad_size` is provided, the image will be padded to the specified dimensions.
-            Otherwise, the image will be padded to the maximum height and width of the batch.
-        pad_size (`Dict[str, int]`, *optional*):
-            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-            height and width in the batch.
-        return_segmentation_masks (`bool`, *optional*, defaults to `False`):
-            Whether to return segmentation masks.
-        masks_path (`str` or `pathlib.Path`, *optional*):
-            Path to the directory containing the segmentation masks.
-        """,
-    )
     def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[RTDetrFastImageProcessorPreprocessKwargs]
+        self,
+        images: ImageInput,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        masks_path: Optional[Union[str, pathlib.Path]] = None,
+        **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
-        return BaseImageProcessorFast().preprocess(images, **kwargs)
+        return BaseImageProcessorFast().preprocess(images, annotations=annotations, masks_path=masks_path, **kwargs)
 
     def prepare_annotation(
         self,
         image: torch.Tensor,
         target: Dict,
         format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
@@ -268,15 +222,8 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
                         target_size=resized_image.size()[-2:],
                     )
                 image = resized_image
-
-            if do_rescale and do_normalize:
-                # fused rescale and normalize
-                image = F.normalize(image.to(dtype=torch.float32), image_mean, image_std)
-            elif do_rescale:
-                image = image * rescale_factor
-            elif do_normalize:
-                image = F.normalize(image, image_mean, image_std)
-
+            # Fused rescale and normalize
+            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
             if do_convert_annotations and annotations is not None:
                 annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
 

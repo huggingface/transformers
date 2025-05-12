@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -109,8 +108,8 @@ class PixtralImageProcessingTester:
 
             ratio = max(height / max_height, width / max_width)
             if ratio > 1:
-                height = int(np.ceil(height / ratio))
-                width = int(np.ceil(width / ratio))
+                height = int(np.floor(height / ratio))
+                width = int(np.floor(width / ratio))
 
             patch_height, patch_width = self.patch_size["height"], self.patch_size["width"]
             num_height_tokens = (height - 1) // patch_height + 1
@@ -161,7 +160,7 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "image_std"))
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
-    # The following tests are overriden as PixtralImageProcessor can return images of different sizes
+    # The following tests are overridden as PixtralImageProcessor can return images of different sizes
     # and thus doesn't support returning batched tensors
 
     def test_call_pil(self):

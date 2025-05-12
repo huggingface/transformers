@@ -29,6 +29,7 @@ model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
 # 初始化分布式环境
 rank = int(os.environ["RANK"])
 device = torch.device(f"cuda:{rank}")
+torch.cuda.set_device(device)
 torch.distributed.init_process_group("nccl", device_id=device)
 
 # 获取支持张量并行的模型

@@ -14,52 +14,33 @@
 # limitations under the License.
 
 
-from functools import lru_cache
 from typing import List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 
-from transformers.models.blip.image_processing_blip import BlipImageProcessor
 from transformers.models.llava.modeling_llava import (
+    KwargsForCausalLM,
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
+    LlavaModel,
+    LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
 )
 from transformers.models.sam.modeling_sam import SamMLPBlock, SamVisionAttention, SamVisionEncoder, SamVisionLayer
-from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
-from transformers.tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
-)
 
 from ...configuration_utils import PretrainedConfig
-from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_transforms import (
-    _rescale_for_pil_conversion,
-    to_channel_dimension_format,
-    to_pil_image,
-)
-from ...image_utils import ChannelDimension, ImageInput
-from ...utils import (
-    add_start_docstrings_to_model_forward,
-    is_vision_available,
-    logging,
-    replace_return_docstrings,
-)
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModelForCausalLM
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...processing_utils import Unpack
+from ...utils import auto_docstring, can_return_tuple, is_vision_available, logging
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 if is_vision_available():
-    import PIL
-
-    from ...image_utils import load_images
+    pass
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "GotOcr2Config"
 
 
 class GotOcr2VisionConfig(PretrainedConfig):
@@ -191,6 +172,9 @@ class GotOcr2Config(PretrainedConfig):
     ```"""
 
     model_type = "got_ocr2"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
     sub_configs = {"text_config": AutoConfig, "vision_config": GotOcr2VisionConfig}
 
     def __init__(
@@ -243,440 +227,6 @@ class GotOcr2Config(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["GotOcr2VisionConfig", "GotOcr2Config"]
-
-
-class GotOcr2TextKwargs(TextKwargs, total=False):
-    format: Optional[bool]
-
-
-class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
-    box: Optional[Union[List, Tuple[float, float], Tuple[float, float, float, float]]]
-    color: Optional[str]
-    num_image_tokens: Optional[int]
-    multi_page: Optional[bool]
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
-
-
-class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: GotOcr2TextKwargs
-    images_kwargs: GotOcr2ImagesKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "format": False,
-        },
-        "images_kwargs": {
-            "num_image_tokens": 256,
-            "multi_page": False,
-            "crop_to_patches": False,
-            "min_patches": 1,
-            "max_patches": 12,
-        },
-    }
-
-
-def preprocess_box_annotation(box: Union[List, Tuple], image_size: Tuple[int, int]) -> List:
-    """
-    Convert box annotation to the format [x1, y1, x2, y2] in the range [0, 1000].
-    """
-    width, height = image_size
-    if len(box) == 4:
-        box[0] = int(box[0] / width * 1000)
-        box[1] = int(box[1] / height * 1000)
-        box[2] = int(box[2] / width * 1000)
-        box[3] = int(box[3] / height * 1000)
-    else:
-        raise ValueError("Box must be a list or tuple of lists in the form [x1, y1, x2, y2].")
-
-    return list(box)
-
-
-# Similar to image_processing_mllama.get_all_supported_aspect_ratios
-@lru_cache(maxsize=10)
-def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> List[Tuple[int, int]]:
-    """
-    Computes all allowed aspect ratios for a given minimum and maximum number of input tiles.
-
-    This function calculates all possible arrangements of tiles that can be formed
-    within the constraint of the minimum and maximum number of tiles. Each arrangement is
-    represented by its aspect ratio (width/height) and the corresponding tile configuration.
-
-    Args:
-        min_image_tiles (`int`):
-            The minimum number of tiles allowed.
-        max_image_tiles (`int`):
-            The maximum number of tiles allowed.
-
-    Returns:
-        `List[Tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
-        configuration in terms of number of tiles.
-
-    Example:
-        >>> get_all_supported_aspect_ratios(1, 4)
-        [(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 4), (2, 2), (4, 1)]
-
-    """
-    aspect_ratios = []
-    for width in range(1, max_image_tiles + 1):
-        for height in range(1, max_image_tiles + 1):
-            if width * height <= max_image_tiles and width * height >= min_image_tiles:
-                aspect_ratios.append((width, height))
-
-    aspect_ratios = sorted(aspect_ratios, key=lambda x: x[0] * x[1])
-
-    return aspect_ratios
-
-
-@lru_cache(maxsize=100)
-def get_optimal_tiled_canvas(
-    original_image_size: Tuple[int, int],
-    target_tile_size: Tuple[int, int],
-    min_image_tiles: int,
-    max_image_tiles: int,
-) -> Tuple[int, int]:
-    """
-    Given a minimum and maximum number of tiles, find the canvas with the closest aspect ratio to the
-    original image aspect ratio.
-    In case of tie-breaking condition when two canvases have the same aspect ratio difference, we favor the canvas with
-    more tiles, until the area covered by the tiles is more than twice the target area, in order to avoid unnecessarily
-    excessive tiling.
-    """
-    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
-
-    original_height, original_width = original_image_size
-    target_tile_height, target_tile_width = target_tile_size
-    aspect_ratio = original_width / original_height
-    area = original_width * original_height
-
-    # find the grid with the best aspect ratio
-    best_ratio_diff = float("inf")
-    best_grid = (1, 1)
-    for grid in possible_tile_arrangements:
-        grid_aspect_ratio = grid[0] / grid[1]
-        ratio_diff = abs(aspect_ratio - grid_aspect_ratio)
-        if ratio_diff < best_ratio_diff:
-            best_ratio_diff = ratio_diff
-            best_grid = grid
-        elif ratio_diff == best_ratio_diff:
-            # if the aspect ratio difference is the same, we favor the grid with more patches
-            # until the area covered by the patches is more than twice the original image area
-            if area > 0.5 * target_tile_height * target_tile_width * grid[0] * grid[1]:
-                best_grid = grid
-
-    return best_grid
-
-
-class GotOcr2ImageProcessor(BlipImageProcessor):
-    def crop_image_to_patches(
-        self,
-        image: ImageInput,
-        min_patches: int,
-        max_patches: int,
-        use_thumbnail: bool = True,
-        patch_size: Union[Tuple, int, dict] = None,
-        return_numpy: bool = False,
-        data_format: ChannelDimension = None,
-    ):
-        """
-        Crop the image to patches and return a list of cropped images.
-        The number of patches and their grid arrangement are determined by the original image size,
-        the target patch size and the minimum and maximum number of patches.
-        The aspect ratio of the patches grid is chosen to be the closest to the original image aspect ratio.
-
-        Args:
-            image (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`):
-                The image to be cropped. The image can be a PIL image, NumPy array or PyTorch tensor.
-            min_patches (`int`):
-                The minimum number of patches to be extracted from the image.
-            max_patches (`int`):
-                The maximum number of patches to be extracted from the image.
-            use_thumbnail (`bool`, *optional*, defaults to `True`):
-                Whether to add a thumbnail image to the list of cropped patches.
-            patch_size (`int`, `Tuple[int, int]`, `dict`, *optional*):
-                The size of the output patches.
-            return_numpy (`bool`, *optional*, defaults to `False`):
-                Whether to return the cropped images as NumPy arrays.
-            data_format (`ChannelDimension`, *optional*):
-                The format of the image data. If `None`, the format is inferred from the input image.
-
-        Returns:
-            List[`PIL.Image.Image`] or List[np.ndarray]: The list of cropped images.
-        """
-        patch_size = patch_size if patch_size is not None else self.size
-        patch_size = get_size_dict(patch_size, default_to_square=True)
-        original_size = get_size_dict(image.size, height_width_order=False)
-        do_rescale = False
-        if not isinstance(image, PIL.Image.Image):
-            do_rescale = _rescale_for_pil_conversion(image)
-            image = to_pil_image(image, do_rescale=do_rescale)
-
-        patch_size_height, patch_size_width = patch_size["height"], patch_size["width"]
-        original_height, original_width = original_size["height"], original_size["width"]
-        # find the closest aspect ratio to the target
-        num_columns, num_rows = get_optimal_tiled_canvas(
-            (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
-        )
-
-        # calculate the target width and height
-        target_width = patch_size_width * num_columns
-        target_height = patch_size_height * num_rows
-        num_blocks = num_columns * num_rows
-
-        # resize the image so that each patch is of patch_size
-        resized_image = image.resize((target_width, target_height))
-
-        # split the image into patches
-        processed_images = []
-        for i in range(num_blocks):
-            column = i % num_columns
-            row = i // num_columns
-            box = (
-                column * patch_size_width,
-                row * patch_size_height,
-                (column + 1) * patch_size_width,
-                (row + 1) * patch_size_height,
-            )
-            # split the image
-            patch_image = resized_image.crop(box)
-            processed_images.append(patch_image)
-
-        if use_thumbnail and len(processed_images) != 1:
-            thumbnail_img = image.resize((patch_size_width, patch_size_height))
-            processed_images.append(thumbnail_img)
-
-        if return_numpy:
-            processed_images_numpy = []
-            for processed_image in processed_images:
-                processed_image = np.array(processed_image)
-                # If the input image channel dimension was of size 1, then it is dropped when converting to a PIL image
-                # so we need to add it back if necessary.
-                processed_image = (
-                    np.expand_dims(processed_image, axis=-1) if processed_image.ndim == 2 else processed_image
-                )
-                # The image is always in channels last format after converting from a PIL image
-                if data_format is not None:
-                    processed_image = to_channel_dimension_format(
-                        processed_image, data_format, input_channel_dim=ChannelDimension.LAST
-                    )
-                # If an image was rescaled to be in the range [0, 255] before converting to a PIL image, then we need to
-                # rescale it back to the original range.
-                processed_image = self.rescale(processed_image, 1 / 255) if do_rescale else processed_image
-                processed_images_numpy.append(processed_image)
-            processed_images = processed_images_numpy
-
-        return processed_images
-
-
-class GotOcr2Processor(ProcessorMixin):
-    r"""
-    Constructs a GotOcr2 processor which wraps a [`GotOcr2ImageProcessor`] and
-    [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
-    tokenizer functionalities. See the [`~GotOcr2Processor.__call__`] and [`~GotOcr2Processor.decode`] for more information.
-    Args:
-        image_processor ([`GotOcr2ImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
-    image_processor_class = "GotOcr2ImageProcessor"
-    tokenizer_class = "PreTrainedTokenizerFast"
-
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
-
-        self.message_start_token = "<|im_start|>"
-        self.message_end_token = "<|im_end|>"
-        self.img_start_token = "<img>"
-        self.img_end_token = "</img>"
-        self.img_pad_token = "<imgpad>"
-        self.system_query = "system\nYou should follow the instructions carefully and explain your answers in detail."
-
-    def _make_list_of_inputs(self, images, text, box, color, multi_page):
-        if not isinstance(images, (list, tuple)):
-            images = [images]
-            if multi_page:
-                logger.warning("Multi-page inference is enabled but only one image is passed.")
-                images = [images]
-        elif isinstance(images[0], (list, tuple)) and not multi_page:
-            raise ValueError("Nested images are only supported with `multi_page` set to `True`.")
-        elif not isinstance(images[0], (list, tuple)) and multi_page:
-            images = [images]
-
-        if isinstance(text, str):
-            text = [text]
-
-        if not isinstance(box[0], (list, tuple)):
-            # Use the same box for all images
-            box = [box for _ in range(len(images))]
-        if not isinstance(color, (list, tuple)):
-            color = [color for _ in range(len(images))]
-
-        return images, text, box, color
-
-    def __call__(
-        self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        audio=None,
-        videos=None,
-        **kwargs: Unpack[GotOcr2ProcessorKwargs],
-    ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text if `text`
-        is not `None`, otherwise encode default OCR queries which depends on the `format`, `box`, `color`, `multi_page` and
-        `crop_to_patches` arguments. To prepare the vision inputs, this method forwards the `images` and `kwrags` arguments to
-        GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            format (`bool`, *optional*):
-                If set, will add the format token to the query, and the model will return the OCR result with formatting.
-            box (`List[float]`, `List[Tuple[float, float]]`, `List[Tuple[float, float, float, float]]`, *optional*):
-                The box annotation to be added to the query. If a list of floats or a tuple of floats is provided, it
-                will be interpreted as [x1, y1, x2, y2]. If a list of tuples is provided, each tuple should be in the
-                form (x1, y1, x2, y2).
-            color (`str`, *optional*):
-                The color annotation to be added to the query. The model will return the OCR result within the box with
-                the specified color.
-            multi_page (`bool`, *optional*):
-                If set, will enable multi-page inference. The model will return the OCR result across multiple pages.
-            crop_to_patches (`bool`, *optional*):
-                If set, will crop the image to patches. The model will return the OCR result upon the patch reference.
-            min_patches (`int`, *optional*):
-                The minimum number of patches to be cropped from the image. Only used when `crop_to_patches` is set to
-                `True`.
-            max_patches (`int`, *optional*):
-                The maximum number of patches to be cropped from the image. Only used when `crop_to_patches` is set to
-                `True`.
-
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-        """
-
-        output_kwargs = self._merge_kwargs(
-            GotOcr2ProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-        format_output = output_kwargs["text_kwargs"].pop("format")
-        num_image_tokens = output_kwargs["images_kwargs"].pop("num_image_tokens")
-        box = output_kwargs["images_kwargs"].pop("box", [None])
-        color = output_kwargs["images_kwargs"].pop("color", None)
-        multi_page = output_kwargs["images_kwargs"].pop("multi_page")
-        crop_to_patches = output_kwargs["images_kwargs"].pop("crop_to_patches")
-        min_patches = output_kwargs["images_kwargs"].pop("min_patches")
-        max_patches = output_kwargs["images_kwargs"].pop("max_patches")
-
-        images, text, box, color = self._make_list_of_inputs(images, text, box, color, multi_page)
-
-        # Load images as we need to know the image size
-        images = load_images(images)
-        if text is None:
-            text = []
-            for index, (image_group, box_single, color_single) in enumerate(zip(images, box, color)):
-                if crop_to_patches:
-                    image_group = self.image_processor.crop_image_to_patches(
-                        image_group,
-                        patch_size=output_kwargs["images_kwargs"].get("size"),
-                        min_patches=min_patches,
-                        max_patches=max_patches,
-                    )
-                    images[index] = image_group
-                num_images = len(image_group) if (multi_page or crop_to_patches) else 1
-                if box_single[0] is not None:
-                    box_single = preprocess_box_annotation(box_single, image_group.size)
-                query = (
-                    f"{f'[{color_single}] ' if color_single is not None else ''}"
-                    f"{str(box_single) if box_single[0] is not None else ''} "
-                    "OCR"
-                    f"{' with format' if format_output else ''}"
-                    f"{' across multi pages' if multi_page else ''}"
-                    f"{' upon the patch reference' if crop_to_patches else ''}"
-                    ": "
-                )
-                prompt = (
-                    self.message_start_token
-                    + self.system_query
-                    + self.message_end_token
-                    + self.message_start_token
-                    + "user\n"
-                    + self.img_start_token
-                    + self.img_pad_token * num_image_tokens * num_images
-                    + self.img_end_token
-                    + "\n"
-                    + query
-                    + self.message_end_token
-                    + self.message_start_token
-                    + "assistant\n"
-                )
-                text.append(prompt)
-        elif crop_to_patches:
-            for index, (image_group, box_single, color_single) in enumerate(zip(images, box, color)):
-                image_group = self.image_processor.crop_image_to_patches(
-                    image_group,
-                    patch_size=output_kwargs["images_kwargs"].get("size"),
-                    min_patches=min_patches,
-                    max_patches=max_patches,
-                )
-                images[index] = image_group
-
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        if multi_page or crop_to_patches:
-            # flatten images
-            images = [image for image_group in images for image in image_group]
-        image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-
-        return BatchFeature(data={**text_inputs, **image_inputs})
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(tokenizer_input_names) + list(image_processor_input_names)
-
-
 class GotOcr2MLPBlock(SamMLPBlock):
     pass
 
@@ -724,95 +274,34 @@ class GotOcr2CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
 
 
-class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
+class GotOcr2ModelOutputWithPast(LlavaModelOutputWithPast):
     pass
 
 
-GOT_OCR2_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
+class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
+    def _init_weights(self, module):
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
-
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        pixel_values (`torch.FloatTensor` of shape `(seq_length, num_channels * image_size * image_size)):
-            The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`GotOcr2ImageProcessor.__call__`] for details. [`GotOcr2Processor`] uses
-            [`GotOcr2ImageProcessor`] for processing images.
-"""
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, (nn.LayerNorm, GotOcr2LayerNorm)):  # noqa: F821
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, GotOcr2VisionAttention):
+            if module.use_rel_pos:
+                module.rel_pos_h.data.zero_()
+                module.rel_pos_w.data.zero_()
+        elif isinstance(module, GotOcr2VisionEncoder):
+            if module.pos_embed is not None:
+                module.pos_embed.data.zero_()
 
 
-class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
+class GotOcr2Model(LlavaModel):
     def __init__(self, config: GotOcr2Config):
         super().__init__(config)
         self.vision_tower = GotOcr2VisionEncoder(config.vision_config)
-
-        self.multi_modal_projector = GotOcr2MultiModalProjector(config)
-        self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
-        self.pad_token_id = config.pad_token_id
-
-        self.post_init()
 
     def get_image_features(
         self,
@@ -829,8 +318,76 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         image_outputs = self.vision_tower(pixel_values).last_hidden_state
         return self.multi_modal_projector(image_outputs)
 
-    @add_start_docstrings_to_model_forward(GOT_OCR2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=GotOcr2CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Union[Tuple, GotOcr2ModelOutputWithPast]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if pixel_values is not None and inputs_embeds is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+            )
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if pixel_values is not None:
+            image_features = self.get_image_features(pixel_values=pixel_values.to(inputs_embeds.dtype))
+            n_image_tokens = (input_ids == self.config.image_token_id).sum()
+            n_image_features = image_features.shape[0] * image_features.shape[1]
+            if n_image_tokens != n_image_features:
+                raise ValueError(
+                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                )
+            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        outputs = self.language_model(
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        return GotOcr2ModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
+        )
+
+
+class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -846,23 +403,13 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-    ) -> Union[Tuple, LlavaCausalLMOutputWithPast]:
+        **kwargs: Unpack[KwargsForCausalLM],
+    ) -> Union[Tuple, GotOcr2CausalLMOutputWithPast]:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
@@ -892,38 +439,15 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         "You should keep in mind what features from the module should be used, especially
         when you're planning to sell a template."
         ```"""
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values=pixel_values.to(inputs_embeds.dtype))
-            n_image_tokens = (input_ids == self.config.image_token_index).sum()
-            n_image_features = image_features.shape[0] * image_features.shape[1]
-            if n_image_tokens != n_image_features:
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
-
-        outputs = self.language_model(
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -931,34 +455,22 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            **kwargs,
         )
 
-        logits = outputs[0]
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            if attention_mask is not None:
-                # we use the input attention mask to shift the logits and labels, because it is 2D.
-                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
-            else:
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return GotOcr2CausalLMOutputWithPast(
             loss=loss,
@@ -966,15 +478,14 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=outputs.image_hidden_states,
         )
 
 
 __all__ = [
     "GotOcr2VisionConfig",
     "GotOcr2Config",
-    "GotOcr2Processor",
     "GotOcr2PreTrainedModel",
+    "GotOcr2Model",
     "GotOcr2ForConditionalGeneration",
-    "GotOcr2ImageProcessor",
 ]

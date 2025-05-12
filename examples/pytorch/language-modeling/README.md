@@ -177,7 +177,7 @@ sure all your batches have the same length.
 
 ### Whole word masking
 
-This part was moved to `examples/research_projects/mlm_wwm`.
+This part was moved to https://github.com/huggingface/transformers-research-projects/tree/main/mlm_wwm.
 
 ### XLNet and permutation language modeling
 

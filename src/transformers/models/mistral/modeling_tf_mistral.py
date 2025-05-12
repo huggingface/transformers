@@ -326,7 +326,7 @@ class TFMistralAttention(keras.layers.Layer):
         )
 
         if past_key_value is not None:
-            # resue k, v, self_attention
+            # reuse k, v, self_attention
             key_states = tf.concat([past_key_value[0], key_states], axis=2)
             value_states = tf.concat([past_key_value[1], value_states], axis=2)
 
@@ -528,7 +528,7 @@ class TFMistralMainLayer(keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
         past_key_values: Optional[List[tf.Tensor]] = None,
@@ -770,7 +770,7 @@ class TFMistralModel(TFMistralPreTrainedModel):
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
         past_key_values: Optional[List[tf.Tensor]] = None,
@@ -837,7 +837,7 @@ class TFMistralForCausalLM(TFMistralPreTrainedModel, TFCausalLanguageModelingLos
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
         past_key_values: Optional[List[tf.Tensor]] = None,
@@ -849,11 +849,10 @@ class TFMistralForCausalLM(TFMistralPreTrainedModel, TFCausalLanguageModelingLos
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, TFCausalLMOutputWithPast]:
         r"""
-        Args:
-            labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
-                or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
+            or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
@@ -963,7 +962,7 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
         past_key_values: Optional[List[tf.Tensor]] = None,
@@ -975,11 +974,10 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, TFSequenceClassifierOutputWithPast]:
         r"""
-        Args:
-            labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
 
         transformer_outputs = self.model(
@@ -1043,3 +1041,6 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
         if getattr(self, "score", None) is not None:
             with tf.name_scope(self.score.name):
                 self.score.build((self.config.hidden_size,))
+
+
+__all__ = ["TFMistralModel", "TFMistralForCausalLM", "TFMistralForSequenceClassification", "TFMistralPreTrainedModel"]

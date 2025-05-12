@@ -27,7 +27,7 @@ jobs:
 
       - name: Get changed files
         id: changed-files
-        uses: tj-actions/changed-files@3f54ebb830831fc121d3263c1857cfbdc310cdb9 #v42
+        uses: tj-actions/changed-files@1c8e6069583811afb28f97afeaf8e7da80c6be5c
         with:
           files: src/transformers/models/**
 

@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # Grounding DINO
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The Grounding DINO model was proposed in [Grounding DINO: Marrying DINO with Grounded Pre-Training for Open-Set Object Detection](https://arxiv.org/abs/2303.05499) by Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Chunyuan Li, Jianwei Yang, Hang Su, Jun Zhu, Lei Zhang. Grounding DINO extends a closed-set object detection model with a text encoder, enabling open-set object detection. The model achieves remarkable results, such as 52.5 AP on COCO zero-shot.
@@ -97,6 +101,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## GroundingDinoImageProcessor
 
 [[autodoc]] GroundingDinoImageProcessor
+    - preprocess
+
+## GroundingDinoImageProcessorFast
+
+[[autodoc]] GroundingDinoImageProcessorFast
     - preprocess
     - post_process_object_detection
 

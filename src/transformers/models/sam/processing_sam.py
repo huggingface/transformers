@@ -21,10 +21,11 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-from ...image_utils import ImageInput, VideoInput
+from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import AudioInput, BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import is_tf_available, is_torch_available
+from ...video_utils import VideoInput
 
 
 if is_torch_available():
@@ -106,13 +107,14 @@ class SamProcessor(ProcessorMixin):
         input_points = output_kwargs["images_kwargs"].pop("input_points", None)
         input_labels = output_kwargs["images_kwargs"].pop("input_labels", None)
         input_boxes = output_kwargs["images_kwargs"].pop("input_boxes", None)
+        point_pad_value = output_kwargs["images_kwargs"].pop("point_pad_value", None)
 
         encoding_image_processor = self.image_processor(
             images,
             **output_kwargs["images_kwargs"],
         )
 
-        # pop arguments that are not used in the foward but used nevertheless
+        # pop arguments that are not used in the forward but used nevertheless
         original_sizes = encoding_image_processor["original_sizes"]
 
         if hasattr(original_sizes, "numpy"):  # Checks if Torch or TF tensor
@@ -131,7 +133,7 @@ class SamProcessor(ProcessorMixin):
             input_labels=input_labels,
             input_boxes=input_boxes,
             return_tensors=output_kwargs["common_kwargs"].get("return_tensors"),
-            point_pad_value=output_kwargs["images_kwargs"].get("point_pad_value"),
+            point_pad_value=point_pad_value,
         )
 
         return encoding_image_processor
