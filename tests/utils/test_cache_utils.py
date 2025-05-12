@@ -1019,9 +1019,7 @@ class SyntheticCacheTest(unittest.TestCase):
         cache = DynamicCache()
         cache.update(prefill, prefill, 0)
         cache.update(update3, update3, 0)
-        self.assertEqual(
-            cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0], "DynamicCache Scenario 1 failed"
-        )
+        self.assertEqual(cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0], "DynamicCache Scenario 1 failed")
         cache.update(update4, update4, 0)
         self.assertEqual(
             cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "DynamicCache Scenario 1 (to 4) failed"
