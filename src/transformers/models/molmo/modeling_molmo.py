@@ -1743,6 +1743,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = MolmoModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.vocab_size = config.text_config.vocab_size
         self.post_init()
 
     def get_input_embeddings(self):

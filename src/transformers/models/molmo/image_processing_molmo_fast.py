@@ -496,7 +496,6 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        device: Optional[str] = None,
         **kwargs,
     ) -> BatchFeature:
         do_resize = do_resize if do_resize is not None else self.do_resize
@@ -525,8 +524,6 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
             images = [F.pil_to_tensor(image) for image in images]
         elif image_type == ImageType.NUMPY:
             images = [torch.from_numpy(image).contiguous() for image in images]
-        if device is not None:
-            images = [image.to(device) for image in images]
 
         all_images = []
         all_crop_grids = []
@@ -565,8 +562,8 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
                 )
 
             if do_rescale and do_normalize:
-                new_mean = torch.tensor(image_mean, device=device) * (1.0 / rescale_factor)
-                new_std = torch.tensor(image_std, device=device) * (1.0 / rescale_factor)
+                new_mean = torch.tensor(image_mean, device=global_image.device) * (1.0 / rescale_factor)
+                new_std = torch.tensor(image_std, device=global_image.device) * (1.0 / rescale_factor)
                 image = F.normalize(image.to(dtype=torch.float32), new_mean, new_std)
                 global_image = F.normalize(global_image.to(dtype=torch.float32), new_mean, new_std)
 
@@ -584,7 +581,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
             crops = new_crops
             # slightly more efficient way
             patch_orderings = torch.where(patch_orderings >= 0, patch_orderings + self.tokens_per_image, -1)
-            prefix = torch.arange(0, self.tokens_per_image, device=device)
+            prefix = torch.arange(0, self.tokens_per_image, device=global_image.device)
             new_patch_orderings = torch.empty(
                 (patch_orderings.shape[0] + prefix.shape[0],),
                 device=patch_orderings.device,
@@ -604,7 +601,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
             "image_masks": all_cropped_masks,
         }
         if do_pad:
-            data = self._pad_for_batching(data, device=device)
+            data = self._pad_for_batching(data, device=global_image.device)
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 

@@ -1388,6 +1388,7 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
 
     def __init__(self, config: MolmoConfig):
         super().__init__(config)
+        self.vocab_size = config.text_config.vocab_size
         self.model = MolmoModel(config)
         self.post_init()
 
