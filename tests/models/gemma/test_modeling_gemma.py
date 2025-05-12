@@ -315,13 +315,12 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             dummy_input = inputs_dict[model_class.main_input_name].to(torch_device)
 
             model.config._attn_implementation = "sdpa"
-            logits_sdpa = model(dummy_input, output_hidden_states=True).hidden_states[-1]
+            states_sdpa = model(dummy_input, output_hidden_states=True).hidden_states[-1]
 
             model.config._attn_implementation = "eager"
-            logits_eager = model(dummy_input, output_hidden_states=True).hidden_states[-1]
+            states_eager = model(dummy_input, output_hidden_states=True).hidden_states[-1]
 
-            # gemma sdpa needs a high tolerance
-            torch.testing.assert_close(logits_sdpa, logits_eager, atol=1e-5, rtol=1e-5)
+            torch.testing.assert_close(states_sdpa, states_eager, atol=1e-5, rtol=1e-5)
 
     @require_flash_attn
     @require_torch_gpu
@@ -332,17 +331,17 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 self.skipTest(reason="Model does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config).to(torch_device)
+            model = model_class(config).to(device=torch_device, dtype=torch.float16)
             dummy_input = inputs_dict[model_class.main_input_name].to(torch_device)
 
             model.config._attn_implementation = "flash_attention_2"
-            logits_sdpa = model(dummy_input, output_hidden_states=True).hidden_states[-1]
+            states_sdpa = model(dummy_input, output_hidden_states=True).hidden_states[1]
 
             model.config._attn_implementation = "eager"
-            logits_eager = model(dummy_input, output_hidden_states=True).hidden_states[-1]
+            states_eager = model(dummy_input, output_hidden_states=True).hidden_states[1]
 
-            # gemma sdpa needs a high tolerance
-            torch.testing.assert_close(logits_sdpa, logits_eager, atol=1e-5, rtol=1e-5)
+            # Here we use higher tolerance and the output of the 2nd layer because otherwise small diffs add-up
+            torch.testing.assert_close(states_sdpa, states_eager, atol=1e-3, rtol=1e-3)
 
 
 @slow
