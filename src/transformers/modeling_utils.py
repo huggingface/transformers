@@ -4105,7 +4105,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
 
-        print("CLASS NAME", cls.__name__.lower(), any(allowed_name in cls.__name__.lower() for allowed_name in VLMS))
         # Load models with hardcoded key mapping on class for VLMs only,  to keep BC and standardize model
         if any(allowed_name in cls.__name__.lower() for allowed_name in VLMS):
             key_mapping = kwargs.pop("key_mapping", cls._checkpoint_conversion_mapping)
