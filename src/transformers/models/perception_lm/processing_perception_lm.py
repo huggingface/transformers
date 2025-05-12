@@ -19,7 +19,8 @@ Processor class for PerceptionLM.
 from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
+from ...image_utils import ImageInput, get_image_size, to_numpy_array
+from ...video_utils import VideoInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
