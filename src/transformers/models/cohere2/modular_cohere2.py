@@ -26,7 +26,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import add_start_docstrings_to_model_forward, can_return_tuple, logging
+from ...utils import logging
 from ...utils.deprecation import deprecate_kwarg
 from ..cohere.modeling_cohere import (
     CohereAttention,
@@ -39,9 +39,6 @@ from ..cohere.modeling_cohere import (
     eager_attention_forward,
 )
 from ..gemma2.modeling_gemma2 import Gemma2Model
-
-
-COHERE2_INPUTS_DOCSTRING = None  # Will be picked up by modular
 
 
 logger = logging.get_logger(__name__)
@@ -444,20 +441,11 @@ class Cohere2PreTrainedModel(CoherePreTrainedModel):
 
 
 class Cohere2Model(Gemma2Model):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Cohere2DecoderLayer`]
-    Args:
-        config: Cohere2Config
-    """
-
     def __init__(self, config: Cohere2Config):
         super().__init__(config)
         self.norm = Cohere2LayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
         self.rotary_emb = Cohere2RotaryEmbedding(config=config)
 
-    @can_return_tuple
-    @add_start_docstrings_to_model_forward(COHERE2_INPUTS_DOCSTRING)
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

@@ -833,6 +833,7 @@ class PretrainedConfig(PushToHubMixin):
                 if "model_type" in value:
                     # Needs to be set even if it's not in the diff
                     diff["model_type"] = value["model_type"]
+
                 serializable_config_dict[key] = diff
             elif (
                 key not in default_config_dict
@@ -1003,6 +1004,8 @@ class PretrainedConfig(PushToHubMixin):
             del d["_commit_hash"]
         if "_attn_implementation_internal" in d:
             del d["_attn_implementation_internal"]
+        if "_attn_implementation_autoset" in d:
+            del d["_attn_implementation_autoset"]
         # Do not serialize `base_model_tp_plan` for now
         if "base_model_tp_plan" in d:
             del d["base_model_tp_plan"]

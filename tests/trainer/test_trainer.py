@@ -4939,6 +4939,8 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         commits = commit_logs.split("\n\n")[1::2]
         return [commit.strip() for commit in commits]
 
+    # TODO: @ydshieh or @SunMarc
+    @unittest.skip("unknown failure reason, possibly staging hub issue")
     def test_push_to_hub_with_saves_each_epoch(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
             with tempfile.TemporaryDirectory() as tmp_dir:

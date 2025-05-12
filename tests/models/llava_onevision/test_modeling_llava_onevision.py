@@ -24,6 +24,7 @@ from transformers import (
     AutoProcessor,
     LlavaOnevisionConfig,
     LlavaOnevisionForConditionalGeneration,
+    LlavaOnevisionModel,
     is_torch_available,
     is_vision_available,
 )
@@ -182,7 +183,14 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     Model tester for `LlavaOnevisionForConditionalGeneration`.
     """
 
-    all_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            LlavaOnevisionModel,
+            LlavaOnevisionForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {"image-text-to-text": LlavaOnevisionForConditionalGeneration} if is_torch_available() else {}
     )
@@ -296,7 +304,8 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
             model = model_class(config).to(torch_device)
             # We should have the right number of input features,
             # and should be able to run a forward pass without exploding
-            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            base_model = getattr(model, "model", model)
+            assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
     @unittest.skip(

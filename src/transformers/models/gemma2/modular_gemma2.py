@@ -27,7 +27,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import add_start_docstrings_to_model_forward, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils import is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..gemma.modeling_gemma import (
     GemmaAttention,
@@ -40,10 +40,6 @@ from ..gemma.modeling_gemma import (
     apply_rotary_pos_emb,
     repeat_kv,
 )
-
-
-_CHECKPOINT_FOR_DOC = "google/gemma2-7b"
-GEMMA2_INPUTS_DOCSTRING = None  # Will be picked up by modular
 
 
 if is_torch_flex_attn_available():
@@ -413,9 +409,6 @@ class Gemma2Model(GemmaModel):
             [Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
-    @can_return_tuple
-    @add_start_docstrings_to_model_forward(GEMMA2_INPUTS_DOCSTRING)
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -595,20 +588,6 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         **loss_kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
-
         Example:
 
         ```python

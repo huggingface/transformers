@@ -340,6 +340,11 @@ This example showcases how to handle a batch of chat conversations with interlea
 [[autodoc]] InternVLVisionModel
     - forward
 
+## InternVLModel
+
+[[autodoc]] InternVLModel
+    - forward
+
 ## InternVLForConditionalGeneration
 
 [[autodoc]] InternVLForConditionalGeneration
@@ -348,3 +353,7 @@ This example showcases how to handle a batch of chat conversations with interlea
 ## InternVLProcessor
 
 [[autodoc]] InternVLProcessor
+
+## InternVLVideoProcessor
+
+[[autodoc]] InternVLVideoProcessor

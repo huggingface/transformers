@@ -378,8 +378,8 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "rope_theta",
         "partial_rotary_factor",
         "pretraining_tp",
-        "boi_token_index",
-        "eoi_token_index",
+        "boi_token_id",
+        "eoi_token_id",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 

@@ -30,21 +30,16 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...utils import auto_docstring
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_hgnet_v2 import HGNetV2Config
 
 
 # General docstring
-_CONFIG_FOR_DOC = "HGNetV2Config"
 
 
+@auto_docstring
 class HGNetV2PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = HGNetV2Config
     base_model_prefix = "hgnetv2"
     main_input_name = "pixel_values"
@@ -346,20 +341,6 @@ class HGNetV2Encoder(nn.Module):
         )
 
 
-HGNet_V2_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`RTDetrImageProcessor.__call__`] for details.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
     def __init__(self, config: HGNetV2Config):
         super().__init__(config)
@@ -372,14 +353,11 @@ class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(HGNet_V2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
     ) -> BackboneOutput:
-        """
-        Returns:
-
+        r"""
         Examples:
 
         ```python
@@ -427,24 +405,11 @@ class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
         )
 
 
-HGNet_V2_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`HGNetV2Config`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     HGNetV2 Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
-    """,
-    HGNet_V2_START_DOCSTRING,
+    """
 )
 class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
     def __init__(self, config: HGNetV2Config):
@@ -462,8 +427,7 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(HGNet_V2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageClassifierOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -476,8 +440,6 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
 
         Examples:
         ```python

@@ -30,12 +30,10 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     is_accelerate_available,
     is_scipy_available,
     logging,
-    replace_return_docstrings,
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
@@ -47,10 +45,6 @@ if is_accelerate_available():
     from accelerate.utils import reduce
 
 logger = logging.get_logger(__name__)
-
-
-_CONFIG_FOR_DOC = "OneFormerConfig"
-_CHECKPOINT_FOR_DOC = "shi-labs/oneformer_ade20k_swin_tiny"
 
 
 if is_scipy_available():
@@ -2753,41 +2747,7 @@ class OneFormerTaskModel(nn.Module):
         return task_tokens
 
 
-ONEFORMER_START_DOCSTRING = r"""
-    This model is a PyTorch [nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use it as a
-    regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
-
-    Parameters:
-        config ([`OneFormerConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-ONEFORMER_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`OneFormerProcessor`]. See
-            [`OneFormerProcessor.__call__`] for details.
-        task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
-            for details.
-        pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
-
-            - 1 for pixels that are real (i.e. **not masked**),
-            - 0 for pixels that are padding (i.e. **masked**).
-
-            [What are attention masks?](../glossary#attention-mask)
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of Detr's decoder attention layers.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~OneFormerModelOutput`] instead of a plain tuple.
-"""
-
-
+@auto_docstring
 class OneFormerPreTrainedModel(PreTrainedModel):
     config_class = OneFormerConfig
     base_model_prefix = "model"
@@ -2903,10 +2863,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-@add_start_docstrings(
-    "The bare OneFormer Model outputting raw hidden-states without any specific head on top.",
-    ONEFORMER_START_DOCSTRING,
-)
+@auto_docstring
 class OneFormerModel(OneFormerPreTrainedModel):
     main_input_name = ["pixel_values", "task_inputs"]
 
@@ -2924,8 +2881,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
 
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(ONEFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=OneFormerModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Tensor,
@@ -2937,8 +2893,12 @@ class OneFormerModel(OneFormerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> OneFormerModelOutput:
         r"""
-        Returns:
-            `OneFormerModelOutput`
+        task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
+            for details.
+        text_inputs (`List[torch.Tensor]`, *optional*):
+            Tensor fof shape `(num_queries, sequence_length)` to be fed to a model
+
         Example:
 
         ```python
@@ -3032,9 +2992,10 @@ class OneFormerModel(OneFormerPreTrainedModel):
         return output
 
 
-@add_start_docstrings(
-    "OneFormer Model for instance, semantic and panoptic image segmentation.",
-    ONEFORMER_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    OneFormer Model for instance, semantic and panoptic image segmentation.
+    """
 )
 class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
     main_input_name = ["pixel_values", "task_inputs"]
@@ -3103,8 +3064,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
     def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
 
-    @add_start_docstrings_to_model_forward(ONEFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=OneFormerForUniversalSegmentationOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Tensor,
@@ -3119,6 +3079,9 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> OneFormerForUniversalSegmentationOutput:
         r"""
+        task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
+            for details.
         text_inputs (`List[torch.Tensor]`, *optional*):
             Tensor fof shape `(num_queries, sequence_length)` to be fed to a model
         mask_labels (`List[torch.Tensor]`, *optional*):
@@ -3126,9 +3089,9 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         class_labels (`List[torch.LongTensor]`, *optional*):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
+        output_auxiliary_logits (`bool`, *optional*):
+            Whether or not to output auxiliary logits.
 
-        Returns:
-            `OneFormerUniversalSegmentationOutput`
         Example:
 
         Universal segmentation example:

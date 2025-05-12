@@ -254,6 +254,10 @@ visualizer("<img>What is shown in this image?")
 [[autodoc]] Gemma3TextModel
     - forward
 
+## Gemma3Model
+
+[[autodoc]] Gemma3Model
+
 ## Gemma3ForCausalLM
 
 [[autodoc]] Gemma3ForCausalLM

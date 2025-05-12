@@ -55,6 +55,9 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
+    def get_video_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
+
     @staticmethod
     def prepare_processor_dict():
         return {
@@ -68,8 +71,11 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
         image_processor = self.get_image_processor()
+        video_processor = self.get_video_processor()
 
-        processor = Qwen2_5_VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2_5_VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
+        )
         processor.save_pretrained(self.tmpdirname)
         processor = Qwen2_5_VLProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
@@ -81,8 +87,11 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_image_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
+        video_processor = self.get_video_processor()
 
-        processor = Qwen2_5_VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2_5_VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
+        )
 
         image_input = self.prepare_image_inputs()
 
@@ -95,8 +104,11 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
+        video_processor = self.get_video_processor()
 
-        processor = Qwen2_5_VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2_5_VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
+        )
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -118,8 +130,11 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
+        video_processor = self.get_video_processor()
 
-        processor = Qwen2_5_VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2_5_VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
+        )
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -130,6 +145,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
     @require_torch
+    @require_av
     def _test_apply_chat_template(
         self,
         modality: str,
@@ -212,7 +228,10 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(input_name in out_dict)
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
-        self.assertEqual(len(out_dict[input_name]), batch_size * 192)
+
+        video_len = 360 if batch_size == 1 else 320  # qwen pixels don't scale with bs same way as other models
+        mm_len = batch_size * 192 if modality == "image" else video_len
+        self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
         for k in out_dict:
@@ -394,7 +413,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            return_tensors="np",
+            return_tensors="pt",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
 

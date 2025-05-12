@@ -1054,8 +1054,8 @@ class DFineConvNormLayer(RTDetrConvNormLayer):
         kernel_size: int,
         stride: int,
         groups: int = 1,
-        padding: int = None,
-        activation: str = None,
+        padding: Optional[int] = None,
+        activation: Optional[str] = None,
     ):
         super().__init__(config, in_channels, out_channels, kernel_size, stride, padding=None, activation=activation)
         self.conv = nn.Conv2d(

@@ -14,13 +14,13 @@
 # limitations under the License.
 """Fast Image processor class for LeViT."""
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, SizeDict
+from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
 from ...image_transforms import (
     ChannelDimension,
     get_resize_output_image_size,
 )
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
-from ...utils import add_start_docstrings, is_torch_available, is_torchvision_available, is_torchvision_v2_available
+from ...utils import auto_docstring, is_torch_available, is_torchvision_available, is_torchvision_v2_available
 
 
 if is_torch_available():
@@ -33,10 +33,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-@add_start_docstrings(
-    "Constructs a fast Levit image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class LevitImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_DEFAULT_MEAN

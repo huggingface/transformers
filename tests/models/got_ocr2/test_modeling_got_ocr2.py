@@ -34,6 +34,7 @@ if is_torch_available():
 
     from transformers import (
         GotOcr2ForConditionalGeneration,
+        GotOcr2Model,
     )
 
 
@@ -140,7 +141,14 @@ class GotOcr2VisionText2TextModelTester:
 
 @require_torch
 class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (GotOcr2ForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            GotOcr2Model,
+            GotOcr2ForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {
             "image-to-text": GotOcr2ForConditionalGeneration,
@@ -226,6 +234,10 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         reason="GotOcr2's language backbone is Qwen2 which uses GQA so the KV cache is a non standard format"
     )
     def test_past_key_values_format(self):
+        pass
+
+    @unittest.skip(reason="Vision backbone doesn't support FLEX yet!")
+    def test_flex_attention_with_grads(self):
         pass
 
 

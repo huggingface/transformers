@@ -219,9 +219,10 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else {}
     )
     is_encoder_decoder = False
-    fx_compatible = True
+    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     test_pruning = False
     test_missing_keys = False
+    test_head_masking = False  # new attn API doesn't support head mask
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
