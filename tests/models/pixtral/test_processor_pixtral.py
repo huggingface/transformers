@@ -14,9 +14,8 @@
 import shutil
 import tempfile
 import unittest
-from io import BytesIO
 
-import requests
+import numpy as np
 import torch
 
 from transformers.testing_utils import require_vision
@@ -26,8 +25,6 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import PixtralProcessor
 
 
@@ -38,11 +35,10 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.url_0 = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        cls.image_0 = Image.open(BytesIO(requests.get(cls.url_0, stream=True).content))
+        cls.image_0 = np.random.randint(255, size=(3, 876, 1300), dtype=np.uint8)
         cls.url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        cls.image_1 = Image.open(BytesIO(requests.get(cls.url_1, stream=True).content))
-        cls.url_2 = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
-        cls.image_2 = Image.open(BytesIO(requests.get(cls.url_2, stream=True).content))
+        cls.image_1 = np.random.randint(255, size=(3, 480, 640), dtype=np.uint8)
+        cls.image_2 = np.random.randint(255, size=(3, 1024, 1024), dtype=np.uint8)
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
