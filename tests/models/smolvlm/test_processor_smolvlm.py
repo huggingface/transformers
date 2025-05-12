@@ -22,7 +22,7 @@ import requests
 
 from transformers import SmolVLMProcessor
 from transformers.models.auto.processing_auto import AutoProcessor
-from transformers.testing_utils import require_av, require_torch, require_vision
+from transformers.testing_utils import is_flaky, require_av, require_torch, require_vision
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -63,6 +63,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         cls.bos_token = processor.tokenizer.bos_token
         cls.image_token = processor.image_token
+        cls.video_token = processor.image_token * 8  # SmolVLM uses image token and repeats it `num_frames` times
         cls.fake_image_token = processor.fake_image_token
         cls.global_img_token = processor.global_image_token
 
@@ -78,6 +79,9 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+
+    def get_video_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
 
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
@@ -113,6 +117,10 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+
+    @is_flaky  # fails 15 out of 100, FIXME @raushan
+    def test_structured_kwargs_nested_from_dict_video(self):
+        super().test_structured_kwargs_nested_from_dict_video()
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor_components = self.prepare_components()
@@ -433,10 +441,13 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
+        video_processor = self.get_component("video_processor")
         tokenizer = self.get_component("tokenizer")
 
         processor_kwargs = self.prepare_processor_dict()
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, **processor_kwargs)
+        processor = self.processor_class(
+            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor, **processor_kwargs
+        )
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modality="image")
@@ -556,3 +567,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 padding=True,
                 max_length=20,
             )
+
+    @unittest.skip("SmolVLM cannot accept image URL as video frames, because it needs to know video fps and duration")
+    def test_apply_chat_template_video_1(self):
+        pass
