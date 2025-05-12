@@ -18,6 +18,8 @@ import torch
 from transformers.generation.configuration_utils import GenerationConfig
 
 from ..utils.import_utils import is_torch_available
+from ..masking_utils import prepare_padding_mask, ALL_MASK_CREATION_FUNCTIONS, _ignore_causal_mask_sdpa
+from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
 
 
 if is_torch_available():
@@ -281,16 +283,6 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             self.register_buffer(f"key_cache_{i}", self.static_cache.key_cache[i], persistent=False)
             self.register_buffer(f"value_cache_{i}", self.static_cache.value_cache[i], persistent=False)
 
-        self.is_causal = any("CausalLM" in arch for arch in self.model.config.architectures)
-        if self.is_causal:
-            causal_mask = torch.tril(
-                torch.ones(
-                    self.static_cache.max_cache_len,
-                    self.static_cache.max_cache_len,
-                    dtype=torch.bool,
-                )
-            )
-            self.register_buffer("mask", causal_mask, persistent=False)
 
     def forward(self, input_ids: torch.Tensor, cache_position: torch.Tensor):
         """
@@ -314,13 +306,12 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             ensuring that the exported model can be executed in `ExecuTorch` out-of-the-box.
         """
         _, seqlen = input_ids.shape
-        attn_mask = self.mask[cache_position, :seqlen] if self.is_causal else None
         position_ids = cache_position.unsqueeze(0)
         past_key_values = self.static_cache
 
         outs = self.model(
             input_ids=input_ids,
-            attention_mask=attn_mask,
+            attention_mask=None,
             position_ids=position_ids,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -492,6 +483,11 @@ def convert_and_export_with_cache(
         raise ImportError("torch >= 2.3 is required.")
 
     import torch.export._trace
+
+    # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
+    ALL_MASK_CREATION_FUNCTIONS["sdpa_without_vmap"] = sdpa_mask_without_vmap
+    ALL_ATTENTION_FUNCTIONS["sdpa_without_vmap"] = ALL_ATTENTION_FUNCTIONS["sdpa"]
+    model.config._attn_implementation = "sdpa_without_vmap"
 
     with torch.no_grad():
         # TODO: The default inputs only work for text models. We need to add support for vision/audio models.
@@ -706,3 +702,72 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                     break
 
             return generated_ids
+
+
+def sdpa_mask_without_vmap(
+    batch_size: int,
+    cache_position: torch.Tensor,
+    kv_length: int,
+    kv_offset: int = 0,
+    attention_mask: Optional[torch.Tensor] = None,
+    sliding_window: Optional[int] = None,
+    chunk_size: Optional[int] = None,
+    allow_is_causal_skip: bool = True,
+    **kwargs,
+) -> Optional[torch.Tensor]:
+    """
+    Create a 4D boolean mask of shape `(batch_size, 1, query_length, kv_length)` where a value of True indicates that
+    the element should take part in the attention computation, and False that it should not.
+
+    This is similar to `masking_utils.sdpa_mask` but does not use `vmap` which is incompatible with export.
+
+    Args:
+        batch_size (`int`):
+            The batch size of the input sequence.
+        cache_position (`torch.Tensor`):
+            A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
+        kv_length (`int`):
+            The size that the key and value states will have during the attention computation.
+        kv_offset (`int`, optional):
+            An optional offset to indicate at which first position the key and values states will refer to.
+        attention_mask (`torch.Tensor`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
+        sliding_window (`int`, optional):
+            An optional sliding window length, if we are using sliding window attention. Mutually exclusive with `chunk_size`.
+        chunk_size (`int`, optional):
+            An optional chunk size, if we are using chunked attention. Mutually exclusive with `sliding_window`.
+        allow_is_causal_skip (`bool`, optional):
+            Whether to allow to return `None` for the mask under conditions where we can use the `is_causal` argument in
+            `torch.sdpa` instead. Default to `True`.
+
+    """
+
+    q_length = cache_position.shape[0]
+    # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
+    if allow_is_causal_skip and _ignore_causal_mask_sdpa(
+        attention_mask, q_length, kv_length, sliding_window, chunk_size
+    ):
+        return None
+
+    # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
+    # but without data-dependent slicing (i.e. torch.compile friendly)
+    kv_arange = torch.arange(kv_length, device=cache_position.device)
+    kv_arange += kv_offset
+    reshaped_cache_position = cache_position.view(-1, 1)
+
+    # Simplest and most efficient way to obtain a causal mask
+    causal_mask = kv_arange <= reshaped_cache_position
+    # If using sliding window, add the sliding mask
+    if sliding_window is not None:
+        sliding_mask_overlay = kv_arange > reshaped_cache_position - sliding_window
+        causal_mask *= sliding_mask_overlay
+    # If using chunk attention, add the chunked mask
+    elif chunk_size is not None:
+        chunked_mask_overlay = kv_arange // chunk_size == reshaped_cache_position // chunk_size
+        causal_mask *= chunked_mask_overlay
+
+    causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
+    if attention_mask is not None:
+        padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
+        causal_mask = causal_mask * padding_mask[:, None, None, :]
+    return causal_mask

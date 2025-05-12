@@ -7,6 +7,7 @@ from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 
 from .cache_utils import Cache
 from .configuration_utils import PretrainedConfig
+from .modeling_utils import GeneralInterface
 from .utils.import_utils import is_torchdynamo_compiling
 
 
@@ -577,12 +578,18 @@ def flex_attention_mask(
     return block_mask
 
 
-ALL_MASK_CREATION_FUNCTIONS = {
-    "sdpa": sdpa_mask,
-    "eager": eager_mask,
-    "flash_attention_2": flash_attention_mask,
-    "flex_attention": flex_attention_mask,
-}
+class AttentionMaskInterface(GeneralInterface):
+    # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
+    # a new instance is created (in order to locally override a given function)
+    _global_mapping = {
+        "sdpa": sdpa_mask,
+        "eager": eager_mask,
+        "flash_attention_2": flash_attention_mask,
+        "flex_attention": flex_attention_mask,
+    }
+
+# Global AttentionMaskInterface shared by all models which do not need to overwrite any of the existing ones
+ALL_MASK_CREATION_FUNCTIONS: AttentionMaskInterface = AttentionMaskInterface()
 
 
 def get_causal_masks(
