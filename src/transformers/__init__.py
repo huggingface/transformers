@@ -259,8 +259,9 @@ _import_structure = {
     ],
     "utils.quantization_config": [
         "AqlmConfig",
+        "AutoRoundConfig",
         "AwqConfig",
-        "BitNetConfig",
+        "BitNetQuantConfig",
         "BitsAndBytesConfig",
         "CompressedTensorsConfig",
         "EetqConfig",
@@ -275,6 +276,7 @@ _import_structure = {
         "TorchAoConfig",
         "VptqConfig",
     ],
+    "video_utils": [],
 }
 
 # tokenizers-backed objects
@@ -333,6 +335,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
+    _import_structure["video_processing_utils"] = ["BaseVideoProcessor"]
 
 # PyTorch-backed objects
 try:
@@ -754,8 +757,9 @@ if TYPE_CHECKING:
     # bitsandbytes config
     from .utils.quantization_config import (
         AqlmConfig,
+        AutoRoundConfig,
         AwqConfig,
-        BitNetConfig,
+        BitNetQuantConfig,
         BitsAndBytesConfig,
         CompressedTensorsConfig,
         EetqConfig,
@@ -807,6 +811,7 @@ if TYPE_CHECKING:
         from .utils.dummy_torchvision_objects import *
     else:
         from .image_processing_utils_fast import BaseImageProcessorFast
+        from .video_processing_utils import BaseVideoProcessor
 
     try:
         if not (is_torchvision_available() and is_timm_available()):

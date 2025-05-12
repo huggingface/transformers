@@ -904,6 +904,7 @@ class GgufModelTests(unittest.TestCase):
         out = model.generate(text, max_new_tokens=10)
 
         EXPECTED_TEXT = 'Hello with the prompt, "What is the best way'
+
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     @require_read_token

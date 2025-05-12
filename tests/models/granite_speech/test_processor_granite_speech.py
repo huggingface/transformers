@@ -33,14 +33,12 @@ if is_torchaudio_available():
     from transformers import GraniteSpeechFeatureExtractor, GraniteSpeechProcessor
 
 
-@pytest.skip("Public models not yet available", allow_module_level=True)
 @require_torch
 @require_torchaudio
 class GraniteSpeechProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        # TODO - use the actual model path on HF hub after release.
-        self.checkpoint = "ibm-granite/granite-speech"
+        self.checkpoint = "ibm-granite/granite-speech-3.3-8b"
         processor = GraniteSpeechProcessor.from_pretrained(self.checkpoint)
         processor.save_pretrained(self.tmpdirname)
 

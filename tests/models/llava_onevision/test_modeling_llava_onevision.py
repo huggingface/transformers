@@ -24,6 +24,7 @@ from transformers import (
     AutoProcessor,
     LlavaOnevisionConfig,
     LlavaOnevisionForConditionalGeneration,
+    LlavaOnevisionModel,
     is_torch_available,
     is_vision_available,
 )
@@ -47,6 +48,8 @@ from ...test_modeling_common import (
 
 if is_torch_available():
     import torch
+
+    from transformers.models.llava_onevision.modeling_llava_onevision import unpad_image
 
 
 if is_vision_available():
@@ -180,7 +183,14 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     Model tester for `LlavaOnevisionForConditionalGeneration`.
     """
 
-    all_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            LlavaOnevisionModel,
+            LlavaOnevisionForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {"image-text-to-text": LlavaOnevisionForConditionalGeneration} if is_torch_available() else {}
     )
@@ -258,6 +268,19 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
+    def test_unpad_image(self):
+        original_size = (400, 400)
+
+        # Test case width is padded
+        pixel_values = floats_tensor([3, 400, 601])
+        unpadded_tensor = unpad_image(pixel_values, original_size)
+        self.assertEqual(unpadded_tensor.shape[1:], original_size)
+
+        # Test case height is padded
+        pixel_values = floats_tensor([3, 503, 400])
+        unpadded_tensor = unpad_image(pixel_values, original_size)
+        self.assertEqual(unpadded_tensor.shape[1:], original_size)
+
     @parameterized.expand(
         [
             (-1,),
@@ -281,7 +304,8 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
             model = model_class(config).to(torch_device)
             # We should have the right number of input features,
             # and should be able to run a forward pass without exploding
-            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            base_model = getattr(model, "model", model)
+            assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
     @unittest.skip(
@@ -300,10 +324,6 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
         reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
         pass
 
     @unittest.skip(

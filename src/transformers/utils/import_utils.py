@@ -19,16 +19,19 @@ import importlib.machinery
 import importlib.metadata
 import importlib.util
 import json
+import operator
 import os
+import re
 import shutil
 import subprocess
 import sys
 import warnings
 from collections import OrderedDict
+from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Dict, FrozenSet, Optional, Set, Tuple, Union
+from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple, Union
 
 from packaging import version
 
@@ -107,7 +110,7 @@ XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.4.0"
-
+AUTOROUND_MIN_VERSION = "0.5.0"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
@@ -131,7 +134,7 @@ _cv2_available = importlib.util.find_spec("cv2") is not None
 _yt_dlp_available = importlib.util.find_spec("yt_dlp") is not None
 _datasets_available = _is_package_available("datasets")
 _detectron2_available = _is_package_available("detectron2")
-# We need to check both `faiss` and `faiss-cpu`.
+# We need to check `faiss`, `faiss-cpu` and `faiss-gpu`.
 _faiss_available = importlib.util.find_spec("faiss") is not None
 try:
     _faiss_version = importlib.metadata.version("faiss")
@@ -141,7 +144,11 @@ except importlib.metadata.PackageNotFoundError:
         _faiss_version = importlib.metadata.version("faiss-cpu")
         logger.debug(f"Successfully imported faiss version {_faiss_version}")
     except importlib.metadata.PackageNotFoundError:
-        _faiss_available = False
+        try:
+            _faiss_version = importlib.metadata.version("faiss-gpu")
+            logger.debug(f"Successfully imported faiss version {_faiss_version}")
+        except importlib.metadata.PackageNotFoundError:
+            _faiss_available = False
 _ftfy_available = _is_package_available("ftfy")
 _g2p_en_available = _is_package_available("g2p_en")
 _hadamard_available = _is_package_available("fast_hadamard_transform")
@@ -159,6 +166,7 @@ _openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
 _auto_gptq_available = _is_package_available("auto_gptq")
 _gptqmodel_available = _is_package_available("gptqmodel")
+_auto_round_available, _auto_round_version = _is_package_available("auto_round", return_version=True)
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
 _quark_available = _is_package_available("quark")
@@ -345,16 +353,28 @@ def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
     return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
 
+def is_torch_accelerator_available():
+    if is_torch_available():
+        import torch
+
+        return hasattr(torch, "accelerator")
+
+    return False
+
+
 def is_torch_deterministic():
     """
     Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
     """
-    import torch
+    if is_torch_available():
+        import torch
 
-    if torch.get_deterministic_debug_mode() == 0:
-        return False
-    else:
-        return True
+        if torch.get_deterministic_debug_mode() == 0:
+            return False
+        else:
+            return True
+
+    return False
 
 
 def is_hadamard_available():
@@ -520,10 +540,12 @@ def is_torch_bf16_gpu_available() -> bool:
 
     if torch.cuda.is_available():
         return torch.cuda.is_bf16_supported()
-    if torch.xpu.is_available():
+    if is_torch_xpu_available():
         return torch.xpu.is_bf16_supported()
     if is_torch_hpu_available():
         return True
+    if is_torch_npu_available():
+        return torch.npu.is_bf16_supported()
     return False
 
 
@@ -1101,6 +1123,10 @@ def is_auto_awq_available():
     return _auto_awq_available
 
 
+def is_auto_round_available(min_version: str = AUTOROUND_MIN_VERSION):
+    return _auto_round_available and version.parse(_auto_round_version) >= version.parse(min_version)
+
+
 def is_optimum_quanto_available():
     # `importlib.metadata.version` doesn't work with `optimum.quanto`, need to put `optimum_quanto`
     return _is_optimum_quanto_available
@@ -1368,6 +1394,16 @@ def is_triton_available():
 
 def is_rich_available():
     return _rich_available
+
+
+def check_torch_load_is_safe():
+    if not is_torch_greater_or_equal("2.6"):
+        raise ValueError(
+            "Due to a serious vulnerability issue in `torch.load`, even with `weights_only=True`, we now require users "
+            "to upgrade torch to at least v2.6 in order to use the function. This version restriction does not apply "
+            "when loading files with safetensors."
+            "\nSee the vulnerability report here https://nvd.nist.gov/vuln/detail/CVE-2025-32434"
+        )
 
 
 # docstyle-ignore
@@ -1701,14 +1737,14 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 LIBROSA_IMPORT_ERROR = """
-{0} requires thes librosa library. But that was not found in your environment. You can install them with pip:
+{0} requires the librosa library. But that was not found in your environment. You can install them with pip:
 `pip install librosa`
 Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 PRETTY_MIDI_IMPORT_ERROR = """
-{0} requires thes pretty_midi library. But that was not found in your environment. You can install them with pip:
+{0} requires the pretty_midi library. But that was not found in your environment. You can install them with pip:
 `pip install pretty_midi`
 Please note that you may need to restart your runtime after installation.
 """
@@ -1805,8 +1841,16 @@ def requires_backends(obj, backends):
     if "tf" in backends and "torch" not in backends and is_torch_available() and not is_tf_available():
         raise ImportError(TF_IMPORT_ERROR_WITH_PYTORCH.format(name))
 
-    checks = (BACKENDS_MAPPING[backend] for backend in backends)
-    failed = [msg.format(name) for available, msg in checks if not available()]
+    failed = []
+    for backend in backends:
+        if isinstance(backend, Backend):
+            available, msg = backend.is_satisfied, backend.error_message
+        else:
+            available, msg = BACKENDS_MAPPING[backend]
+
+        if not available():
+            failed.append(msg.format(name))
+
     if failed:
         raise ImportError("".join(failed))
 
@@ -1850,11 +1894,14 @@ class _LazyModule(ModuleType):
         module_file: str,
         import_structure: IMPORT_STRUCTURE_T,
         module_spec: Optional[importlib.machinery.ModuleSpec] = None,
-        extra_objects: Dict[str, object] = None,
+        extra_objects: Optional[Dict[str, object]] = None,
+        explicit_import_shortcut: Optional[Dict[str, List[str]]] = None,
     ):
         super().__init__(name)
 
         self._object_missing_backend = {}
+        self._explicit_import_shortcut = explicit_import_shortcut if explicit_import_shortcut else {}
+
         if any(isinstance(key, frozenset) for key in import_structure.keys()):
             self._modules = set()
             self._class_to_module = {}
@@ -1870,7 +1917,7 @@ class _LazyModule(ModuleType):
                 #
                 # dict_keys(['models.nllb_moe.configuration_nllb_moe', 'models.sew_d.configuration_sew_d'])
                 #
-                # with this, we don't only want to be able to import these explicitely, we want to be able to import
+                # with this, we don't only want to be able to import these explicitly, we want to be able to import
                 # every intermediate module as well. Therefore, this is what is returned:
                 #
                 # {
@@ -1883,14 +1930,25 @@ class _LazyModule(ModuleType):
                 module_keys = set(
                     chain(*[[k.rsplit(".", i)[0] for i in range(k.count(".") + 1)] for k in list(module.keys())])
                 )
+
                 for backend in backends:
-                    if backend not in BACKENDS_MAPPING:
-                        raise ValueError(
-                            f"Error: the following backend: '{backend}' was specified around object {module} but isn't specified in the backends mapping."
-                        )
-                    callable, error = BACKENDS_MAPPING[backend]
-                    if not callable():
+                    if backend in BACKENDS_MAPPING:
+                        callable, _ = BACKENDS_MAPPING[backend]
+                    else:
+                        if any(key in backend for key in ["=", "<", ">"]):
+                            backend = Backend(backend)
+                            callable = backend.is_satisfied
+                        else:
+                            raise ValueError(
+                                f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}"
+                            )
+
+                    try:
+                        if not callable():
+                            missing_backends.append(backend)
+                    except (importlib.metadata.PackageNotFoundError, ModuleNotFoundError, RuntimeError):
                         missing_backends.append(backend)
+
                 self._modules = self._modules.union(module_keys)
 
                 for key, values in module.items():
@@ -1967,12 +2025,29 @@ class _LazyModule(ModuleType):
 
             value = Placeholder
         elif name in self._class_to_module.keys():
-            module = self._get_module(self._class_to_module[name])
-            value = getattr(module, name)
+            try:
+                module = self._get_module(self._class_to_module[name])
+                value = getattr(module, name)
+            except (ModuleNotFoundError, RuntimeError) as e:
+                raise ModuleNotFoundError(
+                    f"Could not import module '{name}'. Are this object's requirements defined correctly?"
+                ) from e
+
         elif name in self._modules:
-            value = self._get_module(name)
+            try:
+                value = self._get_module(name)
+            except (ModuleNotFoundError, RuntimeError) as e:
+                raise ModuleNotFoundError(
+                    f"Could not import module '{name}'. Are this object's requirements defined correctly?"
+                ) from e
         else:
-            raise AttributeError(f"module {self.__name__} has no attribute {name}")
+            value = None
+            for key, values in self._explicit_import_shortcut.items():
+                if name in values:
+                    value = self._get_module(key)
+
+            if value is None:
+                raise AttributeError(f"module {self.__name__} has no attribute {name}")
 
         setattr(self, name, value)
         return value
@@ -2013,6 +2088,64 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
     return module
 
 
+class VersionComparison(Enum):
+    EQUAL = operator.eq
+    NOT_EQUAL = operator.ne
+    GREATER_THAN = operator.gt
+    LESS_THAN = operator.lt
+    GREATER_THAN_OR_EQUAL = operator.ge
+    LESS_THAN_OR_EQUAL = operator.le
+
+    @staticmethod
+    def from_string(version_string: str) -> "VersionComparison":
+        string_to_operator = {
+            "=": VersionComparison.EQUAL.value,
+            "==": VersionComparison.EQUAL.value,
+            "!=": VersionComparison.NOT_EQUAL.value,
+            ">": VersionComparison.GREATER_THAN.value,
+            "<": VersionComparison.LESS_THAN.value,
+            ">=": VersionComparison.GREATER_THAN_OR_EQUAL.value,
+            "<=": VersionComparison.LESS_THAN_OR_EQUAL.value,
+        }
+
+        return string_to_operator[version_string]
+
+
+@lru_cache()
+def split_package_version(package_version_str) -> Tuple[str, str, str]:
+    pattern = r"([a-zA-Z0-9_-]+)([!<>=~]+)([0-9.]+)"
+    match = re.match(pattern, package_version_str)
+    if match:
+        return (match.group(1), match.group(2), match.group(3))
+    else:
+        raise ValueError(f"Invalid package version string: {package_version_str}")
+
+
+class Backend:
+    def __init__(self, backend_requirement: str):
+        self.package_name, self.version_comparison, self.version = split_package_version(backend_requirement)
+
+        if self.package_name not in BACKENDS_MAPPING:
+            raise ValueError(
+                f"Backends should be defined in the BACKENDS_MAPPING. Offending backend: {self.package_name}"
+            )
+
+    def is_satisfied(self) -> bool:
+        return VersionComparison.from_string(self.version_comparison)(
+            version.parse(importlib.metadata.version(self.package_name)), version.parse(self.version)
+        )
+
+    def __repr__(self) -> str:
+        return f'Backend("{self.package_name}", {VersionComparison[self.version_comparison]}, "{self.version}")'
+
+    @property
+    def error_message(self):
+        return (
+            f"{{0}} requires the {self.package_name} library version {self.version_comparison}{self.version}. That"
+            f" library was not found with this version in your environment."
+        )
+
+
 def requires(*, backends=()):
     """
     This decorator enables two things:
@@ -2020,15 +2153,22 @@ def requires(*, backends=()):
       to execute correctly without instantiating it
     - The '@requires' string is used to dynamically import objects
     """
-    for backend in backends:
-        if backend not in BACKENDS_MAPPING:
-            raise ValueError(f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}")
 
     if not isinstance(backends, tuple):
         raise ValueError("Backends should be a tuple.")
 
+    applied_backends = []
+    for backend in backends:
+        if backend in BACKENDS_MAPPING:
+            applied_backends.append(backend)
+        else:
+            if any(key in backend for key in ["=", "<", ">"]):
+                applied_backends.append(Backend(backend))
+            else:
+                raise ValueError(f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}")
+
     def inner_fn(fun):
-        fun.__backends = backends
+        fun.__backends = applied_backends
         return fun
 
     return inner_fn
@@ -2336,23 +2476,53 @@ def spread_import_structure(nested_import_structure):
     """
 
     def propagate_frozenset(unordered_import_structure):
-        tuple_first_import_structure = {}
+        frozenset_first_import_structure = {}
         for _key, _value in unordered_import_structure.items():
+            # If the value is not a dict but a string, no need for custom manipulation
             if not isinstance(_value, dict):
-                tuple_first_import_structure[_key] = _value
+                frozenset_first_import_structure[_key] = _value
 
             elif any(isinstance(v, frozenset) for v in _value.keys()):
-                # Here we want to switch around key and v
                 for k, v in _value.items():
                     if isinstance(k, frozenset):
-                        if k not in tuple_first_import_structure:
-                            tuple_first_import_structure[k] = {}
-                        tuple_first_import_structure[k][_key] = v
+                        # Here we want to switch around _key and k to propagate k upstream if it is a frozenset
+                        if k not in frozenset_first_import_structure:
+                            frozenset_first_import_structure[k] = {}
+                        if _key not in frozenset_first_import_structure[k]:
+                            frozenset_first_import_structure[k][_key] = {}
+
+                        frozenset_first_import_structure[k][_key].update(v)
+
+                    else:
+                        # If k is not a frozenset, it means that the dictionary is not "level": some keys (top-level)
+                        # are frozensets, whereas some are not -> frozenset keys are at an unkown depth-level of the
+                        # dictionary.
+                        #
+                        # We recursively propagate the frozenset for this specific dictionary so that the frozensets
+                        # are at the top-level when we handle them.
+                        propagated_frozenset = propagate_frozenset({k: v})
+                        for r_k, r_v in propagated_frozenset.items():
+                            if isinstance(_key, frozenset):
+                                if r_k not in frozenset_first_import_structure:
+                                    frozenset_first_import_structure[r_k] = {}
+                                if _key not in frozenset_first_import_structure[r_k]:
+                                    frozenset_first_import_structure[r_k][_key] = {}
+
+                                # _key is a frozenset -> we switch around the r_k and _key
+                                frozenset_first_import_structure[r_k][_key].update(r_v)
+                            else:
+                                if _key not in frozenset_first_import_structure:
+                                    frozenset_first_import_structure[_key] = {}
+                                if r_k not in frozenset_first_import_structure[_key]:
+                                    frozenset_first_import_structure[_key][r_k] = {}
+
+                                # _key is not a frozenset -> we keep the order of r_k and _key
+                                frozenset_first_import_structure[_key][r_k].update(r_v)
 
             else:
-                tuple_first_import_structure[_key] = propagate_frozenset(_value)
+                frozenset_first_import_structure[_key] = propagate_frozenset(_value)
 
-        return tuple_first_import_structure
+        return frozenset_first_import_structure
 
     def flatten_dict(_dict, previous_key=None):
         items = []
@@ -2385,7 +2555,7 @@ def spread_import_structure(nested_import_structure):
 
 
 @lru_cache()
-def define_import_structure(module_path: str, prefix: str = None) -> IMPORT_STRUCTURE_T:
+def define_import_structure(module_path: str, prefix: Optional[str] = None) -> IMPORT_STRUCTURE_T:
     """
     This method takes a module_path as input and creates an import structure digestible by a _LazyModule.
 

@@ -257,6 +257,7 @@ InternVL models can also handle video inputs. Here is an example of how to perfo
 ...     add_generation_prompt=True,
 ...     tokenize=True,
 ...     return_dict=True,
+...     num_frames=8,
 >>> ).to(model.device, dtype=torch.float16)
 
 >>> output = model.generate(**inputs, max_new_tokens=25)
@@ -339,6 +340,11 @@ This example showcases how to handle a batch of chat conversations with interlea
 [[autodoc]] InternVLVisionModel
     - forward
 
+## InternVLModel
+
+[[autodoc]] InternVLModel
+    - forward
+
 ## InternVLForConditionalGeneration
 
 [[autodoc]] InternVLForConditionalGeneration
@@ -347,3 +353,7 @@ This example showcases how to handle a batch of chat conversations with interlea
 ## InternVLProcessor
 
 [[autodoc]] InternVLProcessor
+
+## InternVLVideoProcessor
+
+[[autodoc]] InternVLVideoProcessor

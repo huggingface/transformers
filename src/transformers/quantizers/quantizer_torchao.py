@@ -185,6 +185,10 @@ class TorchAoHfQuantizer(HfQuantizer):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
+        if self.quantization_config.include_embedding:
+            input_emb = model.get_input_embeddings()
+            input_emb_names = [name for name, module in model.named_modules() if id(module) == id(input_emb)]
+            self.modules_to_not_convert = [x for x in self.modules_to_not_convert if x not in input_emb_names]
         return
 
     def check_quantized_param(
@@ -206,9 +210,12 @@ class TorchAoHfQuantizer(HfQuantizer):
             # We don't quantize weights that we offload
             return False
         else:
-            # we only quantize the weight of nn.Linear
+            # we only quantize the weight of nn.Linear and nn.Embedding
             module, tensor_name = get_module_from_name(model, param_name)
-            return isinstance(module, torch.nn.Linear) and (tensor_name == "weight")
+            _QUANTIZABLE = [torch.nn.Linear]
+            if self.quantization_config.include_embedding:
+                _QUANTIZABLE.append(torch.nn.Embedding)
+            return isinstance(module, tuple(_QUANTIZABLE)) and (tensor_name == "weight")
 
     def create_quantized_param(
         self,
@@ -220,7 +227,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         unexpected_keys: List[str],
     ):
         """
-        Each nn.Linear layer that needs to be quantized is processsed here.
+        Each nn.Linear layer that needs to be quantized is processed here.
         First, we set the value the weight tensor, then we move it to the target device. Finally, we quantize the module.
         """
         if self.quantization_config.quant_type == "autoquant":
@@ -240,6 +247,33 @@ class TorchAoHfQuantizer(HfQuantizer):
             module._parameters[tensor_name] = torch.nn.Parameter(
                 param_value, requires_grad=param_value.requires_grad
             ).to(device=target_device)
+            # if we are quantizing tied parameters, to avoid tying the quantized weights
+            # the correct order to do it is
+            # 1. load the weight to model
+            # 2. run tie_weights to populate the weights
+            # 3. quantize
+            input_embed = model.get_input_embeddings()
+            if self.quantization_config.untie_embedding_weights and id(module) == id(input_embed):
+                model.tie_weights()
+                setattr(model.config.get_text_config(decoder=True), "tie_word_embeddings", False)
+
+            # handle AOPerModuleConfig, introduced in torchao 0.11.0+
+            if self.quantization_config._get_ao_version() > version.Version("0.10.0"):
+                from torchao.quantization import AOPerModuleConfig
+
+                config = self.quantization_config.get_apply_tensor_subclass()
+                if isinstance(config, AOPerModuleConfig):
+                    module_fqn, _ = param_name.rsplit(".", 1)
+                    c = None
+                    if module_fqn in config.module_fqn_to_config:
+                        c = config.module_fqn_to_config[module_fqn]
+                    else:
+                        c = config.module_fqn_to_config.get("_default", None)
+                    if c is not None:
+                        # filter_fn: not filtering out any modules
+                        quantize_(module, c, filter_fn=lambda x, fqn: True)
+                    return
+
             quantize_(module, self.quantization_config.get_apply_tensor_subclass())
 
     def _process_model_after_weight_loading(self, model, **kwargs):
@@ -276,6 +310,45 @@ class TorchAoHfQuantizer(HfQuantizer):
             )
             return False
         return _is_torchao_serializable
+
+    def get_cuda_warm_up_factor(self):
+        """
+        This factor is used in caching_allocator_warmup to determine how many bytes to pre-allocate for CUDA warmup.
+        - A factor of 2 means we pre-allocate the full memory footprint of the model.
+        - A factor of 4 means we pre-allocate half of that, and so on
+
+        However, when using TorchAO, calculating memory usage with param.numel() * param.element_size() doesn't give the correct size for quantized weights (like int4 or int8)
+        That's because TorchAO internally represents quantized tensors using subtensors and metadata, and the reported element_size() still corresponds to the torch_dtype
+        not the actual bit-width of the quantized data.
+
+        To correct for this:
+        - Use a division factor of 8 for int4 weights
+        - Use a division factor of 4 for int8 weights
+        """
+        if self.quantization_config._get_ao_version() > version.Version("0.9.0"):
+            from torchao.core.config import AOBaseConfig
+
+            quant_type = self.quantization_config.quant_type
+            # For autoquant case, it will be treated in the string implementation below in map_to_target_dtype
+            if isinstance(quant_type, AOBaseConfig):
+                # Extract size digit using fuzzy match on the class name
+                config_name = quant_type.__class__.__name__
+                size_digit = fuzzy_match_size(config_name)
+
+                if size_digit == "4":
+                    return 8
+                else:
+                    return 4
+
+        # Original mapping for non-AOBaseConfig types
+        map_to_target_dtype = {
+            "int4_weight_only": 8,
+            "int8_weight_only": 4,
+            "int8_dynamic_activation_int8_weight": 4,
+            "autoquant": 4,
+        }
+
+        return map_to_target_dtype[self.quantization_config.quant_type]
 
     @property
     def is_trainable(self) -> bool:

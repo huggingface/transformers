@@ -962,7 +962,7 @@ class TFGenerationMixin:
                 raise ValueError(
                     "Beam search decoding cannot return more sequences than it has beams. Please set num_beams >="
                     f" num_return_sequences, got {generation_config.num_beams} and"
-                    f" {generation_config.num_return_sequences} (respectivelly)"
+                    f" {generation_config.num_return_sequences} (respectively)"
                 )
 
             # 11. broadcast inputs to the desired number of beams
@@ -994,7 +994,7 @@ class TFGenerationMixin:
                 raise ValueError(
                     "Beam search decoding cannot return more sequences than it has beams. Please set num_beams >="
                     f" num_return_sequences, got {generation_config.num_beams} and"
-                    f" {generation_config.num_return_sequences} (respectivelly)"
+                    f" {generation_config.num_return_sequences} (respectively)"
                 )
 
             # 11. prepare logits warper
@@ -1626,7 +1626,7 @@ class TFGenerationMixin:
         )
         use_cache = model_kwargs.pop("use_cache", self.generation_config.use_cache)
         use_xla = not tf.executing_eagerly()
-        # TODO (Joao): fix cache format or find programatic way to detect cache index
+        # TODO (Joao): fix cache format or find programmatic way to detect cache index
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
         model_name = str(self.decoder) if "EncoderDecoder" in str(self) else str(self)
         cache_batch_axis = 1 if any(model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")) else 0
@@ -1910,7 +1910,7 @@ class TFGenerationMixin:
         )
         use_cache = model_kwargs.pop("use_cache", self.generation_config.use_cache)
         use_xla = not tf.executing_eagerly()
-        # TODO (Joao): fix cache format or find programatic way to detect cache index
+        # TODO (Joao): fix cache format or find programmatic way to detect cache index
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
         model_name = str(self.decoder) if "EncoderDecoder" in str(self) else str(self)
         cache_batch_axis = 1 if any(model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")) else 0
@@ -2082,7 +2082,7 @@ class TFGenerationMixin:
 
         def gather_fn(tensor):
             if batch_axis > 0:
-                # pushes all dimentions before the batch to the end, so we get (batch, beam_id, ...)
+                # pushes all dimensions before the batch to the end, so we get (batch, beam_id, ...)
                 perm = tf.concat((tf.range(tf.rank(tensor))[batch_axis:], tf.range(batch_axis)), axis=0)
                 tensor = tf.transpose(tensor, perm=perm)
 
@@ -2253,7 +2253,7 @@ class TFGenerationMixin:
 
         use_cache = model_kwargs.pop("use_cache", self.generation_config.use_cache)
         use_xla = not tf.executing_eagerly()
-        # TODO (Joao): fix cache format or find programatic way to detect cache index
+        # TODO (Joao): fix cache format or find programmatic way to detect cache index
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
         model_name = str(self.decoder) if "EncoderDecoder" in str(self) else str(self)
         cache_batch_axis = 1 if any(model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")) else 0
@@ -2788,7 +2788,7 @@ class TFGenerationMixin:
         model_kwargs.pop("use_cache", None)
 
         use_xla = not tf.executing_eagerly()
-        # TODO (Joao): fix cache format or find programatic way to detect cache index
+        # TODO (Joao): fix cache format or find programmatic way to detect cache index
         # GPT2 and other models has a slightly different cache structure, with a different batch axis
         model_name = str(self.decoder) if "EncoderDecoder" in str(self) else str(self)
         cache_batch_axis = 1 if any(model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")) else 0

@@ -22,10 +22,11 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
-from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
+from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
+from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
@@ -52,7 +53,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     [`LlamaTokenizerFast`]. See the [`~LlavaNextVideoProcessor.__call__`] and [`~LlavaNextVideoProcessor.decode`] for more information.
 
     Args:
-        video_processor ([`LlavaNextVideoImageProcessor`], *optional*):
+        video_processor ([`LlavaNextVideoVideoProcessor`], *optional*):
             The video processor is a required input.
         image_processor ([`LlavaNextImageProcessor`], *optional*):
             The image processor is a required input.
@@ -64,7 +65,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             Patch size from the vision tower.
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
-            Shoudl be same as in model's config
+            Should be same as in model's config
         video_token (`str`, *optional*, defaults to `"<video>"`):
             Special token used to denote video location.
         image_token (`str`, *optional*, defaults to `"<image>"`):
@@ -86,7 +87,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         "num_additional_image_tokens",
     ]
     image_processor_class = ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")
-    video_processor_class = "LlavaNextVideoImageProcessor"
+    video_processor_class = "AutoVideoProcessor"
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
     def __init__(

@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from .modeling_tf_auto import *
     from .processing_auto import *
     from .tokenization_auto import *
+    from .video_processing_auto import *
 else:
     import sys
 
