@@ -95,6 +95,11 @@ def compile_friendly_flex_attention(
     )
 
 
+# JUST TO MAKE IMPORTS HAPPY WHILE SOME MODELS HAVE NOT BEEN CHANGED
+def make_flex_block_causal_mask(*args, **kwargs):
+    pass
+
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
