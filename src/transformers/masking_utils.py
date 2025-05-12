@@ -600,6 +600,7 @@ def get_causal_masks(
     attention_mask: Optional[Union[torch.Tensor, list[torch.Tensor]]],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
+    output_attentions: bool = False,
 ) -> list[Optional[Union[torch.Tensor, "BlockMask"]]]:
     num_layers = config.num_hidden_layers
 
@@ -637,6 +638,9 @@ def get_causal_masks(
 
     # We now create all the masks
     mask_interface = ALL_MASK_CREATION_FUNCTIONS[config._attn_implementation]
+    # Sdpa fallbacks to eager in the Attention modules if `output_attentions=True`
+    if config._attn_implementation == "sdpa" and output_attentions:
+        mask_interface = ALL_MASK_CREATION_FUNCTIONS["eager"]
     masks = []
     for kv_length, kv_offset, window, chunk in sizes_and_patterns:
         # Raise if both are provided somehow

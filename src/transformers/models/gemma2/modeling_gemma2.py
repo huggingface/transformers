@@ -456,6 +456,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
             attention_mask,
             cache_position,
             past_key_values,
+            output_attentions,
         )
 
         # embed positions

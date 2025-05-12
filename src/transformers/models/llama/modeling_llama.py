@@ -432,6 +432,7 @@ class LlamaModel(LlamaPreTrainedModel):
             attention_mask,
             cache_position,
             past_key_values,
+            output_attentions,
         )
 
         hidden_states = inputs_embeds
