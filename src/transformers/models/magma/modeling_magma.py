@@ -36,6 +36,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from transformers import AutoConfig, AutoModelForCausalLM, AutoModel
+from transformers import MODEL_MAPPING
 from transformers.configuration_utils import PretrainedConfig
 from .configuration_magma import MagmaConfig, MagmaVisionConfig
 import torch.utils.checkpoint as checkpoint
@@ -280,7 +281,7 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
     def __init__(self, config: MagmaConfig):
         super().__init__(config)
 
-        self.vision_tower = MagmaVisionModel(config.vision_config, require_pretrained=False)
+        self.vision_tower = MODEL_MAPPING[type(config.vision_config)](config.vision_config)
 
         config.vision_config.mm_hidden_size = config.vision_config.mm_hidden_size \
             if 'mm_hidden_size' in config.vision_config else self.vision_tower.hidden_size
