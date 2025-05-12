@@ -58,11 +58,13 @@ class TestTrainerDistributedWorkerSeed(TestCasePlus):
     @require_torch_multi_gpu
     def test_trainer(self):
         device_count = torch.cuda.device_count()
+        output_dir = self.get_auto_remove_tmp_dir()
         distributed_args = f"""--nproc_per_node={device_count}
             --master_port={get_torch_dist_unique_port()}
             {self.test_file_dir}/test_trainer_distributed_worker_seed.py
         """.split()
-        cmd = ["torchrun"] + distributed_args
+        args = f"--output_dir {output_dir}".split()
+        cmd = ["torchrun"] + distributed_args + args
         execute_subprocess_async(cmd, env=self.get_env())
 
 
