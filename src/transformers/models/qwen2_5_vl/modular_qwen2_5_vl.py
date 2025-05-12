@@ -46,11 +46,12 @@ from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, VideoInput
+from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
+from ...video_utils import VideoInput
 
 
 if is_flash_attn_available():
@@ -928,6 +929,8 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
             The image processor is a required input.
         tokenizer ([`Qwen2TokenizerFast`], *optional*):
             The tokenizer is a required input.
+        video_processor ([`Qwen2_5_VLVideoProcessor`], *optional*):
+            The video processor is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
@@ -990,37 +993,32 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
+        image_inputs = videos_inputs = {}
         if images is not None:
-            image_inputs = self.image_processor(images=images, videos=None, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
-        else:
-            image_inputs = {}
-            image_grid_thw = None
 
         if videos is not None:
-            videos_inputs = self.image_processor(images=None, videos=videos, **output_kwargs["images_kwargs"])
+            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
 
             fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
             if isinstance(fps, (int, float)):
-                second_per_grid_ts = [self.image_processor.temporal_patch_size / fps] * len(video_grid_thw)
+                second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
             elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
-                second_per_grid_ts = [self.image_processor.temporal_patch_size / tmp for tmp in fps]
+                second_per_grid_ts = [self.video_processor.temporal_patch_size / tmp for tmp in fps]
             else:
                 raise ValueError(
                     f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(video_grid_thw)}) or fps should be a single number."
                 )
             videos_inputs.update({"second_per_grid_ts": second_per_grid_ts})
 
-        else:
-            videos_inputs = {}
-            video_grid_thw = None
-
         if not isinstance(text, list):
             text = [text]
 
         text = text.copy()  # below lines change text in-place
-        if image_grid_thw is not None:
+        if images is not None:
             merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):
@@ -1030,8 +1028,8 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
-        if video_grid_thw is not None:
-            merge_length = self.image_processor.merge_size**2
+        if videos is not None:
+            merge_length = self.video_processor.merge_size**2
             index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
