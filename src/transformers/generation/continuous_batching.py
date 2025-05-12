@@ -210,7 +210,7 @@ class PagedAttentionCache(Cache):
             raise ValueError(f"No block table found for request {request_id}")
 
         # Convert to PyTorch tensor for vectorized operations
-        logical_indices_tensor = torch.tensor(logical_indices)
+        logical_indices_tensor = torch.tensor(logical_indices, dtype=torch.long, device=self.device)
         block_size = self.block_size
 
         # Vectorized calculations
@@ -222,7 +222,7 @@ class PagedAttentionCache(Cache):
                 f"Logical indices map to block indices out of bounds for request {request_id}"
             )
 
-        block_table_tensor = torch.tensor(block_table)
+        block_table_tensor = torch.tensor(block_table, dtype=torch.long, device=self.device)
         physical_block_nums = block_table_tensor[block_indices]  # Use PyTorch indexing
         physical_indices = physical_block_nums * block_size + block_offsets
         return physical_indices
@@ -430,7 +430,6 @@ class ContinuousBatchProcessor:
         self.tensor_metadata = tensor_metadata
         self.input_ids              = torch.zeros((1, T), **tensor_metadata)
         self.output_ids             = torch.zeros((1, T), **tensor_metadata)
-        self.static_outputs         = torch.zeros((1, T), **tensor_metadata)
         self.position_ids           = torch.zeros((1, T), **tensor_metadata)
         self.cumulative_seqlens_q   = torch.zeros((T+1,),  **tensor_metadata)
         self.cumulative_seqlens_k   = torch.zeros((T+1,),  **tensor_metadata)
@@ -448,7 +447,7 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_k.zero_()
         self.write_index.zero_()
         self.read_index.zero_()
-        self.logits_indices.zero_()
+        # self.logits_indices.zero_()
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
 
@@ -527,17 +526,19 @@ class ContinuousBatchProcessor:
 
     def _handle_request_error(self, error, request_id):
         """Handle general request processing error."""
-        error_response = {
-            "request_id": request_id,
-            "status": "failed",
-            "error": f"Error processing request: {str(error)}",
-        }
+        error_response = RequestState(
+            request_id=request_id,
+            prompt_ids=list(input_ids),
+            max_new_tokens=max_new_tokens,
+            eos_token_id=self.eos_token_id,
+            status="failed",
+        )
 
         # Include any generated tokens if this is an active request
         if isinstance(request_id, str) and request_id in self.active_requests:
-            error_response["static_outputs"] = self.active_requests[request_id].static_outputs
+            error_response.static_outputs = self.active_requests[request_id].static_outputs
         else:
-            error_response["static_outputs"] = []
+            error_response.static_outputs = []
 
         self.output_queue.put(error_response)
 
@@ -662,22 +663,28 @@ class ContinuousBatchProcessor:
         write_position = 0
         cumq_ptr        = 1 # because at 0 we always have 0?
         cumk_ptr        = 1
+        generated_tokens = (self.output_ids != 0).sum()
+        self.input_ids[:, :generated_tokens].copy_(self.output_ids[self.output_ids != 0])
         for state in requests_in_batch:
             if state.status == "decoding":
-                next_input_ids = [state.static_outputs[-1]]
                 positions_to_add = [state.current_len()]
-
+                state.position_offset += 1
                 if not self._allocate_blocks_if_needed(state, state.current_len() + 1):
                     continue
 
                 # Map logical indices to physical block indices for this request
-                read_indices = self.cache._get_physical_indices(state.request_id, state.current_len())
-                write_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))[0]
+                read_indices = self.cache._get_physical_indices(state.request_id, [state.current_len()])
+                write_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))
 
                 seq_len_q = 1  # Query length is 1 for generation
                 seq_len_k = state.current_len() + 1  # Key length includes context
             elif state.status.startswith("prefilling"):
                 next_input_ids = state.prompt_ids
+                state.position_offset += len(next_input_ids)
+                self.input_ids[:, token_position : token_position + len(next_input_ids)].copy_(
+                    torch.tensor(next_input_ids, **self.tensor_metadata)
+                )
+
                 start_pos = state.current_len()
                 positions_to_add = list(range(start_pos, start_pos + len(next_input_ids)))
 
@@ -692,10 +699,8 @@ class ContinuousBatchProcessor:
             else:
                 logger.warning(f"Request {state.request_id} in unexpected state '{state.status}'. Skipping.")
                 continue
+            
 
-            self.input_ids[:, token_position : token_position + len(next_input_ids)].copy_(
-                torch.tensor(next_input_ids, **self.tensor_metadata)
-            )
             self.position_ids[:, token_position : token_position + len(positions_to_add)].copy_(
                 torch.tensor(positions_to_add, **self.tensor_metadata)
             )
@@ -703,9 +708,7 @@ class ContinuousBatchProcessor:
                 torch.tensor(read_indices, **self.tensor_metadata)
             )
             read_position += len(read_indices)
-            self.read_index[read_position: read_position + len(write_indices)].copy_(
-                torch.tensor(write_indices, **self.tensor_metadata)
-            )
+            self.read_index[read_position: read_position + len(write_indices)].copy_(write_indices)
             read_position += len(write_indices)
             self.write_index[write_position : write_position + len(write_indices)].copy_(write_indices)
             self.cumulative_seqlens_q[cumq_ptr].copy_(self.cumulative_seqlens_q[cumq_ptr-1] + seq_len_q)
@@ -715,12 +718,11 @@ class ContinuousBatchProcessor:
             self.max_seqlen_k = max(self.max_seqlen_k, seq_len_k)
             self.logits_indices[cumq_ptr-1].copy_(self.cumulative_seqlens_q[cumq_ptr]-1)
 
-            token_position += len(next_input_ids)
+            token_position += len(positions_to_add)
             read_position += len(read_indices)
             write_position += len(write_indices)
             cumq_ptr += 1
             cumk_ptr += 1
-            state.position_offset += token_position - len(next_input_ids)
 
 
 
@@ -749,8 +751,8 @@ class ContinuousBatchProcessor:
         has_eos = self.output_ids == self.eos_token_id
         is_max_len = self.cumulative_seqlens_q[1:] + 1 >= self.max_context_len
         to_remove = has_eos | is_max_len
-        tokens_to_keep = torch.where(~to_remove & self.output_ids.bool())[1] # can get request ids with this
-        out_tokens = self.output_ids[tokens_to_keep].cpu().detach().tolist()
+        tokens_to_keep = torch.where(~to_remove & self.output_ids >= 0)[1] # can get request ids with this
+        out_tokens = self.output_ids[:, tokens_to_keep][0].cpu().detach().tolist() # should be the only synch we do
         finished_request_ids = []
         for req_id in self.requests_to_process_next:
             if req_id not in self.active_requests:
@@ -758,53 +760,17 @@ class ContinuousBatchProcessor:
                 continue
 
             state = self.active_requests[req_id]
-
-            if state.status == "prefilling":
+            if state.status in ["prefilling", "decoding"] or not state.remaining_prompt_ids:
                 state.status = "decoding"
                 # state.prompt_ids = []  # Clear prompt as it's now in cache
-
                 token = out_tokens[token_idx]
                 token_idx += 1
-
                 if state.update_with_token(token): 
-                    # TODO optimize this, we have access to cum_seq_len_q for max len
-                    # have acces to tensor of tokens for eos, we should directly update the next input ids for decoding
                     finished_request_ids.append(req_id)
-
                 self._maybe_send_output(state, token)
-
             elif state.status == "prefilling_split":
                 token_idx += 1  # Skip the token
-
-                if state.remaining_prompt_ids:
-                    state.status = "split_pending_remainder"
-                    # state.prompt_ids = []
-                else:
-                    state.status = "decoding"
-                    # state.prompt_ids = []
-
-                    token = out_tokens[token_idx].item()
-                    token_idx += 1
-
-                    if state.update_with_token(token):
-                        finished_request_ids.append(req_id)
-
-                    self._maybe_send_output(state, token)
-
-            elif state.status == "decoding":
-                if token_idx >= len(generated_ids):
-                    error_msg = f"Token index {token_idx} out of bounds for generated_ids (len {len(generated_ids)}) for request {req_id}."
-                    logger.error(error_msg)
-                    raise IndexError(error_msg)
-                else:
-                    token = out_tokens[token_idx].item()
-                    token_idx += 1
-
-                    if state.update_with_token(token):
-                        finished_request_ids.append(req_id)
-
-                    self._maybe_send_output(state, token)
-
+                state.status = "split_pending_remainder"
             elif state.status == "split_pending_remainder":
                 logger.warning(f"Request {req_id} in 'split_pending_remainder' state during update.")
 
@@ -815,19 +781,11 @@ class ContinuousBatchProcessor:
 
     def _maybe_send_output(self, state: RequestState, token: int):
         """Send output to the queue based on streaming mode and request state."""
-        output = {
-            "request_id": state.request_id,
-            "status": state.status,
-            "prompt_token_ids": state.prompt_ids,
-        }
-
         if self.streaming:
-            output["next_token"] = token
-            self.output_queue.put(output)
-
+            state.next_token = token
+            self.output_queue.put(state)
         elif state.status == "finished":
-            output["static_outputs"] = state.static_outputs
-            self.output_queue.put(output)
+            self.output_queue.put(state)
 
     def has_pending_requests(self) -> bool:
         """Check if there are any active or waiting requests."""
@@ -976,10 +934,9 @@ class ContinuousBatchingManager:
         """
         if self._generation_thread is None and self.output_queue.empty():
             return None
-
         try:
             result = self.output_queue.get(block=True, timeout=timeout) # TODO Pop here rather?
-            logger.debug(f"Retrieved result for request {result.get('request_id')}")
+            logger.debug(f"Retrieved result for request {result.request_id}")
             return result
         except queue.Empty:
             return None
@@ -1025,8 +982,8 @@ class ContinuousBatchingManager:
                 next_tokens = torch.multinomial(logits[0], num_samples=1).squeeze(1)
             else:
                 next_tokens = torch.argmax(logits, dim=-1)
+            batch_processor.output_ids.fill_(-1)
             batch_processor.output_ids.copy_(next_tokens)
-            batch_processor.output_ids.masked_fill_(~(batch_data.logits_indices).bool(), 0)
 
     def _run_generation_loop(self):
         """Main processing loop running in the background thread."""
@@ -1066,7 +1023,7 @@ class ContinuousBatchingManager:
                     self._generation_step(batch_processor)
 
                 batch_processor.update_batch()
-                batch_processor._maybe_send_output()
+                # batch_processor._maybe_send_output()
 
         except Exception as e:
             logger.error(f"Error in generation loop: {e}", exc_info=True)
@@ -1159,8 +1116,8 @@ class ContinuousMixin:
                 while finished_count < num_requests:
                     result = manager.get_result(timeout=1.0)
                     if result:
-                        req_id = result["request_id"]
-                        if result["status"] == "finished":
+                        req_id = result.request_id
+                        if result.status == "finished":
                             results[req_id] = result
                         else:  # Failed
                             logger.warning(f"Request {req_id} failed: {result.get('error', 'Unknown error')}")
