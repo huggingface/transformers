@@ -20,22 +20,25 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, List, Optional, Union
+from typing import Deque, Dict, List, Optional, Tuple, Union
 
 import torch
 from tqdm import tqdm
 
+
 try:
-    from opentelemetry import metrics
+    from opentelemetry import metrics, trace
     from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
-    from opentelemetry.metrics import Histogram, Meter
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.trace import Status, StatusCode, get_tracer
 
     _has_opentelemetry = True
 except ImportError:
     _has_opentelemetry = False
-
 
 from ..cache_utils import Cache
 from ..configuration_utils import PretrainedConfig
@@ -44,6 +47,66 @@ from ..generation.utils import GenerationMixin
 from ..utils import (
     logging,
 )
+
+
+def traced(func=None, *, span_name=None):
+    """
+    Decorator to trace function calls with OpenTelemetry.
+
+    Can be used as @traced or @traced(span_name="custom_name")
+
+    Args:
+        func: The function to trace
+        span_name: Optional custom name for the span (defaults to function name)
+
+    Returns:
+        Decorated function with tracing
+    """
+
+    def decorator(func):
+        if not _has_opentelemetry:
+            return func
+
+        import functools
+
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if not hasattr(self, "tracer"):
+                return func(self, *args, **kwargs)
+
+            name = span_name or func.__name__
+            with self.tracer.start_as_current_span(name) as span:
+                # Add function signature details to span
+                span.set_attribute("function.name", func.__name__)
+                span.set_attribute("function.module", func.__module__)
+
+                # Add args and kwargs as attributes where possible
+                if args:
+                    for i, arg in enumerate(args):
+                        if isinstance(arg, (str, int, float, bool)) or arg is None:
+                            span.set_attribute(f"args.{i}", str(arg))
+
+                # Add request_id if it's a common parameter
+                if "request_id" in kwargs and isinstance(kwargs["request_id"], str):
+                    span.set_attribute("request_id", kwargs["request_id"])
+
+                # Add important batch information
+                if func.__name__ == "prepare_next_batch" and hasattr(self, "requests_to_process_next"):
+                    span.set_attribute("batch.size", len(getattr(self, "requests_to_process_next", [])))
+
+                try:
+                    result = func(self, *args, **kwargs)
+                    return result
+                except Exception as e:
+                    span.set_status(Status(StatusCode.ERROR))
+                    span.record_exception(e)
+                    raise
+
+        return wrapper
+
+    if func is None:
+        return decorator
+    return decorator(func)
 
 
 logger = logging.get_logger(__name__)
@@ -128,6 +191,7 @@ class PagedAttentionCache(Cache):
             layer_device_map: Optional mapping of layer indices to devices
             initial_prompt_shapes: Optional sample prompts to help calculate optimal cache size
         """
+        self._setup_tracer()
         # Extract model dimensions
         self.num_key_value_heads = (
             config.num_attention_heads
@@ -167,6 +231,23 @@ class PagedAttentionCache(Cache):
         self._free_blocks = deque(range(num_blocks))
         self._block_tables: Dict[str, List[int]] = {}
 
+    def _setup_tracer(self):
+        """Initialize OpenTelemetry tracing if available."""
+        if not _has_opentelemetry:
+            return
+
+        # Create a resource to identify this component
+        resource = Resource.create({"service.name": "transformers.generation.paged_attention_cache"})
+
+        trace_exporter = OTLPSpanExporter()
+        tracer_provider = TracerProvider(resource=resource)
+        tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
+        trace.set_tracer_provider(tracer_provider)
+
+        # Create a tracer for our functions
+        self.tracer = get_tracer("transformers.generation.cache")
+
+    @traced
     def allocate_blocks(self, n_blocks: int, request_id: str) -> List[int]:
         """Allocates n_blocks for a given request_id."""
         if len(self._free_blocks) < n_blocks:
@@ -230,6 +311,7 @@ class PagedAttentionCache(Cache):
         v_cache = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
         return k_cache, v_cache
 
+    @traced
     def update(
         self,
         key_states: torch.Tensor,
@@ -237,7 +319,7 @@ class PagedAttentionCache(Cache):
         layer_idx: int,
         cache_index,
         **kwargs,
-    ) -> (torch.Tensor, torch.Tensor):
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Updates the key and value states in the cache at the specified indices."""
         fill_index = kwargs.get("fill_index")
 
@@ -438,19 +520,27 @@ class ContinuousBatchProcessor:
         self._configure_batch_parameters()
 
     def _setup_metrics(self):
-        """Initialize OpenTelemetry metrics if the library is available."""
+        """Initialize OpenTelemetry metrics and tracing if the library is available."""
 
         if not _has_opentelemetry:
-            logger.info("OpenTelemetry is not installed. Metrics will not be recorded.")
+            logger.info("OpenTelemetry is not installed. Metrics and tracing will not be recorded.")
             return
 
         # Create a resource to identify this component in the metrics system
-        resource = Resource.create({"service.name": "transformers.generation.continuous_batching"})
+        resource = Resource.create({"service.name": "transformers.generation.continuous_batching_processor"})
 
-        # Set up the meter provider with an OTLP exporter
-        exporter = OTLPMetricExporter(endpoint=self._get_otlp_endpoint())
-        provider = MeterProvider(resource=resource, metric_readers=[exporter])
-        metrics.set_meter_provider(provider)
+        metrics_exporter = OTLPMetricExporter()
+        meter_provider = MeterProvider(resource=resource, metric_readers=[metrics_exporter])
+        metrics.set_meter_provider(meter_provider)
+
+        # Set up the tracer provider with an OTLP exporter for tracing
+        trace_exporter = OTLPSpanExporter()
+        tracer_provider = TracerProvider(resource=resource)
+        tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
+        trace.set_tracer_provider(tracer_provider)
+
+        # Create a tracer for our functions
+        self.tracer = get_tracer("transformers.generation")
 
         # Create a meter for our metrics
         self.meter = metrics.get_meter("transformers.generation")
@@ -489,12 +579,6 @@ class ContinuousBatchProcessor:
             unit="percent",
         )
 
-    def _get_otlp_endpoint(self):
-        """Get the OTLP endpoint from environment variable or use default."""
-        import os
-
-        return os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318/v1/metrics")
-
     def _configure_batch_parameters(self):
         """Set up batch processing parameters based on generation config."""
         # Calculate total cache capacity
@@ -513,6 +597,7 @@ class ContinuousBatchProcessor:
         # Context length and EOS token
         self.max_context_len = getattr(self.generation_config, "max_position_embeddings", 2048)
 
+    @traced
     def _get_new_requests(self):
         """Pull new requests from the input queue and add to waiting list."""
         while not self.input_queue.empty():
@@ -531,6 +616,7 @@ class ContinuousBatchProcessor:
                 if state is not None:
                     self._handle_request_error(e, state.request_id)
 
+    @traced
     def _handle_request_error(self, error, request_id):
         """Handle general request processing error."""
         error_response = {
@@ -547,6 +633,7 @@ class ContinuousBatchProcessor:
 
         self.output_queue.put(error_response)
 
+    @traced
     def _schedule_batch(self) -> List[str]:
         """Select requests for the next processing batch."""
         selected_requests = []
@@ -618,6 +705,7 @@ class ContinuousBatchProcessor:
         logger.debug(f"Scheduled batch with {len(selected_requests)} requests and {batch_token_count} tokens")
         return selected_requests
 
+    @traced(span_name="prepare_request")
     def _prepare_request_for_processing(
         self, state: RequestState, tokens_to_process, request_ids_to_remove_from_waiting
     ):
@@ -645,6 +733,7 @@ class ContinuousBatchProcessor:
                 state.remaining_prompt_ids = source_tokens[tokens_to_process:]
                 state.status = "prefilling_split"
 
+    @traced
     def prepare_next_batch(self):
         """Prepare tensors and metadata for the next model forward pass."""
         # Get new requests from the queue
@@ -771,6 +860,7 @@ class ContinuousBatchProcessor:
 
         return input_ids_tensor, position_ids_tensor, model_kwargs
 
+    @traced
     def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
         """Helper function to allocate blocks for a request."""
         current_blocks = len(state.allocated_blocks)
@@ -784,6 +874,7 @@ class ContinuousBatchProcessor:
             state.allocated_blocks.extend(allocated)
         return True
 
+    @traced
     def update_batch(self, generated_ids: torch.Tensor):
         """Update request states based on generated tokens."""
         token_idx = 0
@@ -852,6 +943,7 @@ class ContinuousBatchProcessor:
                 self.cache.free_blocks(req_id)
                 del self.active_requests[req_id]
 
+    @traced
     def _record_ttft_metric(self, state: RequestState) -> None:
         """Record Time to First Token (TTFT)"""
         if not _has_opentelemetry or not state.created_time:
@@ -867,6 +959,7 @@ class ContinuousBatchProcessor:
         except Exception as e:
             logger.warning(f"Failed to record TTFT metric: {e}")
 
+    @traced
     def _record_batch_metrics(self, requests_in_batch: List[RequestState]) -> None:
         """Record metrics about the batch composition including decode/prefill ratio and batch fill percentage."""
         if not _has_opentelemetry or not requests_in_batch:
@@ -901,12 +994,13 @@ class ContinuousBatchProcessor:
             fill_percentage = (total_batch_tokens / self.max_batch_tokens) * 100.0
             self.batch_fill_percentage_histogram.record(fill_percentage, attributes=attributes)
             logger.debug(
-                f"Batch metrics: {decode_tokens} decode tokens, {prefill_tokens} prefill tokens, ratio: {ratio:.2f}, "
+                f"Batch metrics: {decode_tokens} decode tokens, {prefill_tokens} prefill tokens, "
                 f"batch fill: {fill_percentage:.2f}% ({total_batch_tokens}/{self.max_batch_tokens})"
             )
         except Exception as e:
             logger.warning(f"Failed to record batch metrics: {e}")
 
+    @traced
     def _send_output(self, state: RequestState, token: int):
         """Send output to the queue based on streaming mode and request state."""
         output = {
@@ -984,6 +1078,9 @@ class ContinuousBatchingManager:
         self._request_lock = threading.Lock()
         self._initial_prompt_shapes = []  # Cache sizing hints
 
+        # Set up OpenTelemetry tracing if available
+        self._setup_tracer()
+
     def add_initial_prompts(self, prompts: List[List[int]]):
         """Provide initial prompts to help determine optimal cache size before starting.
 
@@ -993,6 +1090,23 @@ class ContinuousBatchingManager:
         if self._generation_thread is not None:
             raise RuntimeError("Cannot add initial prompts after the manager has started.")
         self._initial_prompt_shapes = prompts
+
+    def _setup_tracer(self):
+        """Initialize OpenTelemetry tracing if available."""
+        if not _has_opentelemetry:
+            return
+
+        # Create a resource to identify this component
+        resource = Resource.create({"service.name": "transformers.generation.continuous_batching_manager"})
+
+        # Set up the tracer provider with an OTLP exporter
+        trace_exporter = OTLPSpanExporter()
+        tracer_provider = TracerProvider(resource=resource)
+        tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
+        trace.set_tracer_provider(tracer_provider)
+
+        # Create a tracer for our functions
+        self.tracer = get_tracer("transformers.generation.manager")
 
     def start(self):
         """Start the background generation thread."""
@@ -1041,6 +1155,7 @@ class ContinuousBatchingManager:
                 logger.info("Continuous Batching Manager stopped.")
                 self._generation_thread = None
 
+    @traced
     def add_request(
         self, input_ids: List[int], request_id: Optional[str] = None, max_new_tokens: Optional[int] = None
     ) -> str:
@@ -1080,6 +1195,7 @@ class ContinuousBatchingManager:
         logger.debug(f"Added request {request_id} to queue.")
         return request_id
 
+    @traced
     def get_result(self, timeout=None) -> Optional[Dict]:
         """Retrieve one result from the output queue.
 
@@ -1108,6 +1224,7 @@ class ContinuousBatchingManager:
             if result is not None:
                 yield result
 
+    @traced(span_name="generation_loop")
     def _run_generation_loop(self):
         """Main processing loop running in the background thread."""
         batch_processor = None
