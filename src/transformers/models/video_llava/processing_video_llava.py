@@ -181,11 +181,6 @@ class VideoLlavaProcessor(ProcessorMixin):
                 width // self.patch_size
             ) + self.num_additional_image_tokens
             num_video_tokens = num_image_tokens * num_frames
-
-            num_image_tokens = (height // self.patch_size) * (
-                width // self.patch_size
-            ) + self.num_additional_image_tokens
-            num_video_tokens = num_image_tokens * num_frames
             if self.vision_feature_select_strategy == "default":
                 num_image_tokens -= 1
 
