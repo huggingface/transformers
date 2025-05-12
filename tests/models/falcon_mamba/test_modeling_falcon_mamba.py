@@ -41,7 +41,7 @@ if is_torch_available():
         FalconMambaForCausalLM,
         FalconMambaModel,
     )
-    from transformers.cache_utils import MambaCache
+    from transformers.models.mamba.modeling_mamba import MambaCache
 
 
 # Copied from transformers.tests.models.mamba.MambaModelTester with Mamba->FalconMamba,mamba->falcon_mamba
