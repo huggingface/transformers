@@ -1,3 +1,17 @@
+# coding=utf-8
+# Copyright 2025 HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import itertools
 from typing import Callable, Optional, Union
 
@@ -9,149 +23,6 @@ from .cache_utils import Cache
 from .configuration_utils import PretrainedConfig
 from .modeling_utils import GeneralInterface
 from .utils.import_utils import is_torchdynamo_compiling
-
-
-# Print the matrix with words as row labels
-GREEN = "\033[92m"
-YELLOW = "\033[93m"
-RESET = "\033[0m"
-BLACK_SQUARE = "■"
-WHITE_SQUARE = "⬚"
-GREY_SQUARE = "∙"
-LOW_TRIANGLE = "⬕"
-UPPER_TRIANGLE = "⬔"
-
-
-r"""
-🀞🀞🀞🀞🀞🀞🀛🀆🀆🀆🀆🀆🀆🀆🀆🀆
-🀞🀞🀞🀞🀞🀞🀞🀛🀆🀆🀆🀆🀆🀆🀆🀆
-🀞🀞🀞🀞🀞🀞🀞🀞🀛🀆🀆🀆🀆🀆🀆🀆
-🀞🀞🀞🀞🀞🀞🀞🀞🀞🀛🀆🀆🀆🀆🀆🀆
-🀞🀞🀞🀞🀞🀞🀞🀞🀞🀞🀛🀆🀆🀆🀆🀆
-🀞🀞🀞🀞🀞🀞🀞🀞🀞🀞🀞🀛🀆🀆🀆🀆
-⛰⛰⛰⛰⛰⛰⛰⛰⛰⚋⚋⚋⚋⚋⚋⚋◹◥
-✅✅✅✅✅🟥🟥🟥🟥🟥
-▚▚▚▚▚▚▚▚▚▚▚▚▚⍂░⋱
-⎕⎕⎕⎕⍂⎕⎕⎕⎕⎕⎕⎕
-⏺⏺⏺⏺⏺⏲⏲⏲⏲⏲
-⏺⏺⏺⏺⏺⏲⏲⏲⏲⏲
-
-"""
-
-
-def get_style(style):
-    if style == "majong":
-        BLACK_SQUARE = "🀞"  # Full block (represents "on" or active)
-        BLACK_SQUARE = "🀙"  # Full block (represents "on" or active)
-        WHITE_SQUARE = "🀆"  # "▒"  # Light shade (represents "off" or inactive)
-        LOW_TRIANGLE = "🀛"  # Lower left triangle (stylized indication)
-        UPPER_TRIANGLE = "🀛"  # Upper left triangle (stylized indication)
-    else:
-        BLACK_SQUARE = "█"  # Full block (represents "on" or active)
-        WHITE_SQUARE = "░"  # "▒"  # Light shade (represents "off" or inactive)
-        LOW_TRIANGLE = "▙"  # Lower left triangle (stylized indication))
-        UPPER_TRIANGLE = "▜"  # Upper left triangle (stylized indication)
-
-    return BLACK_SQUARE, WHITE_SQUARE, LOW_TRIANGLE, UPPER_TRIANGLE
-
-
-# LOW_TRIANGLE = UPPER_TRIANGLE = "⟍"   # Upper right triangle (stylized indication)
-
-YELLOW_SQUARE = f"{YELLOW}{BLACK_SQUARE}{RESET}"
-GREEN_SQUARE = f"{GREEN}{BLACK_SQUARE}{RESET}"
-
-
-def tensor_to_mask_visual(original_tensor: torch.Tensor, grid_size=(20, 40), style="majong") -> str:
-    BLACK_SQUARE, WHITE_SQUARE, LOW_TRIANGLE, UPPER_TRIANGLE = get_style(style)
-    h, w = original_tensor.shape
-    max_h, max_w = grid_size
-    if not (h < max_h and w < max_w):
-        # Preserve aspect ratio within max grid size
-        aspect_ratio = 2 * w / h
-        if aspect_ratio > 1:
-            w = max_w
-            h = min(max_h, max(1, round(max_w / aspect_ratio)))
-        else:
-            h = max_h
-            w = max(1, round(max_h * aspect_ratio))
-
-        # Step 1: Rescale tensor by average pooling
-        tensor = original_tensor.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
-        tensor = F.adaptive_avg_pool2d(tensor, output_size=(h, w))[0, 0]  # Remove extra dims
-    else:
-        tensor = original_tensor
-
-    # Step 3: Build the string representation
-    result = []
-    for i in range(h):
-        row = ""
-        for j in range(w):
-            if tensor[i, j] == 1:
-                row += BLACK_SQUARE
-            elif tensor[i, j] == 0:
-                row += WHITE_SQUARE
-            else:
-                if j > 0:
-                    if tensor[i, j - 1] == 1:
-                        row += LOW_TRIANGLE
-                    elif tensor[i, j - 1] == 0:
-                        row += UPPER_TRIANGLE
-                    else:
-                        row += BLACK_SQUARE if tensor[i, j] == 1 else WHITE_SQUARE
-                else:
-                    row += (
-                        BLACK_SQUARE
-                        if tensor[i, j] == 1
-                        else (
-                            WHITE_SQUARE
-                            if tensor[i, j] == 0
-                            else (UPPER_TRIANGLE if tensor[i, j + 1] == 1 else LOW_TRIANGLE)
-                        )
-                    )
-        result.append(row)
-
-    return "\n".join(result)
-
-
-class AttentionMask(torch.Tensor):
-    def __new__(cls, data, style=None):
-        # Create a new instance of AttentionMask as a Tensor
-        cls.style = style
-        return torch.Tensor._make_subclass(cls, data, require_grad=False)
-
-    def __init__(self, data):
-        # You can initialize any additional metadata here if needed
-        pass
-
-    def to_string(self, grid_size=(20, 40), limit=4):
-        """Returns a string representation of the block mask."""
-        dense_mask = self
-        *batch_dims, num_rows, num_cols = dense_mask.shape
-        total_vis = []
-
-        for idx, batch_idx in enumerate(itertools.product(*[range(i) for i in batch_dims])):
-            if idx == limit:
-                total_vis.append("...")
-                total_vis.append("To print out more, set AttentionMask.to_string(limit=N)")
-                total_vis.append("You can also index (AttentionMask[batch, head]) to choose a specific batch or head")
-                break
-            block_vis = tensor_to_mask_visual(dense_mask[batch_idx], grid_size=grid_size, style=self.style)
-            total_vis.append(block_vis)
-
-        total_vis.append(f"torch.Tensor(shape={tuple(self.shape)}, dtype={self.dtype})")
-        return "\n".join(total_vis)
-
-    def __repr__(self):
-        return self.to_string()
-
-    def __str__(self):
-        return self.to_string()
-
-    @classmethod
-    def from_tensor(cls, tensor: torch.Tensor, style: Optional[str] = None) -> "AttentionMask":
-        res = cls(tensor)
-        res.style = style
-        return res
 
 
 def and_masks(*mask_mods: list[Callable]) -> Callable:
@@ -776,3 +647,131 @@ def infer_mask_sizes_patterns_from_config(config: PretrainedConfig, kv_length: i
             sizes_and_patterns = [(kv_length, 0, None, None), (kv_length, 0, None, chunk_size)]
 
     return sizes_and_patterns, layer_to_mask_mapping
+
+
+
+# Below are utilities to pretty-print the different masks
+# Print the matrix with words as row labels
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+RESET = "\033[0m"
+BLACK_SQUARE = "■"
+WHITE_SQUARE = "⬚"
+GREY_SQUARE = "∙"
+LOW_TRIANGLE = "⬕"
+UPPER_TRIANGLE = "⬔"
+
+
+def get_style(style):
+    if style == "majong":
+        BLACK_SQUARE = "🀞"  # Full block (represents "on" or active)
+        BLACK_SQUARE = "🀙"  # Full block (represents "on" or active)
+        WHITE_SQUARE = "🀆"  # "▒"  # Light shade (represents "off" or inactive)
+        LOW_TRIANGLE = "🀛"  # Lower left triangle (stylized indication)
+        UPPER_TRIANGLE = "🀛"  # Upper left triangle (stylized indication)
+    else:
+        BLACK_SQUARE = "█"  # Full block (represents "on" or active)
+        WHITE_SQUARE = "░"  # "▒"  # Light shade (represents "off" or inactive)
+        LOW_TRIANGLE = "▙"  # Lower left triangle (stylized indication))
+        UPPER_TRIANGLE = "▜"  # Upper left triangle (stylized indication)
+
+    return BLACK_SQUARE, WHITE_SQUARE, LOW_TRIANGLE, UPPER_TRIANGLE
+
+
+# LOW_TRIANGLE = UPPER_TRIANGLE = "⟍"   # Upper right triangle (stylized indication)
+
+YELLOW_SQUARE = f"{YELLOW}{BLACK_SQUARE}{RESET}"
+GREEN_SQUARE = f"{GREEN}{BLACK_SQUARE}{RESET}"
+
+
+def tensor_to_mask_visual(original_tensor: torch.Tensor, grid_size=(20, 40), style="majong") -> str:
+    BLACK_SQUARE, WHITE_SQUARE, LOW_TRIANGLE, UPPER_TRIANGLE = get_style(style)
+    h, w = original_tensor.shape
+    max_h, max_w = grid_size
+    if not (h < max_h and w < max_w):
+        # Preserve aspect ratio within max grid size
+        aspect_ratio = 2 * w / h
+        if aspect_ratio > 1:
+            w = max_w
+            h = min(max_h, max(1, round(max_w / aspect_ratio)))
+        else:
+            h = max_h
+            w = max(1, round(max_h * aspect_ratio))
+
+        # Step 1: Rescale tensor by average pooling
+        tensor = original_tensor.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+        tensor = F.adaptive_avg_pool2d(tensor, output_size=(h, w))[0, 0]  # Remove extra dims
+    else:
+        tensor = original_tensor
+
+    # Step 3: Build the string representation
+    result = []
+    for i in range(h):
+        row = ""
+        for j in range(w):
+            if tensor[i, j] == 1:
+                row += BLACK_SQUARE
+            elif tensor[i, j] == 0:
+                row += WHITE_SQUARE
+            else:
+                if j > 0:
+                    if tensor[i, j - 1] == 1:
+                        row += LOW_TRIANGLE
+                    elif tensor[i, j - 1] == 0:
+                        row += UPPER_TRIANGLE
+                    else:
+                        row += BLACK_SQUARE if tensor[i, j] == 1 else WHITE_SQUARE
+                else:
+                    row += (
+                        BLACK_SQUARE
+                        if tensor[i, j] == 1
+                        else (
+                            WHITE_SQUARE
+                            if tensor[i, j] == 0
+                            else (UPPER_TRIANGLE if tensor[i, j + 1] == 1 else LOW_TRIANGLE)
+                        )
+                    )
+        result.append(row)
+
+    return "\n".join(result)
+
+
+class AttentionMask(torch.Tensor):
+    def __new__(cls, data, style=None):
+        # Create a new instance of AttentionMask as a Tensor
+        cls.style = style
+        return torch.Tensor._make_subclass(cls, data, require_grad=False)
+
+    def __init__(self, data):
+        # You can initialize any additional metadata here if needed
+        pass
+
+    def to_string(self, grid_size=(20, 40), limit=4):
+        """Returns a string representation of the block mask."""
+        dense_mask = self
+        *batch_dims, num_rows, num_cols = dense_mask.shape
+        total_vis = []
+
+        for idx, batch_idx in enumerate(itertools.product(*[range(i) for i in batch_dims])):
+            if idx == limit:
+                total_vis.append("...")
+                total_vis.append("To print out more, set AttentionMask.to_string(limit=N)")
+                total_vis.append("You can also index (AttentionMask[batch, head]) to choose a specific batch or head")
+                break
+            block_vis = tensor_to_mask_visual(dense_mask[batch_idx], grid_size=grid_size, style=self.style)
+            total_vis.append(block_vis)
+
+        total_vis.append(f"torch.Tensor(shape={tuple(self.shape)}, dtype={self.dtype})")
+        return "\n".join(total_vis)
+
+    def __repr__(self):
+        return self.to_string()
+
+    def __str__(self):
+        return self.to_string()
+
+    @classmethod
+    def from_tensor(cls, tensor: torch.Tensor, style: Optional[str] = None) -> "AttentionMask":
+        res = cls(tensor)
+        res.style = style
+        return res
