@@ -240,7 +240,7 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched as a nested list of images, where each sublist is one batch
-            image_inputs_nested = [image_inputs[:3], image_inputs[3:]]
+            image_inputs_nested = [[image_input] for image_input in image_inputs]
             encoded_images_nested = image_processing(image_inputs_nested, return_tensors="pt").pixel_values
             expected_output_image_shape = (7, 1522, 3, 20, 20)
             self.assertEqual(tuple(encoded_images_nested.shape), expected_output_image_shape)
