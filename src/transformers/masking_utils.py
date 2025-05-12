@@ -603,6 +603,26 @@ def get_causal_masks(
     past_key_values: Optional[Cache],
     output_attentions: bool = False,
 ) -> list[Optional[Union[torch.Tensor, "BlockMask"]]]:
+    """
+    Create all required masks, one per layer. This is the only function to be called inside the modeling files.
+
+    Args:
+        config (`PretrainedConfig`):
+            The model config.
+        input_embeds (`torch.Tensor`):
+            The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
+            batch size, query length and dtype.
+        attention_mask (`torch.Tensor` or `list[torch.Tensor]`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
+            It can also be an already prepared 4D mask, in which case it is replicated for each layer. Can also be
+            a list of masks, in which case it is returned as-is.
+        cache_position (`torch.Tensor`):
+            A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
+        past_key_values (`Cache`, optional):
+            The past key values, if we use a cache.
+        output_attentions (`bool`, optional):
+            Whether we return the attention scores or not. By default `False`.
+    """
     num_layers = config.num_hidden_layers
 
     # It means the masks were already prepared outside the `forward`, e.g. by `generate` when compiling - return immediately
