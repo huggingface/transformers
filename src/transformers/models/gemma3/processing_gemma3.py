@@ -38,6 +38,7 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": True,
         },
         "images_kwargs": {
             "do_pan_and_scan": False,
@@ -137,16 +138,38 @@ class Gemma3Processor(ProcessorMixin):
             text = [prompt.replace(self.boi_token, self.full_image_sequence) for prompt in text]
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"], return_tensors="np")
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
         self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
         # Add token type ids manually, as tokenizer can't do arbitrary position token types
-        array_ids = text_inputs["input_ids"]
-        mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-        mm_token_type_ids[array_ids == self.image_token_id] = 1
-        text_inputs = {k: v.tolist() for k, v in text_inputs.items()}  # in case user requested list inputs
-        text_inputs["token_type_ids"] = mm_token_type_ids.tolist()
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(array_ids)
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["token_type_ids"] = mm_token_type_ids.tolist()
+
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def _get_num_mm_tokens_from_sizes(
+        self, image_sizes=None, video_sizes=None, audio_lengths=None, **mm_processor_kwargs
+    ):
+        """
+        Computes the number of placeholder tokens needed for each multimodal input type
+        (image, video, and audio) with the given input sizes.
+        Args:
+            image_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+            audio_lengths (List[int], *optional*):
+                The input length formatted as per each audio.
+        Returns:
+            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            to a list containing the number of placeholder tokens required. If the model doesn't accept
+            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+        """
+        return {"image": [self.image_seq_length] * len(image_sizes), "video": 0, "audio": 0}
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):

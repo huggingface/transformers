@@ -97,32 +97,31 @@ def _num_image_tokens(image_size: Tuple[int, int], patch_size: Tuple[int, int]) 
 
 
 def get_resize_output_image_size(
-    input_image: ImageInput,
+    height: int,
+    width: int,
     size: Union[int, Tuple[int, int], List[int], Tuple[int]],
     patch_size: Union[int, Tuple[int, int], List[int], Tuple[int]],
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> tuple:
     """
     Find the target (height, width) dimension of the output image after resizing given the input image and the desired
     size.
 
     Args:
-        input_image (`ImageInput`):
-            The image to resize.
+        height (`int`):
+            The input image height.
+        width (`int`):
+            The input image width.
         size (`int` or `Tuple[int, int]`):
             Max image size an input image can be. Must be a dictionary with the key "longest_edge".
         patch_size (`int` or `Tuple[int, int]`):
             The patch_size as `(height, width)` to use for resizing the image. If patch_size is an integer, `(patch_size, patch_size)`
             will be used
-        input_data_format (`ChannelDimension`, *optional*):
-            The channel dimension format of the input image. If unset, will use the inferred format from the input.
 
     Returns:
         `tuple`: The target (height, width) dimension of the output image after resizing.
     """
     max_height, max_width = size if isinstance(size, (tuple, list)) else (size, size)
     patch_height, patch_width = patch_size if isinstance(patch_size, (tuple, list)) else (patch_size, patch_size)
-    height, width = get_image_size(input_image, input_data_format)
 
     ratio = max(height / max_height, width / max_width)
 
@@ -258,11 +257,12 @@ class PixtralImageProcessor(BaseImageProcessor):
         else:
             raise ValueError("patch_size must contain either 'shortest_edge' or 'height' and 'width'.")
 
+        height, width = get_image_size(image, input_data_format)
         output_size = get_resize_output_image_size(
-            image,
+            height,
+            width,
             size=size,
             patch_size=patch_size,
-            input_data_format=input_data_format,
         )
         return resize(
             image,
