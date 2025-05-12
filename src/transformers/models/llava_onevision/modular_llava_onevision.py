@@ -301,7 +301,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         image_sizes: torch.Tensor,
         vision_feature_layer: Union[int, List[int]],
         vision_feature_select_strategy: str,
-        batch_num_images: torch.LongTensor,
+        batch_num_images: Optional[torch.LongTensor] = None,
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -318,14 +318,18 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             vision_feature_select_strategy (`str`):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
-            batch_num_images (`torch.LongTensor`):
+            batch_num_images (`torch.LongTensor`, *optional*):
                 Number of images in each sample.
         Returns:
             image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_patches, image_length, embed_dim)`).
         """
         # ! infer image_num_patches from image_sizes
-        need_patching = [n == 1 for n in batch_num_images for _ in range(n)]
+        if batch_num_images is None:
+            # treat this as a single-image case for backward compatibility
+            need_patching = [True] * len(image_sizes)
+        else:
+            need_patching = [n == 1 for n in batch_num_images for _ in range(n)]
         image_num_patches = [
             image_size_to_num_patches(
                 image_size=imsize,
@@ -421,7 +425,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         vision_feature_layer: Optional[Union[int, List[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         vision_aspect_ratio: Optional[str] = None,
-        batch_num_images: torch.LongTensor = None,
+        batch_num_images: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -442,7 +446,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
-        batch_num_images (`torch.LongTensor`):
+        batch_num_images (`torch.LongTensor`, *optional*):
             Number of images in each sample.
         """
 
@@ -566,7 +570,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         vision_feature_layer: Optional[Union[int, List[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         vision_aspect_ratio: Optional[str] = None,
-        batch_num_images: torch.LongTensor = None,
+        batch_num_images: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -589,7 +593,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
             If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
-        batch_num_images (`torch.LongTensor`):
+        batch_num_images (`torch.LongTensor`, *optional*):
             Number of images in each sample.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
