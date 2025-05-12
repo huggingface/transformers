@@ -24,8 +24,6 @@ from ...image_processing_utils import (
     BatchFeature,
 )
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
@@ -36,11 +34,11 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
-    VideoInput,
     PILImageResampling,
     SizeDict,
     get_image_size,
 )
+from ...video_utils import VideoInput
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -75,7 +73,6 @@ class PerceptionLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
 
 @add_start_docstrings(
     "Constructs a fast PerceptionLM image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
         do_pad (`bool`, *optional*, defaults to `self.do_pad`):
             Whether to pad the image to a square based on the longest edge. Can be overridden by the `do_pad` parameter
@@ -106,7 +103,6 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         return dictionary
 
     @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
         """
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
                 Whether to pad the image to a square based on the longest edge. Can be overridden by the `do_pad` parameter
