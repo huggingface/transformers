@@ -744,9 +744,12 @@ def sdpa_mask_without_vmap(
     """
 
     q_length = cache_position.shape[0]
+    # Potentially pad the 2D mask, and slice it correctly
+    padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
+
     # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
     if allow_is_causal_skip and _ignore_causal_mask_sdpa(
-        attention_mask, q_length, kv_length, sliding_window, chunk_size
+        padding_mask, q_length, kv_length, sliding_window, chunk_size
     ):
         return None
 
@@ -768,7 +771,6 @@ def sdpa_mask_without_vmap(
         causal_mask *= chunked_mask_overlay
 
     causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
-    if attention_mask is not None:
-        padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
+    if padding_mask is not None:
         causal_mask = causal_mask * padding_mask[:, None, None, :]
     return causal_mask
