@@ -219,22 +219,19 @@ TORCH_INIT_FUNCTIONS = {
 # DO NOT MODIFY, KEPT FOR BC ONLY
 VLMS = [
     "aria",
-    "aya_vision",
+    "ayavision",
     "emu3",
     "fuyu",
-    "got_ocr2",
+    "gotocr2",
     "gemma3",
     "internvl",
-    "llava",
-    "llava_next",
-    "llava_next_video",
-    "llava_onevision",
+    "llava",  # all llava prefixed models fall under this check
     "mistral3",
     "mllama",
     "paligemma",
     "qwen2vl",
-    "qwem2_5_vl",
-    "video_llava",
+    "qwen2_5_vl",
+    "videollava",
     "vipllava",
 ]
 
@@ -4108,6 +4105,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
 
+        print("CLASS NAME", cls.__name__.lower(), any(allowed_name in cls.__name__.lower() for allowed_name in VLMS))
         # Load models with hardcoded key mapping on class for VLMs only,  to keep BC and standardize model
         if any(allowed_name in cls.__name__.lower() for allowed_name in VLMS):
             key_mapping = kwargs.pop("key_mapping", cls._checkpoint_conversion_mapping)
