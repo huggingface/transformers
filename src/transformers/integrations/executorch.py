@@ -446,13 +446,10 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         # Generate position_ids from cache_position
         position_ids = cache_position.unsqueeze(0).expand(batch_size, -1)
 
-        # Create attention mask (always ones for token-by-token generation)
-        attention_mask = torch.ones((batch_size, seq_len), dtype=torch.long, device=input_ids.device)
-
         # Forward pass with the model
         outputs = self.model(
             input_ids=input_ids,
-            attention_mask=attention_mask,
+            attention_mask=None,
             position_ids=position_ids,
             past_key_values=self.cache,
             use_cache=True,
