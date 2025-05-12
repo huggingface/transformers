@@ -368,6 +368,7 @@ def compute_optimal_blocks(
 @dataclass
 class PagedAttentionArgs:
     input_ids: torch.Tensor
+    attention_mask: torch.Tensor
     position_ids: torch.Tensor
     cumulative_seqlens_q: torch.Tensor
     cumulative_seqlens_k: torch.Tensor
@@ -380,6 +381,33 @@ class PagedAttentionArgs:
     cache: PagedAttentionCache
     use_cache: bool = False
 
+
+def create_document_mask(cumulative_seqlens_q, cumulative_seqlens_k):
+    # Number of documents
+    valid_docs_q = (cumulative_seqlens_q[1:] > cumulative_seqlens_q[:-1])
+    valid_docs_k = (cumulative_seqlens_k[1:] > cumulative_seqlens_k[:-1])
+    num_valid_docs = min(valid_docs_q.sum(), valid_docs_k.sum())
+
+    # Trim to valid docs
+    cumulative_seqlens_q = cumulative_seqlens_q[:num_valid_docs + 1]
+    cumulative_seqlens_k = cumulative_seqlens_k[:num_valid_docs + 1]
+
+    total_q = cumulative_seqlens_q[-1]
+    total_k = cumulative_seqlens_k[-1]
+
+    q_indices = torch.arange(total_q, device=cumulative_seqlens_q.device)
+    k_indices = torch.arange(total_k, device=cumulative_seqlens_k.device)
+
+    q_doc_ids = torch.bucketize(q_indices, cumulative_seqlens_q[1:], right=True)
+    k_doc_ids = torch.bucketize(k_indices, cumulative_seqlens_k[1:], right=False)
+    doc_mask = q_doc_ids[:, None] == k_doc_ids[None, :]
+    # apply causal mask where no decoding (same nb of q than k)
+
+    is_causal = ~(cumulative_seqlens_q[1:] - cumulative_seqlens_q[:-1] == 1) * cumulative_seqlens_q[1:]
+    apply_causal = torch.bucketize(q_indices, is_causal, right=True)[:,None] == k_doc_ids
+    causal_mask = torch.tril(torch.ones(total_q, total_k, device=q_doc_ids.device)).bool()
+    doc_mask.masked_fill_((apply_causal & causal_mask), False)
+    return doc_mask
 
 # Continuous Batch Processor (Internal Logic)
 class ContinuousBatchProcessor:
@@ -430,6 +458,7 @@ class ContinuousBatchProcessor:
         self.tensor_metadata = tensor_metadata
         self.input_ids              = torch.zeros((1, T), **tensor_metadata)
         self.output_ids             = torch.zeros((1, T), **tensor_metadata)
+        self.attention_mask         = torch.zeros((1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device)
         self.position_ids           = torch.zeros((1, T), **tensor_metadata)
         self.cumulative_seqlens_q   = torch.zeros((T+1,),  **tensor_metadata)
         self.cumulative_seqlens_k   = torch.zeros((T+1,),  **tensor_metadata)
@@ -442,11 +471,12 @@ class ContinuousBatchProcessor:
     def reset_static_tensors(self):
         """Reset static tensors for the next batch."""
         self.input_ids.zero_()
+        self.attention_mask.fill_(torch.finfo(self.model_dtype).min)
         self.position_ids.zero_()
         self.cumulative_seqlens_q.zero_()
         self.cumulative_seqlens_k.zero_()
-        self.write_index.zero_()
-        self.read_index.zero_()
+        self.write_index.fill_(-1)
+        self.read_index.fill_(-1)
         # self.logits_indices.zero_()
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
@@ -455,6 +485,7 @@ class ContinuousBatchProcessor:
         """Get model keyword arguments for the current batch."""
         return PagedAttentionArgs(
             input_ids=self.input_ids,
+            attention_mask=self.attention_mask,
             position_ids=self.position_ids,
             cumulative_seqlens_q=self.cumulative_seqlens_q,
             cumulative_seqlens_k=self.cumulative_seqlens_k,
@@ -528,10 +559,8 @@ class ContinuousBatchProcessor:
         """Handle general request processing error."""
         error_response = RequestState(
             request_id=request_id,
-            prompt_ids=list(input_ids),
-            max_new_tokens=max_new_tokens,
-            eos_token_id=self.eos_token_id,
             status="failed",
+            error=str(error),
         )
 
         # Include any generated tokens if this is an active request
@@ -636,8 +665,8 @@ class ContinuousBatchProcessor:
                 state.status = "prefilling_split"
                 request_ids_to_remove_from_waiting.add(state.request_id)
             elif state.status == "split_pending_remainder":
-                state.prompt_ids = source_tokens[:tokens_to_process]
                 state.remaining_prompt_ids = source_tokens[tokens_to_process:]
+                state.prompt_ids = source_tokens[:tokens_to_process]
                 state.status = "prefilling_split"
 
     def prepare_next_batch(self):
@@ -661,8 +690,8 @@ class ContinuousBatchProcessor:
         token_position = 0
         read_position  = 0
         write_position = 0
-        cumq_ptr        = 1 # because at 0 we always have 0?
-        cumk_ptr        = 1
+        cumq_ptr       = 1 # because at 0 we always have 0?
+        cumk_ptr       = 1
         generated_tokens = (self.output_ids != 0).sum()
         self.input_ids[:, :generated_tokens].copy_(self.output_ids[self.output_ids != 0])
         for state in requests_in_batch:
@@ -673,27 +702,25 @@ class ContinuousBatchProcessor:
                     continue
 
                 # Map logical indices to physical block indices for this request
-                read_indices = self.cache._get_physical_indices(state.request_id, [state.current_len()])
-                write_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))
+                write_indices  = self.cache._get_physical_indices(state.request_id, [state.current_len()])
+                read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len()+1)))
 
                 seq_len_q = 1  # Query length is 1 for generation
                 seq_len_k = state.current_len() + 1  # Key length includes context
             elif state.status.startswith("prefilling"):
                 next_input_ids = state.prompt_ids
-                state.position_offset += len(next_input_ids)
                 self.input_ids[:, token_position : token_position + len(next_input_ids)].copy_(
                     torch.tensor(next_input_ids, **self.tensor_metadata)
                 )
 
                 start_pos = state.current_len()
                 positions_to_add = list(range(start_pos, start_pos + len(next_input_ids)))
+                state.position_offset += len(next_input_ids)
 
                 if not self._allocate_blocks_if_needed(state, len(next_input_ids)):
                     continue
 
-                # Get physical indices
-                read_indices = positions_to_add
-                write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
+                read_indices = write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
 
                 seq_len_q = seq_len_k = len(next_input_ids)
             else:
@@ -707,9 +734,6 @@ class ContinuousBatchProcessor:
             self.read_index[read_position : read_position + len(read_indices)].copy_(
                 torch.tensor(read_indices, **self.tensor_metadata)
             )
-            read_position += len(read_indices)
-            self.read_index[read_position: read_position + len(write_indices)].copy_(write_indices)
-            read_position += len(write_indices)
             self.write_index[write_position : write_position + len(write_indices)].copy_(write_indices)
             self.cumulative_seqlens_q[cumq_ptr].copy_(self.cumulative_seqlens_q[cumq_ptr-1] + seq_len_q)
             self.cumulative_seqlens_k[cumk_ptr].copy_(self.cumulative_seqlens_k[cumq_ptr-1] + seq_len_k)
@@ -724,6 +748,10 @@ class ContinuousBatchProcessor:
             cumq_ptr += 1
             cumk_ptr += 1
 
+        # now if sdpa or eager, create the attention mask!
+        attention_mask = create_document_mask(self.cumulative_seqlens_q, self.cumulative_seqlens_k)
+        causal_mask = torch.where(attention_mask, 0, torch.finfo(torch.bfloat16).min) 
+        self.attention_mask[..., :token_position, :attention_mask.shape[-1]].copy_(causal_mask)
 
 
     def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
