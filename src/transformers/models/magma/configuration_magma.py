@@ -53,8 +53,6 @@ class MagmaVisionConfig(PretrainedConfig):
             Whether to use the image start and end tokens.
         vision_backbone (`str`, *optional*, defaults to `"convnextxxlarge"`):
             The vision backbone to use.
-        vision_feature_layer (`str`, *optional*, defaults to `"clip_vis_dense"`):
-            The vision feature layer to use.
 
     Example:
 
@@ -65,7 +63,7 @@ class MagmaVisionConfig(PretrainedConfig):
     >>> configuration = MagmaVisionConfig()
     ```"""
 
-    model_type = "magma_vision_tower"
+    model_type = "magma_vision"
     base_config_key = "vision_config"
 
     def __init__(
@@ -78,7 +76,6 @@ class MagmaVisionConfig(PretrainedConfig):
         mm_use_im_patch_token=False,
         mm_use_im_start_end=False,
         vision_backbone="convnextxxlarge",
-        vision_feature_layer="clip_vis_dense",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -91,7 +88,6 @@ class MagmaVisionConfig(PretrainedConfig):
         self.mm_use_im_patch_token = mm_use_im_patch_token
         self.mm_use_im_start_end = mm_use_im_start_end
         self.vision_backbone = vision_backbone
-        self.vision_feature_layer = vision_feature_layer
 
 class MagmaConfig(PretrainedConfig):
     r"""
@@ -138,9 +134,10 @@ class MagmaConfig(PretrainedConfig):
         self.image_token_id = image_token_id
         
         if isinstance(vision_config, dict):
-            vision_config = PretrainedConfig(**vision_config)
+            vision_config["model_type"] = vision_config["model_type"] if "model_type" in vision_config else "magma_vision"
+            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
-            vision_config = MagmaVisionConfig()
+            vision_config = CONFIG_MAPPING["magma_vision"]()
 
         self.vision_config = vision_config
         

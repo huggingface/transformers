@@ -35,11 +35,10 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from transformers import AutoConfig, AutoModelForCausalLM
+from transformers import AutoConfig, AutoModelForCausalLM, AutoModel
 from transformers.configuration_utils import PretrainedConfig
-from .configuration_magma import MagmaConfig
+from .configuration_magma import MagmaConfig, MagmaVisionConfig
 import torch.utils.checkpoint as checkpoint
-import timm
 
 logger = logging.get_logger(__name__)
 
@@ -86,47 +85,42 @@ class MagmaCausalLMOutputWithPast(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
-# wrap up model.stem and model stages with clip_vision_model
-class ConvNextVisionModelTrunk(nn.Module):
-    def __init__(self, model_name="convnext_xxlarge"):
+class MagmaVisionModel(nn.Module):
+    config_class = MagmaVisionConfig
+    def __init__(self, config: MagmaVisionConfig, **kwargs):    
         super().__init__()
-        self.trunk = timm.create_model(model_name, pretrained=False)
-        # remove self.trunk.head
-        self.trunk.head = nn.Identity()
-
-class ConvNextVisionModel(nn.Module):
-    def __init__(self, config, **kwargs):    
-        super().__init__()
+        self.config = config
         if isinstance(config, PretrainedConfig):
             self.model_name = config.vision_backbone
         else:
             self.model_name = config['vision_backbone']
-        assert 'xxlarge' in self.model_name.lower(), f"Only convnext-xxlarge backbone is supported for Magma model, but got {self.model_name.lower()}"        
-        self.clip_vision_model = ConvNextVisionModelTrunk()
+        
+        assert 'convnext' in self.model_name.lower(), f"Only convnext backbone is supported for Magma model, but got {self.model_name.lower()}"
 
-    def extract_features_convnext(self, x, gradient_checkpointing=False):
-        out = {}
-        x = self.clip_vision_model.trunk.stem(x)
-        if gradient_checkpointing:
-            x = checkpoint.checkpoint(self.clip_vision_model.trunk.stages, x)
+        if 'xxlarge' in self.model_name.lower():
+            model = AutoModel.from_pretrained("timm/convnext_xxlarge.clip_laion2b_soup_ft_in1k")
+        elif 'tiny' in self.model_name.lower():
+            model = AutoModel.from_pretrained("timm/convnext_tiny.in12k_ft_in1k")
         else:
-            x = self.clip_vision_model.trunk.stages(x)
-        out['clip_vis_dense'] = x
-        return out
+            raise ValueError(f"Unsupported model name: {self.model_name}")
+        
+        self.clip_vision_model = nn.Module()
+        self.clip_vision_model.trunk = model.timm_model
+        self.clip_vision_model.trunk.head = nn.Identity()
             
-    def forward(self, x, gradient_checkpointing=False):
+    def forward(self, x):
         """
         Args:
             x: Tensor of shape (N,C,H,W). H, W must be a multiple of ``self.size_divisibility``.
         Returns:
             dict[str->Tensor]: names and the corresponding features
         """
-        return self.extract_features_convnext(x, gradient_checkpointing=gradient_checkpointing)      
-
-    @property
-    def size_divisibility(self):
-        return 32
+        return self.clip_vision_model.trunk(x)
     
+    @property
+    def _supports_sdpa(self):
+        return False
+
 class MagmaMultiModalProjector(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -178,7 +172,7 @@ class MagmaPreTrainedModel(PreTrainedModel):
     config_class = MagmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MagmaImageTower"]
+    _no_split_modules = ["vision_tower"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
 
@@ -263,8 +257,6 @@ MAGMA_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        vision_feature_layer (`str`, *optional*, defaults to `"clip_vis_dense"`):
-            The key of the layer to select the vision feature.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -288,7 +280,8 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
     def __init__(self, config: MagmaConfig):
         super().__init__(config)
 
-        self.vision_tower = ConvNextVisionModel(config.vision_config, require_pretrained=False)
+        self.vision_tower = MagmaVisionModel(config.vision_config, require_pretrained=False)
+
         config.vision_config.mm_hidden_size = config.vision_config.mm_hidden_size \
             if 'mm_hidden_size' in config.vision_config else self.vision_tower.hidden_size
         config.vision_config.hidden_size = config.vision_config.hidden_size \
@@ -366,7 +359,6 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[int] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -415,14 +407,6 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_config.vision_feature_layer
-        )
-        
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        if isinstance(past_key_values, Cache):
-            use_cache = True
 
         if inputs_embeds is None:
             # 1. Extract the input embeddings
@@ -460,7 +444,7 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
                             pixel_values_for_image = pixel_values_for_image.view(image_size[0], image_size[1], *pixel_values_for_image.shape[1:])
                             pixel_values_for_image = pixel_values_for_image.permute(2, 0, 3, 1, 4).flatten(3, 4).flatten(1, 2).unsqueeze(0)
                             image_features = self.vision_tower(pixel_values_for_image)
-                            selected_image_feature = image_features[vision_feature_layer][0].permute(1, 2, 0)
+                            selected_image_feature = image_features[0].permute(1, 2, 0)
                             selected_image_feature = self.multi_modal_projector(selected_image_feature)
                             if self.config.vision_config.mm_use_row_seperator:
                                 selected_image_feature = torch.cat((selected_image_feature, self.multi_modal_projector.row_seperator.repeat(selected_image_feature.shape[0],1,1)), dim=1)
@@ -471,7 +455,7 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
                     # concate nate all images in _pixel_values_list
                     _pixel_values_list_temp = sum(_pixel_values_list, ())
                     _pixel_values_list_temp = torch.cat(_pixel_values_list_temp, dim=0)
-                    image_features = self.vision_tower(_pixel_values_list_temp)[vision_feature_layer].permute(0, 2, 3, 1)
+                    image_features = self.vision_tower(_pixel_values_list_temp).permute(0, 2, 3, 1)
                     image_features = self.multi_modal_projector(image_features)
 
                     num_crops_list = [_image_size[0]*_image_size[1] for _image_size in _image_sizes_list_temp]
@@ -596,4 +580,4 @@ class MagmaForCausalLM(MagmaPreTrainedModel, GenerationMixin):
         return self.language_model._reorder_cache(*args, **kwargs)
 
 
-__all__ = ["MagmaForCausalLM", "MagmaPreTrainedModel"]
+__all__ = ["MagmaVisionModel", "MagmaForCausalLM", "MagmaPreTrainedModel"]

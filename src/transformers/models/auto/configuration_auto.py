@@ -193,6 +193,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("lxmert", "LxmertConfig"),
         ("m2m_100", "M2M100Config"),
         ("magma", "MagmaConfig"),
+        ("magma_vision", "MagmaVisionConfig"),
         ("mamba", "MambaConfig"),
         ("mamba2", "Mamba2Config"),
         ("marian", "MarianConfig"),
@@ -564,6 +565,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("m2m_100", "M2M100"),
         ("madlad-400", "MADLAD-400"),
         ("magma", "Magma"),
+        ("magma_vision", "MagmaVisionModel"),
         ("mamba", "Mamba"),
         ("mamba2", "mamba2"),
         ("marian", "Marian"),
@@ -824,6 +826,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("sam_hq_vision_model", "sam_hq"),
         ("llama4_text", "llama4"),
         ("blip_2_qformer", "blip_2"),
+        ("magma_vision", "magma"),
     ]
 )
 

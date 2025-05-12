@@ -59,10 +59,9 @@ class MagmaVisionText2TextModelTester:
         self,
         parent,
         ignore_index=-100,
-        image_token_index=1,
+        image_token_id=1,
         projector_hidden_act="gelu",
         seq_length=7,
-        vision_feature_layer=-1,
         text_config={
             "model_type": "llama",
             "seq_length": 7,
@@ -103,8 +102,8 @@ class MagmaVisionText2TextModelTester:
             "initializer_range": 0.02,
             "rms_norm_eps": 1e-5,
             "mm_hidden_size": 768,
+            "model_type": "magma_vision",
             "vision_backbone": "convnexttiny",
-            "vision_feature_layer": "clip_vis_dense",            
             "img_anyres_strategy": "crop",
             "mm_projector_type": "mlp2x_gelu",
             "mm_use_row_seperator": False,
@@ -112,11 +111,10 @@ class MagmaVisionText2TextModelTester:
     ):
         self.parent = parent
         self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
+        self.image_token_id = image_token_id
         self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_layer = vision_feature_layer
         self.text_config = text_config
-        self.vision_config = PretrainedConfig(**vision_config)
+        self.vision_config = vision_config
         self.pad_token_id = text_config["pad_token_id"]
         self.num_image_tokens = 1
         self.input_id_length = seq_length + self.num_image_tokens
@@ -131,18 +129,15 @@ class MagmaVisionText2TextModelTester:
         self.num_channels = 3
         self.crop_height = 1
         self.crop_width = 1
-        self.image_size = self.vision_config.image_size
+        self.image_size = self.vision_config["image_size"]
         self.seq_length = seq_length + self.crop_height * self.crop_width * (self.image_size // 32) ** 2 \
-            + (self.crop_height * (self.image_size // 32) if self.vision_config.mm_use_row_seperator else 0)
+            + (self.crop_height * (self.image_size // 32) if self.vision_config["mm_use_row_seperator"] else 0)
 
     def get_config(self):
         return MagmaConfig(
-            text_config=self.text_config,
             vision_config=self.vision_config,
-            ignore_index=self.ignore_index,
-            image_token_id=self.image_token_index,
-            projector_hidden_act=self.projector_hidden_act,
-            vision_feature_layer=self.vision_feature_layer,
+            text_config=self.text_config,
+            image_token_id=self.image_token_id,
         )
 
     def prepare_config_and_inputs(self):
@@ -150,9 +145,9 @@ class MagmaVisionText2TextModelTester:
             [
                 self.batch_size,
                 self.crop_height*self.crop_width,
-                self.vision_config.num_channels,
-                self.vision_config.image_size,
-                self.vision_config.image_size,
+                self.vision_config["num_channels"],
+                self.vision_config["image_size"],
+                self.vision_config["image_size"],
             ]
         )
         config = self.get_config()
@@ -165,8 +160,8 @@ class MagmaVisionText2TextModelTester:
         input_ids = ids_tensor([self.batch_size, self.input_id_length], config.text_config.vocab_size - 2) + 2
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
 
-        input_ids[input_ids == config.image_token_index] = self.pad_token_id
-        input_ids[:, : self.num_image_tokens] = config.image_token_index
+        input_ids[input_ids == config.image_token_id] = self.pad_token_id
+        input_ids[:, : self.num_image_tokens] = config.image_token_id
 
         labels = torch.zeros((self.batch_size, self.seq_length), dtype=torch.long, device=torch_device)
         labels[:, : self.num_image_tokens] == self.ignore_index
@@ -230,7 +225,7 @@ class MagmaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = MagmaVisionText2TextModelTester(self)
-        common_properties = ["image_token_index"]
+        common_properties = ["image_token_id"]
         self.config_tester = ConfigTester(self, config_class=MagmaConfig, has_text_modality=False, common_properties=common_properties)
 
     def test_config(self):
@@ -460,9 +455,9 @@ class MagmaIntegrationTest(unittest.TestCase):
     def test_vision_text_generation(self):
         dtype = torch.bfloat16
         model = MagmaForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=dtype, device_map=torch_device
+            self.checkpoint_path, torch_dtype=dtype, device_map=torch_device, revision="transformers_official"
         )
-        processor = AutoProcessor.from_pretrained(self.checkpoint_path)
+        processor = AutoProcessor.from_pretrained(self.checkpoint_path, revision="transformers_official")
 
         convs = [
             {"role": "system", "content": "You are agent that can see, talk and act."},            
