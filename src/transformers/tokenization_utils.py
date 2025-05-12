@@ -18,10 +18,11 @@ tokenization_utils_fast.py
 
 import bisect
 import itertools
+import os
 import re
 import unicodedata
 from collections import OrderedDict
-from typing import Any, Optional, Union, overload
+from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
 from .tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
@@ -1184,7 +1185,7 @@ class ByteTokenizer(transformers.PreTrainedTokenizer):
 
     def __init__(
         self,
-        encoding: str='utf-8', # popular, but utf-32-be is recommanded
+        encoding: str='utf-8', # use utf-32-be for fixed patching
         bos_token: str='\u0002', # unicode "start of text"
         eos_token: str='\u0003', # unicode "end of text"
         unk_token: str='\u0000', # unicode "null"
@@ -1269,8 +1270,8 @@ class ByteTokenizer(transformers.PreTrainedTokenizer):
 
         See `PreTrainedTokenizerBase.save_vocabulary`.
         """
-        __prefix = kwargs.get('filename_prefix', '')
-        __path = "{}/{}vocab.json".format(save_directory, __prefix or '')
+        __prefix = filename_prefix + '-' if filename_prefix else ''
+        __path = os.path.join(save_directory, f'{__prefix}vocab.json')
         with open(__path, "w") as __file:
             json.dump(self.get_vocab(), __file)
         return (__path,)
