@@ -17,9 +17,9 @@ import torch
 
 from transformers.generation.configuration_utils import GenerationConfig
 
-from ..utils.import_utils import is_torch_available
-from ..masking_utils import prepare_padding_mask, ALL_MASK_CREATION_FUNCTIONS, _ignore_causal_mask_sdpa
+from ..masking_utils import ALL_MASK_CREATION_FUNCTIONS, _ignore_causal_mask_sdpa, prepare_padding_mask
 from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ..utils.import_utils import is_torch_available
 
 
 if is_torch_available():
@@ -288,7 +288,6 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             self.register_buffer(f"key_cache_{i}", self.static_cache.key_cache[i], persistent=False)
             self.register_buffer(f"value_cache_{i}", self.static_cache.value_cache[i], persistent=False)
 
-
     def forward(self, input_ids: torch.Tensor, cache_position: torch.Tensor):
         """
         Forward pass of the module, which is compatible with the ExecuTorch runtime.
@@ -441,7 +440,7 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         Returns:
             torch.Tensor: Logits output from the model.
         """
-        batch_size, seq_len = input_ids.shape
+        batch_size = input_ids.shape[0]
 
         # Generate position_ids from cache_position
         position_ids = cache_position.unsqueeze(0).expand(batch_size, -1)

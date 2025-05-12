@@ -590,6 +590,7 @@ class AttentionMaskInterface(GeneralInterface):
         "flex_attention": flex_attention_mask,
     }
 
+
 # Global AttentionMaskInterface shared by all models which do not need to overwrite any of the existing ones
 ALL_MASK_CREATION_FUNCTIONS: AttentionMaskInterface = AttentionMaskInterface()
 
