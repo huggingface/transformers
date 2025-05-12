@@ -97,7 +97,9 @@ else:
         "validate_stopping_criteria",
         "StopStringCriteria",
     ]
-    _import_structure["continuous_batching"] = [        "ContinuousMixin",]
+    _import_structure["continuous_batching"] = [
+        "ContinuousMixin",
+    ]
     _import_structure["utils"] = [
         "GenerationMixin",
         "GreedySearchEncoderDecoderOutput",

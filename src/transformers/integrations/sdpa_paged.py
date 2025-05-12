@@ -1,7 +1,8 @@
 from typing import Optional, Tuple
 
 import torch
-from torch.nn.attention import sdpa_kernel, SDPBackend
+from torch.nn.attention import SDPBackend, sdpa_kernel
+
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -28,7 +29,7 @@ def sdpa_attention_paged_forward(
 ) -> Tuple[torch.Tensor, None]:
     cache = kwargs.pop("cache", None)
     if cache is not None:
-        key, value = cache.update(key, value, module.layer_idx,**kwargs)
+        key, value = cache.update(key, value, module.layer_idx, **kwargs)
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
         value = repeat_kv(value, module.num_key_value_groups)

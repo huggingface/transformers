@@ -1012,10 +1012,10 @@ class GenerationMixin:
     def _get_logits_processor(
         self,
         generation_config: GenerationConfig,
-        input_ids_seq_length: int=None,
-        encoder_input_ids: torch.LongTensor=None,
-        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]]=None,
-        logits_processor: Optional[LogitsProcessorList]=None,
+        input_ids_seq_length: int = None,
+        encoder_input_ids: torch.LongTensor = None,
+        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
         device: Optional[str] = None,
         model_kwargs: Optional[Dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
@@ -4895,10 +4895,6 @@ class GenerationMixin:
         _ = model_kwargs.pop("position_ids", None)
 
         return model_kwargs
-
-
-
-
 
 
 def _speculative_sampling(

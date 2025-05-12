@@ -2,7 +2,6 @@ import time
 
 import datasets
 import torch
-from tokenizers.decoders import DecodeStream
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
@@ -64,11 +63,12 @@ simple_batch_inputs = list(tokenized_test_prompts["input_ids"])
 model.config.attn_implementation = "sdpa"
 start_time_simple = time.time()
 outputs = model.generate(
-    input_ids=tokenizer(_TEST_PROMPTS, truncation=True, max_length=512, padding=True, return_tensors="pt").input_ids.to(model.device),
+    input_ids=tokenizer(
+        _TEST_PROMPTS, truncation=True, max_length=512, padding=True, return_tensors="pt"
+    ).input_ids.to(model.device),
     generation_config=GenerationConfig(
-    max_new_tokens=25,
-    eos_token_id=tokenizer.eos_token_id,
-    pad_token_id=tokenizer.pad_token_id),
+        max_new_tokens=25, eos_token_id=tokenizer.eos_token_id, pad_token_id=tokenizer.pad_token_id
+    ),
     # You can pass request-specific overrides here, e.g., max_new_tokens=100
 )
 end_time_simple = time.time()
@@ -111,4 +111,3 @@ for request in batch_outputs:
     print(f"  Output: {output_text}")
 print("-" * 20)
 print("--- Finished Simple Batch Generation Example ---\n\n")
-

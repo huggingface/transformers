@@ -23,8 +23,10 @@ from dataclasses import dataclass, field
 from typing import Deque, Dict, List, Optional, Tuple, Union
 
 import torch
-from tqdm import tqdm
 import torch.nn as nn
+from tqdm import tqdm
+
+
 try:
     from opentelemetry import metrics, trace
     from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
@@ -132,7 +134,7 @@ class RequestState:
     max_new_tokens: int = 20
     eos_token_id: int = -1
     created_time: float = field(default_factory=time.time)
-    error : Optional[str] = None
+    error: Optional[str] = None
 
     def current_len(self) -> int:
         """Get the current length of the sequence (prompt + generated tokens)."""
@@ -282,7 +284,6 @@ class PagedAttentionCache(Cache):
         """Returns the block table for a request."""
         return self._block_tables.get(request_id, [])
 
-
     def _get_physical_indices(self, request_id: str, logical_indices: List[int]) -> torch.Tensor:
         """
         Maps logical sequence indices to physical cache indices using the block table, using PyTorch.
@@ -311,9 +312,7 @@ class PagedAttentionCache(Cache):
         block_offsets = logical_indices_tensor % block_size
 
         if torch.any(block_indices >= len(block_table)):
-            raise IndexError(
-                f"Logical indices map to block indices out of bounds for request {request_id}"
-            )
+            raise IndexError(f"Logical indices map to block indices out of bounds for request {request_id}")
 
         block_table_tensor = torch.tensor(block_table, dtype=torch.long, device=self.device)
         physical_block_nums = block_table_tensor[block_indices]  # Use PyTorch indexing
@@ -360,8 +359,8 @@ class PagedAttentionCache(Cache):
             v_cache_flat[:, write_index, :] = value_states.to(v_cache_flat.device, v_cache_flat.dtype)[0]
         except IndexError as e:
             logger.error(
-                f"IndexError during cache update. Fill indices shape: {indices_device.shape}, "
-                f"Max index: {write_index.max() if indices_device.numel() > 0 else 'N/A'}, "
+                f"IndexError during cache update. Fill indices shape: {write_index.shape}, "
+                f"Max index: {write_index.max() if write_index.numel() > 0 else 'N/A'}, "
                 f"Cache shape: {k_cache_flat.shape}"
             )
             raise e
@@ -369,6 +368,7 @@ class PagedAttentionCache(Cache):
         # Return the updated cache slices needed for attention
         k_cache_flat, v_cache_flat = self._reshape_cache_for_update(layer_idx)
         return k_cache_flat[:, read_index, :][None, ...], v_cache_flat[:, read_index, :][None, ...]
+
 
 def compute_optimal_blocks(
     device: torch.device,
@@ -478,13 +478,13 @@ class PagedAttentionArgs:
 
 def create_document_mask(cumulative_seqlens_q, cumulative_seqlens_k):
     # Number of documents
-    valid_docs_q = (cumulative_seqlens_q[1:] > cumulative_seqlens_q[:-1])
-    valid_docs_k = (cumulative_seqlens_k[1:] > cumulative_seqlens_k[:-1])
+    valid_docs_q = cumulative_seqlens_q[1:] > cumulative_seqlens_q[:-1]
+    valid_docs_k = cumulative_seqlens_k[1:] > cumulative_seqlens_k[:-1]
     num_valid_docs = min(valid_docs_q.sum(), valid_docs_k.sum())
 
     # Trim to valid docs
-    cumulative_seqlens_q = cumulative_seqlens_q[:num_valid_docs + 1]
-    cumulative_seqlens_k = cumulative_seqlens_k[:num_valid_docs + 1]
+    cumulative_seqlens_q = cumulative_seqlens_q[: num_valid_docs + 1]
+    cumulative_seqlens_k = cumulative_seqlens_k[: num_valid_docs + 1]
 
     total_q = cumulative_seqlens_q[-1]
     total_k = cumulative_seqlens_k[-1]
@@ -498,10 +498,11 @@ def create_document_mask(cumulative_seqlens_q, cumulative_seqlens_k):
     # apply causal mask where no decoding (same nb of q than k)
 
     is_causal = ~(cumulative_seqlens_q[1:] - cumulative_seqlens_q[:-1] == 1) * cumulative_seqlens_q[1:]
-    apply_causal = torch.bucketize(q_indices, is_causal, right=True)[:,None] == k_doc_ids
+    apply_causal = torch.bucketize(q_indices, is_causal, right=True)[:, None] == k_doc_ids
     causal_mask = torch.triu(torch.ones(total_q, total_k, device=q_doc_ids.device), diagonal=1).bool()
     doc_mask.masked_fill_((apply_causal & causal_mask), False)
     return doc_mask
+
 
 # Continuous Batch Processor (Internal Logic)
 class ContinuousBatchProcessor:
@@ -553,17 +554,19 @@ class ContinuousBatchProcessor:
         max_token_budget = self.cache.num_blocks * self.cache.block_size
         tensor_metadata = {"dtype": torch.long, "device": self.model_device}
         self.tensor_metadata = tensor_metadata
-        self.input_ids              = torch.zeros((1, T), **tensor_metadata)
-        self.output_ids             = torch.zeros((1, T), **tensor_metadata)
-        self.attention_mask         = torch.zeros((1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device)
-        self.position_ids           = torch.zeros((1, T), **tensor_metadata)
-        self.cumulative_seqlens_q   = torch.zeros((T+1,),  **tensor_metadata)
-        self.cumulative_seqlens_k   = torch.zeros((T+1,),  **tensor_metadata)
-        self.write_index            = torch.zeros((T,),  **tensor_metadata)
-        self.read_index             = torch.zeros((max_token_budget,), **tensor_metadata)
-        self.logits_indices         = torch.zeros((T,),  **tensor_metadata)
-        self.max_seqlen_q           = 0
-        self.max_seqlen_k           = 0
+        self.input_ids = torch.zeros((1, T), **tensor_metadata)
+        self.output_ids = torch.zeros((1, T), **tensor_metadata)
+        self.attention_mask = torch.zeros(
+            (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
+        )
+        self.position_ids = torch.zeros((1, T), **tensor_metadata)
+        self.cumulative_seqlens_q = torch.zeros((T + 1,), **tensor_metadata)
+        self.cumulative_seqlens_k = torch.zeros((T + 1,), **tensor_metadata)
+        self.write_index = torch.zeros((T,), **tensor_metadata)
+        self.read_index = torch.zeros((max_token_budget,), **tensor_metadata)
+        self.logits_indices = torch.zeros((T,), **tensor_metadata)
+        self.max_seqlen_q = 0
+        self.max_seqlen_k = 0
 
     def reset_static_tensors(self):
         """Reset static tensors for the next batch."""
@@ -890,20 +893,20 @@ class ContinuousBatchProcessor:
 
         # pointers into our static flat tensors
         token_position = 0
-        read_position  = 0
+        read_position = 0
         write_position = 0
-        cumq_ptr       = 1 # because at 0 we always have 0?
-        cumk_ptr       = 1
+        cumq_ptr = 1  # because at 0 we always have 0?
+        cumk_ptr = 1
         generated_tokens = (self.output_ids != 0).sum()
 
         position_ids = []
         input_ids = []
         read_index = []
-        write_index= []
+        write_index = []
         cumulative_seqlens_q = [0]
         cumulative_seqlens_k = [0]
         logits_indices = []
-        
+
         self.input_ids[:, :generated_tokens].copy_(self.output_ids[self.output_ids != 0])
         self._record_batch_metrics(requests_in_batch)
 
@@ -915,8 +918,8 @@ class ContinuousBatchProcessor:
                     continue
 
                 # Map logical indices to physical block indices for this request
-                write_indices  = self.cache._get_physical_indices(state.request_id, [state.current_len()])
-                read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len()+1)))
+                write_indices = self.cache._get_physical_indices(state.request_id, [state.current_len()])
+                read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len() + 1)))
 
                 seq_len_q = 1  # Query length is 1 for generation
                 seq_len_k = state.current_len() + 1  # Key length includes context
@@ -941,7 +944,7 @@ class ContinuousBatchProcessor:
             write_index.extend(write_indices)
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + seq_len_q)
             cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + seq_len_k)
-            logits_indices.append(cumulative_seqlens_q[-1]-1)
+            logits_indices.append(cumulative_seqlens_q[-1] - 1)
 
             self.max_seqlen_q = max(self.max_seqlen_q, seq_len_q)
             self.max_seqlen_k = max(self.max_seqlen_k, seq_len_k)
@@ -954,31 +957,19 @@ class ContinuousBatchProcessor:
 
         # now if sdpa or eager, create the attention mask!
 
-        self.input_ids[:,generated_tokens:generated_tokens+token_position].copy_(
+        self.input_ids[:, generated_tokens : generated_tokens + token_position].copy_(
             torch.tensor(input_ids, **self.tensor_metadata)
         )
-        self.position_ids[:, :token_position].copy_(
-            torch.tensor(position_ids, **self.tensor_metadata)
-        )
-        self.write_index[:write_position].copy_(
-            torch.tensor(write_index, **self.tensor_metadata)
-        )
-        self.read_index[:read_position].copy_(  
-            torch.tensor(read_index, **self.tensor_metadata)
-        )
-        self.cumulative_seqlens_q[:cumq_ptr].copy_(
-            torch.tensor(cumulative_seqlens_q, **self.tensor_metadata)
-        )
-        self.cumulative_seqlens_k[:cumk_ptr].copy_(
-            torch.tensor(cumulative_seqlens_k, **self.tensor_metadata)
-        )
-        self.logits_indices[:cumk_ptr-1].copy_(
-            torch.tensor(logits_indices, **self.tensor_metadata)
-        )
+        self.position_ids[:, :token_position].copy_(torch.tensor(position_ids, **self.tensor_metadata))
+        self.write_index[:write_position].copy_(torch.tensor(write_index, **self.tensor_metadata))
+        self.read_index[:read_position].copy_(torch.tensor(read_index, **self.tensor_metadata))
+        self.cumulative_seqlens_q[:cumq_ptr].copy_(torch.tensor(cumulative_seqlens_q, **self.tensor_metadata))
+        self.cumulative_seqlens_k[:cumk_ptr].copy_(torch.tensor(cumulative_seqlens_k, **self.tensor_metadata))
+        self.logits_indices[: cumk_ptr - 1].copy_(torch.tensor(logits_indices, **self.tensor_metadata))
 
         attention_mask = create_document_mask(self.cumulative_seqlens_q, self.cumulative_seqlens_k)
-        causal_mask = torch.where(attention_mask, 0, torch.finfo(torch.bfloat16).min) 
-        self.attention_mask[..., :token_position, :attention_mask.shape[-1]].copy_(causal_mask)
+        causal_mask = torch.where(attention_mask, 0, torch.finfo(torch.bfloat16).min)
+        self.attention_mask[..., :token_position, : attention_mask.shape[-1]].copy_(causal_mask)
 
     @traced
     def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
@@ -1007,8 +998,8 @@ class ContinuousBatchProcessor:
         has_eos = self.output_ids == self.eos_token_id
         is_max_len = self.cumulative_seqlens_q[1:] + 1 >= self.max_context_len
         to_remove = has_eos | is_max_len
-        tokens_to_keep = torch.where(~to_remove & self.output_ids >= 0)[1] # can get request ids with this
-        out_tokens = self.output_ids[:, tokens_to_keep][0].cpu().detach().tolist() # should be the only synch we do
+        tokens_to_keep = torch.where(~to_remove & self.output_ids >= 0)[1]  # can get request ids with this
+        out_tokens = self.output_ids[:, tokens_to_keep][0].cpu().detach().tolist()  # should be the only synch we do
         finished_request_ids = []
         for req_id in self.requests_to_process_next:
             if req_id not in self.active_requests:
@@ -1023,7 +1014,7 @@ class ContinuousBatchProcessor:
                 # state.prompt_ids = []  # Clear prompt as it's now in cache
                 token = out_tokens[token_idx]
                 token_idx += 1
-                if state.update_with_token(token): 
+                if state.update_with_token(token):
                     finished_request_ids.append(req_id)
                 self._maybe_send_output(state, token)
             elif state.status == "prefilling_split":
@@ -1282,7 +1273,7 @@ class ContinuousBatchingManager:
         if self._generation_thread is None and self.output_queue.empty():
             return None
         try:
-            result = self.output_queue.get(block=True, timeout=timeout) # TODO Pop here rather?
+            result = self.output_queue.get(block=True, timeout=timeout)  # TODO Pop here rather?
             logger.debug(f"Retrieved result for request {result.request_id}")
             return result
         except queue.Empty:
@@ -1315,20 +1306,22 @@ class ContinuousBatchingManager:
         with torch.no_grad():
             model_outputs = self.model(**batch_data.__dict__)
             # Copy is needed to avoid keeping a hanging ref
-            logits = model_outputs.logits[:, batch_data.logits_indices].to(copy=True, dtype=torch.float32, device=self.model.device)
+            logits = model_outputs.logits[:, batch_data.logits_indices].to(
+                copy=True, dtype=torch.float32, device=self.model.device
+            )
             if self.log_prob_generation:
-                batch_processor.output_probs.copy_(logits) # TODO
+                batch_processor.output_probs.copy_(logits)  # TODO
 
             # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
-            
+
             # TODO re activate once the unpute prepartion is fixed
-            # probs = self.logit_processor(batch_data.input_ids, logits)
+            probs = self.logit_processor(batch_data.input_ids, logits)
             if self.do_sample:  # sample
-                probs = nn.functional.softmax(logits, dim=-1)
+                probs = nn.functional.softmax(probs, dim=-1)
                 next_tokens = torch.multinomial(logits[0], num_samples=1).squeeze(1)
             else:
-                next_tokens = torch.argmax(logits, dim=-1)
+                next_tokens = torch.argmax(probs, dim=-1)
             batch_processor.output_ids.fill_(-1)
             batch_processor.output_ids.copy_(next_tokens)
 
@@ -1457,9 +1450,11 @@ class ContinuousMixin:
         results = {}
         num_requests = len(inputs)
         try:
-            with tqdm(total=num_requests, disable=(not progress_bar), desc=f"Generating {num_requests} requests") as pbar:
+            with tqdm(
+                total=num_requests, disable=(not progress_bar), desc=f"Generating {num_requests} requests"
+            ) as pbar:
                 manager.add_requests(inputs, **kwargs)
-                manager.start() # we don't want to start before adding all requests
+                manager.start()  # we don't want to start before adding all requests
                 finished_count = 0
                 while finished_count < num_requests:
                     result = manager.get_result(timeout=1.0)

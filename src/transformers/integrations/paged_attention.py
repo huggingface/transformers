@@ -7,6 +7,7 @@ from ..utils import is_flash_attn_2_available
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_varlen_func
 
+
 def paged_attention_forward(
     module: torch.nn.Module,
     q: torch.Tensor,
@@ -45,9 +46,9 @@ def paged_attention_forward(
     k, v = cache.update(k, v, module.layer_idx, cumulative_seqlens_k=cumulative_seqlens_k, **kwargs)
 
     attn_output = flash_attn_varlen_func(
-        q.transpose(1,2).squeeze(0),
-        k.transpose(1,2).squeeze(0),
-        v.transpose(1,2).squeeze(0),
+        q.transpose(1, 2).squeeze(0),
+        k.transpose(1, 2).squeeze(0),
+        v.transpose(1, 2).squeeze(0),
         cumulative_seqlens_q,
         cumulative_seqlens_k,
         max_seqlen_q,
