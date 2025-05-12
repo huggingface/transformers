@@ -598,6 +598,14 @@ def get_causal_masks(
     if isinstance(attention_mask, list):
         return attention_mask
 
+    # For BC -> if the mask is passed in 4D directly, simply replicate it on all layers
+    if (
+        isinstance(attention_mask, torch.Tensor)
+        and attention_mask.ndim == 4
+        and config._attn_implementation in ("sdpa", "eager")
+    ):
+        return [attention_mask] * num_layers
+
     # For TGI/vLLM backends, or other custom attention without equivalent mask creation: we don't need a mask!
     if config._attn_implementation not in ALL_MASK_CREATION_FUNCTIONS:
         return [None] * num_layers
