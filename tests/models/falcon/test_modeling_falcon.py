@@ -66,6 +66,7 @@ class FalconModelTester(CausalLMModelTester):
 
 @require_torch
 class FalconModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = FalconModelTester
     all_model_classes = (
         (
             FalconModel,
