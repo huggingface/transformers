@@ -705,7 +705,7 @@ def infer_mask_sizes_patterns_from_config(config: PretrainedConfig, kv_length: i
     chunk_size = getattr(config, "attention_chunk_size", None)
 
     # Default sizes and patterns, and mapping when all layers are similar
-    sizes_and_patterns = (kv_length, 0, sliding_window, chunk_size)
+    sizes_and_patterns = [(kv_length, 0, sliding_window, chunk_size)]
     layer_to_mask_mapping = [0] * config.num_hidden_layers
 
     # sliding_window_pattern is the attribute used by models with alternate full/sliding layers
