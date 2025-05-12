@@ -610,6 +610,7 @@ class Trainer:
             else default_data_collator
         )
         self.data_collator = data_collator if data_collator is not None else default_collator
+        self._using_default_data_collator = self.data_collator is default_data_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.processing_class = processing_class
@@ -1015,7 +1016,9 @@ class Trainer:
         data_collator = self.data_collator
         if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
             train_dataset = self._remove_unused_columns(train_dataset, description="training")
-        else:
+
+        # Don't drop cols when a custom data collator is passed.
+        if self._using_default_data_collator:
             data_collator = self._get_collator_with_removed_columns(data_collator, description="training")
 
         dataloader_params = {
@@ -1115,7 +1118,7 @@ class Trainer:
 
         if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
             eval_dataset = self._remove_unused_columns(eval_dataset, description="evaluation")
-        else:
+        if self._using_default_data_collator:
             data_collator = self._get_collator_with_removed_columns(data_collator, description="evaluation")
 
         dataloader_params = {
