@@ -34,8 +34,8 @@ if is_torch_available():
     from transformers import (
         MambaForCausalLM,
         MambaModel,
+        MambaCache,
     )
-    from transformers.models.mamba.modeling_mamba import MambaCache
 
 
 class MambaModelTester:
