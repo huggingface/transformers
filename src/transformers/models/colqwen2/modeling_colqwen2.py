@@ -20,14 +20,7 @@ from typing import List, Optional, Tuple, Union
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
 from ...models.auto import AutoModelForImageTextToText
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    is_torch_available,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, is_torch_available
 from .configuration_colqwen2 import ColQwen2Config
 
 
@@ -35,29 +28,8 @@ if is_torch_available():
     import torch
     from torch import nn
 
-_CONFIG_FOR_DOC = "ColQwen2Config"
 
-COLQWEN2_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`ColQwen2Config`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare ColQwen2 model outputting raw hidden-states without any specific head on top.",
-    COLQWEN2_START_DOCSTRING,
-)
+@auto_docstring
 class ColQwen2PreTrainedModel(PreTrainedModel):
     config_class = ColQwen2Config
     base_model_prefix = "model"
@@ -116,47 +88,8 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-COLQWEN2_FOR_RETRIEVAL_INPUT_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-            [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-            The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Qwen2VLImageProcessor.__call__`] for details. If none,
-            ColQwen2 will only process text (query embeddings).
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            [What are attention masks?](../glossary#attention-mask)
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        kwargs (`Dict[str, Any]`, *optional*):
-            Additional key word arguments passed along to the vlm backbone model.
-"""
-
-
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Following the ColPali approach, ColQwen2 leverages VLMs to construct efficient multi-vector embeddings directly
     from document images (“screenshots”) for document retrieval. The model is trained to maximize the similarity
     between these document embeddings and the corresponding query embeddings, using the late interaction method
@@ -253,9 +186,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         )
         return outputs
 
-    @add_start_docstrings_to_model_forward(COLQWEN2_FOR_RETRIEVAL_INPUT_DOCSTRING)
-    @can_return_tuple
-    @replace_return_docstrings(output_type=ColQwen2ForRetrievalOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -273,7 +204,8 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> ColQwen2ForRetrievalOutput:
         r"""
-        Returns:
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
         """
         if pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype)  # (batch_size, max_num_patches, pixel_values)
