@@ -637,11 +637,11 @@ def get_causal_masks(
     if attention_mask is not None:
         attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
 
-    # We now create all the masks
     mask_interface = ALL_MASK_CREATION_FUNCTIONS[config._attn_implementation]
     # Sdpa fallbacks to eager in the Attention modules if `output_attentions=True`
     if config._attn_implementation == "sdpa" and output_attentions:
         mask_interface = ALL_MASK_CREATION_FUNCTIONS["eager"]
+    # We now create all the masks
     masks = []
     for kv_length, kv_offset, window, chunk in sizes_and_patterns:
         # Raise if both are provided somehow
@@ -658,7 +658,7 @@ def get_causal_masks(
             chunk_size=chunk,
             # Additional kwargs for eager
             dtype=dtype,
-            # Pass the config as well, in case someone wants to easily have their own mask_interface????
+            # Pass the config as well, in case someone wants to easily have their own mask_interface
             config=config,
         )
         masks.append(causal_mask)
