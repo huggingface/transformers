@@ -1872,10 +1872,12 @@ class TrainingArguments:
                 warnings.warn("`--fsdp_config` is useful only when `--fsdp` is specified.")
             with open(self.fsdp_config, encoding="utf-8") as f:
                 self.fsdp_config = json.load(f)
-                for k in list(self.fsdp_config.keys()):
-                    if k.startswith("fsdp_"):
-                        v = self.fsdp_config.pop(k)
-                        self.fsdp_config[k[5:]] = v
+
+        if self.fsdp_config is not None and isinstance(self.fsdp_config, dict):
+            for k in list(self.fsdp_config.keys()):
+                if k.startswith("fsdp_"):
+                    v = self.fsdp_config.pop(k)
+                    self.fsdp_config[k[5:]] = v
 
         if self.fsdp_min_num_params > 0:
             warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
@@ -2498,6 +2500,11 @@ class TrainingArguments:
             # Handle the accelerator_config if passed
             if is_accelerate_available() and isinstance(v, AcceleratorConfig):
                 d[k] = v.to_dict()
+            # Handle the quantization_config if passed
+            if k == "model_init_kwargs" and isinstance(v, dict) and "quantization_config" in v:
+                quantization_config = v.get("quantization_config")
+                if quantization_config and not isinstance(quantization_config, dict):
+                    d[k]["quantization_config"] = quantization_config.to_dict()
         self._dict_torch_dtype_to_str(d)
 
         return d

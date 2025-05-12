@@ -19,9 +19,10 @@ from parameterized import parameterized
 
 from transformers import AutoTokenizer, GraniteMoeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    Expectations,
     require_read_token,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -301,7 +302,7 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class GraniteMoeIntegrationTest(unittest.TestCase):
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
@@ -325,13 +326,26 @@ class GraniteMoeIntegrationTest(unittest.TestCase):
 
         # fmt: off
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.2122, -1.6632, -2.9269, -2.3344, -2.0143, -3.0146, -2.6839, -2.5610]])
+        EXPECTED_MEANS = Expectations(
+                {
+                    ("xpu", 3): torch.tensor([[-4.4005, -3.6689, -3.6187, -2.8308, -3.9871, -3.1001, -2.8738, -2.8063]]),
+                    ("cuda", 7): torch.tensor([[-2.2122, -1.6632, -2.9269, -2.3344, -2.0143, -3.0146, -2.6839, -2.5610]]),
+                    ("cuda", 8): torch.tensor([[-4.4005, -3.6689, -3.6187, -2.8308, -3.9871, -3.1001, -2.8738, -2.8063]]),
+                }
+            )
+        EXPECTED_MEAN = EXPECTED_MEANS.get_expectation()
 
         torch.testing.assert_close(EXPECTED_MEAN.to(torch_device), out.logits.float().mean(-1), rtol=1e-2, atol=1e-2)
 
         # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = torch.tensor([[4.8785, -2.2890, -2.2892, -2.2885, -2.2890, -3.5007, -2.2897, -2.2892,
-        -2.2895, -2.2891, -2.2887, -2.2882, -2.2889, -2.2898, -2.2892]])
+        EXPECTED_SLICES = Expectations(
+                {
+                    ("xpu", 3): torch.tensor([[2.5479, -9.2123, -9.2121, -9.2175, -9.2122, -1.5024, -9.2121, -9.2122, -9.2161, -9.2122, -6.3100, -3.6223, -3.6377, -5.2542, -5.2523]]),
+                    ("cuda", 7): torch.tensor([[4.8785, -2.2890, -2.2892, -2.2885, -2.2890, -3.5007, -2.2897, -2.2892, -2.2895, -2.2891, -2.2887, -2.2882, -2.2889, -2.2898, -2.2892]]),
+                    ("cuda", 8): torch.tensor([[2.5479, -9.2124, -9.2121, -9.2175, -9.2122, -1.5024, -9.2121, -9.2122, -9.2162, -9.2122, -6.3101, -3.6224, -3.6377, -5.2542, -5.2524]]),
+                }
+            )
+        EXPECTED_SLICE = EXPECTED_SLICES.get_expectation()
         # fmt: on
 
         self.assertTrue(
@@ -346,10 +360,26 @@ class GraniteMoeIntegrationTest(unittest.TestCase):
     @slow
     def test_model_3b_generation(self):
         # ground truth text generated with dola_layers="low", repetition_penalty=1.2
-        EXPECTED_TEXT_COMPLETION = (
-            "Simply put, the theory of relativity states that \n$$\n\\frac{d^2x^\\mu}{d\\tau^2} = "
-            "\\frac{1}{c^2}\\frac{d^2x^\\mu}{dt^2}\n$$\nwhere $x^\\mu$ is a four-vector, $\\tau$ is the proper time"
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                ("xpu", 3): (
+                    "Simply put, the theory of relativity states that 1) the speed of light is constant, and 2) the speed of light is the same for all observers.\n\n"
+                    "The first part is easy to understand. The second part is a little more difficult.\n\n"
+                    "The second part of the theory of relativity is a little more difficult to understand.\n"
+                ),
+                ("cuda", 7): (
+                    "Simply put, the theory of relativity states that \n$$\n\\frac{d^2x^\\mu}{d\\tau^2} = "
+                    "\\frac{1}{c^2}\\frac{d^2x^\\mu}{dt^2}\n$$\nwhere $x^\\mu$ is a four-vector, $\\tau$ is the proper time"
+                ),
+                ("cuda", 8): (
+                    "Simply put, the theory of relativity states that 1) the speed of light is constant, and 2) the speed of light is the same for all observers.\n\n"
+                    "The first part is easy to understand. The second part is a little more difficult.\n\n"
+                    "The second part of the theory of relativity is a little more difficult to understand.\n"
+                ),
+            }
         )
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
+
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("ibm/PowerMoE-3b")
         model = GraniteMoeForCausalLM.from_pretrained("ibm/PowerMoE-3b", device_map="auto")

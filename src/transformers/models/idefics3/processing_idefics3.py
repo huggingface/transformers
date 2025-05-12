@@ -141,9 +141,9 @@ class Idefics3Processor(ProcessorMixin):
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
 
-        self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True)
-        self.image_token = AddedToken("<image>", normalized=False, special=True)
-        self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True)
+        self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True).content
+        self.image_token = AddedToken("<image>", normalized=False, special=True).content
+        self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True).content
         self.global_image_tag = "<global-img>"  # https://github.com/huggingface/transformers/pull/32473/files/8063e5e17362571b693f1db95167f5443a3be1b2#r1734825341
         self.image_seq_len = image_seq_len
 
@@ -159,6 +159,7 @@ class Idefics3Processor(ProcessorMixin):
             ]
         }
         tokenizer.add_special_tokens(tokens_to_add)
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
@@ -240,17 +241,18 @@ class Idefics3Processor(ProcessorMixin):
         )
 
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
         n_images_in_text = []
         n_images_in_images = []
-        inputs = BatchFeature()
+        inputs = {}
 
         if text is not None:
             if isinstance(text, str):
                 text = [text]
             elif not isinstance(text, list) and not isinstance(text[0], str):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-            n_images_in_text = [sample.count(self.image_token.content) for sample in text]
+            n_images_in_text = [sample.count(self.image_token) for sample in text]
 
         if images is not None:
             if is_image_or_image_url(images):
@@ -259,8 +261,8 @@ class Idefics3Processor(ProcessorMixin):
                 if text is not None:
                     if sum(n_images_in_text) != len(images):
                         raise ValueError(
-                            f"The total number of {self.image_token.content} tokens in the prompts should be the same as the number of images passed."
-                            f" Found {sum(n_images_in_text)} {self.image_token.content} tokens and {len(images)} images."
+                            f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
+                            f" Found {sum(n_images_in_text)} {self.image_token} tokens and {len(images)} images."
                         )
                     # Reorganize the images to match the prompts
                     cumsum_images_in_text = [0] + list(accumulate(n_images_in_text))
@@ -295,8 +297,8 @@ class Idefics3Processor(ProcessorMixin):
                 image_rows = inputs.pop("rows", [[0] * len(text)])
                 image_cols = inputs.pop("cols", [[0] * len(text)])
 
-                fake_image_token = self.fake_image_token.content
-                image_token = self.image_token.content
+                fake_image_token = self.fake_image_token
+                image_token = self.image_token
                 global_img_token = self.global_image_tag
 
                 prompt_strings = []
@@ -324,18 +326,19 @@ class Idefics3Processor(ProcessorMixin):
                         sample += image_prompt_string + split_sample[i + 1]
                     prompt_strings.append(sample)
 
-                text_inputs = self.tokenizer(text=prompt_strings, **output_kwargs["text_kwargs"])
+                text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+                self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
                 inputs.update(text_inputs)
 
         elif text is not None:
             if any(n_images_in_text):
                 raise ValueError(
-                    f"Found {sum(n_images_in_text)} {self.image_token.content} tokens in the text but no images were passed."
+                    f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
                 )
             text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
             inputs.update(text_inputs)
 
-        return inputs
+        return BatchFeature(inputs, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """
