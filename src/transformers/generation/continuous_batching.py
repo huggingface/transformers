@@ -311,11 +311,11 @@ class PagedAttentionCache(Cache):
         block_indices = logical_indices_tensor // block_size
         block_offsets = logical_indices_tensor % block_size
 
-        if torch.any(block_indices >= len(block_table)):
+        if torch.any(block_indices > len(block_table)):
             raise IndexError(f"Logical indices map to block indices out of bounds for request {request_id}")
 
         block_table_tensor = torch.tensor(block_table, dtype=torch.long, device=self.device)
-        physical_block_nums = block_table_tensor[block_indices]  # Use PyTorch indexing
+        physical_block_nums = block_table_tensor[block_indices]
         physical_indices = physical_block_nums * block_size + block_offsets
         return physical_indices
 
@@ -876,14 +876,14 @@ class ContinuousBatchProcessor:
         cumulative_seqlens_k = [0]
         logits_to_track = 0
         logits_indices = []
-        self.input_ids[:, :generated_tokens].copy_(self.output_ids[(self.output_ids >= 0)])
         self._record_batch_metrics(requests_in_batch)
 
         for state in requests_in_batch:
             if state.status == "decoding":
+                input_ids.append(state.static_outputs[-1])
                 positions_to_add = [state.current_len()]
                 state.position_offset += 1
-                if not self._allocate_blocks_if_needed(state, state.current_len() + 1):
+                if not self._allocate_blocks_if_needed(state, state.current_len()):
                     continue
 
                 # Map logical indices to physical block indices for this request
@@ -899,7 +899,7 @@ class ContinuousBatchProcessor:
                 positions_to_add = list(range(start_pos, start_pos + len(next_input_ids)))
                 state.position_offset += len(next_input_ids)
 
-                if not self._allocate_blocks_if_needed(state, len(next_input_ids)):
+                if not self._allocate_blocks_if_needed(state,  state.current_len()):
                     continue
 
                 read_indices = write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
@@ -929,7 +929,7 @@ class ContinuousBatchProcessor:
         if self.input_ids[:, generated_tokens : generated_tokens + token_position].shape[1] != torch.tensor(input_ids, **self.tensor_metadata).shape[0]:
             print("Scheduler did not do his job? token position - generated_tokens is off")
         # now if sdpa or eager, create the attention mask!
-        self.input_ids[:, generated_tokens : generated_tokens + token_position].copy_(
+        self.input_ids[:, :token_position].copy_(
             torch.tensor(input_ids, **self.tensor_metadata)
         )
         self.position_ids[:, :token_position].copy_(torch.tensor(position_ids, **self.tensor_metadata))
@@ -947,8 +947,7 @@ class ContinuousBatchProcessor:
     def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
         """Helper function to allocate blocks for a request."""
         current_blocks = len(state.allocated_blocks)
-        needed_blocks = math.ceil(needed_slots / self.cache.block_size)
-
+        needed_blocks = (needed_slots // self.cache.block_size) + 1
         if needed_blocks > current_blocks:
             blocks_needed = needed_blocks - current_blocks
             allocated = self.cache.allocate_blocks(blocks_needed, state.request_id)
@@ -1105,7 +1104,7 @@ class ContinuousBatchingManager:
     """
 
     def __init__(
-        self, model: GenerationMixin, generation_config: GenerationConfig, max_queue_size=0, streaming: bool = False
+        self, model: GenerationMixin, generation_config: GenerationConfig, max_queue_size=0, streaming: bool = True 
     ):
         """Initialize the continuous batching manager.
 
@@ -1402,7 +1401,7 @@ class ContinuousMixin:
         self,
         inputs: List[List[int]],
         generation_config: Optional[GenerationConfig] = None,
-        progress_bar: bool = False,
+        progress_bar: bool = True,
         **kwargs,
     ) -> List[List[int]]:
         """Generate sequences for a batch of prompts using continuous batching.

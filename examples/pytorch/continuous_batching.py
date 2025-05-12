@@ -40,8 +40,8 @@ generation_config = GenerationConfig(
     # temperature=0.7,
     # top_k=50,
     # Parameters relevant for Continuous Batching (can be tuned)
-    num_blocks=1024,
-    block_size=256,
+    num_blocks=256,
+    block_size=128,
     max_batch_tokens=1024,  # Maximum number of tokens to process in a single batch
 )
 
