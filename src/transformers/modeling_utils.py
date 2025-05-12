@@ -219,22 +219,19 @@ TORCH_INIT_FUNCTIONS = {
 # DO NOT MODIFY, KEPT FOR BC ONLY
 VLMS = [
     "aria",
-    "aya_vision",
+    "ayavision",
     "emu3",
     "fuyu",
-    "got_ocr2",
+    "gotocr2",
     "gemma3",
     "internvl",
-    "llava",
-    "llava_next",
-    "llava_next_video",
-    "llava_onevision",
+    "llava",  # all llava prefixed models fall under this check
     "mistral3",
     "mllama",
     "paligemma",
-    "qwen2_vl",
-    "qwem2_5_vl",
-    "video_llava",
+    "qwen2vl",
+    "qwen2_5_vl",
+    "videollava",
     "vipllava",
 ]
 
