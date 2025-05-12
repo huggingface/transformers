@@ -82,8 +82,8 @@ print(f"\nSimple batch generation took: {end_time_simple - start_time_simple:.2f
 # Decode and print results
 print("\nResults from simple generate_batch:")
 for i, output_ids in enumerate(batch_outputs):
-    input_text = tokenizer.decode(simple_batch_inputs[i], skip_special_tokens=False)
-    output_text = tokenizer.decode(output_ids, skip_special_tokens=False)
+    input_text = tokenizer.decode(batch_outputs[output_ids]["prompt_token_ids"], skip_special_tokens=False)
+    output_text = tokenizer.decode(batch_outputs[output_ids]["static_outputs"], skip_special_tokens=False)
     print("-" * 20)
     print(f"Result for Request {i}:")
     # print(f"  Input:  {input_text}")
@@ -107,65 +107,6 @@ simple_inputs = [torch.tensor(item, device=device) for item in tokenized_test_pr
 padded_inputs = tokenizer.pad({"input_ids": list(tokenized_test_prompts["input_ids"])}, return_tensors="pt").to(device)
 
 
-start_time_simple = time.time()
-outputs = model.generate(
-    **padded_inputs,
-    generation_config=generation_config,
-    do_sample=False,
-)
-end_time_simple = time.time()
-
-print(f"generation config: {generation_config}")
-
-print(f"\nSimple generation took: {end_time_simple - start_time_simple:.2f} seconds")
-
-print("\nResults from simple generate:")
-for i, output_ids in enumerate(outputs):
-    input_text = tokenizer.decode(simple_inputs[i], skip_special_tokens=False)
-    # The output_ids from batch generation include the input tokens, skip them for decoding
-    # We need to know the length of the input to slice the output correctly
-    input_length = len(simple_inputs[i])
-    # Slice the output ids to get only the generated part
-    generated_ids = output_ids[input_length:]
-    output_text = tokenizer.decode(generated_ids, skip_special_tokens=False)
-    print("-" * 20)
-    print(f"Result for Request {i}:")
-    # print(f"  Input:  {input_text}")
-    print(f"  Output: {output_text}")
-print("-" * 20)
-
-print("--- Finished Simple Generation Example ---\n\n")
-
-# --- Example 2: Streaming Version using ContinuousBatchingManager ---
-print("--- Running Streaming Continuous Batching Example ---")
-
-manager = model.init_continuous_batching(generation_config=generation_config, streaming=True)
-
-manager.start()
-
-# Doing it here with one request to avoid interleaving outputs
-req_id = manager.add_request(simple_batch_inputs[0])
-
-request_streams = {}
-
-first_token = True
-for output in manager:
-    req_id = output["request_id"]
-    if req_id is None:
-        continue
-    if first_token:
-        print(f"Request {req_id} started")
-        first_token = False
-    if req_id not in request_streams:
-        request_streams[req_id] = DecodeStream(skip_special_tokens=False)
-    next_token = request_streams[req_id].step(tokenizer._tokenizer, output["next_token"])
-    print(f"{next_token}", end="")
-    if output["status"] in ["finished", "failed"]:
-        print(f"\nRequest {req_id} {output['status']}")
-        del request_streams[req_id]
-        break
-
-manager.stop(block=True, timeout=10)
 
 # --- Example 3: Involved Performant Version using ContinuousBatchingManager ---
 print("--- Running Involved Continuous Batching Example ---")
