@@ -90,11 +90,12 @@ class Qwen2AudioProcessor(ProcessorMixin):
         **kwargs: Unpack[Qwen2AudioProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
-        and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
-        WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
+"""
+Main method that prepares one or more text and/or audio inputs for the model.
+If `text` is provided, it forwards the `text` and `kwargs` to Qwen2TokenizerFast’s `__call__` method to encode the text.
+Similarly, if `audios` is provided, it forwards the `audios` and `kwargs` to WhisperFeatureExtractor’s `__call__` method to process the audio.
+For more information, please refer to the docstrings of the two methods.
+"""
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):

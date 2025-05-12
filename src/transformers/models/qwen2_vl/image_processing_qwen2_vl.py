@@ -274,8 +274,10 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         if data_format == ChannelDimension.LAST:
             patches = patches.transpose(0, 3, 1, 2)
         if patches.shape[0] % temporal_patch_size != 0:
-            repeats = np.repeat(patches[-1][np.newaxis], temporal_patch_size - 1, axis=0)
+            pad_len = temporal_patch_size - (patches.shape[0] % temporal_patch_size)
+            repeats = np.repeat(patches[-1][np.newaxis], pad_len, axis=0)
             patches = np.concatenate([patches, repeats], axis=0)
+
         channel = patches.shape[1]
         grid_t = patches.shape[0] // temporal_patch_size
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
