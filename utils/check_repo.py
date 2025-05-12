@@ -157,6 +157,7 @@ IGNORE_NON_TESTED = (
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MolmoForCausalLM",  # Building part of bigger (tested) model.
         "MolmoTextModel",  # Building part of bigger (tested) model.
+        "MolmoModel",  # Building part of bigger (tested) model.
         "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Llama4VisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Emu3VQVAE",  # Building part of bigger (tested) model

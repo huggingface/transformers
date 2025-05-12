@@ -1208,6 +1208,7 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
         return image_features
 
 
+@auto_docstring
 class MolmoModel(LlavaModel):
     _checkpoint_conversion_mapping = {}
 
@@ -1250,7 +1251,7 @@ class MolmoModel(LlavaModel):
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
-        image_masks=None,
+        image_masks: torch.FloatStorage = None,
         image_token_indices: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1266,27 +1267,6 @@ class MolmoModel(LlavaModel):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: int = 0,
     ) -> Union[Tuple, MolmoCausalLMOutputWithPast]:
-        r"""
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, MolmoForConditionalGeneration
-
-        >>> model = MolmoForConditionalGeneration.from_pretrained("molmo-hf/molmo-1.5-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("molmo-hf/molmo-1.5-7b-hf")
-
-        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
-        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
-        ```"""
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1383,6 +1363,11 @@ class MolmoModel(LlavaModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    The Molmo model which consists of a vision backbone and a language model + lm head.
+    """
+)
 class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
     config_class = MolmoConfig
     _checkpoint_conversion_mapping = {}
@@ -1393,6 +1378,7 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
         self.model = MolmoModel(config)
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1512,6 +1498,7 @@ __all__ = [
     "MolmoTextAttention",
     "MolmoPoolingAttention",
     "MolmoAdapterModel",
+    "MolmoModel",
     "MolmoTextModel",
     "MolmoPreTrainedModel",
     "MolmoForCausalLM",
