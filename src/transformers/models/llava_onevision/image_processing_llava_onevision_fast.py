@@ -89,6 +89,15 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
 
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionFastImageProcessorKwargs]) -> BatchFeature:
+        if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
+            # if the first element is a list, we assume that all elements are lists
+            batch_num_images = [len(x) for x in images]
+        elif isinstance(images, (tuple, list)):
+            # treat this as a single-image case for backward compatibility
+            batch_num_images = [1] * len(images)
+        else:
+            batch_num_images = [1]
+        kwargs["batch_num_images"] = batch_num_images
         return super().preprocess(images, **kwargs)
 
     def _prepare_images_structure(
@@ -238,10 +247,15 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
         do_pad: bool,
+        batch_num_images: List[int],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         processed_images = []
         image_sizes = []
+
+        # only single image patching is supported
+        need_patching = [n == 1 for n in batch_num_images for _ in range(n)]
+
         # Determine the size tuple
         if size and size.height and size.width:
             size_tuple = (size.height, size.width)
@@ -256,14 +270,22 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         else:
             patch_size = size.shortest_edge
 
-        for image in images:
-            image_patches = self._get_image_patches(
-                image,
-                image_grid_pinpoints,
-                size=size_tuple,
-                patch_size=patch_size,
-                interpolation=interpolation,
-            )
+        for i, image in enumerate(images):
+            if need_patching[i]:
+                image_patches = self._get_image_patches(
+                    image,
+                    image_grid_pinpoints,
+                    size=size_tuple,
+                    patch_size=patch_size,
+                    interpolation=interpolation,
+                )
+            else:
+                image_size = image.shape[1:]
+                longest_edge = max(image_size)
+                padding = self._get_padding_size(image_size, (longest_edge, longest_edge))
+                constant_values = tuple(int(x * 255) for x in self.image_mean)
+                padded_image = F.pad(image, padding=padding, fill=constant_values)
+                image_patches = [padded_image]
 
             # Group images by size for batched processing
             processed_image_patches_grouped = {}
@@ -293,7 +315,8 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
             processed_images = self._pad_for_batching(processed_images)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(
-            data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "image_sizes": image_sizes, "batch_num_images": batch_num_images},
+            tensor_type=return_tensors,
         )
 
 

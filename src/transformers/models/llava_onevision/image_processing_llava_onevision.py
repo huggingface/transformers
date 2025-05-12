@@ -604,7 +604,8 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
             # if the first element is a list, we assume that all elements are lists
             batch_num_images = [len(x) for x in images]
         elif isinstance(images, (tuple, list)):
-            batch_num_images = [len(images)]
+            # treat this as a single-image case for backward compatibility
+            batch_num_images = [1] * len(images)
         else:
             batch_num_images = [1]
         # only single image patching is supported

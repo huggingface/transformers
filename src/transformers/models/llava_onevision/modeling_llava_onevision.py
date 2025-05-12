@@ -438,7 +438,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
             vision_feature_select_strategy (`str`):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
-            batch_num_images (`torch.LongTensor]`)
+            batch_num_images (`torch.LongTensor`):
                 Number of images in each sample.
         Returns:
             image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
@@ -497,7 +497,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         vision_feature_layer: Optional[Union[int, List[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         vision_aspect_ratio: Optional[str] = None,
-        batch_num_images: Optional[torch.LongTensor] = None,
+        batch_num_images: torch.LongTensor = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -518,7 +518,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
             If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
-        batch_num_images (`torch.LongTensor]`, *optional*)
+        batch_num_images (`torch.LongTensor`):
             Number of images in each sample.
         """
 
@@ -750,7 +750,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         vision_feature_layer: Optional[Union[int, List[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         vision_aspect_ratio: Optional[str] = None,
-        batch_num_images: Optional[torch.LongTensor] = None,
+        batch_num_images: torch.LongTensor = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -773,7 +773,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
-        batch_num_images (`torch.LongTensor]`, *optional*)
+        batch_num_images (`torch.LongTensor`):
             Number of images in each sample.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
