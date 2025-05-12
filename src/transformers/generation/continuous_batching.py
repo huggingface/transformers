@@ -25,6 +25,17 @@ from typing import Deque, Dict, List, Optional, Union
 import torch
 from tqdm import tqdm
 
+try:
+    from opentelemetry import metrics
+    from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+    from opentelemetry.metrics import Histogram, Meter
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.resources import Resource
+
+    _has_opentelemetry = True
+except ImportError:
+    _has_opentelemetry = False
+
 
 from ..cache_utils import Cache
 from ..configuration_utils import PretrainedConfig
@@ -420,8 +431,69 @@ class ContinuousBatchProcessor:
         self.waiting_requests: Deque[RequestState] = deque()
         self.requests_to_process_next: List[str] = []
 
+        # Set up OpenTelemetry metrics if available
+        self._setup_metrics()
+
         # Get batch size parameters from generation config
         self._configure_batch_parameters()
+
+    def _setup_metrics(self):
+        """Initialize OpenTelemetry metrics if the library is available."""
+
+        if not _has_opentelemetry:
+            logger.info("OpenTelemetry is not installed. Metrics will not be recorded.")
+            return
+
+        # Create a resource to identify this component in the metrics system
+        resource = Resource.create({"service.name": "transformers.generation.continuous_batching"})
+
+        # Set up the meter provider with an OTLP exporter
+        exporter = OTLPMetricExporter(endpoint=self._get_otlp_endpoint())
+        provider = MeterProvider(resource=resource, metric_readers=[exporter])
+        metrics.set_meter_provider(provider)
+
+        # Create a meter for our metrics
+        self.meter = metrics.get_meter("transformers.generation")
+
+        # Create histogram for time to first token
+        self.ttft_histogram = self.meter.create_histogram(
+            name="ttft_milliseconds",
+            description="Time to first token in milliseconds",
+            unit="ms",
+        )
+
+        # Create histogram for decode/prefill ratio
+        self.decode_prefill_ratio_gauge = self.meter.create_gauge(
+            name="decode_prefill_ratio",
+            description="Ratio of decode tokens to prefill tokens in a batch",
+            unit="ratio",
+        )
+
+        # Create counters for decode and prefill tokens
+        self.prefill_tokens_counter = self.meter.create_counter(
+            name="prefill_tokens_processed",
+            description="Number of prefill tokens processed",
+            unit="tokens",
+        )
+
+        self.decode_tokens_counter = self.meter.create_counter(
+            name="decode_tokens_processed",
+            description="Number of decode tokens processed",
+            unit="tokens",
+        )
+
+        # Create histogram for batch fill percentage
+        self.batch_fill_percentage_histogram = self.meter.create_histogram(
+            name="batch_fill_percentage",
+            description="Percentage of max_batch_tokens utilized in each batch",
+            unit="percent",
+        )
+
+    def _get_otlp_endpoint(self):
+        """Get the OTLP endpoint from environment variable or use default."""
+        import os
+
+        return os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318/v1/metrics")
 
     def _configure_batch_parameters(self):
         """Set up batch processing parameters based on generation config."""
@@ -440,44 +512,24 @@ class ContinuousBatchProcessor:
 
         # Context length and EOS token
         self.max_context_len = getattr(self.generation_config, "max_position_embeddings", 2048)
-        self.eos_token_id = self.generation_config.eos_token_id
 
     def _get_new_requests(self):
         """Pull new requests from the input queue and add to waiting list."""
         while not self.input_queue.empty():
             try:
-                req_data = self.input_queue.get_nowait()
-                if req_data is None:  # Sentinel value
+                state = self.input_queue.get_nowait()
+                if state is None:  # Sentinel value
                     continue
 
-                if not isinstance(req_data, dict) or "request_id" not in req_data or "input_ids" not in req_data:
-                    logger.error(f"Invalid request format: {req_data}")
-                    if "request_id" in req_data:
-                        self._handle_request_error("Invalid request format", req_data["request_id"])
-                    continue
-
-                request_id = req_data["request_id"]
-                input_ids = req_data["input_ids"]
-                max_new_tokens = req_data.get("max_new_tokens", self.generation_config.max_new_tokens or 20)
-
-                if not input_ids:
-                    logger.warning(f"Request {request_id} received with empty input_ids. Ignoring.")
-                    self._handle_request_error("Empty input_ids provided", request_id)
-                    continue
-
-                state = RequestState(
-                    request_id=request_id,
-                    prompt_ids=list(input_ids),
-                    max_new_tokens=max_new_tokens,
-                    eos_token_id=self.eos_token_id,
-                )
                 self.waiting_requests.append(state)
 
             except queue.Empty:
                 break
             except Exception as e:
                 logger.error(f"Error processing new request: {e}", exc_info=True)
-                self._handle_request_error(e, locals().get("req_data", {}))
+                state: RequestState = locals().get("state")
+                if state is not None:
+                    self._handle_request_error(e, state.request_id)
 
     def _handle_request_error(self, error, request_id):
         """Handle general request processing error."""
@@ -620,6 +672,8 @@ class ContinuousBatchProcessor:
         # Get the request objects for this batch
         requests_in_batch = [self.active_requests[req_id] for req_id in self.requests_to_process_next]
 
+        self._record_batch_metrics(requests_in_batch)
+
         for state in requests_in_batch:
             if state.status == "decoding":
                 last_token = state.output_ids[-1]
@@ -743,6 +797,8 @@ class ContinuousBatchProcessor:
             state = self.active_requests[req_id]
 
             if state.status == "prefilling":
+                self._record_ttft_metric(state)
+
                 state.status = "decoding"
                 # state.prompt_ids = []  # Clear prompt as it's now in cache
 
@@ -763,6 +819,8 @@ class ContinuousBatchProcessor:
                 else:
                     state.status = "decoding"
                     # state.prompt_ids = []
+
+                    self._record_ttft_metric(state)
 
                     token = generated_ids[token_idx].item()
                     token_idx += 1
@@ -793,6 +851,61 @@ class ContinuousBatchProcessor:
             if req_id in self.active_requests:
                 self.cache.free_blocks(req_id)
                 del self.active_requests[req_id]
+
+    def _record_ttft_metric(self, state: RequestState) -> None:
+        """Record Time to First Token (TTFT)"""
+        if not _has_opentelemetry or not state.created_time:
+            return
+
+        ttft_ms = (time.time() - state.created_time) * 1000.0
+
+        attributes = {"prompt_length": len(state.prompt_ids), "request_id": state.request_id}
+
+        try:
+            self.ttft_histogram.record(ttft_ms, attributes=attributes)
+            logger.debug(f"Recorded TTFT for request {state.request_id}: {ttft_ms:.2f}ms")
+        except Exception as e:
+            logger.warning(f"Failed to record TTFT metric: {e}")
+
+    def _record_batch_metrics(self, requests_in_batch: List[RequestState]) -> None:
+        """Record metrics about the batch composition including decode/prefill ratio and batch fill percentage."""
+        if not _has_opentelemetry or not requests_in_batch:
+            return
+
+        decode_tokens = 0
+        prefill_tokens = 0
+
+        for state in requests_in_batch:
+            if state.status == "decoding":
+                decode_tokens += 1
+            elif state.status.startswith("prefilling"):
+                prefill_tokens += len(state.prompt_ids)
+
+        total_batch_tokens = decode_tokens + prefill_tokens
+
+        attributes = {"batch_size": len(requests_in_batch), "timestamp": time.time()}
+
+        try:
+            if prefill_tokens > 0:
+                self.prefill_tokens_counter.add(prefill_tokens, attributes=attributes)
+
+            if decode_tokens > 0:
+                self.decode_tokens_counter.add(decode_tokens, attributes=attributes)
+
+            if prefill_tokens > 0:
+                ratio = decode_tokens / prefill_tokens
+            elif decode_tokens > 0:
+                ratio = float("inf")
+                self.decode_prefill_ratio_gauge.set(ratio, attributes=attributes)
+
+            fill_percentage = (total_batch_tokens / self.max_batch_tokens) * 100.0
+            self.batch_fill_percentage_histogram.record(fill_percentage, attributes=attributes)
+            logger.debug(
+                f"Batch metrics: {decode_tokens} decode tokens, {prefill_tokens} prefill tokens, ratio: {ratio:.2f}, "
+                f"batch fill: {fill_percentage:.2f}% ({total_batch_tokens}/{self.max_batch_tokens})"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record batch metrics: {e}")
 
     def _send_output(self, state: RequestState, token: int):
         """Send output to the queue based on streaming mode and request state."""
@@ -928,7 +1041,9 @@ class ContinuousBatchingManager:
                 logger.info("Continuous Batching Manager stopped.")
                 self._generation_thread = None
 
-    def add_request(self, input_ids: List[int], request_id: Optional[str] = None, **kwargs) -> str:
+    def add_request(
+        self, input_ids: List[int], request_id: Optional[str] = None, max_new_tokens: Optional[int] = None
+    ) -> str:
         """Add a new generation request to the queue.
 
         Args:
@@ -951,11 +1066,17 @@ class ContinuousBatchingManager:
                 request_id = f"req_{self._request_counter}"
                 self._request_counter += 1
 
-        # Create request data
-        req_data = {"request_id": request_id, "input_ids": input_ids, **kwargs}
+        max_new_tokens = self.generation_config.max_new_tokens if max_new_tokens is None else max_new_tokens
+
+        state = RequestState(
+            request_id=request_id,
+            prompt_ids=list(input_ids),
+            max_new_tokens=max_new_tokens,
+            eos_token_id=self.generation_config.eos_token_id,
+        )
 
         # Use block=True with timeout to handle backpressure if queue is full
-        self.input_queue.put(req_data, block=True, timeout=10)  # XXX: pass timeout as fn arg?
+        self.input_queue.put(state, block=True, timeout=10)  # XXX: pass timeout as fn arg?
         logger.debug(f"Added request {request_id} to queue.")
         return request_id
 
@@ -1013,7 +1134,7 @@ class ContinuousBatchingManager:
             first = True
             # Capture the graph
             # graph = torch.cuda.CUDAGraph()
-            # static_batch_data = {} 
+            # static_batch_data = {}
             # static_input_ids = torch.empty(1, paged_attention_cache.cache_shape[1], self.model.config.vocab_size, device=self.model.device, dtype=torch.long)
             # static_position_ids = torch.empty(1, paged_attention_cache.cache_shape[1], device=self.model.device, dtype=torch.long)
 
@@ -1157,7 +1278,9 @@ class ContinuousMixin:
         num_requests = len(inputs)
 
         try:
-            with tqdm(total=num_requests, disable=(not progress_bar), desc=f"Generating {num_requests} requests") as pbar:
+            with tqdm(
+                total=num_requests, disable=(not progress_bar), desc=f"Generating {num_requests} requests"
+            ) as pbar:
                 # Add all requests
                 for i, input_ids in enumerate(inputs):
                     # Assign a predictable request ID for ordering results later
