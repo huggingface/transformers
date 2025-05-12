@@ -282,7 +282,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .flex_attention import make_flex_block_causal_mask
+        from .flex_attention import make_flex_block_mask
 else:
     import sys
 
