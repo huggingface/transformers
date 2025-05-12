@@ -693,6 +693,15 @@ class ContinuousBatchProcessor:
         cumq_ptr       = 1 # because at 0 we always have 0?
         cumk_ptr       = 1
         generated_tokens = (self.output_ids != 0).sum()
+
+        position_ids = []
+        input_ids = []
+        read_index = []
+        write_index= []
+        cumulative_seqlens_q = [0]
+        cumulative_seqlens_k = [0]
+        logits_indices = []
+        
         self.input_ids[:, :generated_tokens].copy_(self.output_ids[self.output_ids != 0])
         for state in requests_in_batch:
             if state.status == "decoding":
@@ -709,10 +718,7 @@ class ContinuousBatchProcessor:
                 seq_len_k = state.current_len() + 1  # Key length includes context
             elif state.status.startswith("prefilling"):
                 next_input_ids = state.prompt_ids
-                self.input_ids[:, token_position : token_position + len(next_input_ids)].copy_(
-                    torch.tensor(next_input_ids, **self.tensor_metadata)
-                )
-
+                input_ids.extend(next_input_ids)
                 start_pos = state.current_len()
                 positions_to_add = list(range(start_pos, start_pos + len(next_input_ids)))
                 state.position_offset += len(next_input_ids)
@@ -721,26 +727,20 @@ class ContinuousBatchProcessor:
                     continue
 
                 read_indices = write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
-
                 seq_len_q = seq_len_k = len(next_input_ids)
             else:
                 logger.warning(f"Request {state.request_id} in unexpected state '{state.status}'. Skipping.")
                 continue
-            
 
-            self.position_ids[:, token_position : token_position + len(positions_to_add)].copy_(
-                torch.tensor(positions_to_add, **self.tensor_metadata)
-            )
-            self.read_index[read_position : read_position + len(read_indices)].copy_(
-                torch.tensor(read_indices, **self.tensor_metadata)
-            )
-            self.write_index[write_position : write_position + len(write_indices)].copy_(write_indices)
-            self.cumulative_seqlens_q[cumq_ptr].copy_(self.cumulative_seqlens_q[cumq_ptr-1] + seq_len_q)
-            self.cumulative_seqlens_k[cumk_ptr].copy_(self.cumulative_seqlens_k[cumq_ptr-1] + seq_len_k)
+            position_ids.extend(positions_to_add)
+            read_index.extend(read_indices)
+            write_index.extend(write_indices)
+            cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + seq_len_q)
+            cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + seq_len_k)
+            logits_indices.append(cumulative_seqlens_q[-1]-1)
 
             self.max_seqlen_q = max(self.max_seqlen_q, seq_len_q)
             self.max_seqlen_k = max(self.max_seqlen_k, seq_len_k)
-            self.logits_indices[cumq_ptr-1].copy_(self.cumulative_seqlens_q[cumq_ptr]-1)
 
             token_position += len(positions_to_add)
             read_position += len(read_indices)
@@ -749,10 +749,32 @@ class ContinuousBatchProcessor:
             cumk_ptr += 1
 
         # now if sdpa or eager, create the attention mask!
+
+        self.input_ids[:,generated_tokens:generated_tokens+token_position].copy_(
+            torch.tensor(input_ids, **self.tensor_metadata)
+        )
+        self.position_ids[:, :token_position].copy_(
+            torch.tensor(position_ids, **self.tensor_metadata)
+        )
+        self.write_index[:write_position].copy_(
+            torch.tensor(write_index, **self.tensor_metadata)
+        )
+        self.read_index[:read_position].copy_(  
+            torch.tensor(read_index, **self.tensor_metadata)
+        )
+        self.cumulative_seqlens_q[:cumq_ptr].copy_(
+            torch.tensor(cumulative_seqlens_q, **self.tensor_metadata)
+        )
+        self.cumulative_seqlens_k[:cumk_ptr].copy_(
+            torch.tensor(cumulative_seqlens_k, **self.tensor_metadata)
+        )
+        self.logits_indices[:cumk_ptr-1].copy_(
+            torch.tensor(logits_indices, **self.tensor_metadata)
+        )
+
         attention_mask = create_document_mask(self.cumulative_seqlens_q, self.cumulative_seqlens_k)
         causal_mask = torch.where(attention_mask, 0, torch.finfo(torch.bfloat16).min) 
         self.attention_mask[..., :token_position, :attention_mask.shape[-1]].copy_(causal_mask)
-
 
     def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
         """Helper function to allocate blocks for a request."""
