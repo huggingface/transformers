@@ -27,15 +27,28 @@ import torch.nn as nn
 from tqdm import tqdm
 
 
+# TODO: move to its own file for usage in other modules
 try:
     from opentelemetry import metrics, trace
     from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
     from opentelemetry.trace import Status, StatusCode, get_tracer
+
+    resource = Resource.create({"service.name": "transformers"})
+
+    metrics_exporter = PeriodicExportingMetricReader(OTLPMetricExporter())
+    meter_provider = MeterProvider(resource=resource, metric_readers=[metrics_exporter])
+    metrics.set_meter_provider(meter_provider)
+
+    trace_exporter = OTLPSpanExporter()
+    tracer_provider = TracerProvider(resource=resource)
+    tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
+    trace.set_tracer_provider(tracer_provider)
 
     _has_opentelemetry = True
 except ImportError:
@@ -87,7 +100,7 @@ def traced(func=None, *, span_name=None):
                         if isinstance(arg, (str, int, float, bool)) or arg is None:
                             span.set_attribute(f"args.{i}", str(arg))
 
-                # Add request_id if it's a common parameter
+                # Add request_id if it's a common parametbatch_processoeer
                 if "request_id" in kwargs and isinstance(kwargs["request_id"], str):
                     span.set_attribute("request_id", kwargs["request_id"])
 
@@ -238,16 +251,8 @@ class PagedAttentionCache(Cache):
         if not _has_opentelemetry:
             return
 
-        # Create a resource to identify this component
-        resource = Resource.create({"service.name": "transformers.generation.paged_attention_cache"})
-
-        trace_exporter = OTLPSpanExporter()
-        tracer_provider = TracerProvider(resource=resource)
-        tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
-        trace.set_tracer_provider(tracer_provider)
-
         # Create a tracer for our functions
-        self.tracer = get_tracer("transformers.generation.cache")
+        self.tracer = get_tracer("transformers.generation.paged_attention_cache")
 
     @traced
     def allocate_blocks(self, n_blocks: int, request_id: str) -> List[int]:
@@ -636,24 +641,9 @@ class ContinuousBatchProcessor:
             logger.info("OpenTelemetry is not installed. Metrics and tracing will not be recorded.")
             return
 
-        # Create a resource to identify this component in the metrics system
-        resource = Resource.create({"service.name": "transformers.generation.continuous_batching_processor"})
+        self.tracer = get_tracer("transformers.generation.continuous_batch_processor")
 
-        metrics_exporter = OTLPMetricExporter()
-        meter_provider = MeterProvider(resource=resource, metric_readers=[metrics_exporter])
-        metrics.set_meter_provider(meter_provider)
-
-        # Set up the tracer provider with an OTLP exporter for tracing
-        trace_exporter = OTLPSpanExporter()
-        tracer_provider = TracerProvider(resource=resource)
-        tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
-        trace.set_tracer_provider(tracer_provider)
-
-        # Create a tracer for our functions
-        self.tracer = get_tracer("transformers.generation")
-
-        # Create a meter for our metrics
-        self.meter = metrics.get_meter("transformers.generation")
+        self.meter = metrics.get_meter("transformers.generation.continuous_batch_processor")
 
         # Create histogram for time to first token
         self.ttft_histogram = self.meter.create_histogram(
@@ -1007,10 +997,8 @@ class ContinuousBatchProcessor:
 
         ttft_ms = (time.time() - state.created_time) * 1000.0
 
-        attributes = {"prompt_length": len(state.prompt_ids), "request_id": state.request_id}
-
         try:
-            self.ttft_histogram.record(ttft_ms, attributes=attributes)
+            self.ttft_histogram.record(ttft_ms)
             logger.debug(f"Recorded TTFT for request {state.request_id}: {ttft_ms:.2f}ms")
         except Exception as e:
             logger.warning(f"Failed to record TTFT metric: {e}")
@@ -1032,23 +1020,21 @@ class ContinuousBatchProcessor:
 
         total_batch_tokens = decode_tokens + prefill_tokens
 
-        attributes = {"batch_size": len(requests_in_batch), "timestamp": time.time()}
-
         try:
             if prefill_tokens > 0:
-                self.prefill_tokens_counter.add(prefill_tokens, attributes=attributes)
+                self.prefill_tokens_counter.add(prefill_tokens)
 
             if decode_tokens > 0:
-                self.decode_tokens_counter.add(decode_tokens, attributes=attributes)
+                self.decode_tokens_counter.add(decode_tokens)
 
             if prefill_tokens > 0:
                 ratio = decode_tokens / prefill_tokens
             elif decode_tokens > 0:
                 ratio = float("inf")
-                self.decode_prefill_ratio_gauge.set(ratio, attributes=attributes)
+                self.decode_prefill_ratio_gauge.set(ratio)
 
             fill_percentage = (total_batch_tokens / self.max_batch_tokens) * 100.0
-            self.batch_fill_percentage_histogram.record(fill_percentage, attributes=attributes)
+            self.batch_fill_percentage_histogram.record(fill_percentage)
             logger.debug(
                 f"Batch metrics: {decode_tokens} decode tokens, {prefill_tokens} prefill tokens, "
                 f"batch fill: {fill_percentage:.2f}% ({total_batch_tokens}/{self.max_batch_tokens})"
@@ -1133,17 +1119,7 @@ class ContinuousBatchingManager:
         if not _has_opentelemetry:
             return
 
-        # Create a resource to identify this component
-        resource = Resource.create({"service.name": "transformers.generation.continuous_batching_manager"})
-
-        # Set up the tracer provider with an OTLP exporter
-        trace_exporter = OTLPSpanExporter()
-        tracer_provider = TracerProvider(resource=resource)
-        tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
-        trace.set_tracer_provider(tracer_provider)
-
-        # Create a tracer for our functions
-        self.tracer = get_tracer("transformers.generation.manager")
+        self.tracer = get_tracer("transformers.generation.continuous_batching_manager")
 
     def start(self):
         """Start the background generation thread."""
@@ -1355,7 +1331,8 @@ class ContinuousBatchingManager:
         try:
             while True:
                 req_data = self.input_queue.get_nowait()
-                self._handle_request_error(error, getattr(req_data, "request_id", None))
+                if batch_processor is not None:
+                    batch_processor._handle_request_error(error, getattr(req_data, "request_id", None))
         except queue.Empty:
             pass
 
