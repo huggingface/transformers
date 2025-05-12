@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Deque, Dict, List, Optional, Tuple, Union
 
 import torch
+import torch.nn as nn
 from tqdm import tqdm
 
 
@@ -125,7 +126,7 @@ class RequestState:
     prompt_ids: List[int]
 
     # Optional/generated fields
-    output_ids: List[int] = field(default_factory=list)
+    static_outputs: List[int] = field(default_factory=list)
     remaining_prompt_ids: List[int] = field(default_factory=list)  # For split requests
     allocated_blocks: List[int] = field(default_factory=list)
     position_offset: int = 0  # Current position in the sequence for position_ids
@@ -133,6 +134,7 @@ class RequestState:
     max_new_tokens: int = 20
     eos_token_id: int = -1
     created_time: float = field(default_factory=time.time)
+    error: Optional[str] = None
 
     def current_len(self) -> int:
         """Get the current length of the sequence (prompt + generated tokens)."""
@@ -140,7 +142,7 @@ class RequestState:
 
     def generated_len(self) -> int:
         """Get the number of tokens generated so far."""
-        return len(self.output_ids)
+        return len(self.static_outputs)
 
     def update_with_token(self, token_id: int) -> bool:
         """Update the request with a newly generated token and check for completion.
@@ -156,7 +158,7 @@ class RequestState:
             return False
 
         # Add the token to output
-        self.output_ids.append(token_id)
+        self.static_outputs.append(token_id)
 
         is_eos = token_id == self.eos_token_id and self.eos_token_id != -1
         is_max_len = self.generated_len() >= self.max_new_tokens
@@ -282,26 +284,39 @@ class PagedAttentionCache(Cache):
         """Returns the block table for a request."""
         return self._block_tables.get(request_id, [])
 
-    def _get_physical_indices(self, request_id: str, logical_indices: List[int]) -> List[int]:
-        """Maps logical sequence indices to physical cache indices using the block table."""
+    def _get_physical_indices(self, request_id: str, logical_indices: List[int]) -> torch.Tensor:
+        """
+        Maps logical sequence indices to physical cache indices using the block table, using PyTorch.
+
+        Args:
+            request_id: The request ID.
+            logical_indices: A list of logical indices.
+
+        Returns:
+            A list of physical indices.
+
+        Raises:
+            ValueError: If no block table is found for the request ID.
+            IndexError: If a logical index maps to a block index that is out of bounds.
+        """
         block_table = self._block_tables.get(request_id)
         if not block_table:
             raise ValueError(f"No block table found for request {request_id}")
 
-        physical_indices = []
-        for idx in logical_indices:
-            block_idx = idx // self.block_size
-            block_offset = idx % self.block_size
+        # Convert to PyTorch tensor for vectorized operations
+        logical_indices_tensor = torch.tensor(logical_indices, dtype=torch.long, device=self.device)
+        block_size = self.block_size
 
-            if block_idx >= len(block_table):
-                raise IndexError(
-                    f"Logical index {idx} maps to block index {block_idx}, but only {len(block_table)} blocks allocated for request {request_id}"
-                )
+        # Vectorized calculations
+        block_indices = logical_indices_tensor // block_size
+        block_offsets = logical_indices_tensor % block_size
 
-            physical_block_num = block_table[block_idx]
-            physical_idx = physical_block_num * self.block_size + block_offset
-            physical_indices.append(physical_idx)
+        if torch.any(block_indices >= len(block_table)):
+            raise IndexError(f"Logical indices map to block indices out of bounds for request {request_id}")
 
+        block_table_tensor = torch.tensor(block_table, dtype=torch.long, device=self.device)
+        physical_block_nums = block_table_tensor[block_indices]  # Use PyTorch indexing
+        physical_indices = physical_block_nums * block_size + block_offsets
         return physical_indices
 
     def _reshape_cache_for_update(self, layer_idx: int):
@@ -317,73 +332,42 @@ class PagedAttentionCache(Cache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_index,
+        read_index,
+        write_index,
         **kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Updates the key and value states in the cache at the specified indices."""
-        fill_index = kwargs.get("fill_index")
-
-        if fill_index is None or fill_index.numel() == 0:
+        if write_index is None or write_index.numel() == 0:
             # Nothing to write, return the current cache state
             return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
         # Validate input shape
-        if key_states.shape[2] != fill_index.numel() or value_states.shape[2] != fill_index.numel():
+        if key_states.shape[2] != write_index.numel() or value_states.shape[2] != write_index.numel():
             raise ValueError(
-                f"Mismatch between number of tokens to write ({key_states.shape[0]}) and number of fill indices ({fill_index.numel()})"
+                f"Mismatch between number of tokens to write ({key_states.shape[0]}) and number of fill indices ({write_index.numel()})"
             )
 
         # Reshape cache for easier indexing
         k_cache_flat, v_cache_flat = self._reshape_cache_for_update(layer_idx)
 
         # Ensure indices are on the same device as the cache
-        indices_device = fill_index.to(k_cache_flat.device)
+        write_index = write_index.to(k_cache_flat.device)
 
         try:
             # Update cache with new key and value states
-            k_cache_flat[:, indices_device, :] = key_states.to(k_cache_flat.device, k_cache_flat.dtype)[0]
-            v_cache_flat[:, indices_device, :] = value_states.to(v_cache_flat.device, v_cache_flat.dtype)[0]
+            k_cache_flat[:, write_index, :] = key_states.to(k_cache_flat.device, k_cache_flat.dtype)[0]
+            v_cache_flat[:, write_index, :] = value_states.to(v_cache_flat.device, v_cache_flat.dtype)[0]
         except IndexError as e:
             logger.error(
-                f"IndexError during cache update. Fill indices shape: {indices_device.shape}, "
-                f"Max index: {indices_device.max() if indices_device.numel() > 0 else 'N/A'}, "
+                f"IndexError during cache update. Fill indices shape: {write_index.shape}, "
+                f"Max index: {write_index.max() if write_index.numel() > 0 else 'N/A'}, "
                 f"Cache shape: {k_cache_flat.shape}"
             )
             raise e
 
         # Return the updated cache slices needed for attention
         k_cache_flat, v_cache_flat = self._reshape_cache_for_update(layer_idx)
-        return k_cache_flat[:, cache_index, :][None, ...], v_cache_flat[:, cache_index, :][None, ...]
-
-    def write_to_cache(
-        self, request_id: str, key_states: torch.Tensor, value_states: torch.Tensor, logical_indices: List[int]
-    ):
-        """Writes key/value states to the cache at specified logical indices for a request."""
-        if not logical_indices:
-            return  # Nothing to write
-
-        physical_indices = self._get_physical_indices(request_id, logical_indices)
-        physical_indices_tensor = torch.tensor(physical_indices, device=self.device, dtype=torch.long)
-
-        # Validate input shapes
-        if key_states.shape[0] != len(logical_indices) or value_states.shape[0] != len(logical_indices):
-            raise ValueError(
-                f"Mismatch between number of tokens to write ({key_states.shape[0]}) and number of indices ({len(logical_indices)})"
-            )
-
-        # Update each layer's cache
-        for layer_idx in range(self.num_hidden_layers):
-            k_cache_flat, v_cache_flat = self._reshape_cache_for_update(layer_idx)
-
-            try:
-                # Write states to cache
-                k_cache_flat[physical_indices_tensor] = key_states.to(k_cache_flat.device, k_cache_flat.dtype)
-                v_cache_flat[physical_indices_tensor] = value_states.to(v_cache_flat.device, v_cache_flat.dtype)
-            except IndexError as e:
-                logger.error(
-                    f"IndexError during cache write for request {request_id}. Physical indices: {physical_indices_tensor.tolist()}, Max index: {k_cache_flat.shape[0] - 1}"
-                )
-                raise e
+        return k_cache_flat[:, read_index, :][None, ...], v_cache_flat[:, read_index, :][None, ...]
 
 
 def compute_optimal_blocks(
@@ -475,6 +459,51 @@ def compute_optimal_blocks(
     return int(num_blocks), int(block_size)
 
 
+@dataclass
+class PagedAttentionArgs:
+    input_ids: torch.Tensor
+    attention_mask: torch.Tensor
+    position_ids: torch.Tensor
+    cumulative_seqlens_q: torch.Tensor
+    cumulative_seqlens_k: torch.Tensor
+    max_seqlen_q: int
+    max_seqlen_k: int
+    write_index: torch.Tensor
+    read_index: torch.Tensor
+    logits_indices: torch.Tensor
+    block_tables: Dict[str, List[int]]
+    cache: PagedAttentionCache
+    use_cache: bool = False
+
+
+def create_document_mask(cumulative_seqlens_q, cumulative_seqlens_k):
+    # Number of documents
+    valid_docs_q = cumulative_seqlens_q[1:] > cumulative_seqlens_q[:-1]
+    valid_docs_k = cumulative_seqlens_k[1:] > cumulative_seqlens_k[:-1]
+    num_valid_docs = min(valid_docs_q.sum(), valid_docs_k.sum())
+
+    # Trim to valid docs
+    cumulative_seqlens_q = cumulative_seqlens_q[: num_valid_docs + 1]
+    cumulative_seqlens_k = cumulative_seqlens_k[: num_valid_docs + 1]
+
+    total_q = cumulative_seqlens_q[-1]
+    total_k = cumulative_seqlens_k[-1]
+
+    q_indices = torch.arange(total_q, device=cumulative_seqlens_q.device)
+    k_indices = torch.arange(total_k, device=cumulative_seqlens_k.device)
+
+    q_doc_ids = torch.bucketize(q_indices, cumulative_seqlens_q[1:], right=True)
+    k_doc_ids = torch.bucketize(k_indices, cumulative_seqlens_k[1:], right=False)
+    doc_mask = q_doc_ids[:, None] == k_doc_ids[None, :]
+    # apply causal mask where no decoding (same nb of q than k)
+
+    is_causal = ~(cumulative_seqlens_q[1:] - cumulative_seqlens_q[:-1] == 1) * cumulative_seqlens_q[1:]
+    apply_causal = torch.bucketize(q_indices, is_causal, right=True)[:, None] == k_doc_ids
+    causal_mask = torch.triu(torch.ones(total_q, total_k, device=q_doc_ids.device), diagonal=1).bool()
+    doc_mask.masked_fill_((apply_causal & causal_mask), False)
+    return doc_mask
+
+
 # Continuous Batch Processor (Internal Logic)
 class ContinuousBatchProcessor:
     def __init__(
@@ -518,6 +547,117 @@ class ContinuousBatchProcessor:
 
         # Get batch size parameters from generation config
         self._configure_batch_parameters()
+        self.setup_static_tensors()
+
+    def setup_static_tensors(self):
+        T = self.max_batch_tokens
+        max_token_budget = self.cache.num_blocks * self.cache.block_size
+        tensor_metadata = {"dtype": torch.long, "device": self.model_device}
+        self.tensor_metadata = tensor_metadata
+        self.input_ids = torch.zeros((1, T), **tensor_metadata)
+        self.output_ids = torch.zeros((1, T), **tensor_metadata)
+        self.attention_mask = torch.zeros(
+            (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
+        )
+        self.position_ids = torch.zeros((1, T), **tensor_metadata)
+        self.cumulative_seqlens_q = torch.zeros((T + 1,), **tensor_metadata)
+        self.cumulative_seqlens_k = torch.zeros((T + 1,), **tensor_metadata)
+        self.write_index = torch.zeros((T,), **tensor_metadata)
+        self.read_index = torch.zeros((max_token_budget,), **tensor_metadata)
+        self.logits_indices = torch.zeros((T,), **tensor_metadata)
+        self.max_seqlen_q = 0
+        self.max_seqlen_k = 0
+
+    def reset_static_tensors(self):
+        """Reset static tensors for the next batch."""
+        self.input_ids.zero_()
+        self.attention_mask.fill_(torch.finfo(self.model_dtype).min)
+        self.position_ids.zero_()
+        self.cumulative_seqlens_q.zero_()
+        self.cumulative_seqlens_k.zero_()
+        self.write_index.fill_(-1)
+        self.read_index.fill_(-1)
+        # self.logits_indices.zero_()
+        self.max_seqlen_q = 0
+        self.max_seqlen_k = 0
+
+    def get_model_kwargs(self) -> PagedAttentionArgs:
+        """Get model keyword arguments for the current batch."""
+        return PagedAttentionArgs(
+            input_ids=self.input_ids,
+            attention_mask=self.attention_mask,
+            position_ids=self.position_ids,
+            cumulative_seqlens_q=self.cumulative_seqlens_q,
+            cumulative_seqlens_k=self.cumulative_seqlens_k,
+            max_seqlen_q=self.max_seqlen_q,
+            max_seqlen_k=self.max_seqlen_k,
+            write_index=self.write_index,
+            read_index=self.read_index,
+            logits_indices=self.logits_indices,
+            block_tables=self.cache._block_tables,
+            cache=self.cache,
+            use_cache=True,
+        )
+
+    def _setup_metrics(self):
+        """Initialize OpenTelemetry metrics and tracing if the library is available."""
+
+        if not _has_opentelemetry:
+            logger.info("OpenTelemetry is not installed. Metrics and tracing will not be recorded.")
+            return
+
+        # Create a resource to identify this component in the metrics system
+        resource = Resource.create({"service.name": "transformers.generation.continuous_batching_processor"})
+
+        metrics_exporter = OTLPMetricExporter()
+        meter_provider = MeterProvider(resource=resource, metric_readers=[metrics_exporter])
+        metrics.set_meter_provider(meter_provider)
+
+        # Set up the tracer provider with an OTLP exporter for tracing
+        trace_exporter = OTLPSpanExporter()
+        tracer_provider = TracerProvider(resource=resource)
+        tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
+        trace.set_tracer_provider(tracer_provider)
+
+        # Create a tracer for our functions
+        self.tracer = get_tracer("transformers.generation")
+
+        # Create a meter for our metrics
+        self.meter = metrics.get_meter("transformers.generation")
+
+        # Create histogram for time to first token
+        self.ttft_histogram = self.meter.create_histogram(
+            name="ttft_milliseconds",
+            description="Time to first token in milliseconds",
+            unit="ms",
+        )
+
+        # Create histogram for decode/prefill ratio
+        self.decode_prefill_ratio_gauge = self.meter.create_gauge(
+            name="decode_prefill_ratio",
+            description="Ratio of decode tokens to prefill tokens in a batch",
+            unit="ratio",
+        )
+
+        # Create counters for decode and prefill tokens
+        self.prefill_tokens_counter = self.meter.create_counter(
+            name="prefill_tokens_processed",
+            description="Number of prefill tokens processed",
+            unit="tokens",
+        )
+
+        self.decode_tokens_counter = self.meter.create_counter(
+            name="decode_tokens_processed",
+            description="Number of decode tokens processed",
+            unit="tokens",
+        )
+
+        # Create histogram for batch fill percentage
+        self.batch_fill_percentage_histogram = self.meter.create_histogram(
+            name="batch_fill_percentage",
+            description="Percentage of max_batch_tokens utilized in each batch",
+            unit="percent",
+        )
 
     def _setup_metrics(self):
         """Initialize OpenTelemetry metrics and tracing if the library is available."""
@@ -619,17 +759,17 @@ class ContinuousBatchProcessor:
     @traced
     def _handle_request_error(self, error, request_id):
         """Handle general request processing error."""
-        error_response = {
-            "request_id": request_id,
-            "status": "failed",
-            "error": f"Error processing request: {str(error)}",
-        }
+        error_response = RequestState(
+            request_id=request_id,
+            status="failed",
+            error=str(error),
+        )
 
         # Include any generated tokens if this is an active request
         if isinstance(request_id, str) and request_id in self.active_requests:
-            error_response["output_ids"] = self.active_requests[request_id].output_ids
+            error_response.static_outputs = self.active_requests[request_id].static_outputs
         else:
-            error_response["output_ids"] = []
+            error_response.static_outputs = []
 
         self.output_queue.put(error_response)
 
@@ -729,8 +869,8 @@ class ContinuousBatchProcessor:
                 state.status = "prefilling_split"
                 request_ids_to_remove_from_waiting.add(state.request_id)
             elif state.status == "split_pending_remainder":
-                state.prompt_ids = source_tokens[:tokens_to_process]
                 state.remaining_prompt_ids = source_tokens[tokens_to_process:]
+                state.prompt_ids = source_tokens[:tokens_to_process]
                 state.status = "prefilling_split"
 
     @traced
@@ -747,118 +887,89 @@ class ContinuousBatchProcessor:
         if not self.requests_to_process_next:
             return None
 
-        # Initialize batch tensors and metadata
-        batch_input_ids = []
-        batch_position_ids = []
-        batch_cache_indices = []  # For reading
-        batch_fill_indices = []  # For writing
-        cumulative_seqlens_q = [0]
-        cumulative_seqlens_k = [0]
-        max_seqlen_q = 0
-        max_seqlen_k = 0
-        logits_indices = []  # Indices for next token logits
-
         # Get the request objects for this batch
         requests_in_batch = [self.active_requests[req_id] for req_id in self.requests_to_process_next]
+        self.reset_static_tensors()
 
+        # pointers into our static flat tensors
+        token_position = 0
+        read_position = 0
+        write_position = 0
+        cumq_ptr = 1  # because at 0 we always have 0?
+        cumk_ptr = 1
+        generated_tokens = (self.output_ids != 0).sum()
+
+        position_ids = []
+        input_ids = []
+        read_index = []
+        write_index = []
+        cumulative_seqlens_q = [0]
+        cumulative_seqlens_k = [0]
+        logits_indices = []
+
+        self.input_ids[:, :generated_tokens].copy_(self.output_ids[self.output_ids != 0])
         self._record_batch_metrics(requests_in_batch)
 
         for state in requests_in_batch:
             if state.status == "decoding":
-                last_token = state.output_ids[-1]
-                tokens_to_add = [last_token]
-                start_pos = state.current_len()
-                positions_to_add = [start_pos]
-
-                # Allocate blocks if needed
+                positions_to_add = [state.current_len()]
+                state.position_offset += 1
                 if not self._allocate_blocks_if_needed(state, state.current_len() + 1):
                     continue
 
-                # Get physical indices for reading and writing
-                read_logical_indices = list(range(state.current_len()))
-                write_logical_index = state.current_len()
-
                 # Map logical indices to physical block indices for this request
-                physical_read_indices = self.cache._get_physical_indices(state.request_id, read_logical_indices)
-                physical_write_index = self.cache._get_physical_indices(state.request_id, [write_logical_index])[0]
+                write_indices = self.cache._get_physical_indices(state.request_id, [state.current_len()])
+                read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len() + 1)))
 
-                batch_cache_indices.extend(physical_read_indices)
-                batch_cache_indices.append(physical_write_index)
-                batch_fill_indices.append(physical_write_index)
-
-                # Update sequence lengths
                 seq_len_q = 1  # Query length is 1 for generation
                 seq_len_k = state.current_len() + 1  # Key length includes context
-
             elif state.status.startswith("prefilling"):
-                tokens_to_add = state.prompt_ids
+                next_input_ids = state.prompt_ids
+                input_ids.extend(next_input_ids)
                 start_pos = state.current_len()
-                positions_to_add = list(range(start_pos, start_pos + len(tokens_to_add)))
+                positions_to_add = list(range(start_pos, start_pos + len(next_input_ids)))
+                state.position_offset += len(next_input_ids)
 
-                # Allocate blocks if needed
-                if not self._allocate_blocks_if_needed(state, len(tokens_to_add)):
+                if not self._allocate_blocks_if_needed(state, len(next_input_ids)):
                     continue
 
-                # Get physical indices
-                write_logical_indices = list(range(start_pos, start_pos + len(tokens_to_add)))
-                physical_write_indices = self.cache._get_physical_indices(state.request_id, write_logical_indices)
-
-                batch_fill_indices.extend(physical_write_indices)
-                batch_cache_indices.extend(physical_write_indices)
-
-                # Update sequence lengths
-                seq_len_q = len(tokens_to_add)
-                seq_len_k = len(tokens_to_add)
-
+                read_indices = write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
+                seq_len_q = seq_len_k = len(next_input_ids)
             else:
                 logger.warning(f"Request {state.request_id} in unexpected state '{state.status}'. Skipping.")
                 continue
 
-            # Add to batch
-            batch_input_ids.extend(tokens_to_add)
-            batch_position_ids.extend(positions_to_add)
-
-            # Update cumulative lengths
+            position_ids.extend(positions_to_add)
+            read_index.extend(read_indices)
+            write_index.extend(write_indices)
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + seq_len_q)
             cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + seq_len_k)
-
-            # Update max lengths
-            max_seqlen_q = max(max_seqlen_q, seq_len_q)
-            max_seqlen_k = max(max_seqlen_k, seq_len_k)
-
-            # Add index for logits
             logits_indices.append(cumulative_seqlens_q[-1] - 1)
 
-            # Update position offset for next iteration
-            state.position_offset += len(batch_input_ids[-len(tokens_to_add) :])
+            self.max_seqlen_q = max(self.max_seqlen_q, seq_len_q)
+            self.max_seqlen_k = max(self.max_seqlen_k, seq_len_k)
 
-        if not batch_input_ids:
-            return None
+            token_position += len(positions_to_add)
+            read_position += len(read_indices)
+            write_position += len(write_indices)
+            cumq_ptr += 1
+            cumk_ptr += 1
 
-        input_ids_tensor = torch.tensor(batch_input_ids, dtype=torch.long, device=self.model_device).unsqueeze(0)
-        position_ids_tensor = torch.tensor(batch_position_ids, dtype=torch.long, device=self.model_device).unsqueeze(0)
-        cumulative_seqlens_q_tensor = torch.tensor(cumulative_seqlens_q, dtype=torch.int32, device=self.model_device)
-        cumulative_seqlens_k_tensor = torch.tensor(cumulative_seqlens_k, dtype=torch.int32, device=self.model_device)
+        # now if sdpa or eager, create the attention mask!
 
-        # Prepare model kwargs
-        model_kwargs = {
-            "cumulative_seqlens_q": cumulative_seqlens_q_tensor,
-            "cumulative_seqlens_k": cumulative_seqlens_k_tensor,
-            "max_seqlen_q": max_seqlen_q,
-            "max_seqlen_k": max_seqlen_k,
-            "fill_index": torch.tensor(batch_fill_indices, dtype=torch.long, device=self.model_device),
-            "cache_index": torch.tensor(batch_cache_indices, dtype=torch.long, device=self.model_device),
-            "logits_indices": logits_indices,
-            "block_tables": {req_id: self.cache.get_block_table(req_id) for req_id in self.requests_to_process_next},
-            "cache": self.cache,
-            "use_cache": False,  # Disable DynamicCache to save memory
-        }
+        self.input_ids[:, generated_tokens : generated_tokens + token_position].copy_(
+            torch.tensor(input_ids, **self.tensor_metadata)
+        )
+        self.position_ids[:, :token_position].copy_(torch.tensor(position_ids, **self.tensor_metadata))
+        self.write_index[:write_position].copy_(torch.tensor(write_index, **self.tensor_metadata))
+        self.read_index[:read_position].copy_(torch.tensor(read_index, **self.tensor_metadata))
+        self.cumulative_seqlens_q[:cumq_ptr].copy_(torch.tensor(cumulative_seqlens_q, **self.tensor_metadata))
+        self.cumulative_seqlens_k[:cumk_ptr].copy_(torch.tensor(cumulative_seqlens_k, **self.tensor_metadata))
+        self.logits_indices[: cumk_ptr - 1].copy_(torch.tensor(logits_indices, **self.tensor_metadata))
 
-        # Calculate max total sequence length in the batch
-        max_total_len_k = max(state.current_len() for state in requests_in_batch)
-        model_kwargs["max_seqlen_k"] = max_total_len_k
-
-        return input_ids_tensor, position_ids_tensor, model_kwargs
+        attention_mask = create_document_mask(self.cumulative_seqlens_q, self.cumulative_seqlens_k)
+        causal_mask = torch.where(attention_mask, 0, torch.finfo(torch.bfloat16).min)
+        self.attention_mask[..., :token_position, : attention_mask.shape[-1]].copy_(causal_mask)
 
     @traced
     def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
@@ -875,66 +986,40 @@ class ContinuousBatchProcessor:
         return True
 
     @traced
-    def update_batch(self, generated_ids: torch.Tensor):
+    def update_batch(self):
         """Update request states based on generated tokens."""
-        token_idx = 0
-        finished_request_ids = []
+        # TODO I think many slowdowns can come from here
+        # this should be probably vectorized
+        # we need to batch adding the tokens
+        # and potentially have a tensor with values containing the status
 
+        # TODO I ANM HERE NEED TO FIGURE LOGIC OPTIAML HERE
+        token_idx = 0
+        has_eos = self.output_ids == self.eos_token_id
+        is_max_len = self.cumulative_seqlens_q[1:] + 1 >= self.max_context_len
+        to_remove = has_eos | is_max_len
+        tokens_to_keep = torch.where(~to_remove & self.output_ids >= 0)[1]  # can get request ids with this
+        out_tokens = self.output_ids[:, tokens_to_keep][0].cpu().detach().tolist()  # should be the only synch we do
+        finished_request_ids = []
         for req_id in self.requests_to_process_next:
             if req_id not in self.active_requests:
                 logger.warning(f"Request {req_id} not found in active requests during update.")
                 continue
 
             state = self.active_requests[req_id]
-
-            if state.status == "prefilling":
+            if state.status in ["prefilling", "decoding"] or not state.remaining_prompt_ids:
                 self._record_ttft_metric(state)
 
                 state.status = "decoding"
                 # state.prompt_ids = []  # Clear prompt as it's now in cache
-
-                token = generated_ids[token_idx].item()
+                token = out_tokens[token_idx]
                 token_idx += 1
-
                 if state.update_with_token(token):
                     finished_request_ids.append(req_id)
-
-                self._send_output(state, token)
-
+                self._maybe_send_output(state, token)
             elif state.status == "prefilling_split":
                 token_idx += 1  # Skip the token
-
-                if state.remaining_prompt_ids:
-                    state.status = "split_pending_remainder"
-                    # state.prompt_ids = []
-                else:
-                    state.status = "decoding"
-                    # state.prompt_ids = []
-
-                    self._record_ttft_metric(state)
-
-                    token = generated_ids[token_idx].item()
-                    token_idx += 1
-
-                    if state.update_with_token(token):
-                        finished_request_ids.append(req_id)
-
-                    self._send_output(state, token)
-
-            elif state.status == "decoding":
-                if token_idx >= len(generated_ids):
-                    error_msg = f"Token index {token_idx} out of bounds for generated_ids (len {len(generated_ids)}) for request {req_id}."
-                    logger.error(error_msg)
-                    raise IndexError(error_msg)
-                else:
-                    token = generated_ids[token_idx].item()
-                    token_idx += 1
-
-                    if state.update_with_token(token):
-                        finished_request_ids.append(req_id)
-
-                    self._send_output(state, token)
-
+                state.status = "split_pending_remainder"
             elif state.status == "split_pending_remainder":
                 logger.warning(f"Request {req_id} in 'split_pending_remainder' state during update.")
 
@@ -1001,21 +1086,13 @@ class ContinuousBatchProcessor:
             logger.warning(f"Failed to record batch metrics: {e}")
 
     @traced
-    def _send_output(self, state: RequestState, token: int):
+    def _maybe_send_output(self, state: RequestState, token: int):
         """Send output to the queue based on streaming mode and request state."""
-        output = {
-            "request_id": state.request_id,
-            "status": state.status,
-            "prompt_token_ids": state.prompt_ids,
-        }
-
         if self.streaming:
-            output["next_token"] = token
-            self.output_queue.put(output)
-
+            state.next_token = token
+            self.output_queue.put(state)
         elif state.status == "finished":
-            output["output_ids"] = state.output_ids
-            self.output_queue.put(output)
+            self.output_queue.put(state)
 
     def has_pending_requests(self) -> bool:
         """Check if there are any active or waiting requests."""
@@ -1072,24 +1149,13 @@ class ContinuousBatchingManager:
         self.output_queue = queue.Queue()
         self.stop_event = threading.Event()
         self.streaming = streaming
-
+        self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
         self._generation_thread = None
         self._request_counter = 0
         self._request_lock = threading.Lock()
-        self._initial_prompt_shapes = []  # Cache sizing hints
-
-        # Set up OpenTelemetry tracing if available
+        self.logit_processor = self.model._get_logits_processor(self.model.generation_config)
+        self.do_sample = getattr(generation_config, "do_sample", False)
         self._setup_tracer()
-
-    def add_initial_prompts(self, prompts: List[List[int]]):
-        """Provide initial prompts to help determine optimal cache size before starting.
-
-        Args:
-            prompts: List of token sequences to use for cache size estimation
-        """
-        if self._generation_thread is not None:
-            raise RuntimeError("Cannot add initial prompts after the manager has started.")
-        self._initial_prompt_shapes = prompts
 
     def _setup_tracer(self):
         """Initialize OpenTelemetry tracing if available."""
@@ -1169,13 +1235,6 @@ class ContinuousBatchingManager:
         Returns:
             str: The request ID
         """
-        if self.stop_event.is_set():
-            raise RuntimeError("Manager is stopping or has stopped.")
-
-        if self._generation_thread is None:
-            raise RuntimeError("Manager has not been started yet. Call start() first.")
-
-        # Generate request ID if not provided
         if request_id is None:
             with self._request_lock:
                 request_id = f"req_{self._request_counter}"
@@ -1195,6 +1254,12 @@ class ContinuousBatchingManager:
         logger.debug(f"Added request {request_id} to queue.")
         return request_id
 
+    def add_requests(self, inputs: List[List[int]], **kwargs):
+        for i, input_ids in enumerate(inputs):
+            # Assign a predictable request ID for ordering results later
+            req_id = f"batch_req_{i}"
+            self.add_request(input_ids, request_id=req_id, **kwargs)
+
     @traced
     def get_result(self, timeout=None) -> Optional[Dict]:
         """Retrieve one result from the output queue.
@@ -1207,10 +1272,9 @@ class ContinuousBatchingManager:
         """
         if self._generation_thread is None and self.output_queue.empty():
             return None
-
         try:
-            result = self.output_queue.get(block=True, timeout=timeout)
-            logger.debug(f"Retrieved result for request {result.get('request_id')}")
+            result = self.output_queue.get(block=True, timeout=timeout)  # TODO Pop here rather?
+            logger.debug(f"Retrieved result for request {result.request_id}")
             return result
         except queue.Empty:
             return None
@@ -1224,6 +1288,43 @@ class ContinuousBatchingManager:
             if result is not None:
                 yield result
 
+    def warmup(self, batch_processor):
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream):
+            # Warmup the model with a dummy forward pass
+            self._generation_step(batch_processor)
+        torch.cuda.current_stream().wait_stream(stream)
+
+        self.graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(self.graph):
+            self._generation_step(batch_processor)
+
+    def _generation_step(self, batch_processor: ContinuousBatchProcessor):
+        """Perform a single generation step. This is cuda graphed"""
+        batch_data = batch_processor.get_model_kwargs()
+        with torch.no_grad():
+            model_outputs = self.model(**batch_data.__dict__)
+            # Copy is needed to avoid keeping a hanging ref
+            logits = model_outputs.logits[:, batch_data.logits_indices].to(
+                copy=True, dtype=torch.float32, device=self.model.device
+            )
+            if self.log_prob_generation:
+                batch_processor.output_probs.copy_(logits)  # TODO
+
+            # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
+            # `temperature`, ...), and add new logprobs to existing running logprobs scores.
+
+            # TODO re activate once the unpute prepartion is fixed
+            probs = self.logit_processor(batch_data.input_ids, logits)
+            if self.do_sample:  # sample
+                probs = nn.functional.softmax(probs, dim=-1)
+                next_tokens = torch.multinomial(logits[0], num_samples=1).squeeze(1)
+            else:
+                next_tokens = torch.argmax(probs, dim=-1)
+            batch_processor.output_ids.fill_(-1)
+            batch_processor.output_ids.copy_(next_tokens)
+
     @traced(span_name="generation_loop")
     def _run_generation_loop(self):
         """Main processing loop running in the background thread."""
@@ -1234,9 +1335,7 @@ class ContinuousBatchingManager:
                 self.generation_config,
                 self.model.device,
                 self.model.dtype,
-                initial_prompt_shapes=self._initial_prompt_shapes,
             )
-            self._initial_prompt_shapes = None  # Clear after use
 
             batch_processor = ContinuousBatchProcessor(
                 paged_attention_cache,
@@ -1249,62 +1348,23 @@ class ContinuousBatchingManager:
                 self.streaming,
             )
             first = True
-            # Capture the graph
-            # graph = torch.cuda.CUDAGraph()
-            # static_batch_data = {}
-            # static_input_ids = torch.empty(1, paged_attention_cache.cache_shape[1], self.model.config.vocab_size, device=self.model.device, dtype=torch.long)
-            # static_position_ids = torch.empty(1, paged_attention_cache.cache_shape[1], device=self.model.device, dtype=torch.long)
-
             while not self.stop_event.is_set() or batch_processor.has_pending_requests():
-                batch_data = batch_processor.prepare_next_batch()
-                if batch_data is None:
-                    if self.stop_event.is_set() and not batch_processor.has_pending_requests():
-                        break  # No more work to do
-                    time.sleep(0.005)  # Prevent CPU spinning
-                    continue
+                batch_processor.prepare_next_batch()
+                if torch.cuda.is_available():
+                    if first:
+                        self.warmup(batch_processor)
+                        first = False
+                    try:
+                        self.graph.replay()
+                    except Exception as e:
+                        logger.error(f"Model forward pass failed: {e}", exc_info=True)
+                        batch_processor.handle_batch_error(e)
+                        continue
+                else:
+                    self._generation_step(batch_processor)
 
-                input_ids, position_ids, model_kwargs = batch_data
-
-                # if first:
-                #     # get first request
-                #     static_batch_data.update(model_kwargs)
-                #     with torch.cuda.graph(graph):
-                #         static_outputs = self.model.forward(
-                #             input_ids=static_input_ids,
-                #             position_ids=static_position_ids,
-                #             **batch_data,
-                #         )
-                #     first = False
-                try:
-                    # # === Copy input data into static tensors ===
-                    # static_input_ids.copy_(input_ids)
-                    # static_position_ids.copy_(position_ids)
-                    # for key in static_batch_data:
-                    #     static_batch_data[key].copy_(model_kwargs[key])
-
-                    # # === Replay captured CUDA graph ===
-                    # graph.replay()
-
-                    # outputs = static_outputs  # Already computed by graph.replay()
-
-                    with torch.no_grad():
-                        outputs = self.model.forward(
-                            input_ids=input_ids,
-                            position_ids=position_ids,
-                            **model_kwargs,
-                        )
-                except Exception as e:
-                    logger.error(f"Model forward pass failed: {e}", exc_info=True)
-                    batch_processor.handle_batch_error(e)
-                    continue
-
-                # Get next token logits and sample next tokens
-                next_token_logits = outputs.logits[:, model_kwargs["logits_indices"], :]
-
-                # Simple argmax sampling (can be extended with other sampling methods)
-                generated_ids = torch.argmax(next_token_logits, dim=-1).squeeze(0)
-
-                batch_processor.update_batch(generated_ids)
+                batch_processor.update_batch()
+                # batch_processor._maybe_send_output()
 
         except Exception as e:
             logger.error(f"Error in generation loop: {e}", exc_info=True)
@@ -1387,45 +1447,27 @@ class ContinuousMixin:
 
         # Initialize manager with the batch inputs
         manager = self.init_continuous_batching(generation_config=generation_config)
-        manager.add_initial_prompts(inputs)
-        manager.start()
-
         results = {}
-        request_ids = {}
         num_requests = len(inputs)
-
         try:
             with tqdm(
                 total=num_requests, disable=(not progress_bar), desc=f"Generating {num_requests} requests"
             ) as pbar:
-                # Add all requests
-                for i, input_ids in enumerate(inputs):
-                    # Assign a predictable request ID for ordering results later
-                    req_id = f"batch_req_{i}"
-                    manager.add_request(input_ids=input_ids, request_id=req_id, **kwargs)
-                    request_ids[req_id] = i
-
-                # Collect results
+                manager.add_requests(inputs, **kwargs)
+                manager.start()  # we don't want to start before adding all requests
                 finished_count = 0
                 while finished_count < num_requests:
                     result = manager.get_result(timeout=1.0)
                     if result:
-                        req_id = result["request_id"]
-                        if req_id in request_ids:
-                            original_idx = request_ids[req_id]
-                            if result["status"] == "finished":
-                                results[original_idx] = result
-                            else:  # Failed
-                                logger.warning(f"Request {req_id} failed: {result.get('error', 'Unknown error')}")
-                                results[original_idx] = []
-
-                            finished_count += 1
-                            pbar.update(1)
-                        else:
-                            # Log unexpected request IDs
-                            logger.warning(f"Received result for unknown request ID: {req_id}. Ignoring.")
+                        req_id = result.request_id
+                        if result.status == "finished":
+                            results[req_id] = result
+                        else:  # Failed
+                            logger.warning(f"Request {req_id} failed: {result.get('error', 'Unknown error')}")
+                            results[req_id] = []
+                        finished_count += 1
+                        pbar.update(1)
                     else:
-                        # Check if the manager is still running
                         if not manager.is_running():
                             logger.error("Generation thread terminated unexpectedly.")
                             break
@@ -1437,6 +1479,4 @@ class ContinuousMixin:
                     results[i] = []
         finally:
             manager.stop(block=True, timeout=5.0)
-
-        # Return results in the original order
-        return [results.get(i, []) for i in range(num_requests)]
+        return results

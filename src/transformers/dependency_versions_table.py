@@ -103,4 +103,7 @@ deps = {
     "pytest-rich": "pytest-rich",
     "libcst": "libcst",
     "rich": "rich",
+    "opentelemetry-api": "opentelemetry-api",
+    "opentelemetry-sdk": "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp": "opentelemetry-exporter-otlp",
 }
