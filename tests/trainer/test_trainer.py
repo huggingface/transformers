@@ -1368,6 +1368,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             per_device_train_batch_size=2,
             torch_compile=True,
             max_steps=1,  # compile happens on the first step
+            report_to="none",
         )
         trainer = Trainer(model=tiny_llama, args=args, train_dataset=train_dataset)  # noqa
         trainer.train()
@@ -4560,7 +4561,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             config = RegressionModelConfig(a=1.5, b=2.5)
             trainer = Trainer(
                 model=RegressionPreTrainedModel(config),
-                args=TrainingArguments(output_dir=tmp_dir),
+                args=TrainingArguments(output_dir=tmp_dir, report_to="none"),
                 processing_class=image_processor,
             )
             trainer.save_model()
@@ -4576,7 +4577,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             config = RegressionModelConfig(a=1.5, b=2.5)
             trainer = Trainer(
                 model=RegressionPreTrainedModel(config),
-                args=TrainingArguments(output_dir=tmp_dir),
+                args=TrainingArguments(output_dir=tmp_dir, report_to="none"),
                 processing_class=feature_extractor,
             )
             trainer.save_model()
@@ -4596,7 +4597,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             config = RegressionModelConfig(a=1.5, b=2.5)
             trainer = Trainer(
                 model=RegressionPreTrainedModel(config),
-                args=TrainingArguments(output_dir=tmp_dir),
+                args=TrainingArguments(output_dir=tmp_dir, report_to="none"),
                 processing_class=processor,
             )
             trainer.save_model()
