@@ -58,6 +58,7 @@ class RequestState:
     max_new_tokens: int = 20
     eos_token_id: int = -1
     created_time: float = field(default_factory=time.time)
+    error : Optional[str] = None
 
     def current_len(self) -> int:
         """Get the current length of the sequence (prompt + generated tokens)."""
