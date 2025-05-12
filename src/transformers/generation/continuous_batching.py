@@ -405,7 +405,7 @@ def create_document_mask(cumulative_seqlens_q, cumulative_seqlens_k):
 
     is_causal = ~(cumulative_seqlens_q[1:] - cumulative_seqlens_q[:-1] == 1) * cumulative_seqlens_q[1:]
     apply_causal = torch.bucketize(q_indices, is_causal, right=True)[:,None] == k_doc_ids
-    causal_mask = torch.tril(torch.ones(total_q, total_k, device=q_doc_ids.device)).bool()
+    causal_mask = torch.triu(torch.ones(total_q, total_k, device=q_doc_ids.device), diagonal=1).bool()
     doc_mask.masked_fill_((apply_causal & causal_mask), False)
     return doc_mask
 
