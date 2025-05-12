@@ -40,9 +40,9 @@ generation_config = GenerationConfig(
     # temperature=0.7,
     # top_k=50,
     # Parameters relevant for Continuous Batching (can be tuned)
-    num_blocks=256,
-    block_size=1024,
-    max_batch_tokens=512,  # Maximum number of tokens to process in a single batch
+    num_blocks=1024,
+    block_size=256,
+    max_batch_tokens=1024,  # Maximum number of tokens to process in a single batch
 )
 
 # Prepare data (using a smaller subset for demonstration)
@@ -115,9 +115,9 @@ print("\nResults from simple generate_batch:")
 for request in batch_outputs:
     input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=False)
     output_text = tokenizer.decode(batch_outputs[request].static_outputs, skip_special_tokens=False)
-    print("-" * 20)
-    print(f"Result for Request {request}:")
     if len(output_text) > 0:
+        print("-" * 20)
+        print(f"Result for Request {request}:")
         print(f"  Input:  {input_text}")
         print(f"  Output: {output_text}")
     else:
