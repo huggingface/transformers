@@ -1620,6 +1620,19 @@ class MolmoModel(MolmoPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: int = 0,
     ) -> Union[Tuple, MolmoCausalLMOutputWithPast]:
+        r"""
+        image_masks (`torch.FloatTensor` or `torch.BoolTensor`, optional):
+            A mask indicating valid image tokens. It is used during image feature adaptation to apply padding embeddings.
+            Shape: `(batch_size, num_images, num_patches)` or `(batch_size * num_images, num_patches)`.
+        image_token_indices (`torch.LongTensor`, optional):
+            Indices indicating the positions in the language input sequence where image patch embeddings should be inserted.
+            Shape: `(batch_size, num_images, num_image_tokens)`.
+            Tokens with index `-1` are ignored. Used only when `pixel_values` is provided.
+        vision_feature_layers (`List[int]`, optional):
+            The indices of the vision model's hidden layers to extract features from. These layers' outputs are concatenated
+            along the channel dimension to form image embeddings. If not provided, defaults to `config.vision_feature_layers`.
+        """
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1780,13 +1793,16 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> Union[Tuple, MolmoCausalLMOutputWithPast]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Example:
-
+        image_masks (`torch.FloatTensor` or `torch.BoolTensor`, optional):
+            A mask indicating valid image tokens. It is used during image feature adaptation to apply padding embeddings.
+            Shape: `(batch_size, num_images, num_patches)` or `(batch_size * num_images, num_patches)`.
+        image_token_indices (`torch.LongTensor`, optional):
+            Indices indicating the positions in the language input sequence where image patch embeddings should be inserted.
+            Shape: `(batch_size, num_images, num_image_tokens)`.
+            Tokens with index `-1` are ignored. Used only when `pixel_values` is provided.
+        vision_feature_layers (`List[int]`, optional):
+            The indices of the vision model's hidden layers to extract features from. These layers' outputs are concatenated
+            along the channel dimension to form image embeddings. If not provided, defaults to `config.vision_feature_layers`.
         ```python
         >>> from PIL import Image
         >>> import requests

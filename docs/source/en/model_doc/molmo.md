@@ -110,6 +110,11 @@ print(processor.decode(output[0], skip_special_tokens=True))
 [[autodoc]] MolmoAdapterModel
     - forward
 
+## MolmoModel
+
+[[autodoc]] MolmoModel
+    - forward
+
 ## MolmoTextModel
 
 [[autodoc]] MolmoTextModel

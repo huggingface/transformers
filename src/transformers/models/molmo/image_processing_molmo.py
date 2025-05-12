@@ -39,7 +39,6 @@ from ...image_utils import (
     is_valid_image,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging
@@ -626,8 +625,9 @@ class MolmoImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
+        # Removing validation here - not a good design pattern as it is increasingly constraining for VLMs
+        # TODO @molbap a nicer validation using TypedDictionaries (:eyes:) would be better
+        # validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
         images = make_batched_images(images)
 
         if not valid_images(images):
