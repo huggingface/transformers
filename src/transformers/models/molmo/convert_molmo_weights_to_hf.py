@@ -173,7 +173,7 @@ def write_model(
         layer_norm_eps=original_config["layer_norm_eps"],
         rope_theta=original_config["rope_theta"],
         vocab_size=original_config["vocab_size"] if variant == "7B-D" else original_config["embedding_size"],
-        additional_embedding_size = 128,
+        additional_embedding_size=128,
         tie_word_embeddings=original_config["tie_word_embeddings"],
         use_qk_norm=True if variant == "7B-O" else False,
     )
@@ -310,7 +310,11 @@ def write_model(
     processor.save_pretrained(model_path)
     print("Processor saved successfully.")
 
-    generation_config = GenerationConfig(bos_token_id=tokenizer.bos_token_id, eos_token_id=tokenizer.eos_token_id, pad_token_id=tokenizer.pad_token_id,)
+    generation_config = GenerationConfig(
+        bos_token_id=tokenizer.bos_token_id,
+        eos_token_id=tokenizer.eos_token_id,
+        pad_token_id=tokenizer.pad_token_id,
+    )
     generation_config.save_pretrained(model_path)
     print("Generation config saved successfully.")
 

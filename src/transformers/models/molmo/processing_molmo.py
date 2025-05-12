@@ -236,7 +236,9 @@ class MolmoProcessor(ProcessorMixin):
             first_valid_index = (attention_mask == 1).argmax(axis=-1)
             sample_indices = np.arange(input_sequences.shape[0])
             first_tokens = input_sequences[sample_indices, first_valid_index]
-            bos_offsets = (first_tokens == bos_token_identifier).astype(np.int64) if bos_token_identifier is not None else 0
+            bos_offsets = (
+                (first_tokens == bos_token_identifier).astype(np.int64) if bos_token_identifier is not None else 0
+            )
         else:
             pad_positions = (attention_mask == 0).long()
             left_padding = pad_positions.cumprod(dim=-1).sum(dim=-1)

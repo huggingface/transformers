@@ -43,9 +43,9 @@ from ..clip.modeling_clip import (
 )
 from ..cohere.configuration_cohere import CohereConfig
 from ..cohere.modeling_cohere import (
+    CohereLayerNorm,
     CohereModel,
     CoherePreTrainedModel,
-    CohereLayerNorm,
 )
 from ..llama.modeling_llama import LlamaAttention, apply_rotary_pos_emb, eager_attention_forward
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration
@@ -752,6 +752,7 @@ class MolmoTextPrenormDecoderLayer(MolmoTextDecoderLayer):
 class MolmoLayerNorm(CohereLayerNorm):
     pass
 
+
 MOLMO_TEXT_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -846,6 +847,7 @@ class MolmoTextModel(CohereModel):
 class MolmoForCausalLM(Qwen2ForCausalLM):
     _tied_weights_keys = []  # Weights are not tied
     _tp_plan = {"lm_head": "colwise_rep"}
+    base_model_prefix = "language_model"
 
     def forward(
         self,
@@ -864,22 +866,7 @@ class MolmoForCausalLM(Qwen2ForCausalLM):
         **kwargs,
     ):
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-
-        Returns:
-
-        Example:
-
-        ```python
+            ```python
         >>> from transformers import AutoTokenizer, MolmoForCausalLM
 
         >>> model = MolmoForCausalLM.from_pretrained("...")
@@ -935,11 +922,6 @@ class MolmoMultiModalProjector(nn.Module):
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
 
-
-# Molmo image components inherited from CLIPVision
-# We have different attention classes for the txt and the image components, they need to be propagated back correctly
-
-
 class MolmoVisionEmbeddings(nn.Module):
     def __init__(self, config: MolmoVisionConfig):
         super().__init__()
@@ -970,7 +952,7 @@ class MolmoVisionEmbeddings(nn.Module):
         class_embeds = self.class_embedding.expand(batch_size, patches, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=2)
         embeddings = embeddings + self.position_embedding(self.position_ids).unsqueeze(1)
-        return embeddings.flatten(0, 1)  # NOTE: DON'T FLATTEN MORE TO MATCH ORIG IMPL
+        return embeddings.flatten(0, 1)
 
 
 class MolmoVisionAttention(CLIPAttention):
