@@ -110,7 +110,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
         ALL_MASK_CREATION_FUNCTIONS["sdpa_without_vmap"] = sdpa_mask_without_vmap
         ALL_ATTENTION_FUNCTIONS["sdpa_without_vmap"] = ALL_ATTENTION_FUNCTIONS["sdpa"]
-        model.config._attn_implementation = "sdpa_without_vmap"
+        self.model.config._attn_implementation = "sdpa_without_vmap"
 
         example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
         example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
