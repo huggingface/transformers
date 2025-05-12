@@ -202,7 +202,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[2]]
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
@@ -629,14 +629,14 @@ class LlamaModel(LlamaPreTrainedModel):
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        # if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
-        #     if AttentionMaskConverter._ignore_causal_mask_sdpa(
-        #         attention_mask,
-        #         inputs_embeds=input_tensor,
-        #         past_key_values_length=past_seen_tokens,
-        #         is_training=self.training,
-        #     ):
-        #         return None
+        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask,
+                inputs_embeds=input_tensor,
+                past_key_values_length=past_seen_tokens,
+                is_training=self.training,
+            ):
+                return None
 
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = input_tensor.shape[1]
