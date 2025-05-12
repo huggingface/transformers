@@ -72,38 +72,38 @@ CHAT_TEMPLATE = (
 
 # fmt: off
 # If a weight needs to be split in two or more keys, use `|` to indicate it. ex:
-# r"text_model.layers.(\d+).attention.wqkv.weight": r"language_model.model.layers.\1.self_attn.q|k|v|_proj.weight"
+# r"text_model.layers.(\d+).attention.wqkv.weight": r"model.language_model.layers.\1.self_attn.q|k|v|_proj.weight"
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
-    r"transformer.blocks.(\d+).att_proj.(bias|weight)":                            r"language_model.model.layers.\1.self_attn.qkv_proj.\2", # fused attentions will need to be sliced later
-    r"transformer.blocks.(\d+).(q|k)_norm.weight":                                 r"language_model.model.layers.\1.self_attn.\2_norm.weight",
-    r"transformer.blocks.(\d+).attn_norm.weight":                                  r"language_model.model.layers.\1.input_layernorm.weight",
-    r"transformer.blocks.(\d+).attn_out.weight":                                   r"language_model.model.layers.\1.self_attn.o_proj.weight",
-    r"transformer.blocks.(\d+).ff_norm.weight":                                    r"language_model.model.layers.\1.post_attention_layernorm.weight",
-    r"transformer.blocks.(\d+).ff_out.weight":                                     r"language_model.model.layers.\1.mlp.fc2.weight",
-    r"transformer.blocks.(\d+).ff_proj.weight":                                    r"language_model.model.layers.\1.mlp.fc1.weight",
-    r"transformer.ff_out.weight":                                                  r"language_model.lm_head.weight",
-    r"transformer.ln_f.(weight|bias)":                                             r"language_model.model.norm.\1", # no post layernorm bias
-    r"transformer.wte.embedding":                                                  r"language_model.model.word_embeddings.weight",
-    r"transformer.wte.new_embedding":                                              r"language_model.model.new_embeddings.weight",
+    r"transformer.blocks.(\d+).att_proj.(bias|weight)":                            r"model.language_model.layers.\1.self_attn.qkv_proj.\2", # fused attentions will need to be sliced later
+    r"transformer.blocks.(\d+).(q|k)_norm.weight":                                 r"model.language_model.layers.\1.self_attn.\2_norm.weight",
+    r"transformer.blocks.(\d+).attn_norm.weight":                                  r"model.language_model.layers.\1.input_layernorm.weight",
+    r"transformer.blocks.(\d+).attn_out.weight":                                   r"model.language_model.layers.\1.self_attn.o_proj.weight",
+    r"transformer.blocks.(\d+).ff_norm.weight":                                    r"model.language_model.layers.\1.post_attention_layernorm.weight",
+    r"transformer.blocks.(\d+).ff_out.weight":                                     r"model.language_model.layers.\1.mlp.fc2.weight",
+    r"transformer.blocks.(\d+).ff_proj.weight":                                    r"model.language_model.layers.\1.mlp.fc1.weight",
+    r"transformer.ff_out.weight":                                                  r"lm_head.weight",
+    r"transformer.ln_f.(weight|bias)":                                             r"model.language_model.norm.\1", # no post layernorm bias
+    r"transformer.wte.embedding":                                                  r"model.language_model.word_embeddings.weight",
+    r"transformer.wte.new_embedding":                                              r"model.language_model.new_embeddings.weight",
 
-    r"vision_backbone.image_pooling_2d.w(q|k|v|o).bias":                           r"adapter.image_pooling_2d.\1_proj.bias",
-    r"vision_backbone.image_pooling_2d.w(q|k|v|o).weight":                         r"adapter.image_pooling_2d.\1_proj.weight",
+    r"vision_backbone.image_pooling_2d.w(q|k|v|o).bias":                           r"model.adapter.image_pooling_2d.\1_proj.bias",
+    r"vision_backbone.image_pooling_2d.w(q|k|v|o).weight":                         r"model.adapter.image_pooling_2d.\1_proj.weight",
 
-    r"vision_backbone.image_projector.w(\d+).weight":                              r"adapter.multi_modal_projector.linear_\1.weight",
+    r"vision_backbone.image_projector.w(\d+).weight":                              r"model.adapter.multi_modal_projector.linear_\1.weight",
 
-    r"vision_backbone.image_vit.transformer.resblocks.(\d+).attention.w(k|q|v).(weight|bias)":   r"vision_tower.vision_model.encoder.layers.\1.self_attn.\2_proj.\3",
-    r"vision_backbone.image_vit.transformer.resblocks.(\d+).attention.wo.(weight|bias)":         r"vision_tower.vision_model.encoder.layers.\1.self_attn.out_proj.\2",
+    r"vision_backbone.image_vit.transformer.resblocks.(\d+).attention.w(k|q|v).(weight|bias)":   r"model.vision_tower.vision_model.encoder.layers.\1.self_attn.\2_proj.\3",
+    r"vision_backbone.image_vit.transformer.resblocks.(\d+).attention.wo.(weight|bias)":         r"model.vision_tower.vision_model.encoder.layers.\1.self_attn.out_proj.\2",
 
-    r"vision_backbone.image_vit.transformer.resblocks.(\d+).attention_norm.(weight|bias)":       r"vision_tower.vision_model.encoder.layers.\1.layer_norm1.\2",
-    r"vision_backbone.image_vit.transformer.resblocks.(\d+).feed_forward.w1.(weight|bias)":      r"vision_tower.vision_model.encoder.layers.\1.mlp.fc1.\2",
-    r"vision_backbone.image_vit.transformer.resblocks.(\d+).feed_forward.w2.(weight|bias)":      r"vision_tower.vision_model.encoder.layers.\1.mlp.fc2.\2",
-    r"vision_backbone.image_vit.transformer.resblocks.(\d+).ffn_norm.(weight|bias)":             r"vision_tower.vision_model.encoder.layers.\1.layer_norm2.\2",
+    r"vision_backbone.image_vit.transformer.resblocks.(\d+).attention_norm.(weight|bias)":       r"model.vision_tower.vision_model.encoder.layers.\1.layer_norm1.\2",
+    r"vision_backbone.image_vit.transformer.resblocks.(\d+).feed_forward.w1.(weight|bias)":      r"model.vision_tower.vision_model.encoder.layers.\1.mlp.fc1.\2",
+    r"vision_backbone.image_vit.transformer.resblocks.(\d+).feed_forward.w2.(weight|bias)":      r"model.vision_tower.vision_model.encoder.layers.\1.mlp.fc2.\2",
+    r"vision_backbone.image_vit.transformer.resblocks.(\d+).ffn_norm.(weight|bias)":             r"model.vision_tower.vision_model.encoder.layers.\1.layer_norm2.\2",
 
-    r"vision_backbone.image_vit.positional_embedding":                             r"vision_tower.vision_model.embeddings.position_embedding.weight",
-    r"vision_backbone.image_vit.class_embedding":                                  r"vision_tower.vision_model.embeddings.class_embedding",
-    r"vision_backbone.image_vit.patch_embedding.weight":                           r"vision_tower.vision_model.embeddings.patch_embedding.weight",
-    r"vision_backbone.image_vit.pre_ln.(weight|bias)":                             r"vision_tower.vision_model.pre_layernorm.\1",
-    r"vision_backbone.pad_embed":                                                  r"adapter.pad_embed",
+    r"vision_backbone.image_vit.positional_embedding":                             r"model.vision_tower.vision_model.embeddings.position_embedding.weight",
+    r"vision_backbone.image_vit.class_embedding":                                  r"model.vision_tower.vision_model.embeddings.class_embedding",
+    r"vision_backbone.image_vit.patch_embedding.weight":                           r"model.vision_tower.vision_model.embeddings.patch_embedding.weight",
+    r"vision_backbone.image_vit.pre_ln.(weight|bias)":                             r"model.vision_tower.vision_model.pre_layernorm.\1",
+    r"vision_backbone.pad_embed":                                                  r"model.adapter.pad_embed",
 
 }
 # fmt: on
@@ -255,9 +255,9 @@ def write_model(
         model = MolmoForConditionalGeneration(config)
 
     # convert word embeddings. They exist separately in the Molmo custom Embedding layer.
-    initial_word_embeddings = state_dict.pop("language_model.model.word_embeddings.weight")
-    new_word_embeddings = state_dict.pop("language_model.model.new_embeddings.weight")
-    state_dict["language_model.model.embed_tokens.weight"] = torch.cat([initial_word_embeddings, new_word_embeddings])
+    initial_word_embeddings = state_dict.pop("model.language_model.word_embeddings.weight")
+    new_word_embeddings = state_dict.pop("model.language_model.new_embeddings.weight")
+    state_dict["model.language_model.embed_tokens.weight"] = torch.cat([initial_word_embeddings, new_word_embeddings])
     print("Loading the checkpoint in a Molmo model.")
     model.load_state_dict(state_dict, strict=True, assign=True)
 

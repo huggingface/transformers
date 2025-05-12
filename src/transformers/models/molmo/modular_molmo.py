@@ -30,7 +30,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    add_start_docstrings,
+    auto_docstring,
     logging,
 )
 from ..clip.modeling_clip import (
@@ -48,7 +48,12 @@ from ..cohere.modeling_cohere import (
     CoherePreTrainedModel,
 )
 from ..llama.modeling_llama import LlamaAttention, apply_rotary_pos_emb, eager_attention_forward
-from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration
+from ..llava.modeling_llava import (
+    LlavaCausalLMOutputWithPast,
+    LlavaForConditionalGeneration,
+    LlavaModel,
+    LlavaModelOutputWithPast,
+)
 from ..qwen2.modeling_qwen2 import (
     Qwen2DecoderLayer,
     Qwen2ForCausalLM,
@@ -514,6 +519,10 @@ class MolmoCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     pass
 
 
+class MolmoModelOutputWithPast(LlavaModelOutputWithPast):
+    logits: Optional[torch.FloatTensor] = None
+
+
 # swiglu activation
 class MolmoSwiGLU(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -753,27 +762,7 @@ class MolmoLayerNorm(CohereLayerNorm):
     pass
 
 
-MOLMO_TEXT_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`MolmoTextConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Molmo Model outputting raw hidden-states without any specific head on top.",
-    MOLMO_TEXT_START_DOCSTRING,
-)
+@auto_docstring
 class MolmoPreTrainedModel(CoherePreTrainedModel):
     config_class = MolmoTextConfig
     _no_split_modules = ["MolmoTextDecoderLayer", "MolmoTextPrenormDecoderLayer"]
@@ -801,10 +790,7 @@ class MolmoPreTrainedModel(CoherePreTrainedModel):
             module.class_embedding.data.normal_()
 
 
-@add_start_docstrings(
-    "The bare MolmoText Model outputting raw hidden-states without any specific head on top.",
-    MOLMO_TEXT_START_DOCSTRING,
-)
+@auto_docstring
 class MolmoTextPreTrainedModel(PreTrainedModel):
     config_class = MolmoTextConfig
     base_model_prefix = "model"
@@ -921,6 +907,7 @@ class MolmoMultiModalProjector(nn.Module):
         hidden_states = self.act(self.linear_1(image_features)) * self.linear_3(image_features)
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
+
 
 class MolmoVisionEmbeddings(nn.Module):
     def __init__(self, config: MolmoVisionConfig):
@@ -1221,95 +1208,17 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
         return image_features
 
 
-MOLMO_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-            The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`MolmoProcessor`] uses
-            [`CLIPImageProcessor`] for processing images).
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
-
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        vision_feature_layer (`Union[int, List[int]], *optional*, defaults to -2`):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
-
-
-class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
-    config_class = MolmoConfig
+class MolmoModel(LlavaModel):
+    _checkpoint_conversion_mapping = {}
 
     def __init__(self, config: MolmoConfig):
         super().__init__(config)
         self.image_token_index = config.image_token_index  # mostly for testing purposes
         self.adapter = MolmoAdapterModel._from_config(config.pooling_config)
 
-        self.language_model = MolmoForCausalLM._from_config(config.text_config)
+        self.language_model = MolmoTextModel._from_config(config.text_config)
         self.vision_tower = MolmoVisionModel._from_config(config.vision_config)
         self.post_init()
-
         del self.multi_modal_projector
 
     def get_image_features(
@@ -1358,22 +1267,6 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
         logits_to_keep: int = 0,
     ) -> Union[Tuple, MolmoCausalLMOutputWithPast]:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-
-
-        Returns:
-
-        Example:
-
         ```python
         >>> from PIL import Image
         >>> import requests
@@ -1481,15 +1374,93 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
             logits_to_keep=logits_to_keep,
         )
 
-        logits = outputs[0]
+        return MolmoModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
+        )
+
+
+class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
+    config_class = MolmoConfig
+    _checkpoint_conversion_mapping = {}
+    _tied_weights_keys = []
+
+    def __init__(self, config: MolmoConfig):
+        super().__init__(config)
+        self.model = MolmoModel(config)
+        self.post_init()
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        image_masks=None,
+        image_token_indices: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        vision_feature_layers: Optional[int] = None,
+        vision_feature_select_strategy: Optional[str] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: int = 0,
+        **kwargs,
+    ) -> Union[Tuple, MolmoCausalLMOutputWithPast]:
+        r"""
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, MolmoForConditionalGeneration
+
+        >>> model = MolmoForConditionalGeneration.from_pretrained("molmo-hf/molmo-1.5-7b-hf")
+        >>> processor = AutoProcessor.from_pretrained("molmo-hf/molmo-1.5-7b-hf")
+
+        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
+        ```"""
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            image_masks=image_masks,
+            image_token_indices=image_token_indices,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            vision_feature_layers=vision_feature_layers,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+            return_dict=return_dict,
+            cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.vocab_size)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return MolmoCausalLMOutputWithPast(
             loss=loss,
@@ -1497,7 +1468,7 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=outputs.image_hidden_states,
         )
 
     def prepare_inputs_for_generation(
@@ -1513,7 +1484,7 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
         logits_to_keep=None,
         **kwargs,
     ):
-        model_inputs = self.language_model.prepare_inputs_for_generation(
+        model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,

@@ -136,7 +136,7 @@ class MolmoImageProcessor(BaseImageProcessor):
         self,
         max_num_crops: int = 12,
         overlap_margins: Tuple[int, int] = [4, 4],
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         tokens_per_image_width: int = 12,
         tokens_per_image_height: int = 12,
         image_patch_size: int = 14,
