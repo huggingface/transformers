@@ -198,6 +198,9 @@ _deps = [
     "pytest-rich",
     "libcst",
     "rich",
+    "opentelemetry-api",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp",
 ]
 
 
