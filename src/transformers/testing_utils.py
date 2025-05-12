@@ -2986,6 +2986,11 @@ if is_torch_available():
         "cpu": 0,
         "default": 0,
     }
+    BACKEND_TORCH_ACCELERATOR_MODULE = {
+        "cuda": torch.cuda,
+        "cpu": None,
+        "default": None,
+    }
 else:
     BACKEND_MANUAL_SEED = {"default": None}
     BACKEND_EMPTY_CACHE = {"default": None}
@@ -2993,21 +2998,25 @@ else:
     BACKEND_RESET_MAX_MEMORY_ALLOCATED = {"default": None}
     BACKEND_MAX_MEMORY_ALLOCATED = {"default": 0}
     BACKEND_MEMORY_ALLOCATED = {"default": 0}
+    BACKEND_TORCH_ACCELERATOR_MODULE = {"default": None}
 
 
 if is_torch_hpu_available():
     BACKEND_MANUAL_SEED["hpu"] = torch.hpu.manual_seed
     BACKEND_DEVICE_COUNT["hpu"] = torch.hpu.device_count
+    BACKEND_TORCH_ACCELERATOR_MODULE["hpu"] = torch.hpu
 
 if is_torch_mlu_available():
     BACKEND_EMPTY_CACHE["mlu"] = torch.mlu.empty_cache
     BACKEND_MANUAL_SEED["mlu"] = torch.mlu.manual_seed
     BACKEND_DEVICE_COUNT["mlu"] = torch.mlu.device_count
+    BACKEND_TORCH_ACCELERATOR_MODULE["mlu"] = torch.mlu
 
 if is_torch_npu_available():
     BACKEND_EMPTY_CACHE["npu"] = torch.npu.empty_cache
     BACKEND_MANUAL_SEED["npu"] = torch.npu.manual_seed
     BACKEND_DEVICE_COUNT["npu"] = torch.npu.device_count
+    BACKEND_TORCH_ACCELERATOR_MODULE["npu"] = torch.npu
 
 if is_torch_xpu_available():
     BACKEND_EMPTY_CACHE["xpu"] = torch.xpu.empty_cache
@@ -3016,6 +3025,8 @@ if is_torch_xpu_available():
     BACKEND_RESET_MAX_MEMORY_ALLOCATED["xpu"] = torch.xpu.reset_peak_memory_stats
     BACKEND_MAX_MEMORY_ALLOCATED["xpu"] = torch.xpu.max_memory_allocated
     BACKEND_MEMORY_ALLOCATED["xpu"] = torch.xpu.memory_allocated
+    BACKEND_TORCH_ACCELERATOR_MODULE["xpu"] = torch.xpu
+
 
 if is_torch_xla_available():
     BACKEND_EMPTY_CACHE["xla"] = torch.cuda.empty_cache
@@ -3045,6 +3056,10 @@ def backend_max_memory_allocated(device: str):
 
 def backend_memory_allocated(device: str):
     return _device_agnostic_dispatch(device, BACKEND_MEMORY_ALLOCATED)
+
+
+def backend_torch_accelerator_module(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_TORCH_ACCELERATOR_MODULE)
 
 
 if is_torch_available():
