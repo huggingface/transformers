@@ -37,7 +37,7 @@ if is_torch_available():
 
 class MolmoImagesKwargs(ImagesKwargs, total=False):
     device: Optional[str]
-    max_crops: Optional[int]
+    max_num_crops: Optional[int]
     overlap_margins: Optional[Tuple[int, int]]
     tokens_per_image_height: Optional[int]
     tokens_per_image_width: Optional[int]
@@ -47,7 +47,7 @@ class MolmoProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: MolmoImagesKwargs
     _defaults = {
         "images_kwargs": {
-            "max_crops": 12,
+            "max_num_crops": 12,
             "overlap_margins": (4, 4),
             "tokens_per_image_width": 12,
             "tokens_per_image_height": 12,
@@ -222,22 +222,35 @@ class MolmoProcessor(ProcessorMixin):
                 for sample in text:
                     sample = sample.replace(self.image_token, "".join(all_image_tokens))
                     prompt_strings.append(sample)
-        text_inputs = self.tokenizer(
-            [f"{self.bos_token}{prompt}" for prompt in prompt_strings], **output_kwargs["text_kwargs"]
-        )
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        # # shift patch mapping after addition of bos token (with left padding)
+        # # necessary for batched generation
+        bos_token_identifier = self.tokenizer.bos_token_id
+        attention_mask = text_inputs["attention_mask"]
+        input_sequences = text_inputs["input_ids"]
+        use_numpy = isinstance(attention_mask, np.ndarray)
 
-        # shift patch mapping after addition of bos token (with left padding)
-        # necessary for batched generation
-        leading_pad_mask = (text_inputs["attention_mask"] == 0).long().cumprod(dim=-1)
-        left_pad = leading_pad_mask.sum(dim=-1)
-        total_shift = 1 + left_pad
+        if use_numpy:
+            pad_positions = (attention_mask == 0).astype(np.int64)
+            left_padding = np.cumprod(pad_positions, axis=-1).sum(axis=-1)
+            first_valid_index = (attention_mask == 1).argmax(axis=-1)
+            sample_indices = np.arange(input_sequences.shape[0])
+            first_tokens = input_sequences[sample_indices, first_valid_index]
+            bos_offsets = (first_tokens == bos_token_identifier).astype(np.int64) if bos_token_identifier is not None else 0
+        else:
+            pad_positions = (attention_mask == 0).long()
+            left_padding = pad_positions.cumprod(dim=-1).sum(dim=-1)
+            first_valid_index = (attention_mask == 1).long().argmax(dim=-1, keepdim=True)
+            first_tokens = input_sequences.gather(1, first_valid_index).squeeze(1)
+            bos_offsets = (first_tokens == bos_token_identifier).long() if bos_token_identifier is not None else 0
+
+        total_offsets = left_padding + bos_offsets
 
         if image_inputs.get("image_token_indices") is not None:
-            shifted_indices = []
-            for mask, shift in zip(image_inputs["image_token_indices"], total_shift):
-                shifted_indices.append(np.where(mask < 0, mask, mask + int(shift)))
-            image_inputs["image_token_indices"] = shifted_indices
-
+            shifted = []
+            for mask, offset in zip(image_inputs["image_token_indices"], total_offsets):
+                shifted.append(np.where(mask < 0, mask, mask + int(offset)))
+            image_inputs["image_token_indices"] = shifted
         if kwargs.get("device", None) is not None:
             text_inputs = text_inputs.to(device=kwargs.get("device"))
         # there is no bos token in Qwen tokenizer

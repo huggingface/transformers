@@ -41,6 +41,7 @@ from transformers.models.molmo.configuration_molmo import (
 
 
 CHAT_TEMPLATE = (
+    "{{ bos_token or '' }}"
     "{% for message in messages %}"
     "{%- if (loop.index % 2 == 1 and message['role'] != 'user') or (loop.index % 2 == 0 and message['role'].lower() != 'assistant') -%}"
     "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}"
@@ -107,10 +108,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 # fmt: on
 
-
-# fmt: on
-
-CONTEXT_LENGTH = 131072  # TODO change this up
+CONTEXT_LENGTH = 131072
 
 
 def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
@@ -165,7 +163,6 @@ def write_model(
 
     with open(config_file, "r") as f:
         original_config = json.load(f)
-
     text_config = MolmoTextConfig(
         hidden_size=original_config["hidden_size"],
         num_attention_heads=original_config["num_attention_heads"],
@@ -175,8 +172,8 @@ def write_model(
         max_position_embeddings=original_config["max_position_embeddings"],
         layer_norm_eps=original_config["layer_norm_eps"],
         rope_theta=original_config["rope_theta"],
-        vocab_size=original_config["vocab_size"],
-        additional_embedding_size=74 if variant == "7B-O" else 128,
+        vocab_size=original_config["vocab_size"] if variant == "7B-D" else original_config["embedding_size"],
+        additional_embedding_size = 128,
         tie_word_embeddings=original_config["tie_word_embeddings"],
         use_qk_norm=True if variant == "7B-O" else False,
     )
@@ -313,11 +310,7 @@ def write_model(
     processor.save_pretrained(model_path)
     print("Processor saved successfully.")
 
-    generation_config = GenerationConfig(
-        bos_token_id=tokenizer.bos_token_id,
-        eos_token_id=tokenizer.eos_token_id,
-        pad_token_id=tokenizer.pad_token_id,
-    )
+    generation_config = GenerationConfig(bos_token_id=tokenizer.bos_token_id, eos_token_id=tokenizer.eos_token_id, pad_token_id=tokenizer.pad_token_id,)
     generation_config.save_pretrained(model_path)
     print("Generation config saved successfully.")
 

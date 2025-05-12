@@ -16,7 +16,7 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, LlamaTokenizerFast, MolmoProcessor
+from transformers import AutoProcessor, MolmoProcessor
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
@@ -24,7 +24,37 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import MolmoImageProcessor
+    pass
+
+
+CHAT_TEMPLATE = (
+    "{{ bos_token or '' }}"
+    "{% for message in messages %}"
+    "{%- if (loop.index % 2 == 1 and message['role'] != 'user') or (loop.index % 2 == 0 and message['role'].lower() != 'assistant') -%}"
+    "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}"
+    "{%- endif -%}"
+    "{% if message['content'] is not string %}"
+    "{% for content in message['content'] %}"
+    "{% if content['type'] == 'image' %}"
+    "{{ '<image> ' }}"
+    "{% endif %}"
+    "{% endfor %}"
+    "{% endif %}"
+    "{{ message['role'].capitalize() + ': ' }}"
+    "{% if message['content'] is string %}"
+    "{{ message['content'] + ' ' }}"
+    "{% else %}"
+    "{% for content in message['content'] %}"
+    "{% if content['type'] == 'text' %}"
+    "{{ content['text'] + ' ' }}"
+    "{% endif %}"
+    "{% endfor %}"
+    "{% endif %}"
+    "{% endfor %}"
+    "{% if add_generation_prompt %}"
+    "{{ 'Assistant:' }}"
+    "{% endif %}"
+)
 
 
 @require_vision
@@ -33,21 +63,8 @@ class MolmoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-
-        image_processor = MolmoImageProcessor(do_center_crop=False)
-        extra_special_tokens = {
-            "image_token": "<image>",
-            "boi_token": "<im_patch>",
-            "eoi_token": "<im_start>",
-            "im_patch_token": "<im_end>",
-            "im_col_token": "<im_col>",
-        }
-        tokenizer = LlamaTokenizerFast.from_pretrained(
-            "huggyllama/llama-7b", extra_special_tokens=extra_special_tokens
-        )
-        processor_kwargs = self.prepare_processor_dict()
-        processor = MolmoProcessor(image_processor, tokenizer, **processor_kwargs)
-        processor.save_pretrained(self.tmpdirname)
+        self.processor = MolmoProcessor.from_pretrained("Molbap/molmo-hf-7B-D")
+        self.processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -57,9 +74,13 @@ class MolmoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
+        del self.processor
 
-    def prepare_processor_dict(self):
-        return {"chat_template": "dummy_template"}
+    @staticmethod
+    def prepare_processor_dict():
+        return {
+            "chat_template": CHAT_TEMPLATE,
+        }
 
     @unittest.skip(
         "Skip because the model has no processor kwargs except for chat template and"
@@ -103,8 +124,7 @@ class MolmoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue((inputs_nested.pixel_values == inputs_flat.pixel_values).all())
 
     def test_chat_template(self):
-        processor = MolmoProcessor.from_pretrained("Molbap/molmo-hf-7B-D")
-        expected_prompt = "User: <image> What is shown in this image? Assistant:"
+        expected_prompt = "<|endoftext|><image> User: What is shown in this image? Assistant:"
 
         messages = [
             {
@@ -116,5 +136,5 @@ class MolmoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             },
         ]
 
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+        formatted_prompt = self.processor.apply_chat_template(messages, add_generation_prompt=True)
         self.assertEqual(expected_prompt, formatted_prompt)

@@ -536,7 +536,7 @@ class MolmoPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_flex_attn = True
+    _supports_flex_attn = False
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
@@ -552,8 +552,16 @@ class MolmoPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, MolmoLayerNorm):
+        elif isinstance(module, MolmoLayerNorm) or isinstance(module, MolmoTextLayerNorm):
             module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, MolmoAdapterModel):
+            module.pad_embed.data.zero_()
+        elif isinstance(module, MolmoVisionEmbeddings):
+            module.class_embedding.data.normal_()
 
 
 @add_start_docstrings(
@@ -568,7 +576,7 @@ class MolmoTextPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_flex_attn = True
+    _supports_flex_attn = False
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
@@ -1618,7 +1626,7 @@ class MolmoPoolingAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = False,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         query_hidden_shape = (*input_shape, -1, self.head_dim)
@@ -1906,7 +1914,6 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
 
         image_features = None
         if pixel_values is not None and image_token_indices is not None:
-            # if input_
             batch_size, num_crops, height, width = pixel_values.shape
             seq_len = inputs_embeds.size(1)
             hidden_size = inputs_embeds.size(2)
