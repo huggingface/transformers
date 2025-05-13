@@ -205,6 +205,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         self,
         video: "torch.Tensor",
         padded_size: tuple[int, int],
+        max_num_frames: int,
         fill: int = 0,
         return_pixel_mask: bool = True,
     ):
@@ -214,24 +215,28 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 Video to pad.
             padded_size (`Tuple[int, int]`):
                 Height and width to pad.
+            max_num_frames (`int`):
+                The maximum number of frames to which video will be padded.
             fill (`int`, *optional*):
                 The value to use for the padding.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return a pixel mask.
         """
         original_size = video.size()[-2:]
-        padding_bottom = padded_size[0] - original_size[0]
-        padding_right = padded_size[1] - original_size[1]
-        if padding_bottom < 0 or padding_right < 0:
+        padding_height = padded_size[0] - original_size[0]
+        padding_width = padded_size[1] - original_size[1]
+        padding_frame = max_num_frames - video.shape[0]
+        if padding_width < 0 or padding_height < 0:
             raise ValueError(
                 f"Padding dimensions are negative. Please make sure that the padded size is larger than the "
                 f"original size. Got padded size: {padded_size}, original size: {original_size}."
             )
         if original_size != padded_size:
-            padding = [0, 0, padding_right, padding_bottom]
+            padding = [0, padding_width, 0, padding_height, 0, 0, 0, padding_frame]
             video = F.pad(video, padding, fill=fill)
 
         # Make a pixel mask for the video, where 1 indicates a valid pixel and 0 indicates padding.
+        # Mask shape is (num_frames, height, width) so we omit the channel dim
         pixel_mask = None
         if return_pixel_mask:
             pixel_mask = torch.zeros_like(video[..., 0, :, :], dtype=torch.int64)
@@ -374,12 +379,15 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
 
         if do_pad:
             pad_size = get_max_height_width(processed_videos)
+            max_num_frames = max(len(video) for video in processed_videos)
             grouped_videos, grouped_videos_index = group_videos_by_shape(processed_videos)
             processed_padded_mask_grouped = {}
             processed_videos_grouped = {}
 
             for shape, stacked_videos in grouped_videos.items():
-                stacked_videos, padded_masks = self.pad(stacked_videos, padded_size=pad_size)
+                stacked_videos, padded_masks = self.pad(
+                    stacked_videos, padded_size=pad_size, max_num_frames=max_num_frames
+                )
                 processed_videos_grouped[shape] = stacked_videos
                 processed_padded_mask_grouped[shape] = padded_masks
 

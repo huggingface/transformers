@@ -522,7 +522,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
 
     def pad(
         self,
-        images: List[np.ndarray],
+        images: List[List[np.ndarray]],
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,

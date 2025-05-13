@@ -53,6 +53,9 @@ else:
     num2words = None
 
 
+CHAT_TEMPLATE = "<|im_start|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% elif line['type'] == 'video' %}{{ '<video>' }}{% endif %}{% endfor %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}"
+
+
 def _prompt_split_image(
     image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_image_token
 ):
@@ -163,6 +166,7 @@ class SmolVLMProcessor(ProcessorMixin):
         self.global_image_token = getattr(tokenizer, "global_image_token", "<global-img>")
         self.image_seq_len = image_seq_len
         self.video_token = getattr(tokenizer, "video_token", "<video>")
+        chat_template = CHAT_TEMPLATE  # re-assign to the correct template for BC
 
         if not num2words:
             raise ImportError(
