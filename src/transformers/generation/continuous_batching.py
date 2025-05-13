@@ -63,46 +63,6 @@ from ..utils import (
 )
 
 
-class TelemetryProfilerCallback:
-    def __init__(self, tracer: Tracer):
-        self.tracer = tracer
-
-    def __call__(self, prof: torch.profiler.profile):
-        with self.tracer.start_as_current_span("pytorch_profiler_trace") as parent_span:
-            parent_span.set_attribute("profile.step_count", getattr(prof, "_step_count", 0))
-            self._create_trace_from_events(prof.profiler.function_events, parent_span)
-
-    def _create_trace_from_events(self, events, parent_span):
-        """Recursively convert PyTorch profiler events to OpenTelemetry spans.
-
-        Args:
-            events: PyTorch profiler events or event tree
-            parent_span: Parent OpenTelemetry span
-        """
-        if not events:
-            return
-
-        # Process events in time order to properly capture parent-child relationships
-        for event in sorted(events, key=lambda e: e.start_us()):
-            with self.tracer.start_as_current_span(
-                event.name(), start_time=event.start_ns(), end_time=event.end_ns()
-            ) as span:
-                span.set_attribute("event.name", event.name())
-                span.set_attribute("event.type", event.tag() or "unknown")
-                span.set_attribute("event.duration_us", event.duration_us())
-
-                if event.cpu_time_total > 0:
-                    span.set_attribute("cpu.duration_us", event.cpu_time_total)
-                if event.cuda_time_total > 0:
-                    span.set_attribute("cuda.duration_us", event.cuda_time_total)
-
-                if event.input_shapes:
-                    span.set_attribute("input_shapes", str(event.input_shapes))
-
-                if hasattr(event, "cpu_children") and event.cpu_children:
-                    self._create_trace_from_events(event.cpu_children, span)
-
-
 def traced(func=None, *, span_name=None):
     """
     Decorator to trace function calls with OpenTelemetry.
@@ -360,7 +320,7 @@ class PagedAttentionCache(Cache):
         physical_indices = physical_block_nums * block_size + block_offsets
         return physical_indices
 
-    # @traced
+    @traced
     def update(
         self,
         key_states: torch.Tensor,
@@ -559,6 +519,7 @@ class ContinuousBatchProcessor:
         self._configure_batch_parameters()
         self.setup_static_tensors()
 
+    @traced
     def setup_static_tensors(self):
         T = self.max_batch_tokens
         max_token_budget = self.cache.num_blocks * self.cache.block_size
@@ -578,6 +539,7 @@ class ContinuousBatchProcessor:
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
 
+    @traced
     def reset_static_tensors(self):
         """Reset static tensors for the next batch."""
         self.input_ids.zero_()
@@ -658,6 +620,7 @@ class ContinuousBatchProcessor:
             unit="percent",
         )
 
+    @traced
     def _configure_batch_parameters(self):
         """Set up batch processing parameters based on generation config."""
         # Calculate total cache capacity
@@ -1022,10 +985,12 @@ class ContinuousBatchProcessor:
         elif state.status == "finished":
             self.output_queue.put(state)
 
+    @traced
     def has_pending_requests(self) -> bool:
         """Check if there are any active or waiting requests."""
         return bool(self.active_requests or self.waiting_requests)
 
+    @traced
     def handle_batch_error(self, error):
         """Handle errors during batch processing."""
         failed_ids = self.requests_to_process_next
@@ -1035,6 +1000,7 @@ class ContinuousBatchProcessor:
                 self.cache.free_blocks(req_id)
                 del self.active_requests[req_id]
 
+    @traced
     def fail_all_requests(self, error):
         """Fail all active requests with the given error.
 
@@ -1093,6 +1059,7 @@ class ContinuousBatchingManager:
 
         self.tracer = get_tracer("transformers.generation.continuous_batching_manager")
 
+    @traced
     def start(self):
         """Start the background generation thread."""
         if self._generation_thread is not None and self._generation_thread.is_alive():
@@ -1208,6 +1175,7 @@ class ContinuousBatchingManager:
             if result is not None:
                 yield result
 
+    @traced
     def warmup(self, batch_processor):
         stream = torch.cuda.Stream()
         stream.wait_stream(torch.cuda.current_stream())
@@ -1220,19 +1188,23 @@ class ContinuousBatchingManager:
         with torch.cuda.graph(self.graph):
             self._generation_step(batch_processor)
 
+    @traced
     def _generation_step(self, batch_processor: ContinuousBatchProcessor):
         """Perform a single generation step. This is cuda graphed"""
         batch_data = batch_processor.get_model_kwargs()
         with torch.no_grad():
-            logits = self.model(**batch_data.__dict__).logits
+            with self.tracer.start_as_current_span("model_forward"):
+                logits = self.model(**batch_data.__dict__).logits
             if self.log_prob_generation:
                 batch_processor.output_probs.copy_(logits)  # TODO
-            probs = self.logit_processor(batch_data.input_ids, logits)
-            if self.do_sample:  # sample
-                probs = nn.functional.softmax(probs, dim=-1)
-                next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
-            else:
-                next_tokens = torch.argmax(probs, dim=-1)
+            with self.tracer.start_as_current_span("logit_processing"):
+                probs = self.logit_processor(batch_data.input_ids, logits)
+            with self.tracer.start_as_current_span("sampling"):
+                if self.do_sample:  # sample
+                    probs = nn.functional.softmax(probs, dim=-1)
+                    next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
+                else:
+                    next_tokens = torch.argmax(probs, dim=-1)
             batch_processor.output_ids.copy_(next_tokens)
 
     @traced(span_name="generation_loop")
@@ -1258,39 +1230,24 @@ class ContinuousBatchingManager:
                 self.streaming,
             )
 
-            telemetry_callback = None
-            if _has_opentelemetry:
-                telemetry_callback = TelemetryProfilerCallback(self.tracer)
-
-            with torch.profiler.profile(
-                activities=[
-                    torch.profiler.ProfilerActivity.CPU,
-                    torch.profiler.ProfilerActivity.CUDA,
-                ],
-                schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
-                on_trace_ready=telemetry_callback,
-                record_shapes=True,
-                profile_memory=True,
-                with_stack=True,
-            ) as prof:
-                first = True
-                while not self.stop_event.is_set() or batch_processor.has_pending_requests():
-                    batch_processor.prepare_next_batch()
-                    if torch.cuda.is_available():
-                        if first:
-                            self.warmup(batch_processor)
-                            first = False
-                        try:
+            first = True
+            while not self.stop_event.is_set() or batch_processor.has_pending_requests():
+                batch_processor.prepare_next_batch()
+                if torch.cuda.is_available():
+                    if first:
+                        self.warmup(batch_processor)
+                        first = False
+                    try:
+                        with self.tracer.start_as_current_span("graph_replay"):
                             self.graph.replay()
-                        except Exception as e:
-                            logger.error(f"Model forward pass failed: {e}", exc_info=True)
-                            batch_processor.handle_batch_error(e)
-                            continue
-                    else:
-                        self._generation_step(batch_processor)
+                    except Exception as e:
+                        logger.error(f"Model forward pass failed: {e}", exc_info=True)
+                        batch_processor.handle_batch_error(e)
+                        continue
+                else:
+                    self._generation_step(batch_processor)
 
-                    batch_processor.update_batch()
-                    prof.step()
+                batch_processor.update_batch()
 
         except Exception as e:
             logger.error(f"Error in generation loop: {e}", exc_info=True)
@@ -1349,6 +1306,7 @@ class ContinuousMixin:
             model=self, generation_config=gen_config, max_queue_size=max_queue_size, streaming=streaming
         )
 
+    @traced
     @torch.inference_mode()
     def generate_batch(
         self,
