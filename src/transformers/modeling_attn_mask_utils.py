@@ -16,6 +16,7 @@ IMPORTANT NOTICE: Every class and function in this file is deprecated in favor o
 `masking_utils.py` primitives. New code should not rely on it, it is only kept for backward compatibility for now,
 and will be removed in the future.
 """
+
 from dataclasses import dataclass
 from typing import Optional, Union
 

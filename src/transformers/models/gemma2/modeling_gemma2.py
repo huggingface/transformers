@@ -28,7 +28,7 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
 from ...generation import GenerationMixin
-from ...masking_utils import get_causal_masks, LayerType
+from ...masking_utils import LayerType, get_causal_masks
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -384,7 +384,9 @@ class Gemma2Model(Gemma2PreTrainedModel):
         )
         self.norm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Gemma2RotaryEmbedding(config=config)
-        self.layer_attention_patterns = [LayerType(layer_type, config.sliding_window) for layer_type in config.layer_attention_patterns]
+        self.layer_attention_patterns = [
+            LayerType(layer_type, config.sliding_window) for layer_type in config.layer_attention_patterns
+        ]
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
