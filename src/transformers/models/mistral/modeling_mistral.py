@@ -337,6 +337,8 @@ class MistralModel(MistralPreTrainedModel):
         )
         self.norm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = MistralRotaryEmbedding(config=config)
+        pattern = "sliding" if config.sliding_window is not None else "full"
+        self.layer_attention_patterns = [LayerPattern(pattern, config.sliding_window) for _ in range(config.num_hidden_layers)]
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -398,7 +400,8 @@ class MistralModel(MistralPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_masks = get_causal_masks(
-            self.config,
+            self.layer_attention_patterns,
+            self.config._attn_implementation,
             inputs_embeds,
             attention_mask,
             cache_position,

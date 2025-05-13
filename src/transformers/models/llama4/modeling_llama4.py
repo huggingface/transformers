@@ -503,6 +503,9 @@ class Llama4TextModel(Llama4PreTrainedModel):
         )
         self.norm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Llama4TextRotaryEmbedding(config=config)
+        self.layer_attention_patterns = [
+            LayerPattern(pattern, config.attention_chunk_size) for pattern in config.layer_attention_patterns
+        ]
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -565,7 +568,8 @@ class Llama4TextModel(Llama4PreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_masks = get_causal_masks(
-            self.config,
+            self.layer_attention_patterns,
+            self.config._attn_implementation,
             inputs_embeds,
             attention_mask,
             cache_position,

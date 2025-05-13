@@ -233,6 +233,8 @@ class Llama4TextConfig(PretrainedConfig):
             `no_rope_layer_interval` layers.
         attention_chunk_size (`int`, *optional*, defaults to 8192):
             <TODO>
+        layer_attention_patterns (`list`, *optional*, defaults to None):
+            Attention pattern for each layer.
         attn_temperature_tuning (`bool`, *optional*, defaults to `True`):
             Whether to dynamically scale the attention temperature for each query token based on sequence length.
             Recommended for long sequences (e.g., >32k tokens) to maintain stable output results.
@@ -298,6 +300,7 @@ class Llama4TextConfig(PretrainedConfig):
         no_rope_layers=None,
         no_rope_layer_interval=4,
         attention_chunk_size=8192,
+        layer_attention_patterns=None,
         attn_temperature_tuning=True,
         floor_scale=8192,
         attn_scale=0.1,
@@ -362,6 +365,9 @@ class Llama4TextConfig(PretrainedConfig):
             else list(range(interleave_moe_layer_step - 1, num_hidden_layers, interleave_moe_layer_step))
         )
         self.attention_chunk_size = attention_chunk_size
+
+        if layer_attention_patterns is None:
+            self.layer_attention_patterns = ["chunked" if no_rope else "full" for no_rope in self.no_rope_layers]
 
 
 class Llama4Config(PretrainedConfig):

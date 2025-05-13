@@ -366,6 +366,7 @@ class LlamaModel(LlamaPreTrainedModel):
         )
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = LlamaRotaryEmbedding(config=config)
+        self.layer_attention_patterns = [LayerPattern("full") for _ in range(config.num_hidden_layers)]
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -427,7 +428,8 @@ class LlamaModel(LlamaPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_masks = get_causal_masks(
-            self.config,
+            self.layer_attention_patterns,
+            self.config._attn_implementation,
             inputs_embeds,
             attention_mask,
             cache_position,
