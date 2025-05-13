@@ -16,10 +16,10 @@
 
 import numpy as np
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...utils import (
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -41,10 +41,7 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-@add_start_docstrings(
-    "Constructs a fast Chameleon image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class ChameleonImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.LANCZOS
     image_mean = [1.0, 1.0, 1.0]
