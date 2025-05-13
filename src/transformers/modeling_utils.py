@@ -64,6 +64,7 @@ from .integrations.flex_attention import flex_attention_forward
 from .integrations.paged_attention import paged_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
+from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.tensor_parallel import (
     SUPPORTED_TP_STYLES,
     shard_and_distribute_module,
@@ -5921,6 +5922,7 @@ class AttentionInterface(MutableMapping):
         "paged_attention": paged_attention_forward,
         "sdpa": sdpa_attention_forward,
         "sdpa_paged": sdpa_attention_paged_forward,
+        "eager_paged": eager_paged_attention_forward,
     }
 
     def __init__(self):

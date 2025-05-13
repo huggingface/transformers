@@ -171,6 +171,7 @@ class RequestState:
 
         # Add the token to output
         self.static_outputs.append(token_id)
+        self.prompt_ids = [token_id]
 
         is_eos = token_id == self.eos_token_id and self.eos_token_id != -1
         is_max_len = self.generated_len() >= self.max_new_tokens
@@ -182,7 +183,7 @@ class RequestState:
         return False
 
     def __repr__(self):
-        return f"RequestState(request_id={self.request_id}, status={self.status}, generated_len={self.generated_len()}, current_len={self.current_len()})"
+        return f"RequestState(\nrequest_id={self.request_id},\nstatus={self.status}, \nout_tokens={self.generated_len()}, \ncurrent_prompt={len(self.prompt_ids)}, \nprefilled_tokens={self.current_len()}, \nremaining_length={len(self.remaining_prompt_ids)}, \nfull_lenght={len(self.full_prompt_ids)},\nallocated_blocks={self.allocated_blocks}\n)"
 
 
 class PagedAttentionCache(Cache):
@@ -574,6 +575,9 @@ class ContinuousBatchProcessor:
             use_cache=True,
         )
 
+    def __repr__(self):
+        return f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.active_requests}, waiting_requests={self.waiting_requests})" + self.get_model_kwargs().__repr__() 
+
     def _setup_metrics(self):
         """Initialize OpenTelemetry metrics and tracing if the library is available."""
 
@@ -867,10 +871,10 @@ class ContinuousBatchProcessor:
 
         for state in requests_in_batch:
             if state.status == "decoding":
-                input_ids.append(state.static_outputs[-1])
+                next_input_ids = state.prompt_ids
+                input_ids.extend(next_input_ids)
                 positions_to_add = [state.current_len()]
-                state.position_offset += 1
-                if not self._allocate_blocks_if_needed(state, state.current_len()):
+                if not self._allocate_blocks_if_needed(state, state.current_len()+1):
                     continue
 
                 # Map logical indices to physical block indices for this request
@@ -879,19 +883,8 @@ class ContinuousBatchProcessor:
 
                 seq_len_q = 1  # Query length is 1 for generation
                 seq_len_k = state.current_len()
-            elif state.status == "prefilling":
-                next_input_ids = state.prompt_ids
-                input_ids.extend(next_input_ids)
-                start_pos = state.current_len()
-                positions_to_add = list(range(start_pos, start_pos + len(next_input_ids)))
-                state.position_offset += len(next_input_ids)
-
-                if not self._allocate_blocks_if_needed(state,  state.current_len()):
-                    continue
-
-                read_indices = write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
-                seq_len_q = seq_len_k = len(next_input_ids)
-            elif state.status == "prefilling_split":
+                state.position_offset += 1
+            else:
                 next_input_ids = state.prompt_ids
                 input_ids.extend(next_input_ids)
                 start_pos = state.current_len()
@@ -911,7 +904,7 @@ class ContinuousBatchProcessor:
             write_index.extend(write_indices)
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + seq_len_q)
             cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + seq_len_k)
-            if state.status != "prefilling_split" or len(state.remaining_prompt_ids) == 0:
+            if len(state.remaining_prompt_ids) == 0:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
                 logits_to_track += 1
 
@@ -946,6 +939,7 @@ class ContinuousBatchProcessor:
                 torch.triu(torch.ones(self.attention_mask[...,cumulative_seqlens_q[i] : cumulative_seqlens_q[i+1],cumulative_seqlens_k[i] : cumulative_seqlens_k[i+1]].shape), 
                            diagonal=diagonal) * torch.finfo(self.model_dtype).min
             )
+        print("")
 
     @traced
     def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
@@ -1380,7 +1374,7 @@ class ContinuousMixin:
             model=self, generation_config=gen_config, max_queue_size=max_queue_size, streaming=streaming
         )
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def generate_batch(
         self,
         inputs: List[List[int]],

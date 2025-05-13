@@ -17,10 +17,10 @@ _TEST_PROMPTS = [
 
 # --- Common Setup ---
 model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.2-3b-Instruct", attn_implementation="sdpa_paged", torch_dtype=torch.float16, device_map="auto"
-)
+    "meta-llama/Llama-3.2-3b-Instruct", attn_implementation="eager_paged", torch_dtype=torch.bfloat16, device_map="auto"
+).eval()
 tokenizer = AutoTokenizer.from_pretrained(
-    "meta-llama/Llama-3.2-3b-Instruct", torch_dtype=torch.float16, padding_side="left"
+    "meta-llama/Llama-3.2-3b-Instruct", padding_side="left"
 )
 
 device = "mps"
@@ -32,7 +32,7 @@ if tokenizer.pad_token is None:
 
 # Configure generation parameters
 generation_config = GenerationConfig(
-    max_new_tokens=16,
+    max_new_tokens=50,
     top_k=0,
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
@@ -41,9 +41,9 @@ generation_config = GenerationConfig(
     # temperature=0.7,
     # top_k=50,
     # Parameters relevant for Continuous Batching (can be tuned)
-    num_blocks=20,
+    num_blocks=64,
     block_size=64,
-    max_batch_tokens=32,  # Maximum number of tokens to process in a single batch
+    max_batch_tokens=64,  # Maximum number of tokens to process in a single batch
 )
 
 # Prepare data (using a smaller subset for demonstration)
@@ -127,9 +127,8 @@ for request in batch_outputs:
         output_text = tokenizer.decode(batch_outputs[request].static_outputs[1:], skip_special_tokens=False)
     if len(output_text) > 0:
         print("-" * 20)
-        print(f"Result for Request {request}:")
-        print(f"  Input:  {input_text}")
-        print(f"  Output: {output_text}")
+        print(f"{request} Input:  {input_text}")
+        print(f"{request} Output: {output_text}")
     else:
         print("", end="\r\r\r\r")
 print("-" * 20)
