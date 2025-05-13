@@ -489,12 +489,11 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             do_rescale=True,
             rescale_factor=-1,
             padding="max_length",
-            max_length=76,
-            truncation=True,
+            max_length=172,
         )
 
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
+        self.assertEqual(len(inputs["input_ids"][0]), 172)
 
     @require_torch
     @require_vision
