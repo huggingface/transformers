@@ -186,7 +186,6 @@ def is_local_dist_rank_0():
 
 
 if is_sagemaker_mp_enabled():
-    import smdistributed.modelparallel.torch as smp
     from smdistributed.modelparallel import __version__ as SMP_VERSION
 
     IS_SAGEMAKER_MP_POST_1_10 = version.parse(SMP_VERSION) >= version.parse("1.10")
@@ -3480,6 +3479,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 current_peft_config.save_pretrained(save_directory)
 
         # ── Materialize & De-share ─────────────────────────────────────────────
+        module_map = {}
         raw_sd     = state_dict if state_dict is not None else model_to_save.state_dict()
         state_dict = {
                         name: tensor.detach().cpu().clone()
