@@ -9,13 +9,6 @@ if is_torch_available():
     import torch.nn as nn
     import torch.nn.functional as F
 
-    # We reuse the RMSNorm implementation shipped with the reference BitNet model to avoid code duplication
-    # and guarantee consistency with the official implementation.
-    try:
-        from ..models.bitnet.modeling_bitnet import BitNetRMSNorm
-    except (ModuleNotFoundError, ImportError):
-        BitNetRMSNorm = None  # BitNet model might not be available in minimal installations
-
 logger = logging.get_logger(__name__)
 
 
@@ -169,13 +162,8 @@ class BitLinear(nn.Module):
         # Optional RMSNorm (applied on the activations before quantization).
         self.rms_norm = None
         if use_rms_norm:
-            if BitNetRMSNorm is None:
-                raise ImportError(
-                    "`use_rms_norm=True` requires the BitNet model code to be available in the current Transformers"
-                    " installation. Please install the full `transformers` package or ensure the BitNet model files"
-                    " are accessible."
-                )
-            self.rms_norm = BitNetRMSNorm(in_features, eps=rms_norm_eps)
+            from ..models.llama.modeling_llama import LlamaRMSNorm
+            self.rms_norm = LlamaRMSNorm(in_features, eps=rms_norm_eps)
 
     @torch.compile
     def activation_quant(self, input, num_bits=8):
@@ -284,13 +272,8 @@ class AutoBitLinear(nn.Linear):
         # Optional RMSNorm
         self.rms_norm = None
         if use_rms_norm:
-            if BitNetRMSNorm is None:
-                raise ImportError(
-                    "`use_rms_norm=True` requires the BitNet model code to be available in the current Transformers"
-                    " installation. Please install the full `transformers` package or ensure the BitNet model files"
-                    " are accessible."
-                )
-            self.rms_norm = BitNetRMSNorm(in_features, eps=rms_norm_eps)
+            from ..models.llama.modeling_llama import LlamaRMSNorm
+            self.rms_norm = LlamaRMSNorm(in_features, eps=rms_norm_eps)
         if not online_quant:
             self.register_buffer(
                 "weight_scale",
@@ -365,8 +348,8 @@ def _replace_with_bitnet_linear(
                             device=module.weight.device,
                             dtype=module.weight.dtype,
                             online_quant=(quantization_config.quantization_mode == "online"),
-                            use_rms_norm=getattr(quantization_config, "use_rms_norm", False),
-                            rms_norm_eps=getattr(quantization_config, "rms_norm_eps", 1e-6),
+                            use_rms_norm=quantization_config.use_rms_norm,
+                            rms_norm_eps=quantization_config.rms_norm_eps,
                         )
                         if quantization_config.quantization_mode == "offline":
                             model._modules[name].requires_grad_(False)
@@ -377,8 +360,8 @@ def _replace_with_bitnet_linear(
                             bias=module.bias is not None,
                             device=module.weight.device,
                             dtype=module.weight.dtype,
-                            use_rms_norm=getattr(quantization_config, "use_rms_norm", False),
-                            rms_norm_eps=getattr(quantization_config, "rms_norm_eps", 1e-6),
+                            use_rms_norm=quantization_config.use_rms_norm,
+                            rms_norm_eps=quantization_config.rms_norm_eps,
                         )
                         model._modules[name].requires_grad_(False)
                     has_been_replaced = True
