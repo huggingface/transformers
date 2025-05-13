@@ -366,6 +366,7 @@ class Llama4TextConfig(PretrainedConfig):
         )
         self.attention_chunk_size = attention_chunk_size
 
+        self.layer_attention_patterns = layer_attention_patterns
         if layer_attention_patterns is None:
             self.layer_attention_patterns = ["chunked" if no_rope else "full" for no_rope in self.no_rope_layers]
 

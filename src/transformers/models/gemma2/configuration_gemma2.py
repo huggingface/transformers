@@ -171,6 +171,7 @@ class Gemma2Config(PretrainedConfig):
         self.attn_logit_softcapping = attn_logit_softcapping
         self.cache_implementation = cache_implementation
 
+        self.layer_attention_patterns = layer_attention_patterns
         if layer_attention_patterns is None:
             self.layer_attention_patterns = [
                 "sliding" if bool((i + 1) % 2) else "full" for i in range(self.num_hidden_layers)
