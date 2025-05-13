@@ -693,6 +693,8 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, ModernBertForCausalLM):
+            init_weight(module.lm_head, stds["out"])
 
     @classmethod
     def _autoset_attn_implementation(

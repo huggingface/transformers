@@ -761,7 +761,7 @@ class ModernBertAttention(nn.Module):
             if output_attentions:
                 return (attn_output, attn_weights)
             return (attn_output,)
-        # Self-attention (기존 동작)
+        # Self-attention
         qkv = self.Wqkv(hidden_states)
 
         bs = hidden_states.shape[0]
@@ -924,6 +924,8 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, ModernBertForCausalLM):
+            init_weight(module.lm_head, stds["out"])
 
     @classmethod
     def _autoset_attn_implementation(
