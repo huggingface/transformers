@@ -15,7 +15,7 @@ jobs:
     uses: jitesh-gupta/hf-workflows/.github/workflows/transformers_amd_ci_scheduled.yaml@use-arc-runner
     with:
       job: run_examples_gpu
-      runner: test-linux-mi300-1gpu-ossci
+      runner: test-linux-mi300
       docker: huggingface/transformers-pytorch-amd-gpu
     secrets: inherit
 
