@@ -14,7 +14,7 @@ def paged_attention_forward(
     k: torch.Tensor,
     v: torch.Tensor,
     attention_mask: torch.Tensor,
-    cache: PagedAttentionCache,
+    cache: PagedAttentionCache=None,
     cumulative_seqlens_q=None,
     cumulative_seqlens_k=None,
     max_seqlen_q=None,
