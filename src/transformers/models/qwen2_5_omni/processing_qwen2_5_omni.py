@@ -82,7 +82,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
     Args:
         image_processor ([`Qwen2VLImageProcessor`], *optional*):
             The image processor.
-        video_processor ([`Qwen2VLVideoProcessor`], *optional*):
+        video_processor ([`Qwen2_5OmniVideoProcessor`], *optional*):
             The video processor.
         feature_extractor ([`WhisperFeatureExtractor`], *optional*):
             The audio feature extractor.
@@ -94,7 +94,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "video_processor", "feature_extractor", "tokenizer"]
     image_processor_class = "Qwen2VLImageProcessor"
-    video_processor_class = "Qwen2VLVideoProcessor"
+    video_processor_class = "Qwen2_5OmniVideoProcessor"
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
     valid_kwargs = ["chat_template"]
@@ -155,7 +155,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         seconds_per_chunk = output_kwargs["videos_kwargs"].pop("seconds_per_chunk")
         position_id_per_seconds = output_kwargs["videos_kwargs"].pop("position_id_per_seconds")
         use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
-        fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
+        fps = output_kwargs["videos_kwargs"].get("fps", 2.0)
 
         if audio is not None:
             output_kwargs["audio_kwargs"]["padding"] = "max_length"  # Support "max_length" padding only here

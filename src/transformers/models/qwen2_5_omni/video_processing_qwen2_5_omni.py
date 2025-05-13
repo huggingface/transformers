@@ -51,7 +51,6 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 if is_vision_available():
     from ...image_utils import PILImageResampling
-    from .image_processing_qwen2_vl import smart_resize
 
 if is_torchvision_available():
     if is_torchvision_v2_available():
@@ -64,21 +63,45 @@ if is_torch_available():
     import torch
 
 
-VIDEO_MIN_PIXELS = 128 * 28 * 28
-VIDEO_MAX_PIXELS = 768 * 28 * 28
-FRAME_FACTOR = 2
-FPS = 2.0
-FPS_MIN_FRAMES = 4
-FPS_MAX_FRAMES = 768
-VIDEO_TOTAL_PIXELS = int(128000 * 28 * 28 * 0.9)
-
-
 class Qwen2_5OmniVideoProcessorInitKwargs(VideosKwargs):
     min_pixels: Optional[int]
     max_pixels: Optional[int]
     patch_size: Optional[int]
     temporal_patch_size: Optional[int]
     merge_size: Optional[int]
+    min_frames: Optional[int]
+    max_frames: Optional[int]
+
+
+def smart_resize(
+    height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
+):
+    """Rescales the image so that the following conditions are met:
+
+    1. Both dimensions (height and width) are divisible by 'factor'.
+
+    2. The total number of pixels is within the range ['min_pixels', 'max_pixels'].
+
+    3. The aspect ratio of the image is maintained as closely as possible.
+
+    """
+    if height < factor or width < factor:
+        raise ValueError(f"height:{height} and width:{width} must be larger than factor:{factor}")
+    elif max(height, width) / min(height, width) > 200:
+        raise ValueError(
+            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
+        )
+    h_bar = round(height / factor) * factor
+    w_bar = round(width / factor) * factor
+    if h_bar * w_bar > max_pixels:
+        beta = math.sqrt((height * width) / max_pixels)
+        h_bar = math.floor(height / beta / factor) * factor
+        w_bar = math.floor(width / beta / factor) * factor
+    elif h_bar * w_bar < min_pixels:
+        beta = math.sqrt(min_pixels / (height * width))
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
+    return h_bar, w_bar
 
 
 @add_start_docstrings(
@@ -95,23 +118,29 @@ class Qwen2_5OmniVideoProcessorInitKwargs(VideosKwargs):
             The temporal patch size of the vision encoder.
         merge_size (`int`, *optional*, defaults to 2):
             The merge size of the vision encoder to llm encoder.
+        min_frames (`int`, *optional*, defaults to 4):
+            The minimum number of frames that can be sampled.
+        max_frames (`int`, *optional*, defaults to 768):
+            The maximum number of frames that can be sampled.
     """,
 )
 @requires(backends=("torchvision",))
 class Qwen2_5OmniVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
-    size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
+    size = {"shortest_edge": 128 * 28 * 28, "longest_edge": 28 * 28 * 768}
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
     do_resize = True
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    min_pixels = 56 * 56
-    max_pixels = 28 * 28 * 1280
+    min_pixels = 128 * 28 * 28
+    max_pixels = 28 * 28 * 768
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
+    min_frames = 4
+    max_frames = 768
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
     valid_kwargs = Qwen2_5OmniVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
@@ -123,6 +152,9 @@ class Qwen2_5OmniVideoProcessor(BaseVideoProcessor):
     def sample_frames(
         self,
         video: "torch.Tensor",
+        frame_factor: int,
+        min_frames: int,
+        max_frames: int,
         metadata: Optional[Union[VideoMetadata, dict]] = None,
         num_frames: Optional[int] = None,
         fps: Optional[int] = None,
@@ -135,6 +167,12 @@ class Qwen2_5OmniVideoProcessor(BaseVideoProcessor):
         Args:
             video (`torch.Tensor`):
                 Video that need to be sampled.
+            frame_factor (`int`):
+                The temporal patch size of the vision encoder. Number of sampled frames will be rounded to be divisible by frame factor.
+            min_frames (`int`):
+                The minimum number of frames that can be sampled.
+            max_frames (`int`):
+                The maximum number of frames that can be sampled.
             metadata (`VideoMetadata`, *optional*):
                 Metadata of the video containing information about total duration, fps and total number of frames.
             num_frames (`int`, *optional*):
@@ -157,48 +195,29 @@ class Qwen2_5OmniVideoProcessor(BaseVideoProcessor):
 
         # If num_frames is not given but fps is, calculate num_frames from fps
         if num_frames is not None:
-            num_frames = round(num_frames / FRAME_FACTOR) * FRAME_FACTOR
+            num_frames = round(num_frames / frame_factor) * frame_factor
         elif fps is not None:
             if metadata is None:
                 raise ValueError(
                     "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
                     "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
                 )
-            max_frames = math.floor(min(FPS_MAX_FRAMES, total_num_frames) / FRAME_FACTOR) * FRAME_FACTOR
+            max_frames = math.floor(min(max_frames, total_num_frames) / frame_factor) * frame_factor
             num_frames = total_num_frames / metadata.fps * fps
-            num_frames = min(min(max(num_frames, FPS_MIN_FRAMES), max_frames), total_num_frames)
-            num_frames = math.floor(num_frames / FRAME_FACTOR) * FRAME_FACTOR
+            num_frames = min(min(max(num_frames, min_frames), max_frames), total_num_frames)
+            num_frames = math.floor(num_frames / frame_factor) * frame_factor
 
         if num_frames > total_num_frames:
             raise ValueError(
-                f"Video can't be sampled. The `num_frames={num_frames}1` exceeds `total_num_frames={total_num_frames}`."
+                f"Video can't be sampled. The inferred `num_frames={num_frames}` exceeds `total_num_frames={total_num_frames}`. "
+                "Decrease `num_frames` or `fps` for sampling."
             )
 
         if num_frames is not None:
             indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
         else:
             indices = torch.arange(0, total_num_frames).int()
-
         video = video[indices].contiguous()
-
-        max_pixels = max(
-            min(VIDEO_MAX_PIXELS, VIDEO_TOTAL_PIXELS / num_frames * FRAME_FACTOR), int(VIDEO_MIN_PIXELS * 1.05)
-        )
-        height, width = video.shape[-2:]
-        resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=patch_size * merge_size,
-            min_pixels=VIDEO_MIN_PIXELS,
-            max_pixels=max_pixels,
-        )
-
-        video = F.resize(
-            video,
-            [resized_height, resized_width],
-            interpolation=F.InterpolationMode.BICUBIC,
-            antialias=True,
-        )
 
         return video
 
@@ -223,6 +242,8 @@ class Qwen2_5OmniVideoProcessor(BaseVideoProcessor):
         video_metadata: Optional[Union[List[List[VideoMetadata]], List[List[dict]]]] = None,
         fps: Optional[int] = None,
         num_frames: Optional[int] = None,
+        min_frames: Optional[int] = None,
+        max_frames: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
@@ -233,7 +254,15 @@ class Qwen2_5OmniVideoProcessor(BaseVideoProcessor):
             else:
                 batch_metadata = [None] * len(videos)
             videos = [
-                self.sample_frames(video, metadata=metadata, num_frames=num_frames, fps=fps)
+                self.sample_frames(
+                    video,
+                    frame_factor=temporal_patch_size,
+                    min_frames=min_frames,
+                    max_frames=max_frames,
+                    metadata=metadata,
+                    num_frames=num_frames,
+                    fps=fps,
+                )
                 for video, metadata in zip(videos, batch_metadata)
             ]
 
