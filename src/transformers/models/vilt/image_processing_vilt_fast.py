@@ -211,7 +211,8 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by shape before padding
         grouped_images, grouped_images_index = group_images_by_shape(images)
-        processed_grouped = {}
+        processed_images = {}
+        processed_masks = {}
 
         for shape, stacked_images in grouped_images.items():
             # Create mask template for efficient masking
@@ -240,15 +241,12 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
                 )
 
             # Store processed group
-            processed_grouped[shape] = (padded_images, pixel_masks)
+            processed_images[shape] = padded_images
+            processed_masks[shape] = pixel_masks
 
         # Reorder images back to original order
-        padded_images = []
-        pixel_masks = []
-
-        for _, (group_key, position) in grouped_images_index.items():
-            padded_images.append(processed_grouped[group_key][0][position])
-            pixel_masks.append(processed_grouped[group_key][1][position])
+        padded_images = reorder_images(processed_images, grouped_images_index)
+        pixel_masks = reorder_images(processed_masks, grouped_images_index)
 
         # Stack if tensors are requested for final result
         if return_tensors == "pt" and padded_images:
