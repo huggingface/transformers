@@ -455,7 +455,7 @@ def main():
             split=train_split_name,
             cache_dir=args.cache_dir,
             trust_remote_code=args.trust_remote_code,
-            storage_options={"client_kwargs": {"timeout": aiohttp.ClientTimeout(total=10 * 60)}},
+            storage_options={"client_kwargs": {"timeout": aiohttp.ClientTimeout(total=60 * 60)}},
         )
         datasets_splits.append(dataset_split)
 
