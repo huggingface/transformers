@@ -298,6 +298,26 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
             image_sizes = torch.cat([image_sizes, image_sizes], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
 
+    def test_odd_sized_image(self):
+        # prepare processor & input
+        processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
+        image = torch.randint(0, 2, (3, 503, 316)).numpy()  # odd-sized image
+        prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
+        inputs_dict = processor(images=[image], text=[prompt], return_tensors="pt", padding=True).to(torch_device)
+
+        # prepare model configuration
+        config = self.model_tester.get_config()
+        config.text_config.vocab_size = len(processor.tokenizer)
+        config.vision_config.patch_size = processor.patch_size
+        config.vision_config.image_size = processor.image_processor.size["shortest_edge"]
+        config.image_grid_pinpoints = processor.image_processor.image_grid_pinpoints
+        config.image_token_index = processor.image_token_id
+
+        # forward with odd-sized image input
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model(**inputs_dict)
+
     @parameterized.expand(
         [
             (-1,),
