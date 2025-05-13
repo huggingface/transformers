@@ -474,6 +474,7 @@ def create_document_mask(cumulative_seqlens_q, cumulative_seqlens_k):
 
     is_causal = ~(cumulative_seqlens_q[1:] - cumulative_seqlens_q[:-1] == 1) * cumulative_seqlens_q[1:]
     apply_causal = torch.bucketize(q_indices, is_causal, right=True)[:, None] == k_doc_ids
+    # TODO don't apply on prefill splitting
     causal_mask = torch.triu(torch.ones(total_q, total_k, device=q_doc_ids.device), diagonal=1).bool()
     doc_mask.masked_fill_((apply_causal & causal_mask), False)
     return doc_mask
@@ -761,25 +762,25 @@ class ContinuousBatchProcessor:
                 continue
 
             # Get tokens to process
-            tokens_to_process = (
+            token_budget = (
                 len(state.remaining_prompt_ids) if state.status == "split_pending_remainder" else len(state.prompt_ids)
             )
-            if tokens_to_process == 0:
+            if token_budget == 0:
                 if i < len(self.waiting_requests):
                     request_ids_to_remove_from_waiting.add(state.request_id)
                 continue
 
             # Check if we need to split the request
-            if batch_token_count + tokens_to_process > self.max_batch_tokens:
+            if batch_token_count + token_budget > self.max_batch_tokens:
                 remaining_space = self.max_batch_tokens - batch_token_count
                 # Only split if we have enough space for a meaningful chunk
                 if remaining_space >= 16:
-                    tokens_to_process = remaining_space
+                    token_budget = remaining_space
                 else:
                     continue  # Not enough space to split
 
             # Check if we have enough blocks
-            needed_blocks = math.ceil(tokens_to_process / self.cache.block_size)
+            needed_blocks = math.ceil(token_budget / self.cache.block_size)
             if needed_blocks > num_free_blocks:
                 logger.debug(
                     f"Request {state.request_id} needs {needed_blocks} blocks but only {num_free_blocks} available. Skipping."
@@ -788,11 +789,11 @@ class ContinuousBatchProcessor:
 
             # We can process this request
             num_free_blocks -= needed_blocks
-            batch_token_count += tokens_to_process
+            batch_token_count += token_budget
             selected_requests.append(state.request_id)
 
             # Set up the request based on whether we're splitting
-            self._prepare_request_for_processing(state, tokens_to_process, request_ids_to_remove_from_waiting)
+            self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
 
         # Remove processed requests from waiting queue
         self.waiting_requests = deque(
@@ -804,12 +805,11 @@ class ContinuousBatchProcessor:
 
     @traced(span_name="prepare_request")
     def _prepare_request_for_processing(
-        self, state: RequestState, tokens_to_process, request_ids_to_remove_from_waiting
+        self, state: RequestState, token_budget, request_ids_to_remove_from_waiting
     ):
         """Prepare a request for processing in the current batch."""
-        source_tokens = state.remaining_prompt_ids if state.status == "split_pending_remainder" else state.prompt_ids
-
-        if tokens_to_process >= len(source_tokens):
+        request_tokens = state.remaining_prompt_ids if state.status == "split_pending_remainder" else state.prompt_ids
+        if len(request_tokens) < token_budget:
             # Can process the entire prompt/remainder
             if state.status == "pending":
                 self.active_requests[state.request_id] = state
@@ -823,14 +823,12 @@ class ContinuousBatchProcessor:
             # Need to split the request
             if state.status == "pending":
                 self.active_requests[state.request_id] = state
-                state.remaining_prompt_ids = source_tokens[tokens_to_process:]
-                state.prompt_ids = source_tokens[:tokens_to_process]
                 state.status = "prefilling_split"
                 request_ids_to_remove_from_waiting.add(state.request_id)
             elif state.status == "split_pending_remainder":
-                state.remaining_prompt_ids = source_tokens[tokens_to_process:]
-                state.prompt_ids = source_tokens[:tokens_to_process]
                 state.status = "prefilling_split"
+            state.remaining_prompt_ids = request_tokens[token_budget:]
+            state.prompt_ids = request_tokens[:token_budget]
 
     @traced
     def prepare_next_batch(self):
@@ -881,8 +879,8 @@ class ContinuousBatchProcessor:
                 read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len() + 1)))
 
                 seq_len_q = 1  # Query length is 1 for generation
-                seq_len_k = state.current_len() + 1  # Key length includes context
-            elif state.status.startswith("prefilling"):
+                seq_len_k = state.current_len()
+            elif state.status == "prefilling":
                 next_input_ids = state.prompt_ids
                 input_ids.extend(next_input_ids)
                 start_pos = state.current_len()
@@ -894,9 +892,20 @@ class ContinuousBatchProcessor:
 
                 read_indices = write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
                 seq_len_q = seq_len_k = len(next_input_ids)
-            else:
-                logger.warning(f"Request {state.request_id} in unexpected state '{state.status}'. Skipping.")
-                continue
+            elif state.status == "prefilling_split":
+                next_input_ids = state.prompt_ids
+                input_ids.extend(next_input_ids)
+                start_pos = state.current_len()
+                positions_to_add = list(range(start_pos, start_pos + len(next_input_ids)))
+                state.position_offset += len(next_input_ids)
+
+                if not self._allocate_blocks_if_needed(state, state.current_len()):
+                    continue
+
+                write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
+                read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))
+                seq_len_q = len(next_input_ids)
+                seq_len_k = state.current_len() # Key length includes previously split context #TODO not sure about +1
 
             position_ids.extend(positions_to_add)
             read_index.extend(read_indices)
@@ -906,7 +915,9 @@ class ContinuousBatchProcessor:
             if state.status != "prefilling_split":
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
                 logits_to_track += 1
-
+            if state.status == "prefilling_split":
+                self.attention_mask[..., cumulative_seqlens_q[-2]:cumulative_seqlens_q[-1], cumulative_seqlens_k[-2]:cumulative_seqlens_k[-1]-(seq_len_k-seq_len_q)] = 0
+                self.attention_mask[..., cumulative_seqlens_q[-2]:cumulative_seqlens_q[-1], cumulative_seqlens_k[-2]:cumulative_seqlens_k[-1]-(seq_len_k-seq_len_q)] = 0
             self.max_seqlen_q = max(self.max_seqlen_q, seq_len_q)
             self.max_seqlen_k = max(self.max_seqlen_k, seq_len_k)
 
