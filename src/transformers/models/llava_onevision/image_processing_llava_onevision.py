@@ -644,7 +644,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
                 image,
                 image_grid_pinpoints,
                 size=size_tuple,
-                patch_size=size["height"],
+                patch_size=size_tuple[0],
                 resample=resample,
                 data_format=input_data_format,
                 input_data_format=input_data_format,
