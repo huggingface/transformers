@@ -40,7 +40,12 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_flash_attn_2_available, logging
+from ...utils import (
+    add_start_docstrings,
+    auto_docstring,
+    is_flash_attn_2_available,
+    logging,
+)
 from ...utils.import_utils import is_triton_available
 from .configuration_modernbert import ModernBertConfig
 
@@ -533,7 +538,7 @@ class ModernBertAttention(nn.Module):
             if output_attentions:
                 return (attn_output, attn_weights)
             return (attn_output,)
-        # Self-attention (기존 동작)
+        # Self-attention
         qkv = self.Wqkv(hidden_states)
 
         bs = hidden_states.shape[0]
@@ -637,7 +642,27 @@ class ModernBertEncoderLayer(nn.Module):
         return outputs
 
 
-@auto_docstring
+MODERNBERT_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`ModernBertConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    "The bare ModernBert Model outputting raw hidden-states without any specific head on top.",
+    MODERNBERT_START_DOCSTRING,
+)
 class ModernBertPreTrainedModel(PreTrainedModel):
     config_class = ModernBertConfig
     base_model_prefix = "model"

@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_flash_attn_2_available, logging
+from ...utils import add_start_docstrings, auto_docstring, is_flash_attn_2_available, logging
 from ...utils.import_utils import is_triton_available
 from ..gemma.modeling_gemma import GemmaRotaryEmbedding, apply_rotary_pos_emb
 
