@@ -132,56 +132,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
     def get_decoder(self):
         return self.vlm.model
 
-    def inner_forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        pixel_values: Optional[torch.Tensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, ModelOutput]:
-        """
-        Forward through the Qwen2VL backbone.
-
-        Uses a custom forward method to fix an issue with the gradient flow when training with multiple GPUs. Code is
-        mostly copied from [`Qwen2VLForConditionalGeneration.forward`], excluding the code for video processing.
-        """
-        if inputs_embeds is None:
-            inputs_embeds = self.vlm.model.embed_tokens(input_ids)
-
-            if pixel_values is not None:
-                pixel_values = pixel_values.type(self.vlm.visual.get_dtype())
-                image_embeds = self.vlm.visual(pixel_values, grid_thw=image_grid_thw)
-                image_mask = (
-                    (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
-                )
-                image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
-
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(inputs_embeds.device)
-
-        outputs = self.vlm.model(
-            input_ids=None,
-            position_ids=position_ids,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
-        )
-        return outputs
-
     @auto_docstring
     def forward(
         self,
@@ -229,20 +179,36 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             attention_mask=attention_mask,
         )
 
-        vlm_output = self.inner_forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
+
+        # Custom data preparation to fix an issue with the gradient flow when training with multiple GPUs.
+        if inputs_embeds is None:
+            inputs_embeds = self.vlm.model.embed_tokens(input_ids)
+
+            if pixel_values is not None:
+                pixel_values = pixel_values.type(self.vlm.visual.get_dtype())
+                image_embeds = self.vlm.visual(pixel_values, grid_thw=image_grid_thw)
+                image_mask = (
+                    (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+                )
+                image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(inputs_embeds.device)
+
+        vlm_output = self.vlm.model(
+            input_ids=None,
             position_ids=position_ids,
+            attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            output_hidden_states=True,
-            return_dict=True,
-            pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             cache_position=cache_position,
         )
+
         vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
 
         last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)
