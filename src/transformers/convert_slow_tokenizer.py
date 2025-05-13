@@ -1563,6 +1563,8 @@ def bytes_to_unicode():
             n += 1
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
+
+
 class TikTokenConverter:
     """
     A general tiktoken converter.
@@ -1582,7 +1584,9 @@ class TikTokenConverter:
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
         self.additional_special_tokens = (
-            additional_special_tokens.keys() if isinstance(additional_special_tokens, dict) else additional_special_tokens
+            additional_special_tokens.keys()
+            if isinstance(additional_special_tokens, dict)
+            else additional_special_tokens
         )
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):

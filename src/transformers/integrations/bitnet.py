@@ -163,6 +163,7 @@ class BitLinear(nn.Module):
         self.rms_norm = None
         if use_rms_norm:
             from ..models.llama.modeling_llama import LlamaRMSNorm
+
             self.rms_norm = LlamaRMSNorm(in_features, eps=rms_norm_eps)
 
     @torch.compile
@@ -273,6 +274,7 @@ class AutoBitLinear(nn.Linear):
         self.rms_norm = None
         if use_rms_norm:
             from ..models.llama.modeling_llama import LlamaRMSNorm
+
             self.rms_norm = LlamaRMSNorm(in_features, eps=rms_norm_eps)
         if not online_quant:
             self.register_buffer(
@@ -424,4 +426,3 @@ def replace_with_bitnet_linear(
         )
 
     return model
-
