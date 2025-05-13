@@ -63,6 +63,24 @@ class FalconModelTester(CausalLMModelTester):
         else {}
     )
 
+    def get_config(self):
+        return self.config_class(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,
+            intermediate_size=self.intermediate_size,
+            hidden_act=self.hidden_act,
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
+            type_vocab_size=self.type_vocab_size,
+            is_decoder=False,
+            initializer_range=self.initializer_range,
+            pad_token_id=self.pad_token_id,
+        )
+
 
 @require_torch
 class FalconModelTest(CausalLMModelTest, unittest.TestCase):
