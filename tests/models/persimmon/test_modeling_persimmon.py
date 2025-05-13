@@ -43,11 +43,11 @@ if is_torch_available():
         PersimmonModel,
     )
 
-from ...causal_lm_tester import CausalLMModelTester
+from ...causal_lm_tester import CausalLMModelTester, CausalLMModelTest
 
 
 # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester with Llama->Persimmon
-class LlamaModelTester(CausalLMModelTester):
+class PersimmonModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = PersimmonConfig
         base_model_class = PersimmonModel
@@ -68,7 +68,8 @@ class LlamaModelTester(CausalLMModelTester):
 
 
 @require_torch
-class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class PersimmonModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = PersimmonModelTester
     all_model_classes = (
         (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification, PersimmonForTokenClassification)
         if is_torch_available()
