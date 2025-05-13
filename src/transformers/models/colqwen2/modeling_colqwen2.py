@@ -36,11 +36,7 @@ class ColQwen2PreTrainedModel(PreTrainedModel):
     _no_split_modules = []
 
     def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range")
-        if std is None:
-            raise AttributeError(
-                "The `initializer_range` attribute is not set in the configuration. Please set it before using the model."
-            )
+        std = self.config["initializer_range"]
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
