@@ -231,7 +231,9 @@ class Phi4MultimodalFeatureExtractionTest(SequenceFeatureExtractionTestMixin, un
         self.assertEqual(input_features.shape, (1, 584, 80))
         torch.testing.assert_close(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, rtol=1e-4, atol=1e-4)
 
-    @unittest.mock.patch("transformers.models.phi4_multimodal.feature_extraction_phi4_multimodal.is_torch_available", lambda: False)
+    @unittest.mock.patch(
+        "transformers.models.phi4_multimodal.feature_extraction_phi4_multimodal.is_torch_available", lambda: False
+    )
     def test_numpy_integration(self):
         # fmt: off
         EXPECTED_INPUT_FEATURES = np.array(
