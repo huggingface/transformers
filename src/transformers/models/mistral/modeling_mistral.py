@@ -24,7 +24,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, LayerPattern, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_mistral import MistralConfig
@@ -338,7 +338,9 @@ class MistralModel(MistralPreTrainedModel):
         self.norm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = MistralRotaryEmbedding(config=config)
         pattern = "sliding" if config.sliding_window is not None else "full"
-        self.layer_attention_patterns = [LayerPattern(pattern, config.sliding_window) for _ in range(config.num_hidden_layers)]
+        self.layer_attention_patterns = [
+            LayerPattern(pattern, config.sliding_window) for _ in range(config.num_hidden_layers)
+        ]
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
