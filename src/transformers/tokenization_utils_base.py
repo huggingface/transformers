@@ -800,12 +800,13 @@ class BatchEncoding(UserDict):
 
         return self
 
-    def to(self, device: Union[str, "torch.device"], *, non_blocking: bool = False) -> "BatchEncoding":
+    def to(self, device: Union[str, "torch.device"], dtype: Union[str, "torch.dtype"] = None, *, non_blocking: bool = False) -> "BatchEncoding":
         """
         Send all values to device by calling `v.to(device, non_blocking=non_blocking)` (PyTorch only).
 
         Args:
             device (`str` or `torch.device`): The device to put the tensors on.
+            dtype (`str` or `torch.dtype`): The dtype to the tensors
             non_blocking (`bool`): Whether to perform the copy asynchronously.
 
         Returns:
@@ -819,7 +820,7 @@ class BatchEncoding(UserDict):
         # into a HalfTensor
         if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
             self.data = {
-                k: v.to(device=device, non_blocking=non_blocking) if isinstance(v, torch.Tensor) else v
+                k: v.to(device=device, dtype=dtype, non_blocking=non_blocking) if isinstance(v, torch.Tensor) else v
                 for k, v in self.data.items()
             }
         else:
