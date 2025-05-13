@@ -560,7 +560,7 @@ def get_causal_masks(
     ]
     unique_mask_configs = list(set(mask_configs))
     # Compute the layer mapping from unique configs
-    layer_to_mask_mapping = [unique_mask_configs.index(config) for config in unique_mask_configs]
+    layer_to_mask_mapping = [unique_mask_configs.index(config) for config in mask_configs]
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
     if attention_mask is not None:
