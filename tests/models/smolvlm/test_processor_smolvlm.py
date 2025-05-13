@@ -465,6 +465,31 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     @require_vision
+    def test_unstructured_kwargs_batched_video(self):
+        if "video_processor" not in self.processor_class.attributes:
+            self.skipTest(f"video_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs(batch_size=2, modality="video")
+        video_input = self.prepare_video_inputs(batch_size=2)
+        inputs = processor(
+            text=input_str,
+            videos=video_input,
+            return_tensors="pt",
+            do_rescale=True,
+            rescale_factor=-1,
+            padding="max_length",
+            max_length=76,
+        )
+
+        self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
+        self.assertEqual(len(inputs["input_ids"][0]), 76)
+
+    @require_torch
+    @require_vision
     def test_text_only_inference(self):
         """Test that the processor works correctly with text-only input."""
         processor_components = self.prepare_components()
