@@ -32,10 +32,12 @@ from ..cache_utils import (
     Cache,
     DynamicCache,
     EncoderDecoderCache,
+    HybridCache,
     HybridChunkedCache,
     OffloadedCache,
     OffloadedHybridCache,
     QuantizedCacheConfig,
+    StaticCache,
 )
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import (
@@ -75,6 +77,7 @@ from .candidate_generator import (
 from .configuration_utils import (
     NEED_SETUP_CACHE_CLASSES_MAPPING,
     QUANT_BACKEND_CLASSES_MAPPING,
+    CompileConfig,
     GenerationConfig,
     GenerationMode,
 )
@@ -3545,6 +3548,17 @@ class GenerationMixin:
         compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
         if compile_forward:
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
+            # If we use FA2 and a static cache, we cannot compile with fullgraph
+            if self.config._attn_implementation == "flash_attention_2" and isinstance(
+                model_kwargs.get("past_key_values"), (StaticCache, HybridCache, HybridChunkedCache)
+            ):
+                # only raise warning if using a non-default compile-config (otherwise, let's just change the default without confusing the user)
+                if generation_config.compile_config.fullgraph and generation_config.compile_config != CompileConfig():
+                    logger.warning_once(
+                        "When using Flash Attention 2 and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
+                        "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
+                    )
+                generation_config.compile_config.fullgraph = False
             model_forward = self.get_compiled_call(generation_config.compile_config)
 
         if generation_config.prefill_chunk_size is not None:

@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma model."""
 
-import tempfile
 import unittest
 
 import pytest
@@ -23,7 +22,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_to
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     cleanup,
-    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,

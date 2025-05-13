@@ -649,7 +649,6 @@ def infer_mask_sizes_patterns_from_config(config: PretrainedConfig, kv_length: i
     return sizes_and_patterns, layer_to_mask_mapping
 
 
-
 # Below are utilities to pretty-print the different masks
 # Print the matrix with words as row labels
 GREEN = "\033[92m"
