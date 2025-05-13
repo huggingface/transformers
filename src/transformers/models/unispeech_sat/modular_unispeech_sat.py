@@ -6,22 +6,9 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.nn as nn
 
-from ...modeling_outputs import (
-    CausalLMOutput,
-    ModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-    Wav2Vec2BaseModelOutput,
-    XVectorOutput,
-)
+from ...modeling_outputs import ModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, logging
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Encoder,
     Wav2Vec2EncoderStableLayerNorm,
@@ -42,25 +29,6 @@ logger = logging.get_logger(__name__)
 
 
 _HIDDEN_STATES_START_POSITION = 2
-
-# General docstring
-_CONFIG_FOR_DOC = "UniSpeechSatConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "microsoft/unispeech-sat-base-100h-libri-ft"
-_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
-
-# CTC docstring
-_CTC_EXPECTED_OUTPUT = "'MISTER QUILDER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
-_CTC_EXPECTED_LOSS = 39.88
-
-# Frame class docstring
-_FRAME_CLASS_CHECKPOINT = "microsoft/unispeech-sat-base-plus-sd"
-_FRAME_EXPECTED_OUTPUT = [0, 0]
-
-# Speaker Verification docstring
-_XVECTOR_CHECKPOINT = "microsoft/unispeech-sat-base-plus-sv"
-_XVECTOR_EXPECTED_OUTPUT = 0.97
 
 
 @dataclass
@@ -169,12 +137,8 @@ class UniSpeechSatGumbelVectorQuantizer(Wav2Vec2GumbelVectorQuantizer):
         return codevectors, perplexity
 
 
+@auto_docstring
 class UniSpeechSatPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = UniSpeechSatConfig
     base_model_prefix = "unispeech_sat"
     main_input_name = "input_values"
@@ -246,67 +210,9 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-UNISPEECH_SAT_START_DOCSTRING = r"""
-    UniSpeechSat was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech
-    Representations](https://arxiv.org/abs/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael
-    Auli.
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving etc.).
-
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`UniSpeechSatConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-UNISPEECH_SAT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-            1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            <Tip warning={true}>
-
-            `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-            True`. For all models whose processor has `config.return_attention_mask == False`, `attention_mask` should
-            **not** be passed to avoid degraded performance when doing batched inference. For such models
-            `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware that these
-            models also yield slightly different results depending on whether `input_values` is padded or not.
-
-            </Tip>
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
 UniSpeechSatBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
-@add_start_docstrings(
-    "The bare UniSpeechSat Model transformer outputting raw hidden-states without any specific head on top.",
-    UNISPEECH_SAT_START_DOCSTRING,
-)
 class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
     def __init__(self, config: UniSpeechSatConfig):
         UniSpeechSatPreTrainedModel.__init__(config)
@@ -330,14 +236,6 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for UniSpeechSat")
 
-    @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=UniSpeechSatBaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -347,6 +245,11 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, UniSpeechSatBaseModelOutput]:
+        r"""
+        mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
+            masked extracted features in *config.proj_codevector_dim* space.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -386,9 +289,10 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
         )
 
 
-@add_start_docstrings(
-    """UniSpeechSat Model with a vector-quantization module and ctc loss for pre-training.""",
-    UNISPEECH_SAT_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    UniSpeechSat Model with a vector-quantization module and ctc loss for pre-training.
+    """
 )
 class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
     def __init__(self, config: UniSpeechSatConfig):
@@ -458,8 +362,7 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         logits = logits / temperature
         return logits
 
-    @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=UniSpeechSatForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -469,8 +372,6 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, UniSpeechSatForPreTrainingOutput]:
         r"""
-        Returns:
-
         Example:
 
         ```python
@@ -517,86 +418,20 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """UniSpeechSat Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    UNISPEECH_SAT_START_DOCSTRING,
-    """
-        target_lang (`str`, *optional*):
-            Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
-            adapter.<lang>.bin. Only relevant when using an instance of [`UniSpeechSatForCTC`] with adapters. Uses
-            'eng' by default.
-    """,
-)
 class UniSpeechSatForCTC(Wav2Vec2ForCTC):
-    @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_CTC_EXPECTED_OUTPUT,
-        expected_loss=_CTC_EXPECTED_LOSS,
-    )
-    def forward(self, **super_kwargs):
-        return super().forward(**super_kwargs)
-
-
-@add_start_docstrings(
-    """
-    UniSpeechSat Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB Keyword Spotting.
-    """,
-    UNISPEECH_SAT_START_DOCSTRING,
-)
-class UniSpeechSatForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-    )
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
-
-
-@add_start_docstrings(
-    """
-    UniSpeechSat Model with a frame classification head on top for tasks like Speaker Diarization.
-    """,
-    UNISPEECH_SAT_START_DOCSTRING,
-)
-class UniSpeechSatForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
-    @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_FRAME_CLASS_CHECKPOINT,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_FRAME_EXPECTED_OUTPUT,
-    )
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
-
-
-@add_start_docstrings(
-    """
-    UniSpeechSat Model with an XVector feature extraction head on top for tasks like Speaker Verification.
-    """,
-    UNISPEECH_SAT_START_DOCSTRING,
-)
-class UniSpeechSatForXVector(Wav2Vec2ForXVector):
     pass
 
-    @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_XVECTOR_CHECKPOINT,
-        output_type=XVectorOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_XVECTOR_EXPECTED_OUTPUT,
-    )
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
+
+class UniSpeechSatForSequenceClassification(Wav2Vec2ForSequenceClassification):
+    pass
+
+
+class UniSpeechSatForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
+    pass
+
+
+class UniSpeechSatForXVector(Wav2Vec2ForXVector):
+    pass
 
 
 __all__ = [
