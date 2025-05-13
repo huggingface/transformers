@@ -36,6 +36,9 @@ from transformers.models.perception_lm.configuration_perception_lm import (
 from transformers.models.perception_lm.image_processing_perception_lm_fast import (
     PerceptionLMImageProcessorFast,
 )
+from transformers.models.perception_lm.video_processing_perception_lm import (
+    PerceptionLMVideoProcessor,
+)
 from transformers.models.perception_lm.modeling_perception_lm import (
     PerceptionLMForConditionalGeneration,
 )
@@ -491,18 +494,25 @@ def write_tokenizer(
         "patch_size": params["model"]["vision_model"]["patch_size"],
         "processor_class": "PerceptionLMProcessor",
     }
+    image_res = params["model"]["vision_model"]["image_size"]
 
     image_preprocessor_config = {
         "image_processor_type": "PerceptionLMImageProcessorFast",
         "vision_input_type": params["data"]["vision_input_type"],
-        "image_res": params["model"]["vision_model"]["image_size"],
+        "image_res": image_res,
         "max_num_tiles": params["data"]["max_num_tiles"],
         "max_frame_tiles": 1,
         "normalize_img": True,
     }
     image_preprocessor = PerceptionLMImageProcessorFast(**image_preprocessor_config)
+    video_preprocessor_config = {
+        "video_processor_type": "PerceptionLMVideoProcessor",
+        "size": {"height": image_res, "width": image_res},
+    }
+    video_preprocessor = PerceptionLMVideoProcessor(**video_preprocessor_config)
     processor = PerceptionLMProcessor(
         image_processor=image_preprocessor,
+        video_processor=video_preprocessor,
         tokenizer=tokenizer,
         **processor_config,
     )
