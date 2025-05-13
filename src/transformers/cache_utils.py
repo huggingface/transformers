@@ -1754,7 +1754,9 @@ class HybridCache(Cache):
 
         self._dtype = dtype
         self.num_key_value_heads = (
-            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
+            config.num_attention_heads
+            if getattr(config, "num_key_value_heads", None) is None
+            else config.num_key_value_heads
         )
 
         layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2  # 2 is for BC
@@ -2050,7 +2052,7 @@ class OffloadedHybridCache(HybridChunkedCache):
 
         # TODO (joao): to enable this cache on multiple devicesuse the pattern from `OffloadedCache`, which keeps
         # track of the original device of each layer
-        unique_devices = set(layer_device_map.values())
+        unique_devices = set(layer_device_map.values()) if layer_device_map else set()
         if len(unique_devices) > 1:
             raise ValueError(f"OffloadedHybridCache does not support multiple devices. Got devices: {unique_devices}")
 
@@ -2309,7 +2311,7 @@ class OffloadedStaticCache(StaticCache):
 
         # TODO (joao): to enable this cache on multiple devicesuse the pattern from `OffloadedCache`, which keeps
         # track of the original device of each layer
-        unique_devices = set(layer_device_map.values())
+        unique_devices = set(layer_device_map.values()) if layer_device_map else set()
         if len(unique_devices) > 1:
             raise ValueError(f"OffloadedStaticCache does not support multiple devices. Got devices: {unique_devices}")
 
@@ -2385,6 +2387,9 @@ class OffloadedStaticCache(StaticCache):
         Return:
             A tuple containing the updated key and value states.
         """
+
+        key_states = key_states.to(self.key_cache[layer_idx].dtype)
+        value_states = value_states.to(self.value_cache[layer_idx].dtype)
 
         if layer_idx == 0:
             # Update seen tokens.

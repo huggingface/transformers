@@ -306,6 +306,20 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = self.tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
+    @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
+    def test_cache_pipe_rope_model(self, cache_implementation):
+        """Tests caches with a RoPE model"""
+        self._skip_on_failed_cache_prerequisites(cache_implementation)
+        # if cache_implementation in ["off
+        from transformers import pipeline
+        
+        model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM"
+        pipe = pipeline("text-generation", model=model_id, torch_dtype=torch.bfloat16)
+        pipe.model.config.sliding_window = 10 if cache_implementation in ["sliding_window", "hybrid", "hybrid_chunked"] else None
+        out = pipe("h", cache_implementation=cache_implementation, max_new_tokens=10, do_sample=False, disable_compile=True, return_tensors=True)[0]['generated_token_ids'][-10:]
+        EXPECTED_OUTPUT = [914, 134, 124, 889, 48, 233, 541, 27, 380, 365]
+        self.assertListEqual(out, EXPECTED_OUTPUT)
+
 
 @require_torch_accelerator
 class CacheHardIntegrationTest(unittest.TestCase):
