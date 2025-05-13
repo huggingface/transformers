@@ -314,9 +314,18 @@ class CacheIntegrationTest(unittest.TestCase):
 
         model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM"
         pipe = pipeline("text-generation", model=model_id, torch_dtype=torch.bfloat16)
-        pipe.model.config.sliding_window = 10 if cache_implementation in ["sliding_window", "hybrid", "hybrid_chunked"] else None
-        out = pipe("h", cache_implementation=cache_implementation, max_new_tokens=10, do_sample=False, disable_compile=True, return_tensors=True)
-        out = out[0]['generated_token_ids'][-10:]
+        pipe.model.config.sliding_window = (
+            10 if cache_implementation in ["sliding_window", "hybrid", "hybrid_chunked"] else None
+        )
+        out = pipe(
+            "h",
+            cache_implementation=cache_implementation,
+            max_new_tokens=10,
+            do_sample=False,
+            disable_compile=True,
+            return_tensors=True,
+        )
+        out = out[0]["generated_token_ids"][-10:]
         EXPECTED_OUTPUT = [914, 134, 124, 889, 48, 233, 541, 27, 380, 365]
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
