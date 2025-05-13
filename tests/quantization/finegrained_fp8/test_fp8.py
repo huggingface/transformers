@@ -152,9 +152,9 @@ class FP8QuantizerTest(unittest.TestCase):
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
 
-        output_tokens = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
-        output = self.tokenizer.decode(output_tokens[0], skip_special_tokens=True)
-        self.assertEqual(output, self.EXPECTED_OUTPUT)
+        output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+        output_tokens = self.tokenizer.decode(output[0], skip_special_tokens=True)
+        self.assertEqual(output_tokens, self.EXPECTED_OUTPUT)
 
     def test_save_pretrained(self):
         """
