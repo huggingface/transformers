@@ -569,7 +569,7 @@ def _ignore_causal_mask_sdpa(
     """
     Detects whether the causal mask can be ignored in case PyTorch's SDPA is used, rather relying on SDPA's `is_causal` argument.
 
-    In case no token is masked in the `padding_mask` argument, if `query_length == 1` or
+    In case no token is masked in the 2D `padding_mask` argument, if `query_length == 1` or
     `key_value_length == query_length`, we rather rely on SDPA `is_causal` argument to use causal/non-causal masks,
     allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is
     passed).
