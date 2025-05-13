@@ -13,7 +13,7 @@ conversation = [
         "content": [
             {
                 "type": "video",
-                "url": "/home/smhu/code/occhi/apps/plm/dummy_datasets/video/videos/tdiuLmVuCKk_000007_000017.mp4",
+                "url": "/home/smhu/code/occhi/apps/plm/dummy_datasets/video/videos/GUWR5TyiY-M_000012_000022.mp4",
             },
             {"type": "text", "text": "Can you describe the video in detail?"},
         ],

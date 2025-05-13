@@ -123,7 +123,7 @@ class ImageTransform(object):
         image = self.normalize(image)
 
         # Add chunk dim to make it compatible with existing dataloaders
-        image = image.view(-1, 3, self.size, self.size)
+        image = image.view(1, -1, 3, self.size, self.size)
         return image, (w, h)
 
 
@@ -273,30 +273,20 @@ class VariableSizeImageTransform(object):
             return F.pad(
                 image, (0, 0, new_width - image.shape[-1], new_height - image.shape[-2])
             )
-        
+
     def _split(self, image: torch.Tensor, ncw: int, nch: int) -> torch.Tensor:
         # Split image into number of required tiles (width x height)
-        num_channels, height, width = image.size()
-        image = image.view(num_channels, nch, height // nch, ncw, width // ncw)
+        batch_size, num_channels, height, width = image.size()
+        image = image.view(
+            batch_size, num_channels, nch, height // nch, ncw, width // ncw
+        )
         # Permute dimensions to reorder the axes
-        image = image.permute(1, 3, 0, 2, 4).contiguous()
+        image = image.permute(0, 2, 4, 1, 3, 5).contiguous()
         # Reshape into the desired output shape (batch_size * 4, num_channels, width/2, height/2)
-        image = image.view(ncw * nch, num_channels, height // nch, width // ncw)
+        image = image.view(
+            batch_size, ncw * nch, num_channels, height // nch, width // ncw
+        )
         return image
-
-    # def _split(self, image: torch.Tensor, ncw: int, nch: int) -> torch.Tensor:
-    #     # Split image into number of required tiles (width x height)
-    #     batch_size, num_channels, height, width = image.size()
-    #     image = image.view(
-    #         batch_size, num_channels, nch, height // nch, ncw, width // ncw
-    #     )
-    #     # Permute dimensions to reorder the axes
-    #     image = image.permute(0, 2, 4, 1, 3, 5).contiguous()
-    #     # Reshape into the desired output shape (batch_size * 4, num_channels, width/2, height/2)
-    #     image = image.view(
-    #         batch_size, ncw * nch, num_channels, height // nch, width // ncw
-    #     )
-    #     return image
 
     def _get_image_height_width(
         self, image_width: int, image_height: int, target_width: int, target_height: int
@@ -449,9 +439,9 @@ class VariableSizeImageTransform(object):
         image = self.normalize(image)
         image = self._split(image, ar[0], ar[1])  # type: ignore
         if self.use_thumbnail == "before":
-            image = torch.cat((thumbnail, image), dim=0)
+            image = torch.cat((thumbnail, image), dim=1)
         elif self.use_thumbnail == "after":
-            image = torch.cat((image, thumbnail), dim=0)
+            image = torch.cat((image, thumbnail), dim=1)
         elif self.use_thumbnail == "both":
-            image = torch.cat((thumbnail, image, thumbnail), dim=0)
+            image = torch.cat((thumbnail, image, thumbnail), dim=1)
         return image, ar
