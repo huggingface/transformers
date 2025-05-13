@@ -34,15 +34,16 @@ if is_vision_available():
 class BridgeTowerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = BridgeTowerProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = BridgeTowerImageProcessor()
         tokenizer = RobertaTokenizerFast.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
 
         processor = BridgeTowerProcessor(image_processor, tokenizer)
 
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -50,10 +51,11 @@ class BridgeTowerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    # Some kwargs tests are overriden from common tests to handle shortest_edge
+    # Some kwargs tests are overridden from common tests to handle shortest_edge
     # and size_divisor behaviour
 
     @require_torch

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -138,7 +137,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
 
         sequence = "Encode this sequence."
-        space_encoding = tokenizer.byte_encoder[" ".encode("utf-8")[0]]
+        space_encoding = tokenizer.byte_encoder[b" "[0]]
 
         # Testing encoder arguments
         encoded = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=False)
@@ -199,7 +198,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokens_r_str = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
                 tokens_p_str = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
 
-                # Rust correctly handles the space before the mask while python doesnt
+                # Rust correctly handles the space before the mask while python doesn't
                 self.assertSequenceEqual(tokens_p["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
                 self.assertSequenceEqual(tokens_r["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
 

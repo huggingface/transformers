@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,7 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    BitNetConfig,
+    BitNetQuantConfig,
     OPTForCausalLM,
 )
 from transformers.testing_utils import (
@@ -40,12 +39,12 @@ if is_accelerate_available():
 
 
 @require_torch_gpu
-class BitNetConfigTest(unittest.TestCase):
+class BitNetQuantConfigTest(unittest.TestCase):
     def test_to_dict(self):
         """
         Simple test that checks if one uses a config and converts it to a dict, the dict is the same as the config object
         """
-        quantization_config = BitNetConfig()
+        quantization_config = BitNetQuantConfig()
         config_to_dict = quantization_config.to_dict()
 
         for key in config_to_dict:

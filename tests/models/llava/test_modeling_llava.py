@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava model."""
 
+import copy
 import unittest
 
 import requests
@@ -24,6 +24,7 @@ from transformers import (
     AutoTokenizer,
     LlavaConfig,
     LlavaForConditionalGeneration,
+    LlavaModel,
     is_torch_available,
     is_vision_available,
 )
@@ -160,19 +161,6 @@ class LlavaVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_llava_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
-        model = LlavaForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -180,7 +168,14 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
     Model tester for `LlavaForConditionalGeneration`.
     """
 
-    all_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            LlavaModel,
+            LlavaForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {"image-to-text": LlavaForConditionalGeneration, "image-text-to-text": LlavaForConditionalGeneration}
         if is_torch_available()
@@ -198,13 +193,6 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         )
 
     def test_config(self):
-        # overwritten from `tests/test_configuration_common.py::ConfigTester` after #36077
-        # TODO: avoid overwritten once there is a better fix for #36077
-        def check_config_can_be_init_without_params():
-            config = self.config_tester.config_class()
-            self.config_tester.parent.assertIsNotNone(config)
-
-        self.config_tester.check_config_can_be_init_without_params = check_config_can_be_init_without_params
         self.config_tester.run_common_tests()
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
@@ -259,16 +247,17 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successful forward with no modifications
+            curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
+            _ = model(**curr_input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
-            input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
             with self.assertRaises(ValueError):
-                _ = model(**input_dict)
+                _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = input_dict["input_ids"][:1]
-            pixel_values = input_dict["pixel_values"][:1]
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
@@ -302,7 +291,8 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
             model = model_class(config).to(torch_device)
             # We should have the right number of input features,
             # and should be able to run a forward pass without exploding
-            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            base_model = getattr(model, "model", model)
+            assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
     @unittest.skip(
@@ -321,10 +311,6 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
         pass
 
     @unittest.skip(
@@ -578,8 +564,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # image = Image.open(requests.get(url, stream=True).raw)
         inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(model.device)
         generate_ids = model.generate(**inputs, max_new_tokens=500)
-        ouptut = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        print(ouptut)
+        output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        print(output)
 
         # fmt: off
         EXPECTED_GENERATION = """
@@ -598,7 +584,7 @@ These descriptions provide a detailed overview of the content and atmosphere of 
 """
         # fmt: on
         # check that both inputs are handled correctly and generate the same output
-        self.assertEqual(ouptut, EXPECTED_GENERATION)
+        self.assertEqual(output, EXPECTED_GENERATION)
 
     @slow
     @require_bitsandbytes
@@ -617,8 +603,13 @@ These descriptions provide a detailed overview of the content and atmosphere of 
         generate_ids = model.generate(**inputs, max_new_tokens=50)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
-        EXPECTED_GENERATION = "Describe the images. The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador"  # fmt: skip
-        self.assertEqual(output, EXPECTED_GENERATION)
+        EXPECTED_GENERATION = [
+            # CUDA output
+            "Describe the images. The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador",
+            # XPU output
+            "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which covers the entire background. The dog appears to be the main focus",
+        ]  # fmt: skip
+        self.assertTrue(output in EXPECTED_GENERATION)
 
     @slow
     @require_bitsandbytes

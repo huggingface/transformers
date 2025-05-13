@@ -23,31 +23,22 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import MoeCausalLMOutputWithPast
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import (
-    LossKwargs,
-    logging,
-)
+from ...utils import LossKwargs, logging
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaRMSNorm,
 )
-from ..mixtral.modeling_mixtral import (
-    MixtralForCausalLM,
-    MixtralModel,
-    load_balancing_loss_func,
-)
+from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, load_balancing_loss_func
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from .configuration_qwen3_moe import Qwen3MoeConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "Qwen/Qwen3-MoE-15B-A2B"
 
 
 class Qwen3MoeAttention(Qwen3Attention):  # This is the main diff with qwen2Moe!
@@ -131,9 +122,6 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer, nn.Module):
     def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
         nn.Module().__init__()
         self.hidden_size = config.hidden_size
-
-        self.self_attn = Qwen3MoeAttention(config, layer_idx)
-        self.mlp = Qwen3MoeMLP(config)
 
         self.self_attn = Qwen3MoeAttention(config, layer_idx)
 
@@ -244,7 +232,7 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -254,25 +242,15 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
+    ) -> MoeCausalLMOutputWithPast:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
@@ -299,10 +277,9 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
+        outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -312,12 +289,11 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             output_router_logits=output_router_logits,
-            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
@@ -329,19 +305,13 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
         aux_loss = None
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
-                outputs.router_logits if return_dict else outputs[-1],
+                outputs.router_logits,
                 self.num_experts,
                 self.num_experts_per_tok,
                 attention_mask,
             )
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            if output_router_logits:
-                output = (aux_loss,) + output
-            return (loss,) + output if loss is not None else output
 
         return MoeCausalLMOutputWithPast(
             loss=loss,

@@ -32,6 +32,7 @@ import tempfile
 import time
 import warnings
 from collections.abc import Mapping
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
@@ -147,6 +148,7 @@ from .utils import (
     PushInProgress,
     PushToHubMixin,
     can_return_loss,
+    check_torch_load_is_safe,
     find_labels,
     is_accelerate_available,
     is_apex_available,
@@ -164,7 +166,6 @@ from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_schedulefree_available,
-    is_torch_compile_available,
     is_torch_hpu_available,
     is_torch_mlu_available,
     is_torch_mps_available,
@@ -178,6 +179,7 @@ from .utils import (
     strtobool,
 )
 from .utils.deprecation import deprecate_kwarg
+from .utils.import_utils import requires
 from .utils.quantization_config import QuantizationMethod
 
 
@@ -198,12 +200,12 @@ if is_datasets_available():
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
+    import torch_xla.runtime as xr
     from torch_xla import __version__ as XLA_VERSION
 
     IS_XLA_FSDPV2_POST_2_2 = version.parse(XLA_VERSION) >= version.parse(XLA_FSDPV2_MIN_VERSION)
     if IS_XLA_FSDPV2_POST_2_2:
         import torch_xla.distributed.spmd as xs
-        import torch_xla.runtime as xr
 else:
     IS_XLA_FSDPV2_POST_2_2 = False
 
@@ -257,7 +259,7 @@ if is_accelerate_available("0.28.0"):
 
 def _is_peft_model(model):
     if is_peft_available():
-        classes_to_check = (PeftModel,) if is_peft_available() else ()
+        classes_to_check = (PeftModel,)
         # Here we also check if the model is an instance of `PeftMixedModel` introduced in peft>=0.7.0: https://github.com/huggingface/transformers/pull/28321
         if version.parse(importlib.metadata.version("peft")) >= version.parse("0.7.0"):
             from peft import PeftMixedModel
@@ -313,6 +315,12 @@ SCHEDULER_NAME = "scheduler.pt"
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
 
 
+@requires(
+    backends=(
+        "torch",
+        "accelerate",
+    )
+)
 class Trainer:
     """
     Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
@@ -353,7 +361,7 @@ class Trainer:
             Processing class used to process the data. If provided, will be used to automatically process the inputs
             for the model, and it will be saved along the model to make it easier to rerun an interrupted training or
             reuse the fine-tuned model.
-            This supercedes the `tokenizer` argument, which is now deprecated.
+            This supersedes the `tokenizer` argument, which is now deprecated.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
@@ -459,7 +467,7 @@ class Trainer:
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
-
+        self.model = model
         self.create_accelerator_and_postprocess()
 
         # memory metrics - must set up as early as possible
@@ -797,10 +805,6 @@ class Trainer:
         # very last
         self._memory_tracker.stop_and_update_metrics()
 
-        # torch.compile
-        if args.torch_compile and not is_torch_compile_available():
-            raise RuntimeError("Using torch.compile requires PyTorch 2.0 or higher.")
-
         self.is_fsdp_xla_v2_enabled = args.fsdp_config.get("xla_fsdp_v2", False)
         if self.is_fsdp_xla_v2_enabled:
             if not IS_XLA_FSDPV2_POST_2_2:
@@ -937,7 +941,7 @@ class Trainer:
         columns = [k for k in signature_columns if k in dataset.column_names]
         if len(columns) == 0:
             raise ValueError(
-                "No columns in the dataset match the model's forward method signature. "
+                "No columns in the dataset match the model's forward method signature: ({', '.join(signature_columns)}). "
                 f"The following columns have been ignored: [{', '.join(ignored_columns)}]. "
                 "Please check the dataset and model. You may need to set `remove_unused_columns=False` in `TrainingArguments`."
             )
@@ -1025,7 +1029,9 @@ class Trainer:
         if not isinstance(train_dataset, torch.utils.data.IterableDataset):
             dataloader_params["sampler"] = self._get_train_sampler()
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
-            dataloader_params["worker_init_fn"] = seed_worker
+            dataloader_params["worker_init_fn"] = partial(
+                seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
+            )
             dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
 
         return self.accelerator.prepare(DataLoader(train_dataset, **dataloader_params))
@@ -1039,7 +1045,7 @@ class Trainer:
         if self.args.use_legacy_prediction_loop:
             if is_torch_xla_available():
                 return SequentialDistributedSampler(
-                    eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
+                    eval_dataset, num_replicas=xr.world_size(), rank=xr.global_ordinal()
                 )
             elif is_sagemaker_mp_enabled():
                 return SequentialDistributedSampler(
@@ -1245,7 +1251,7 @@ class Trainer:
 
             self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
-            if optimizer_cls.__name__ == "Adam8bit":
+            if "bitsandbytes" in str(optimizer_cls) and optimizer_kwargs.get("optim_bits", None) == 8:
                 import bitsandbytes
 
                 manager = bitsandbytes.optim.GlobalOptimManager.get_instance()
@@ -1361,7 +1367,6 @@ class Trainer:
                 and args.optim_target_modules.replace("_", "-") == "all-linear"
             )
 
-            target_params = []
             target_params_names = []
             for module_name, module in model.named_modules():
                 target_module_exists, is_regex = check_target_module_exists(
@@ -1378,12 +1383,12 @@ class Trainer:
                 if not target_module_exists and not all_linear:
                     continue
 
-                target_params.append(module.weight)
                 target_params_names.append(module_name + ".weight")
 
-            if len(target_params) == 0:
+            if len(target_params_names) == 0:
                 raise ValueError(f"No target modules found for {optimizer_name} ({args.optim_target_modules}).")
 
+            target_params = [p for n, p in model.named_parameters() if n in target_params_names]
             non_target_params = [p for n, p in model.named_parameters() if n not in target_params_names]
             optim_kwargs.update(optim_args)
 
@@ -1902,22 +1907,14 @@ class Trainer:
                     jit_model.forward = original_forward
                 autocast_handler = AutocastKwargs(cache_enabled=False)
                 with self.accelerator.autocast(autocast_handler=autocast_handler), torch.no_grad():
-                    if version.parse(version.parse(torch.__version__).base_version) >= version.parse("2.0.0"):
-                        if isinstance(example_batch, dict):
-                            jit_model = torch.jit.trace(jit_model, example_kwarg_inputs=example_batch, strict=False)
-                        else:
-                            jit_model = torch.jit.trace(
-                                jit_model,
-                                example_kwarg_inputs={key: example_batch[key] for key in example_batch},
-                                strict=False,
-                            )
+                    if isinstance(example_batch, dict):
+                        jit_model = torch.jit.trace(jit_model, example_kwarg_inputs=example_batch, strict=False)
                     else:
-                        jit_inputs = []
-                        for key in example_batch:
-                            example_tensor = torch.ones_like(example_batch[key])
-                            jit_inputs.append(example_tensor)
-                        jit_inputs = tuple(jit_inputs)
-                        jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
+                        jit_model = torch.jit.trace(
+                            jit_model,
+                            example_kwarg_inputs={key: example_batch[key] for key in example_batch},
+                            strict=False,
+                        )
                 jit_model = torch.jit.freeze(jit_model)
                 with torch.no_grad():
                     jit_model(**example_batch)
@@ -1992,10 +1989,10 @@ class Trainer:
             return smp.DistributedModel(model, backward_passes_per_step=self.args.gradient_accumulation_steps)
 
         # train/eval could be run multiple-times - if already wrapped, don't re-wrap it again
-        if self.accelerator.unwrap_model(model) is not model:
+        if self.accelerator.unwrap_model(model, keep_torch_compile=False) is not model:
             return model
 
-        # Mixed precision training with apex (torch < 1.6)
+        # Mixed precision training with apex
         if self.use_apex and training:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
@@ -2313,6 +2310,11 @@ class Trainer:
 
         delay_optimizer_creation = is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled or self.is_fsdp_enabled
 
+        # Can't delay optimizer creation when using FSDP2: https://github.com/huggingface/accelerate/blob/3f636d626063ffcf9a337c7d3624d61b7d187d59/src/accelerate/accelerator.py#L1404
+        is_fsdp2 = self.is_fsdp_enabled and (getattr(self.accelerator.state.fsdp_plugin, "fsdp_version", 1) == 2)
+        if is_fsdp2:
+            delay_optimizer_creation = False
+
         # We need to reset the scheduler, as its parameters may be different on subsequent calls
         if self._created_lr_scheduler:
             self.lr_scheduler = None
@@ -2454,7 +2456,7 @@ class Trainer:
         self.state.init_training_references(self, max_steps, num_train_epochs, trial)
 
         # tr_loss is a tensor to avoid synchronization of TPUs through .item()
-        tr_loss = torch.tensor(0.0).to(args.device)
+        tr_loss = torch.tensor(0.0, device=args.device)
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
@@ -2496,13 +2498,13 @@ class Trainer:
             step = -1
             epoch_iterator = iter(epoch_dataloader)
             # We chunkify the epoch iterator into gradient accumulation steps `n` batches
-            remainder = num_examples % args.gradient_accumulation_steps
+            remainder = steps_in_epoch % args.gradient_accumulation_steps
             if remainder == 0:
                 remainder = args.gradient_accumulation_steps
             update_step = -1
-            total_updates = steps_in_epoch // args.gradient_accumulation_steps + 1
-            if args.gradient_accumulation_steps == 1:
-                total_updates -= 1
+            total_updates = steps_in_epoch // args.gradient_accumulation_steps + int(
+                remainder < args.gradient_accumulation_steps
+            )
             for _ in range(total_updates):
                 update_step += 1
                 num_batches = args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
@@ -2524,9 +2526,7 @@ class Trainer:
                         else:
                             input_tokens = inputs[main_input_name].numel()
                             input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
-                            self.state.num_input_tokens_seen += (
-                                self.accelerator.gather(input_tokens).sum().cpu().item()
-                            )
+                            self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
                     if rng_to_sync:
                         self._load_rng_state(resume_from_checkpoint)
                         rng_to_sync = False
@@ -2835,6 +2835,7 @@ class Trainer:
                         logger.warning(
                             "Enabling FP16 and loading from smp < 1.10 checkpoint together is not supported."
                         )
+                    check_torch_load_is_safe()
                     state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
                     # Required for smp to not auto-translate state_dict from hf to smp (is already smp).
                     state_dict["_smp_is_partial"] = False
@@ -2854,6 +2855,7 @@ class Trainer:
                 if self.args.save_safetensors and os.path.isfile(safe_weights_file):
                     state_dict = safetensors.torch.load_file(safe_weights_file, device="cpu")
                 else:
+                    check_torch_load_is_safe()
                     state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
 
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
@@ -2948,6 +2950,7 @@ class Trainer:
                     if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
                         state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
                     else:
+                        check_torch_load_is_safe()
                         state_dict = torch.load(best_model_path, map_location="cpu", weights_only=True)
 
                     state_dict["_smp_is_partial"] = False
@@ -3003,6 +3006,7 @@ class Trainer:
                     if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
                         state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
                     else:
+                        check_torch_load_is_safe()
                         state_dict = torch.load(best_model_path, map_location="cpu", weights_only=True)
 
                     # If the model is on the GPU, it still works!
@@ -3076,7 +3080,7 @@ class Trainer:
 
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
             if grad_norm is not None:
-                logs["grad_norm"] = grad_norm.detach().item() if isinstance(grad_norm, torch.Tensor) else grad_norm
+                logs["grad_norm"] = grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
             if learning_rate is not None:
                 logs["learning_rate"] = learning_rate
             else:
@@ -3124,7 +3128,7 @@ class Trainer:
                 return
 
         with safe_globals():
-            checkpoint_rng_state = torch.load(rng_file, weights_only=True)
+            checkpoint_rng_state = torch.load(rng_file)
         random.setstate(checkpoint_rng_state["python"])
         np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
@@ -3229,9 +3233,8 @@ class Trainer:
 
         # Maybe delete some older checkpoints.
         if self.args.should_save:
-            # Solely rely on numerical checkpoint id for rotation.
-            # mtime is not reliable especially on some fuse fs in cloud environments.
-            self._rotate_checkpoints(use_mtime=False, output_dir=run_dir)
+            # we use mtime as default, filesystems without mtime support will be detected in `_sorted_checkpoints`
+            self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
 
     def _save_rng_state(self, output_dir):
         # Save RNG state in non-distributed training
@@ -3357,6 +3360,7 @@ class Trainer:
             # deepspeed loads optimizer/lr_scheduler together with the model in deepspeed_init
             if not isinstance(self.lr_scheduler, DeepSpeedSchedulerWrapper):
                 with warnings.catch_warnings(record=True) as caught_warnings:
+                    check_torch_load_is_safe()
                     self.lr_scheduler.load_state_dict(
                         torch.load(os.path.join(checkpoint, SCHEDULER_NAME), weights_only=True)
                     )
@@ -3389,6 +3393,7 @@ class Trainer:
             if is_torch_xla_available():
                 # On TPU we have to take some extra precautions to properly load the states on the right device.
                 if self.is_fsdp_xla_v1_enabled:
+                    check_torch_load_is_safe()
                     optimizer_state = torch.load(
                         os.path.join(
                             checkpoint, f"rank{self.args.process_index}-of-{self.args.world_size}-{OPTIMIZER_NAME}"
@@ -3399,10 +3404,12 @@ class Trainer:
                     # We only need `optimizer` when resuming from checkpoint
                     optimizer_state = optimizer_state["optimizer"]
                 else:
+                    check_torch_load_is_safe()
                     optimizer_state = torch.load(
                         os.path.join(checkpoint, OPTIMIZER_NAME), map_location="cpu", weights_only=True
                     )
                 with warnings.catch_warnings(record=True) as caught_warnings:
+                    check_torch_load_is_safe()
                     lr_scheduler_state = torch.load(
                         os.path.join(checkpoint, SCHEDULER_NAME), map_location="cpu", weights_only=True
                     )
@@ -3446,12 +3453,14 @@ class Trainer:
                             **_get_fsdp_ckpt_kwargs(),
                         )
                     else:
+                        check_torch_load_is_safe()
                         self.optimizer.load_state_dict(
                             torch.load(
                                 os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location, weights_only=True
                             )
                         )
                 with warnings.catch_warnings(record=True) as caught_warnings:
+                    check_torch_load_is_safe()
                     self.lr_scheduler.load_state_dict(
                         torch.load(os.path.join(checkpoint, SCHEDULER_NAME), weights_only=True)
                     )
@@ -3489,6 +3498,7 @@ class Trainer:
             # Load in scaler states
             if is_torch_xla_available():
                 with warnings.catch_warnings(record=True) as caught_warnings:
+                    check_torch_load_is_safe()
                     scaler_state = torch.load(
                         os.path.join(checkpoint, SCALER_NAME), map_location="cpu", weights_only=True
                     )
@@ -3497,6 +3507,7 @@ class Trainer:
                 self.accelerator.scaler.load_state_dict(scaler_state)
             else:
                 with warnings.catch_warnings(record=True) as caught_warnings:
+                    check_torch_load_is_safe()
                     self.accelerator.scaler.load_state_dict(
                         torch.load(os.path.join(checkpoint, SCALER_NAME), weights_only=True)
                     )
@@ -3694,6 +3705,9 @@ class Trainer:
         arguments, depending on the situation.
         """
         if self.use_cpu_amp:
+            # TODO Matt: This syntax is deprecated and the preferred version is
+            #      torch.amp.autocast("cpu", cache_enabled=cache_enabled, dtype=self.amp_dtype)
+            #      but this is unavailable on Torch 2.1 or earlier. We can change this when we stop supporting 2.1.
             ctx_manager = torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
         else:
             ctx_manager = contextlib.nullcontext()
@@ -3745,7 +3759,7 @@ class Trainer:
                 torch.musa.empty_cache()
             elif is_torch_npu_available():
                 torch.npu.empty_cache()
-            elif is_torch_mps_available(min_version="2.0"):
+            elif is_torch_mps_available():
                 torch.mps.empty_cache()
             elif is_torch_hpu_available():
                 logger.warning(
@@ -3987,8 +4001,8 @@ class Trainer:
             if state_dict is None:
                 state_dict = self.model.state_dict()
 
-            if isinstance(self.accelerator.unwrap_model(self.model), supported_classes):
-                self.accelerator.unwrap_model(self.model).save_pretrained(
+            if isinstance(self.accelerator.unwrap_model(self.model, keep_torch_compile=False), supported_classes):
+                self.accelerator.unwrap_model(self.model, keep_torch_compile=False).save_pretrained(
                     output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
                 )
             else:
@@ -4044,7 +4058,17 @@ class Trainer:
                     ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
 
         checkpoints_sorted = sorted(ordering_and_checkpoint_path)
+        # mtime is not reliable on all filesystems, especially on some fuse fs in cloud environments
+        # so we check if the mtime is fake and fallback to numerical ordering if needed
+        if use_mtime and len(ordering_and_checkpoint_path) > 1:
+            mtime_diff = checkpoints_sorted[-1][0] - checkpoints_sorted[0][0]
+            if mtime_diff < 1.0:  # less than 1 second, which is almost impossible when mtime works fine
+                warnings.warn("mtime may not be reliable on this filesystem, falling back to numerical ordering")
+                return self._sorted_checkpoints(
+                    use_mtime=False, output_dir=output_dir, checkpoint_prefix=checkpoint_prefix
+                )
         checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
+
         # Make sure we don't delete the best model.
         if (
             self.state.best_model_checkpoint is not None
@@ -4275,7 +4299,8 @@ class Trainer:
             start_time = time.time()
             model = (
                 self.accelerator.prepare(model)
-                if self.is_deepspeed_enabled or (self.is_fsdp_enabled and self.accelerator.mixed_precision != "fp8")
+                if self.is_deepspeed_enabled
+                or (self.is_fsdp_enabled and self.accelerator.mixed_precision != "fp8" and not self.args.torch_compile)
                 else self.accelerator.prepare_model(model, evaluation_mode=True)
             )
             self.model_preparation_time = round(time.time() - start_time, 4)
@@ -4559,7 +4584,7 @@ class Trainer:
                 if has_labels or loss_without_labels:
                     with self.compute_loss_context_manager():
                         loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
-                    loss = loss.mean().detach()
+                    loss = loss.detach().mean()
 
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
@@ -5142,10 +5167,10 @@ class Trainer:
             args.update(accelerator_config)
         # tp is initialized at Accelerator init phase so
         # args should be prepared here
-        if self.args.tp_size > 1:
+        if hasattr(self.model, "tp_size") and self.model.tp_size is not None and self.model.tp_size > 1:
             self.is_tp_enabled = True
             if version.parse(accelerate_version) > version.parse("1.3.0"):
-                args["torch_tp_plugin"] = TorchTensorParallelPlugin(tp_size=self.args.tp_size)
+                args["torch_tp_plugin"] = TorchTensorParallelPlugin(tp_size=self.model.tp_size)
             else:
                 raise ValueError("Requires accelerate>1.3.0 to use Tensor Parallelism.")
 
@@ -5234,13 +5259,29 @@ class Trainer:
     def get_batch_samples(self, epoch_iterator, num_batches, device):
         batch_samples = []
         num_items_in_batch = None
+
         for _ in range(num_batches):
             try:
-                batch_samples += [next(epoch_iterator)]
+                batch_samples.append(next(epoch_iterator))
             except StopIteration:
                 break
 
-        if len(batch_samples) > 0 and "labels" in batch_samples[0]:
+        count_num_items_in_batch = (
+            len(batch_samples) > 0
+            and "labels" in batch_samples[0]
+            and (
+                # num_items_in_batch is passed to model forward
+                # https://github.com/huggingface/transformers/blob/v4.49.0/src/transformers/trainer.py#L3757
+                self.model_accepts_loss_kwargs
+                # num_items_in_batch is passed to compute_loss_func
+                # https://github.com/huggingface/transformers/blob/v4.49.0/src/transformers/trainer.py#L3773
+                or self.compute_loss_func is not None
+                # num_items_in_batch is also verified if (self.model_accepts_loss_kwargs or self.compute_loss_func)
+                # https://github.com/huggingface/transformers/blob/v4.49.0/src/transformers/trainer.py#L3790
+            )
+        )
+
+        if count_num_items_in_batch:
             # For now we don't support object detection
             try:
                 num_items_in_batch = sum([(batch["labels"].ne(-100)).sum() for batch in batch_samples])
@@ -5253,6 +5294,10 @@ class Trainer:
 
             if torch.is_tensor(num_items_in_batch):
                 num_items_in_batch = num_items_in_batch.to(device)
+
+                if self.args.n_gpu > 1 and num_items_in_batch.dim() == 0:
+                    # In the DataParallel case, convert the scalar tensor into a 1-dim tensor
+                    num_items_in_batch = num_items_in_batch.unsqueeze(0)
 
         return batch_samples, num_items_in_batch
 
@@ -5277,7 +5322,11 @@ class Trainer:
 
         # Case 2: We have a dataloader length and can extrapolate
         if len_dataloader is not None:
-            num_update_steps_per_epoch = max(len_dataloader // args.gradient_accumulation_steps, 1)
+            num_update_steps_per_epoch = max(
+                len_dataloader // args.gradient_accumulation_steps
+                + int(len_dataloader % args.gradient_accumulation_steps > 0),
+                1,
+            )
             # Case 3: We have a length but are using epochs, we can extrapolate the number of steps
             if epoch_based:
                 max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)

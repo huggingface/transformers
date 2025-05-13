@@ -378,7 +378,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return word
 
     def set_prefix_tokens(
-        self, language: Optional[str] = None, task: Optional[str] = None, predict_timestamps: bool = None
+        self, language: Optional[str] = None, task: Optional[str] = None, predict_timestamps: Optional[bool] = None
     ):
         """
         Override the prefix tokens appended to the start of the label sequence. This method can be used standalone to
@@ -515,7 +515,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     def normalize(self, text):
         """
-        Normalize a given string using the `EnglishTextNormalizer` class, which preforms commons transformation on
+        Normalize a given string using the `EnglishTextNormalizer` class, which performs commons transformation on
         english text.
         """
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
@@ -524,7 +524,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
     @staticmethod
     def basic_normalize(text, remove_diacritics=False):
         """
-        Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
+        Normalize a given string using the `BasicTextNormalizer` class, which performs commons transformation on
         multilingual text.
         """
         normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
@@ -676,7 +676,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self,
         token_ids,
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         output_offsets: bool = False,
         time_precision: float = 0.02,
         decode_with_timestamps: bool = False,
@@ -1045,7 +1045,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                         # as a stop where it should be a start.
                         # This is an issue in the underlying model output
                         # Let's just skip it so it becomes de-factor
-                        # a start agin
+                        # a start again
                         pass
                     else:
                         chunk["timestamp"][1] = time

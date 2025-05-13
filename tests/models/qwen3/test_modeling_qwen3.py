@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Qwen team, Alibaba Group and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,6 +31,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils.import_utils import is_torch_greater_or_equal
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -62,7 +62,7 @@ class Qwen3ModelTester:
         use_token_type_ids=True,
         use_labels=True,
         vocab_size=99,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=5,
         max_window_layers=3,
         use_sliding_window=True,
@@ -172,119 +172,6 @@ class Qwen3ModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Qwen3
-    def create_and_check_model_as_decoder(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.add_cross_attention = True
-        model = Qwen3Model(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-        )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Qwen3
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = Qwen3ForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->Qwen3
-    def create_and_check_decoder_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.is_decoder = True
-        config.add_cross_attention = True
-        model = Qwen3ForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # first forward pass
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            use_cache=True,
-        )
-        past_key_values = outputs.past_key_values
-
-        # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
-
-        output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-        output_from_past = model(
-            next_tokens,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -348,42 +235,6 @@ class Qwen3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.model_tester = Qwen3ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Qwen3Config, hidden_size=37)
 
-    @unittest.skip("TODO: ask the contributor to take a look")
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("TODO: ask the contributor to take a look")
-    def test_assisted_decoding_matches_greedy_search_0_random(self):
-        pass
-
-    @unittest.skip("TODO: ask the contributor to take a look")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("TODO: ask the contributor to take a look")
-    def test_assisted_decoding_matches_greedy_search_1_same(self):
-        pass
-
-    @unittest.skip("TODO: ask the contributor to take a look")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("TODO: ask the contributor to take a look")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip("TODO: ask the contributor to take a look")
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("TODO: ask the contributor to take a look")
-    def test_prompt_lookup_decoding_matches_greedy_search(self):
-        pass
-
-    @unittest.skip("TODO: ask the contributor to take a look")
-    def test_generate_compilation_all_outputs(self):
-        pass
-
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -402,7 +253,6 @@ class Qwen3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def test_Qwen3_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        print(config)
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
@@ -457,14 +307,6 @@ class Qwen3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip(reason="Qwen3 buffers include complex numbers, which breaks this test")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Qwen3 uses GQA on all models so the KV cache is a non standard format")
-    def test_past_key_values_format(self):
-        pass
-
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
@@ -487,7 +329,6 @@ class Qwen3IntegrationTest(unittest.TestCase):
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:30]
         EXPECTED_SLICE = torch.tensor([5.9062, 6.0938, 5.5625, 3.8594, 2.6094, 1.9531, 4.3125, 4.9375, 3.8906, 3.1094, 3.6719, 5.1562, 6.9062, 5.7500, 5.4062, 7.0625, 8.7500, 8.7500, 8.1250, 7.9375, 8.0625, 7.5312, 7.3750, 7.2188, 7.2500, 5.8750, 2.8750, 4.3438, 2.3438, 2.2500])  # fmt: skip
-        print(out[0, 0, :30])
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
         del model
@@ -613,17 +454,23 @@ class Qwen3IntegrationTest(unittest.TestCase):
         qwen_model = "Qwen/Qwen3-0.6B-Base"
 
         tokenizer = AutoTokenizer.from_pretrained(qwen_model, pad_token="</s>", padding_side="right")
-        EXPECTED_TEXT_COMPLETION = ["My favourite condiment is 100% plain, unflavoured, and unadulterated. It is"]
+        if is_torch_greater_or_equal("2.7.0"):
+            strict = False  # Due to https://github.com/pytorch/pytorch/issues/150994
+            EXPECTED_TEXT_COMPLETION = ["My favourite condiment is 100% plain, unsalted, unsweetened, and unflavored."]
+        else:
+            strict = True
+            EXPECTED_TEXT_COMPLETION = ["My favourite condiment is 100% plain, unflavoured, and unadulterated. It is"]
+
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
         ].shape[-1]
-
-        # Load model
         device = "cpu"
         dtype = torch.bfloat16
         cache_implementation = "static"
         attn_implementation = "sdpa"
         batch_size = 1
+
+        # Load model
         model = Qwen3ForCausalLM.from_pretrained(
             qwen_model,
             device_map=device,
@@ -646,7 +493,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
         max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
 
         # Static Cache + export
-        exported_program = convert_and_export_with_cache(model)
+        exported_program = convert_and_export_with_cache(model, strict=strict)
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )

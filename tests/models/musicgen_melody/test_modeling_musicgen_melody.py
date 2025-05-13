@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +30,7 @@ from transformers import (
     T5Config,
 )
 from transformers.testing_utils import (
+    get_device_properties,
     is_torch_available,
     is_torchaudio_available,
     require_flash_attn,
@@ -960,12 +960,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         super().test_greedy_generate_dict_outputs()
         self.model_tester.audio_channels = original_audio_channels
 
-    @unittest.skip(
-        reason="MusicgenMelodyModel is actually not the base of MusicgenMelodyForCausalLM as the latter is a composite model"
-    )
-    def test_save_load_fast_init_from_base(self):
-        pass
-
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -1090,12 +1084,15 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        torch.compiler.reset()
-        compute_capability = torch.cuda.get_device_capability()
-        major, _ = compute_capability
-
-        if not torch.version.cuda or major < 8:
+        (device_type, major) = get_device_properties()
+        if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
+        elif device_type == "rocm" and major < 9:
+            self.skipTest(reason="This test requires an AMD GPU with compute capability >= 9.0")
+        else:
+            self.skipTest(reason="This test requires a Nvidia or AMD GPU")
+
+        torch.compiler.reset()
 
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:

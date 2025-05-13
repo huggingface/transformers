@@ -63,6 +63,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -731,7 +732,7 @@ def compute_segments(
     mask_threshold: float = 0.5,
     overlap_mask_area_threshold: float = 0.8,
     label_ids_to_fuse: Optional[Set[int]] = None,
-    target_size: Tuple[int, int] = None,
+    target_size: Optional[Tuple[int, int]] = None,
 ):
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
@@ -784,6 +785,7 @@ def compute_segments(
     return segmentation, segments
 
 
+@requires(backends=("vision",))
 class DetrImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Detr image processor.
@@ -843,13 +845,13 @@ class DetrImageProcessor(BaseImageProcessor):
         self,
         format: Union[str, AnnotationFormat] = AnnotationFormat.COCO_DETECTION,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Union[float, List[float]] = None,
-        image_std: Union[float, List[float]] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         do_convert_annotations: Optional[bool] = None,
         do_pad: bool = True,
         pad_size: Optional[Dict[str, int]] = None,
@@ -928,7 +930,7 @@ class DetrImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         target: Dict,
         format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
@@ -1237,7 +1239,7 @@ class DetrImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
@@ -1568,7 +1570,7 @@ class DetrImageProcessor(BaseImageProcessor):
         def to_tuple(tup):
             if isinstance(tup, tuple):
                 return tup
-            return tuple(tup.cpu().tolist())
+            return tuple(tup.tolist())
 
         for cur_logits, cur_masks, size in zip(out_logits, raw_masks, target_sizes):
             # we filter empty queries and detection below threshold
@@ -1677,7 +1679,7 @@ class DetrImageProcessor(BaseImageProcessor):
         def to_tuple(tup):
             if isinstance(tup, tuple):
                 return tup
-            return tuple(tup.cpu().tolist())
+            return tuple(tup.tolist())
 
         for cur_logits, cur_masks, cur_boxes, size, target_size in zip(
             out_logits, raw_masks, raw_boxes, processed_sizes, target_sizes
@@ -1822,7 +1824,7 @@ class DetrImageProcessor(BaseImageProcessor):
 
         return results
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple[int, int]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None):
         """
         Converts the output of [`DetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
