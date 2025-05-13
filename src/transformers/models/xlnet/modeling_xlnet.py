@@ -605,9 +605,9 @@ class XLNetPoolerEndLogits(nn.Module):
         Returns:
             `torch.FloatTensor`: The end logits for SQuAD.
         """
-        assert start_states is not None or start_positions is not None, (
-            "One of start_states, start_positions should be not None"
-        )
+        assert (
+            start_states is not None or start_positions is not None
+        ), "One of start_states, start_positions should be not None"
         if start_positions is not None:
             slen, hsz = hidden_states.shape[-2:]
             start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
@@ -674,9 +674,9 @@ class XLNetPoolerAnswerClass(nn.Module):
         """
         # No dependency on end_feature so that we can obtain one single `cls_logits` for each sample.
         hsz = hidden_states.shape[-1]
-        assert start_states is not None or start_positions is not None, (
-            "One of start_states, start_positions should be not None"
-        )
+        assert (
+            start_states is not None or start_positions is not None
+        ), "One of start_states, start_positions should be not None"
         if start_positions is not None:
             start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
             start_states = hidden_states.gather(-2, start_positions).squeeze(-2)  # shape (bsz, hsz)
