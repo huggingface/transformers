@@ -79,7 +79,8 @@ class WrappedFlexAttention:
 Offset = Union[torch.Tensor, int]
 
 
-def make_flex_block_mask(
+# TODO: rename to make_flex_block_mask
+def make_flex_block_causal_mask(
     attention_mask_2d: torch.Tensor,
     attention_chunk_size: Optional[int] = None,
     query_length=None,

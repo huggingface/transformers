@@ -45,7 +45,7 @@ def sdpa_attention_forward(
     if is_causal is None:
         # The last condition is for encoder (decoder) models which specify this by passing their own `is_causal` flag
         # This is mainly due to those models having mixed implementations for encoder, decoder, and encoder-decoder attns
-        is_causal = query.shape[2] > 1 and attention_mask is None and getattr(module, "is_causal", True)
+        is_causal = query.shape[2] > 1 and attention_mask is None and module.is_causal
 
     # Shapes (e.g. query.shape[2]) are tensors during jit tracing, resulting in `is_causal` being a tensor.
     # We convert it to a bool for the SDPA kernel that only accepts bools.
