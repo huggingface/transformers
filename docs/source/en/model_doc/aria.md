@@ -102,6 +102,10 @@ response = processor.decode(output_ids, skip_special_tokens=True)
 
 [[autodoc]] AriaTextModel
 
+## AriaModel
+
+[[autodoc]] AriaModel
+
 ## AriaTextForCausalLM
 
 [[autodoc]] AriaTextForCausalLM

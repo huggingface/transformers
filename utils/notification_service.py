@@ -1260,6 +1260,28 @@ if __name__ == "__main__":
                 token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
             )
 
+        # Let's create a file contain job --> job link
+        model_job_links = {}
+        sorted_dict = sorted(model_results.items(), key=lambda t: t[0])
+        for job, job_result in sorted_dict:
+            model_name = job
+            if model_name.startswith("models_"):
+                model_name = model_name[len("models_") :]
+            model_job_links[model_name] = job_result["job_link"]
+
+        with open(f"ci_results_{job_name}/model_job_links.json", "w", encoding="UTF-8") as fp:
+            json.dump(model_job_links, fp, indent=4, ensure_ascii=False)
+
+        # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
+        if is_scheduled_ci_run:
+            api.upload_file(
+                path_or_fileobj=f"ci_results_{job_name}/model_job_links.json",
+                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/model_job_links.json",
+                repo_id="hf-internal-testing/transformers_daily_ci",
+                repo_type="dataset",
+                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            )
+
     # Must have the same keys as in `additional_results`.
     # The values are used as the file names where to save the corresponding CI job results.
     test_to_result_name = {
