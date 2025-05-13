@@ -14,21 +14,14 @@
 # limitations under the License.
 """Testing suite for the PyTorch Nemotron model."""
 
-import tempfile
 import unittest
-
-import pytest
 
 from transformers import NemotronConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    is_flaky,
-    require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
