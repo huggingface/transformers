@@ -18,7 +18,6 @@ from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     get_max_height_width,
@@ -28,7 +27,7 @@ from ...image_processing_utils_fast import (
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -55,21 +54,8 @@ class ViltFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     rescale_factor: Optional[float]
 
 
-@add_start_docstrings(
-    "Constructs a fast Vilt image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class ViltImageProcessorFast(BaseImageProcessorFast):
-    # This generated class can be used as a starting point for the fast image processor.
-    # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,
-    # only the default values should be set in the class.
-    # If the image processor requires more complex augmentations, methods from BaseImageProcessorFast can be overridden.
-    # In most cases, only the `_preprocess` method should be overridden.
-
-    # For an example of a fast image processor requiring more complex augmentations, see `LlavaNextImageProcessorFast`.
-
-    # Default values should be checked against the slow image processor
-    # None values left after checking can be removed
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
