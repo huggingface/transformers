@@ -58,7 +58,7 @@ pipe("Explain quantum computing simply. ", max_new_tokens=50)
 
 </hfoption>
 <hfoption id="AutoModel">
-    
+
 ```python
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -80,16 +80,16 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```
-echo -e "Explain quantum computing simply." | transformers-cli run --task text-generation --model google/gemma-2-2b --device 0
+echo -e "Explain quantum computing simply." | transformers run --task text-generation --model google/gemma-2-2b --device 0
 ```
 </hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-	
+
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
 ```python
@@ -118,7 +118,7 @@ Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/bl
 ```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 visualizer = AttentionMaskVisualizer("google/gemma-2b")
-visualizer("You are an assistant. Make sure you print me") 
+visualizer("You are an assistant. Make sure you print me")
 ```
 
 <div class="flex justify-center">
@@ -137,7 +137,7 @@ visualizer("You are an assistant. Make sure you print me")
 
     inputs = tokenizer(text="My name is Gemma", return_tensors="pt")
     max_generated_length = inputs.input_ids.shape[1] + 10
-    past_key_values = HybridCache(config=model.config, max_batch_size=1, 
+    past_key_values = HybridCache(config=model.config, max_batch_size=1,
     max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
     outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
     ```

@@ -32,6 +32,7 @@ import tempfile
 import time
 import warnings
 from collections.abc import Mapping
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
@@ -1028,7 +1029,9 @@ class Trainer:
         if not isinstance(train_dataset, torch.utils.data.IterableDataset):
             dataloader_params["sampler"] = self._get_train_sampler()
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
-            dataloader_params["worker_init_fn"] = seed_worker
+            dataloader_params["worker_init_fn"] = partial(
+                seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
+            )
             dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
 
         return self.accelerator.prepare(DataLoader(train_dataset, **dataloader_params))
@@ -1986,7 +1989,7 @@ class Trainer:
             return smp.DistributedModel(model, backward_passes_per_step=self.args.gradient_accumulation_steps)
 
         # train/eval could be run multiple-times - if already wrapped, don't re-wrap it again
-        if self.accelerator.unwrap_model(model) is not model:
+        if self.accelerator.unwrap_model(model, keep_torch_compile=False) is not model:
             return model
 
         # Mixed precision training with apex
@@ -2495,13 +2498,13 @@ class Trainer:
             step = -1
             epoch_iterator = iter(epoch_dataloader)
             # We chunkify the epoch iterator into gradient accumulation steps `n` batches
-            remainder = num_examples % args.gradient_accumulation_steps
+            remainder = steps_in_epoch % args.gradient_accumulation_steps
             if remainder == 0:
                 remainder = args.gradient_accumulation_steps
             update_step = -1
-            total_updates = steps_in_epoch // args.gradient_accumulation_steps + 1
-            if args.gradient_accumulation_steps == 1:
-                total_updates -= 1
+            total_updates = steps_in_epoch // args.gradient_accumulation_steps + int(
+                remainder < args.gradient_accumulation_steps
+            )
             for _ in range(total_updates):
                 update_step += 1
                 num_batches = args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
@@ -3079,9 +3082,7 @@ class Trainer:
             if grad_norm is not None:
                 logs["grad_norm"] = grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
             if learning_rate is not None:
-                logs["learning_rate"] = (
-                    learning_rate.item() if isinstance(learning_rate, torch.Tensor) else learning_rate
-                )
+                logs["learning_rate"] = learning_rate
             else:
                 logs["learning_rate"] = self._get_learning_rate()
 
@@ -3704,7 +3705,10 @@ class Trainer:
         arguments, depending on the situation.
         """
         if self.use_cpu_amp:
-            ctx_manager = torch.amp.autocast("cpu", cache_enabled=cache_enabled, dtype=self.amp_dtype)
+            # TODO Matt: This syntax is deprecated and the preferred version is
+            #      torch.amp.autocast("cpu", cache_enabled=cache_enabled, dtype=self.amp_dtype)
+            #      but this is unavailable on Torch 2.1 or earlier. We can change this when we stop supporting 2.1.
+            ctx_manager = torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
         else:
             ctx_manager = contextlib.nullcontext()
 
@@ -3997,8 +4001,8 @@ class Trainer:
             if state_dict is None:
                 state_dict = self.model.state_dict()
 
-            if isinstance(self.accelerator.unwrap_model(self.model), supported_classes):
-                self.accelerator.unwrap_model(self.model).save_pretrained(
+            if isinstance(self.accelerator.unwrap_model(self.model, keep_torch_compile=False), supported_classes):
+                self.accelerator.unwrap_model(self.model, keep_torch_compile=False).save_pretrained(
                     output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
                 )
             else:
@@ -4295,7 +4299,8 @@ class Trainer:
             start_time = time.time()
             model = (
                 self.accelerator.prepare(model)
-                if self.is_deepspeed_enabled or (self.is_fsdp_enabled and self.accelerator.mixed_precision != "fp8")
+                if self.is_deepspeed_enabled
+                or (self.is_fsdp_enabled and self.accelerator.mixed_precision != "fp8" and not self.args.torch_compile)
                 else self.accelerator.prepare_model(model, evaluation_mode=True)
             )
             self.model_preparation_time = round(time.time() - start_time, 4)
@@ -5317,7 +5322,11 @@ class Trainer:
 
         # Case 2: We have a dataloader length and can extrapolate
         if len_dataloader is not None:
-            num_update_steps_per_epoch = max(len_dataloader // args.gradient_accumulation_steps, 1)
+            num_update_steps_per_epoch = max(
+                len_dataloader // args.gradient_accumulation_steps
+                + int(len_dataloader % args.gradient_accumulation_steps > 0),
+                1,
+            )
             # Case 3: We have a length but are using epochs, we can extrapolate the number of steps
             if epoch_based:
                 max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
