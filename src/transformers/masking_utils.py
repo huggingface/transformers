@@ -27,14 +27,14 @@ from .utils.import_utils import is_torchdynamo_compiling
 
 @dataclass(unsafe_hash=True)
 class LayerType(object):
-    layer_type: str
+    type_: str
     value: int = None
 
     def __init__(self, layer_type: str, value: Optional[int] = None):
-        self.layer_type = layer_type
+        self.type_ = layer_type
         self.value = value
         # Ignore the value passed if the layer is full
-        if self.layer_type == "full":
+        if self.type_ == "full":
             self.value = None
 
     def get_mask_function(self):
@@ -544,7 +544,7 @@ def get_causal_masks(
 
     # If using a cache, it can give all informations about mask sizes based on seen tokens
     if past_key_values is not None:
-        mask_sizes = past_key_values.get_mask_sizes(cache_position)
+        mask_sizes = past_key_values.get_mask_sizes(cache_position, num_layers)
     # We are either training, or running inference without cache -> extract patterns from config
     else:
         kv_length = input_embeds.shape[1]
