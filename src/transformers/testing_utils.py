@@ -587,8 +587,8 @@ def require_read_token(test_case):
                     return test_case(*args, **kwargs)
             else:  # Allow running locally with the default token env variable
                 # dealing with static/class methods and called by `self.xxx`
-                if len(args) > 0 and "self" not in inspect.signature(test_case).parameters.keys():
-                    if isinstance(args[0], unittest.TestCase):
+                if "staticmethod" in inspect.getsource(test_case).strip():
+                    if len(args) > 0 and isinstance(args[0], unittest.TestCase):
                         return test_case(*args[1:], **kwargs)
                 return test_case(*args, **kwargs)
 
