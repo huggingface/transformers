@@ -254,7 +254,6 @@ class Gemma2DecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.config = config
-        self.is_sliding = not bool(layer_idx % 2)
         self.self_attn = Gemma2Attention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma2MLP(config)
         self.input_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -262,7 +261,6 @@ class Gemma2DecoderLayer(nn.Module):
 
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.layer_type = LayerType("sliding" if self.is_sliding else "full", config.sliding_window if self.is_sliding else None)
 
     @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
@@ -386,7 +384,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
         )
         self.norm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Gemma2RotaryEmbedding(config=config)
-        self.layer_types = [layer.layer_type for layer in self.layers]
+        self.layer_attention_patterns = [LayerType(layer_type, config.sliding_window) for layer_type in config.layer_attention_patterns]
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -452,7 +450,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_masks = get_causal_masks(
-            self.layer_types,
+            self.layer_attention_patterns,
             self.config._attn_implementation,
             inputs_embeds,
             attention_mask,

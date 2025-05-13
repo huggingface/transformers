@@ -81,8 +81,8 @@ class Gemma2Config(PretrainedConfig):
         query_pre_attn_scalar (`float`, *optional*, defaults to 256): scaling factor used on the attention scores
         sliding_window (`int`, *optional*, defaults to 4096): in Gemma2, every other layer uses sliding window attention. This is the
             size of the sliding window.
-        sliding_window_pattern (`int`, *optional*, defaults to 2):
-            Pattern for the sliding window attention.
+        layer_attention_patterns (`list`, *optional*, defaults to None):
+            Attention pattern for each layer.
         final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh softcapping on the attention scores.
         cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
@@ -137,7 +137,7 @@ class Gemma2Config(PretrainedConfig):
         attention_dropout=0.0,
         query_pre_attn_scalar=256,
         sliding_window=4096,
-        sliding_window_pattern=2,
+        layer_attention_patterns=None,
         final_logit_softcapping=30.0,
         attn_logit_softcapping=50.0,
         cache_implementation="hybrid",
@@ -167,10 +167,12 @@ class Gemma2Config(PretrainedConfig):
         self.hidden_activation = hidden_activation
         self.query_pre_attn_scalar = query_pre_attn_scalar
         self.sliding_window = sliding_window
-        self.sliding_window_pattern = sliding_window_pattern
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.cache_implementation = cache_implementation
+
+        if layer_types is None:
+            self.layer_attention_patterns = ["sliding" if bool((i + 1) % 2) else "full" for i in range(self.num_hidden_layers)]
 
 
 __all__ = ["Gemma2Config"]

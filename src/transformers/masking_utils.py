@@ -28,8 +28,15 @@ from .utils.import_utils import is_torchdynamo_compiling
 
 @dataclass(unsafe_hash=True)
 class LayerType(object):
-    type_: str
+    layer_type: str
     value: int = None
+
+    def __init__(self, layer_type: str, value: Optional[int] = None):
+        self.layer_type = layer_type
+        self.value = value
+        # Ignore the value passed if the layer is full
+        if self.layer_type == "full":
+            self.value = None
 
     def get_mask_function(self):
         if self.type_ == "full":
