@@ -464,7 +464,7 @@ class DynamicCache(Cache):
         """Returns the maximum sequence length of the cache object. DynamicCache does not have a maximum length."""
         return None
 
-    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
+    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
         """Converts the `DynamicCache` instance into the its equivalent in the legacy cache format. Used for
         backward compatibility."""
         legacy_cache = ()
@@ -473,7 +473,9 @@ class DynamicCache(Cache):
         return legacy_cache
 
     @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
+    def from_legacy_cache(
+        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor]]] = None
+    ) -> "DynamicCache":
         """Converts a cache in the legacy cache format into an equivalent `DynamicCache`. Used for
         backward compatibility."""
         cache = cls()
@@ -1402,7 +1404,7 @@ class SlidingWindowCache(StaticCache):
         value_states = value_states.to(v_out.dtype)
 
         # assume this only happens in prefill phase when prompt length > sliding_window_size (= max_cache_len)
-        if cache_position.shape[0] > self.max_cache_len:
+        if cache_position.shape[0] >= self.max_cache_len:
             k_out = key_states[:, :, -self.max_cache_len :, :]
             v_out = value_states[:, :, -self.max_cache_len :, :]
             # Assumption: caches are all zeros at this point, `+=` is equivalent to `=` but compile-friendly
@@ -1413,8 +1415,8 @@ class SlidingWindowCache(StaticCache):
             return key_states, value_states
 
         slicing = torch.ones(self.max_cache_len, dtype=torch.long, device=value_states.device).cumsum(0)
-        cache_position = cache_position.clamp(0, self.max_cache_len - 1)
         to_shift = cache_position > self.max_cache_len - 1
+        cache_position = cache_position.clamp(0, self.max_cache_len - 1)
         indices = (slicing + to_shift[-1].int() - 1) % self.max_cache_len
 
         k_out = k_out[:, :, indices]
@@ -1505,8 +1507,8 @@ class EncoderDecoderCache(Cache):
         """
         return len(self.self_attention_cache)
 
-    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-        """Converts the `EncoderDecoderCache` instance into  its equivalent in the legacy cache format."""
+    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor]]:
+        """Converts the `EncoderDecoderCache` instance into its equivalent in the legacy cache format."""
         legacy_cache = ()
         if len(self.cross_attention_cache) > 0:
             for self_attn, cross_attn in zip(
@@ -1725,7 +1727,7 @@ class HybridCache(Cache):
             self.value_cache.append(new_layer_value_cache)
 
     def _sliding_update(self, cache_position, layer_idx, key_states, value_states, k_out, v_out, max_cache_len):
-        if cache_position.shape[0] > max_cache_len:
+        if cache_position.shape[0] >= max_cache_len:
             k_out = key_states[:, :, -max_cache_len:, :]
             v_out = value_states[:, :, -max_cache_len:, :]
             # Assumption: caches are all zeros at this point, `+=` is equivalent to `=` but compile-friendly
@@ -1736,8 +1738,8 @@ class HybridCache(Cache):
             return key_states, value_states
 
         slicing = torch.ones(max_cache_len, dtype=torch.long, device=value_states.device).cumsum(0)
-        cache_position = cache_position.clamp(0, max_cache_len - 1)
         to_shift = cache_position > max_cache_len - 1
+        cache_position = cache_position.clamp(0, max_cache_len - 1)
         indices = (slicing + to_shift[-1].int() - 1) % max_cache_len
         k_out = k_out[:, :, indices]
         v_out = v_out[:, :, indices]
@@ -2028,6 +2030,13 @@ class OffloadedHybridCache(HybridChunkedCache):
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ):
         super().__init__(config, max_batch_size, max_cache_len, device, dtype, layer_device_map)
+
+        # TODO (joao): to enable this cache on multiple devicesuse the pattern from `OffloadedCache`, which keeps
+        # track of the original device of each layer
+        unique_devices = set(layer_device_map.values())
+        if len(unique_devices) > 1:
+            raise ValueError(f"OffloadedHybridCache does not support multiple devices. Got devices: {unique_devices}")
+
         self.offload_device = torch.device(offload_device)
         # Create new CUDA stream for parallel prefetching.
         self._prefetch_stream = torch.cuda.Stream() if torch._C._get_accelerator().type == "cuda" else None
@@ -2280,6 +2289,13 @@ class OffloadedStaticCache(StaticCache):
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
         super(Cache, self).__init__()
+
+        # TODO (joao): to enable this cache on multiple devicesuse the pattern from `OffloadedCache`, which keeps
+        # track of the original device of each layer
+        unique_devices = set(layer_device_map.values())
+        if len(unique_devices) > 1:
+            raise ValueError(f"OffloadedStaticCache does not support multiple devices. Got devices: {unique_devices}")
+
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.device = torch.device(device) if layer_device_map is None else torch.device(layer_device_map[0])

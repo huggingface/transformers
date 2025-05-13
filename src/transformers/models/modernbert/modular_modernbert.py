@@ -35,13 +35,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    logging,
-)
+from ...utils import auto_docstring, is_flash_attn_2_available, logging
 from ...utils.import_utils import is_triton_available
 from ..gemma.modeling_gemma import GemmaRotaryEmbedding, apply_rotary_pos_emb
 
@@ -53,8 +47,6 @@ if is_flash_attn_2_available():
 else:
     RotaryEmbedding = object
 
-_CHECKPOINT_FOR_DOC = "answerdotai/ModernBERT-base"
-_CONFIG_FOR_DOC = "ModernBertConfig"
 
 logger = logging.get_logger(__name__)
 
@@ -1010,71 +1002,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         return model_embeds
 
 
-MODERNBERT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. With Flash Attention 2.0, padding will be ignored
-            by default should you provide it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
-            perform global attention, while the rest perform local attention. This mask is used to avoid attending to
-            far-away tokens in the local attention layers when not using Flash Attention.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        indices (`torch.Tensor` of shape `(total_unpadded_tokens,)`, *optional*):
-            Indices of the non-padding tokens in the input sequence. Used for unpadding the output.
-        cu_seqlens (`torch.Tensor` of shape `(batch + 1,)`, *optional*):
-            Cumulative sequence lengths of the input sequences. Used to index the unpadded tensors.
-        max_seqlen (`int`, *optional*):
-            Maximum sequence length in the batch excluding padding tokens. Used to unpad input_ids and pad output tensors.
-        batch_size (`int`, *optional*):
-            Batch size of the input sequences. Used to pad the output tensors.
-        seq_len (`int`, *optional*):
-            Sequence length of the input sequences including padding tokens. Used to pad the output tensors.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare ModernBert Model outputting raw hidden-states without any specific head on top.",
-    MODERNBERT_START_DOCSTRING,
-)
+@auto_docstring
 class ModernBertModel(ModernBertPreTrainedModel):
     def __init__(self, config: ModernBertConfig):
         super().__init__(config)
@@ -1093,12 +1021,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.tok_embeddings = value
 
-    @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1119,6 +1042,22 @@ class ModernBertModel(ModernBertPreTrainedModel):
         causal_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[Tuple[torch.Tensor, ...], BaseModelOutput]:
+        r"""
+        sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
+            perform global attention, while the rest perform local attention. This mask is used to avoid attending to
+            far-away tokens in the local attention layers when not using Flash Attention.
+        indices (`torch.Tensor` of shape `(total_unpadded_tokens,)`, *optional*):
+            Indices of the non-padding tokens in the input sequence. Used for unpadding the output.
+        cu_seqlens (`torch.Tensor` of shape `(batch + 1,)`, *optional*):
+            Cumulative sequence lengths of the input sequences. Used to index the unpadded tensors.
+        max_seqlen (`int`, *optional*):
+            Maximum sequence length in the batch excluding padding tokens. Used to unpad input_ids and pad output tensors.
+        batch_size (`int`, *optional*):
+            Batch size of the input sequences. Used to pad the output tensors.
+        seq_len (`int`, *optional*):
+            Sequence length of the input sequences including padding tokens. Used to pad the output tensors.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1271,9 +1210,10 @@ class ModernBertPredictionHead(nn.Module):
         return self.norm(self.act(self.dense(hidden_states)))
 
 
-@add_start_docstrings(
-    "The ModernBert Model with a decoder head on top that is used for masked language modeling.",
-    MODERNBERT_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The ModernBert Model with a decoder head on top that is used for masked language modeling.
+    """
 )
 class ModernBertForMaskedLM(ModernBertPreTrainedModel):
     _tied_weights_keys = ["decoder.weight"]
@@ -1301,12 +1241,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
     def compiled_head(self, output: torch.Tensor) -> torch.Tensor:
         return self.decoder(self.head(output))
 
-    @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1325,6 +1260,22 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
+        r"""
+        sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
+            perform global attention, while the rest perform local attention. This mask is used to avoid attending to
+            far-away tokens in the local attention layers when not using Flash Attention.
+        indices (`torch.Tensor` of shape `(total_unpadded_tokens,)`, *optional*):
+            Indices of the non-padding tokens in the input sequence. Used for unpadding the output.
+        cu_seqlens (`torch.Tensor` of shape `(batch + 1,)`, *optional*):
+            Cumulative sequence lengths of the input sequences. Used to index the unpadded tensors.
+        max_seqlen (`int`, *optional*):
+            Maximum sequence length in the batch excluding padding tokens. Used to unpad input_ids and pad output tensors.
+        batch_size (`int`, *optional*):
+            Batch size of the input sequences. Used to pad the output tensors.
+        seq_len (`int`, *optional*):
+            Sequence length of the input sequences including padding tokens. Used to pad the output tensors.
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
@@ -1403,9 +1354,10 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "The ModernBert Model with a sequence classification head on top that performs pooling.",
-    MODERNBERT_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The ModernBert Model with a sequence classification head on top that performs pooling.
+    """
 )
 class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
     def __init__(self, config: ModernBertConfig):
@@ -1421,12 +1373,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1446,10 +1393,24 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
+        sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
+            perform global attention, while the rest perform local attention. This mask is used to avoid attending to
+            far-away tokens in the local attention layers when not using Flash Attention.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        indices (`torch.Tensor` of shape `(total_unpadded_tokens,)`, *optional*):
+            Indices of the non-padding tokens in the input sequence. Used for unpadding the output.
+        cu_seqlens (`torch.Tensor` of shape `(batch + 1,)`, *optional*):
+            Cumulative sequence lengths of the input sequences. Used to index the unpadded tensors.
+        max_seqlen (`int`, *optional*):
+            Maximum sequence length in the batch excluding padding tokens. Used to unpad input_ids and pad output tensors.
+        batch_size (`int`, *optional*):
+            Batch size of the input sequences. Used to pad the output tensors.
+        seq_len (`int`, *optional*):
+            Sequence length of the input sequences including padding tokens. Used to pad the output tensors.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
@@ -1517,9 +1478,10 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "The ModernBert Model with a token classification head on top, e.g. for Named Entity Recognition (NER) tasks.",
-    MODERNBERT_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The ModernBert Model with a token classification head on top, e.g. for Named Entity Recognition (NER) tasks.
+    """
 )
 class ModernBertForTokenClassification(ModernBertPreTrainedModel):
     def __init__(self, config: ModernBertConfig):
@@ -1534,12 +1496,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1558,8 +1515,22 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
+        sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
+            perform global attention, while the rest perform local attention. This mask is used to avoid attending to
+            far-away tokens in the local attention layers when not using Flash Attention.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+        indices (`torch.Tensor` of shape `(total_unpadded_tokens,)`, *optional*):
+            Indices of the non-padding tokens in the input sequence. Used for unpadding the output.
+        cu_seqlens (`torch.Tensor` of shape `(batch + 1,)`, *optional*):
+            Cumulative sequence lengths of the input sequences. Used to index the unpadded tensors.
+        max_seqlen (`int`, *optional*):
+            Maximum sequence length in the batch excluding padding tokens. Used to unpad input_ids and pad output tensors.
+        batch_size (`int`, *optional*):
+            Batch size of the input sequences. Used to pad the output tensors.
+        seq_len (`int`, *optional*):
+            Sequence length of the input sequences including padding tokens. Used to pad the output tensors.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
@@ -1602,13 +1573,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    The ModernBert Model with a span classification head on top for extractive question-answering tasks like SQuAD
-    (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    MODERNBERT_START_DOCSTRING,
-)
+@auto_docstring
 class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
     def __init__(self, config: ModernBertConfig):
         super().__init__(config)
@@ -1621,12 +1586,7 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
 
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=QuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor],
@@ -1645,6 +1605,22 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
+        r"""
+        sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
+            perform global attention, while the rest perform local attention. This mask is used to avoid attending to
+            far-away tokens in the local attention layers when not using Flash Attention.
+        indices (`torch.Tensor` of shape `(total_unpadded_tokens,)`, *optional*):
+            Indices of the non-padding tokens in the input sequence. Used for unpadding the output.
+        cu_seqlens (`torch.Tensor` of shape `(batch + 1,)`, *optional*):
+            Cumulative sequence lengths of the input sequences. Used to index the unpadded tensors.
+        max_seqlen (`int`, *optional*):
+            Maximum sequence length in the batch excluding padding tokens. Used to unpad input_ids and pad output tensors.
+        batch_size (`int`, *optional*):
+            Batch size of the input sequences. Used to pad the output tensors.
+        seq_len (`int`, *optional*):
+            Sequence length of the input sequences including padding tokens. Used to pad the output tensors.
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
