@@ -609,8 +609,6 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
             - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
                 An image can have no segments, in which case the list should be empty.
             - "file_name" (`str`): The file name of the image.
-        format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-            Data format of the annotations. One of "coco_detection" or "coco_panoptic".
         masks_path (`str` or `pathlib.Path`, *optional*):
             Path to the directory containing the segmentation masks.
         """
@@ -628,7 +626,7 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
             )
             kwargs["size"] = kwargs.pop("max_size")
 
-        return super().preprocess(images, annotations=annotations, masks_path=masks_path, **kwargs)
+        return super().preprocess(images, annotations, masks_path, **kwargs)
 
     def _preprocess(
         self,

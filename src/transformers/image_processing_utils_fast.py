@@ -232,11 +232,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
         # get valid kwargs names
         self._valid_kwargs_names = list(self.valid_kwargs.__annotations__.keys())
 
-        # get valid preprocessor arguments (not kwargs and `self`), e.g. annotations, masks_path etc.
-        self._valid_preprocess_args = list(
-            self.preprocess.__code__.co_varnames[1 : self.preprocess.__code__.co_argcount]
-        )
-
     def resize(
         self,
         image: "torch.Tensor",
@@ -575,14 +570,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     @auto_docstring
     def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
-        # The child class's `preprocess` method can support additional arguments, e.g. annotations, masks_path etc.,
-        # which are not present in `ModelFastImageProcessorKwargs`. These arguments are captured in the `__init__` method
-        # based on the signature of the child's `preprocess` method, and stored in `self._valid_preprocess_args`.
-        # Since these arguments are valid for the child class and can be passed as kwargs to the super class,
-        # we need to add them to the valid processor keys.
-
-        valid_processor_keys = self._valid_kwargs_names + self._valid_preprocess_args
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=valid_processor_keys)
+        # args are not validated, but their order in the `preprocess` and `_preprocess` signatures must be the same
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_kwargs_names)
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self._valid_kwargs_names:
@@ -665,7 +654,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def to_dict(self):
         encoder_dict = super().to_dict()
         encoder_dict.pop("_valid_processor_keys", None)
-        encoder_dict.pop("_valid_preprocess_args", None)
         encoder_dict.pop("_valid_kwargs_names", None)
         return encoder_dict
 
