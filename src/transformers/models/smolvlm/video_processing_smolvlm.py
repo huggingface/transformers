@@ -242,7 +242,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
     def sample_frames(
         self,
         video: "torch.Tensor",
-        metadata: VideoMetadata,
+        metadata: Union[VideoMetadata, dict],
         num_frames: Optional[int] = None,
         fps: Optional[int] = None,
         skip_secs: Optional[int] = 1,
@@ -276,7 +276,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         total_num_frames = video.shape[0]
 
         # Step 1) Estimate how many frames we'd sample at `target_fps`, fallback if target_fps <= 0
-        estimated_frames = int(round(fps * metadata.duration))
+        estimated_frames = int(round(fps * metadata["duration"]))
 
         # Step 2) desired_frames
         desired_frames = min(estimated_frames, num_frames)
@@ -287,9 +287,9 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         start_idx = 0
         end_idx = total_num_frames - 1
 
-        if skip_secs > 0 and (metadata.duration - 2 * skip_secs) > (num_frames * fps):
-            start_idx = int(skip_secs * metadata.fps)
-            end_idx = int(total_num_frames - skip_secs * metadata.fps)
+        if skip_secs > 0 and (metadata["duration"] - 2 * skip_secs) > (num_frames * fps):
+            start_idx = int(skip_secs * metadata["fps"])
+            end_idx = int(total_num_frames - skip_secs * metadata["fps"])
 
         start_idx = max(0, start_idx)
         end_idx = min(end_idx, total_num_frames - 1)
@@ -302,11 +302,11 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
 
         timestamps = []
         for idx in indices:
-            sec = idx / metadata.fps
+            sec = idx / metadata["fps"]
             mm = int(sec // 60)
             ss = int(sec % 60)
             timestamps.append([mm, ss])
-        return video, timestamps, int(metadata.duration)
+        return video, timestamps, int(metadata["duration"])
 
     def _preprocess(
         self,

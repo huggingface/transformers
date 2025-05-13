@@ -34,7 +34,7 @@ from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, is_valid_image, is_vision_available, load_image
 from .utils.chat_template_utils import render_jinja_template
-from .video_utils import load_video
+from .video_utils import VideoMetadata, load_video
 
 
 if is_vision_available():
@@ -268,7 +268,7 @@ class VideosKwargs(TypedDict, total=False):
     input_data_format: Optional[Union[str, ChannelDimension]]
     device: Optional[str]
     do_sample_frames: Optional[bool]
-    video_metadata: Optional[int]
+    video_metadata: Optional[Union[VideoMetadata, dict]]
     fps: Optional[int]
     num_frames: Optional[int]
 

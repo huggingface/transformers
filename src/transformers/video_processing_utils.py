@@ -274,11 +274,11 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                     "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
                     "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
                 )
-            num_frames = int(total_num_frames / metadata.fps * fps)
+            num_frames = int(total_num_frames / metadata["fps"] * fps)
 
         if num_frames > total_num_frames:
             raise ValueError(
-                f"Video can't be sampled. The `num_frames={num_frames}1` exceeds `total_num_frames={total_num_frames}`."
+                f"Video can't be sampled. The `num_frames={num_frames}1` exceeds `total_num_frames={total_num_frames}`. "
             )
 
         if num_frames is not None:

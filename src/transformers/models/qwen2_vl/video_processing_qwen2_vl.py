@@ -64,7 +64,7 @@ if is_torch_available():
     import torch
 
 
-class Qwen2_VLVideoProcessorInitKwargs(VideosKwargs):
+class Qwen2VLVideoProcessorInitKwargs(VideosKwargs):
     min_pixels: Optional[int]
     max_pixels: Optional[int]
     patch_size: Optional[int]
@@ -75,7 +75,7 @@ class Qwen2_VLVideoProcessorInitKwargs(VideosKwargs):
 
 
 @add_start_docstrings(
-    "Constructs a fast Qwen2.VL image processor that dynamically resizes videos based on the original videos.",
+    "Constructs a fast Qwen2-VL image processor that dynamically resizes videos based on the original videos.",
     BASE_VIDEO_PROCESSOR_DOCSTRING,
     """
         min_pixels (`int`, *optional*, defaults to `56 * 56`):
@@ -95,7 +95,7 @@ class Qwen2_VLVideoProcessorInitKwargs(VideosKwargs):
     """,
 )
 @requires(backends=("torchvision",))
-class Qwen2_VLVideoProcessor(BaseVideoProcessor):
+class Qwen2VLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 128 * 28 * 28, "longest_edge": 28 * 28 * 768}
     image_mean = OPENAI_CLIP_MEAN
@@ -112,10 +112,10 @@ class Qwen2_VLVideoProcessor(BaseVideoProcessor):
     min_frames = 4
     max_frames = 768
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
-    valid_kwargs = Qwen2_VLVideoProcessorInitKwargs
+    valid_kwargs = Qwen2VLVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Qwen2_VLVideoProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[Qwen2VLVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
         self.size = {"shortest_edge": self.min_pixels, "longest_edge": self.max_pixels}
 
@@ -173,7 +173,7 @@ class Qwen2_VLVideoProcessor(BaseVideoProcessor):
                     "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
                 )
             max_frames = math.floor(min(max_frames, total_num_frames) / frame_factor) * frame_factor
-            num_frames = total_num_frames / metadata.fps * fps
+            num_frames = total_num_frames / metadata["fps"] * fps
             num_frames = min(min(max(num_frames, min_frames), max_frames), total_num_frames)
             num_frames = math.floor(num_frames / frame_factor) * frame_factor
 
@@ -312,4 +312,4 @@ class Qwen2_VLVideoProcessor(BaseVideoProcessor):
         )
 
 
-__all__ = ["Qwen2_VLVideoProcessor"]
+__all__ = ["Qwen2VLVideoProcessor"]

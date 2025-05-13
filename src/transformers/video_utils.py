@@ -73,6 +73,9 @@ class VideoMetadata:
     duration: float
     video_backend: str
 
+    def __getitem__(self, item):
+        return getattr(self, item)
+
 
 def is_valid_video_frame(frame):
     return isinstance(frame, PIL.Image.Image) or (
