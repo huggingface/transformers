@@ -112,6 +112,10 @@ class ModernBertConfig(PretrainedConfig):
         repad_logits_with_grad (`bool`, *optional*, defaults to `False`):
             When True, ModernBertForMaskedLM keeps track of the logits' gradient when repadding for output. This only
             applies when using Flash Attention 2 with passed labels. Otherwise output logits always have a gradient.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder in a sequence-to-sequence model.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether the model has cross attention.
 
     Examples:
 
@@ -168,6 +172,8 @@ class ModernBertConfig(PretrainedConfig):
         sparse_pred_ignore_index=-100,
         reference_compile=None,
         repad_logits_with_grad=False,
+        is_decoder: bool = False,
+        add_cross_attention: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -176,6 +182,8 @@ class ModernBertConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             cls_token_id=cls_token_id,
             sep_token_id=sep_token_id,
+            is_decoder=is_decoder,
+            add_cross_attention=add_cross_attention,
             **kwargs,
         )
         self.vocab_size = vocab_size
@@ -208,6 +216,8 @@ class ModernBertConfig(PretrainedConfig):
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
         self.repad_logits_with_grad = repad_logits_with_grad
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
 
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(

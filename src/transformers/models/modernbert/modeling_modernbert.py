@@ -32,6 +32,7 @@ from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
+    CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
@@ -250,6 +251,8 @@ class ModernBertMLP(nn.Module):
 class ModernBertRotaryEmbedding(nn.Module):
     def __init__(self, config: ModernBertConfig, dim: int, base: float, device: Optional[torch.device] = None):
         super().__init__()
+        if not hasattr(config, "rope_theta"):
+            config.rope_theta = config.global_rope_theta
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
@@ -490,8 +493,55 @@ class ModernBertAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        sliding_window_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        causal_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.Tensor:
+        # Cross-attention mode
+        is_cross_attention = encoder_hidden_states is not None
+        if is_cross_attention:
+            # Project query from hidden_states, key/value from encoder_hidden_states
+            query_proj = self.Wqkv(hidden_states)[..., : self.all_head_size]
+            key_value_proj = self.Wqkv(encoder_hidden_states)
+            key_proj = key_value_proj[..., self.all_head_size : 2 * self.all_head_size]
+            value_proj = key_value_proj[..., 2 * self.all_head_size :]
+            bs = hidden_states.shape[0]
+            seq_len = hidden_states.shape[1]
+            enc_seq_len = encoder_hidden_states.shape[1]
+            # Reshape
+            query = query_proj.view(bs, seq_len, self.num_heads, self.head_dim).transpose(
+                1, 2
+            )  # (bs, heads, seq, head_dim)
+            key = key_proj.view(bs, enc_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+            value = value_proj.view(bs, enc_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+            # Attention scores
+            scale = self.head_dim**-0.5
+            attn_weights = torch.matmul(query, key.transpose(-2, -1)) * scale
+            # Apply attention_mask (encoder_attention_mask)
+            if attention_mask is not None:
+                # attention_mask: (bs, 1, 1, enc_seq_len) or (bs, 1, enc_seq_len)
+                if attention_mask.dim() == 2:
+                    attention_mask = attention_mask[:, None, None, :]
+                elif attention_mask.dim() == 3:
+                    attention_mask = attention_mask[:, None, :, :]
+                attn_weights = attn_weights + attention_mask
+            # Apply causal_mask if provided (for decoder cross-attn, usually not needed)
+            if causal_mask is not None:
+                attn_weights = attn_weights + causal_mask[:, None, :, :enc_seq_len]
+            attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+            attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+            attn_output = torch.matmul(attn_weights, value)
+            attn_output = attn_output.transpose(1, 2).contiguous().view(bs, seq_len, self.all_head_size)
+            attn_output = self.out_drop(self.Wo(attn_output))
+            if output_attentions:
+                return (attn_output, attn_weights)
+            return (attn_output,)
+        # Self-attention (기존 동작)
         qkv = self.Wqkv(hidden_states)
 
         bs = hidden_states.shape[0]
@@ -508,7 +558,11 @@ class ModernBertAttention(nn.Module):
             bs=bs,
             dim=self.all_head_size,
             output_attentions=output_attentions,
-            **kwargs,
+            attention_mask=attention_mask,
+            sliding_window_mask=sliding_window_mask,
+            position_ids=position_ids,
+            cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
         )
         hidden_states = attn_outputs[0]
         hidden_states = self.out_drop(self.Wo(hidden_states))
@@ -527,6 +581,12 @@ class ModernBertEncoderLayer(nn.Module):
         self.attn = ModernBertAttention(config=config, layer_id=layer_id)
         self.mlp_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.mlp = ModernBertMLP(config)
+        self.has_cross_attention = getattr(config, "add_cross_attention", False)
+        if self.has_cross_attention:
+            if not getattr(config, "is_decoder", False):
+                raise ValueError("Cannot add cross-attention if not a decoder.")
+            self.cross_attn = ModernBertAttention(config=config, layer_id=layer_id)
+            self.cross_attn_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
 
     @torch.compile(dynamic=True)
     def compiled_mlp(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -541,6 +601,9 @@ class ModernBertEncoderLayer(nn.Module):
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
         output_attentions: Optional[bool] = False,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        causal_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         attn_outputs = self.attn(
             self.attn_norm(hidden_states),
@@ -550,8 +613,22 @@ class ModernBertEncoderLayer(nn.Module):
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
             output_attentions=output_attentions,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            causal_mask=causal_mask,
         )
         hidden_states = hidden_states + attn_outputs[0]
+
+        cross_attn_outputs = None
+        if self.has_cross_attention and encoder_hidden_states is not None:
+            cross_attn_outputs = self.cross_attn(
+                self.cross_attn_norm(hidden_states),
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                output_attentions=output_attentions,
+            )
+            hidden_states = hidden_states + cross_attn_outputs[0]
+
         mlp_output = (
             self.compiled_mlp(hidden_states)
             if self.config.reference_compile
@@ -559,7 +636,13 @@ class ModernBertEncoderLayer(nn.Module):
         )
         hidden_states = hidden_states + mlp_output
 
-        return (hidden_states,) + attn_outputs[1:]  # add attentions if outputted
+        # Return cross-attentions if requested
+        outputs = (hidden_states,)
+        if output_attentions:
+            outputs += attn_outputs[1:]
+            if cross_attn_outputs is not None and len(cross_attn_outputs) > 1:
+                outputs += (cross_attn_outputs[1],)
+        return outputs
 
 
 MODERNBERT_START_DOCSTRING = r"""
@@ -892,6 +975,10 @@ class ModernBertModel(ModernBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        causal_mask: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[Tuple[torch.Tensor, ...], BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -957,6 +1044,9 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     cu_seqlens,
                     max_seqlen,
                     output_attentions,
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                    causal_mask,
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -967,6 +1057,9 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     cu_seqlens=cu_seqlens,
                     max_seqlen=max_seqlen,
                     output_attentions=output_attentions,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    causal_mask=causal_mask,
                 )
             hidden_states = layer_outputs[0]
             if output_attentions and len(layer_outputs) > 1:
@@ -1457,6 +1550,106 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    The ModernBert Model with a language modeling head on top for causal language modeling.
+    """,
+    MODERNBERT_START_DOCSTRING,
+)
+class ModernBertForCausalLM(ModernBertPreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
+
+    def __init__(self, config: ModernBertConfig):
+        super().__init__(config)
+        self.config = config
+        self.model = ModernBertModel(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.decoder_bias)
+        self.post_init()
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings: nn.Linear):
+        self.lm_head = new_embeddings
+
+    def _prepare_causal_mask(self, input_shape, dtype, device, past_key_values_length=0):
+        bsz, tgt_len = input_shape
+        mask = torch.full((tgt_len, tgt_len), float("-inf"), device=device)
+        mask = torch.triu(mask, diagonal=1)
+        mask = mask.to(dtype)
+        mask = mask.unsqueeze(0).expand(bsz, -1, -1)  # (bsz, tgt_len, tgt_len)
+        if past_key_values_length > 0:
+            mask = F.pad(mask, (past_key_values_length, 0, 0, 0), value=0)
+        return mask
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> CausalLMOutputWithCrossAttentions:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # Causal mask
+        if input_ids is not None:
+            bsz, seq_len = input_ids.shape
+        elif inputs_embeds is not None:
+            bsz, seq_len = inputs_embeds.shape[:2]
+        else:
+            raise ValueError("You must specify input_ids or inputs_embeds")
+
+        causal_mask = self._prepare_causal_mask(
+            (bsz, seq_len),
+            dtype=torch.float32,
+            device=input_ids.device if input_ids is not None else inputs_embeds.device,
+        )
+
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            sliding_window_mask=None,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+            causal_mask=causal_mask,
+            **kwargs,
+        )
+        hidden_states = outputs.last_hidden_state
+        logits = self.lm_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+            # Shift so that tokens < n predict n
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return CausalLMOutputWithCrossAttentions(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=getattr(outputs, "cross_attentions", None),
+        )
+
+
 __all__ = [
     "ModernBertModel",
     "ModernBertPreTrainedModel",
@@ -1464,4 +1657,5 @@ __all__ = [
     "ModernBertForSequenceClassification",
     "ModernBertForTokenClassification",
     "ModernBertForQuestionAnswering",
+    "ModernBertForCausalLM",
 ]

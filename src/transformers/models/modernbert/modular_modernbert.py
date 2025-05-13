@@ -28,11 +28,11 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
+    CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
-    CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -57,6 +57,22 @@ _CHECKPOINT_FOR_DOC = "answerdotai/ModernBERT-base"
 _CONFIG_FOR_DOC = "ModernBertConfig"
 
 logger = logging.get_logger(__name__)
+
+MODERNBERT_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`ModernBertConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
 
 class ModernBertConfig(PretrainedConfig):
@@ -718,19 +734,21 @@ class ModernBertAttention(nn.Module):
         is_cross_attention = encoder_hidden_states is not None
         if is_cross_attention:
             # Project query from hidden_states, key/value from encoder_hidden_states
-            query_proj = self.Wqkv(hidden_states)[..., :self.all_head_size]
+            query_proj = self.Wqkv(hidden_states)[..., : self.all_head_size]
             key_value_proj = self.Wqkv(encoder_hidden_states)
-            key_proj = key_value_proj[..., self.all_head_size:2*self.all_head_size]
-            value_proj = key_value_proj[..., 2*self.all_head_size:]
+            key_proj = key_value_proj[..., self.all_head_size : 2 * self.all_head_size]
+            value_proj = key_value_proj[..., 2 * self.all_head_size :]
             bs = hidden_states.shape[0]
             seq_len = hidden_states.shape[1]
             enc_seq_len = encoder_hidden_states.shape[1]
             # Reshape
-            query = query_proj.view(bs, seq_len, self.num_heads, self.head_dim).transpose(1,2)  # (bs, heads, seq, head_dim)
-            key = key_proj.view(bs, enc_seq_len, self.num_heads, self.head_dim).transpose(1,2)
-            value = value_proj.view(bs, enc_seq_len, self.num_heads, self.head_dim).transpose(1,2)
+            query = query_proj.view(bs, seq_len, self.num_heads, self.head_dim).transpose(
+                1, 2
+            )  # (bs, heads, seq, head_dim)
+            key = key_proj.view(bs, enc_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+            value = value_proj.view(bs, enc_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
             # Attention scores
-            scale = self.head_dim ** -0.5
+            scale = self.head_dim**-0.5
             attn_weights = torch.matmul(query, key.transpose(-2, -1)) * scale
             # Apply attention_mask (encoder_attention_mask)
             if attention_mask is not None:
@@ -791,9 +809,9 @@ class ModernBertEncoderLayer(nn.Module):
         self.attn = ModernBertAttention(config=config, layer_id=layer_id)
         self.mlp_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.mlp = ModernBertMLP(config)
-        self.has_cross_attention = getattr(config, 'add_cross_attention', False)
+        self.has_cross_attention = getattr(config, "add_cross_attention", False)
         if self.has_cross_attention:
-            if not getattr(config, 'is_decoder', False):
+            if not getattr(config, "is_decoder", False):
                 raise ValueError("Cannot add cross-attention if not a decoder.")
             self.cross_attn = ModernBertAttention(config=config, layer_id=layer_id)
             self.cross_attn_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
@@ -853,23 +871,6 @@ class ModernBertEncoderLayer(nn.Module):
             if cross_attn_outputs is not None and len(cross_attn_outputs) > 1:
                 outputs += (cross_attn_outputs[1],)
         return outputs
-
-
-MODERNBERT_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`ModernBertConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
 
 
 @add_start_docstrings(
@@ -1688,6 +1689,12 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    The ModernBert Model with a language modeling head on top for causal language modeling.
+    """,
+    MODERNBERT_START_DOCSTRING,
+)
 class ModernBertForCausalLM(ModernBertPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1706,7 +1713,7 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel):
 
     def _prepare_causal_mask(self, input_shape, dtype, device, past_key_values_length=0):
         bsz, tgt_len = input_shape
-        mask = torch.full((tgt_len, tgt_len), float('-inf'), device=device)
+        mask = torch.full((tgt_len, tgt_len), float("-inf"), device=device)
         mask = torch.triu(mask, diagonal=1)
         mask = mask.to(dtype)
         mask = mask.unsqueeze(0).expand(bsz, -1, -1)  # (bsz, tgt_len, tgt_len)
@@ -1738,7 +1745,11 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel):
         else:
             raise ValueError("You must specify input_ids or inputs_embeds")
 
-        causal_mask = self._prepare_causal_mask((bsz, seq_len), dtype=torch.float32, device=input_ids.device if input_ids is not None else inputs_embeds.device)
+        causal_mask = self._prepare_causal_mask(
+            (bsz, seq_len),
+            dtype=torch.float32,
+            device=input_ids.device if input_ids is not None else inputs_embeds.device,
+        )
 
         outputs = self.model(
             input_ids=input_ids,

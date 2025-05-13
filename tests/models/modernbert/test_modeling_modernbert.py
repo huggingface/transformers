@@ -40,6 +40,7 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
+        ModernBertForCausalLM,
         ModernBertForMaskedLM,
         ModernBertForQuestionAnswering,
         ModernBertForSequenceClassification,
@@ -208,6 +209,7 @@ class ModernBertModelTester:
         config.is_decoder = True
         config.add_cross_attention = True
         from transformers import ModernBertForCausalLM
+
         model = ModernBertForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
@@ -251,6 +253,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
             ModernBertForQuestionAnswering,
+            ModernBertForCausalLM,
         )
         if is_torch_available()
         else ()
