@@ -27,10 +27,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_modeling_common import ModelTesterMixin
-from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -43,7 +39,7 @@ if is_torch_available():
         PersimmonModel,
     )
 
-from ...causal_lm_tester import CausalLMModelTester, CausalLMModelTest
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester with Llama->Persimmon
@@ -87,6 +83,7 @@ class PersimmonModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+    model_tester_class = PersimmonModelTester
 
     test_headmasking = False
     test_pruning = False
