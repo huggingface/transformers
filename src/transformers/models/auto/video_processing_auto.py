@@ -24,13 +24,7 @@ from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 # Build the list of all video processors
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...utils import (
-    CONFIG_NAME,
-    VIDEO_PROCESSOR_NAME,
-    cached_file,
-    is_torchvision_available,
-    logging,
-)
+from ...utils import CONFIG_NAME, VIDEO_PROCESSOR_NAME, cached_file, is_torchvision_available, logging
 from ...utils.import_utils import requires
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
@@ -53,6 +47,7 @@ else:
     VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
             ("instructblipvideo", "InstructBlipVideoVideoProcessor"),
+            ("internvl", "InternVLVideoProcessor"),
             ("llava_next_video", "LlavaNextVideoVideoProcessor"),
             ("llava_onevision", "LlavaOnevisionVideoProcessor"),
             ("qwen2_5_vl", "Qwen2_5_VLVideoProcessor"),
