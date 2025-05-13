@@ -202,6 +202,30 @@ class ModernBertModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
+    def create_and_check_for_causal_lm(
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.is_decoder = True
+        config.add_cross_attention = True
+        from transformers import ModernBertForCausalLM
+        model = ModernBertForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
+        # Forward without encoder_hidden_states (pure causal LM)
+        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        # Forward with encoder_hidden_states (seq2seq)
+        encoder_hidden_states = torch.randn(self.batch_size, self.seq_length, self.hidden_size, device=torch_device)
+        encoder_attention_mask = torch.ones(self.batch_size, self.seq_length, device=torch_device)
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            labels=token_labels,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -317,6 +341,10 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
+    def test_for_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
     def test_for_warning_if_padding_and_no_attention_mask(self):
         (
