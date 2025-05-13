@@ -3,10 +3,10 @@ import torch
 from transformers import AutoProcessor
 from transformers import PerceptionLMForConditionalGeneration
 
-processor = AutoProcessor.from_pretrained("/checkpoint/vision_encoder/smhu/debug/plm_hf_1b", use_fast=True)
+processor = AutoProcessor.from_pretrained("/checkpoint/vision_encoder/smhu/debug/plm_hf_3b", use_fast=True)
 print(type(processor))
 
-model = PerceptionLMForConditionalGeneration.from_pretrained("/checkpoint/vision_encoder/smhu/debug/plm_hf_1b").to(torch.bfloat16).to("cuda")
+model = PerceptionLMForConditionalGeneration.from_pretrained("/checkpoint/vision_encoder/smhu/debug/plm_hf_3b").to(torch.bfloat16).to("cuda")
 conversation = [
     {
         "role": "user",

@@ -38,7 +38,7 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...video_utils import VideoInput
+# from ...video_utils import VideoInput
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -89,17 +89,17 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
             max_num_tiles=kwargs.get("max_num_tiles", 36),
             normalize_img=kwargs.get("normalize_img", True),
         )
-        self.video_transform = get_image_transform(
-            vision_input_type="vanilla",
-            image_res=kwargs.get("image_res", 448),
-            max_num_tiles=kwargs.get("max_frame_tiles", 1),
-            normalize_img=kwargs.get("normalize_img", True),
-        )
+        # self.video_transform = get_image_transform(
+        #     vision_input_type="vanilla",
+        #     image_res=kwargs.get("image_res", 448),
+        #     max_num_tiles=kwargs.get("max_frame_tiles", 1),
+        #     normalize_img=kwargs.get("normalize_img", True),
+        # )
 
     def to_dict(self):
         dictionary = super().to_dict()
         dictionary["image_transform"] = self.image_transform.to_dict()
-        dictionary["video_transform"] = self.video_transform.to_dict()
+        # dictionary["video_transform"] = self.video_transform.to_dict()
         return dictionary
 
     @add_start_docstrings(
@@ -108,7 +108,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
                 Whether to pad the image to a square based on the longest edge. Can be overridden by the `do_pad` parameter
         """,
     )
-    def preprocess(self, images: ImageInput, videos: VideoInput, **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]) -> BatchFeature:
         return_tensors = kwargs.get("return_tensors", "pt")
         if images:
             processed_images = []
@@ -118,11 +118,11 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
                 processed_images.append(processed)
             processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
             return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-        elif videos:
-            videos = [torch.from_numpy(np.array(v)).flatten(0, 1).permute(0, 3, 1, 2) for v in videos]
-            processed_videos = [self.video_transform(v)[0] for v in videos]
-            processed_videos = torch.stack(processed_videos, dim=0) if return_tensors else processed_videos
-            return BatchFeature(data={"pixel_values": processed_videos}, tensor_type=return_tensors)
+        # elif videos:
+        #     videos = [torch.from_numpy(np.array(v)).flatten(0, 1).permute(0, 3, 1, 2) for v in videos]
+        #     processed_videos = [self.video_transform(v)[0] for v in videos]
+        #     processed_videos = torch.stack(processed_videos, dim=0) if return_tensors else processed_videos
+        #     return BatchFeature(data={"pixel_values": processed_videos}, tensor_type=return_tensors)
         else:
             return BatchFeature(data={"pixel_values": None}, tensor_type=return_tensors)
 
