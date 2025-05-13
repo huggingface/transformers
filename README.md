@@ -120,7 +120,7 @@ To chat with a model, the usage pattern is the same. The only difference is you 
 > [!TIP]
 > You can also chat with a model directly from the command line.
 > ```shell
-> transformers chat --model_name_or_path Qwen/Qwen2.5-0.5B-Instruct
+> transformers chat Qwen/Qwen2.5-0.5B-Instruct
 > ```
 
 ```py

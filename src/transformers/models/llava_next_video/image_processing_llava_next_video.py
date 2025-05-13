@@ -31,15 +31,14 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    VideoInput,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_batched_videos,
     make_list_of_images,
     to_numpy_array,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging
+from ...video_utils import VideoInput, make_batched_videos
 
 
 logger = logging.get_logger(__name__)
@@ -358,6 +357,10 @@ class LlavaNextVideoImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         images = make_batched_videos(images)
+        logger.warning(
+            "`LlavaNextVideoImageProcessor` is deprecated and will be removed in v5.0. "
+            "We recommend to load an instance of `LlavaNextVideoVideoProcessor` to process videos for the model. "
+        )
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,

@@ -284,14 +284,14 @@ def unpad_image(tensor, original_size):
 
     if original_aspect_ratio > current_aspect_ratio:
         scale_factor = current_width / original_width
-        new_height = min(math.ceil(original_height * scale_factor), current_height)
-        padding, r = divmod(current_height - new_height, 2)
-        unpadded_tensor = tensor[:, padding : current_height - (padding + r), :]
+        new_height = int(round(original_height * scale_factor, 7))
+        padding = (current_height - new_height) // 2
+        unpadded_tensor = tensor[:, padding : current_height - padding, :]
     else:
         scale_factor = current_height / original_height
-        new_width = min(math.ceil(original_width * scale_factor), current_width)
-        padding, r = divmod(current_width - new_width, 2)
-        unpadded_tensor = tensor[:, :, padding : current_width - (padding + r)]
+        new_width = int(round(original_width * scale_factor, 7))
+        padding = (current_width - new_width) // 2
+        unpadded_tensor = tensor[:, :, padding : current_width - padding]
 
     return unpadded_tensor
 
