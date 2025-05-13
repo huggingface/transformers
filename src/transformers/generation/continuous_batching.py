@@ -1248,7 +1248,6 @@ class ContinuousBatchingManager:
             if self.log_prob_generation:
                 batch_processor.output_probs.copy_(logits)  # TODO
             probs = self.logit_processor(batch_data.input_ids, logits)
-            # probs = logits
             if self.do_sample:  # sample
                 probs = nn.functional.softmax(probs, dim=-1)
                 next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)

@@ -17,7 +17,7 @@ _TEST_PROMPTS = [
 
 # --- Common Setup ---
 model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.2-3b-Instruct", attn_implementation="eager_paged", torch_dtype=torch.bfloat16, device_map="auto"
+    "meta-llama/Llama-3.2-3b-Instruct", attn_implementation="sdpa_paged", torch_dtype=torch.bfloat16, device_map="auto"
 ).eval()
 tokenizer = AutoTokenizer.from_pretrained(
     "meta-llama/Llama-3.2-3b-Instruct", padding_side="left"
@@ -42,53 +42,52 @@ generation_config = GenerationConfig(
     # temperature=0.7,
     # top_k=50,
     # Parameters relevant for Continuous Batching (can be tuned)
-    num_blocks=128,
-    block_size=32,
-    max_batch_tokens=16,  # Maximum number of tokens to process in a single batch
+    num_blocks=64,
+    block_size=128,
+    max_batch_tokens=64,  # Maximum number of tokens to process in a single batch
 )
 
 # Prepare data (using a smaller subset for demonstration)
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
 train_dataset = train_dataset.select(range(100))  # Use only 5 examples for the simple version
 
-tokenized_test_prompts = tokenizer(_TEST_PROMPTS, padding=True, padding_side="left", truncation=True, max_length=512)
-simple_batch_inputs = list(tokenized_test_prompts["input_ids"])
+# tokenized_test_prompts = tokenizer(_TEST_PROMPTS, padding=True, padding_side="left", truncation=True, max_length=512)
+# simple_batch_inputs = list(tokenized_test_prompts["input_ids"])
 
-# def tokenize_function(examples):
-#     # Truncate to avoid overly long prompts exceeding max context length
-#     return tokenizer(examples["text"], padding=True, truncation=True, max_length=512)
-
-
-# tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
-# simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
+def tokenize_function(examples):
+    # Truncate to avoid overly long prompts exceeding max context length
+    return tokenizer(examples["question"], padding=True, truncation=True, max_length=512)
 
 
-# model.config.attn_implementation = "sdpa"
-# start_time_simple = time.time()
-# batch_size = 16
-# full_outputs = []
-# from tqdm import tqdm
+tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
+simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
 
-# for i in tqdm(range(0, len(simple_batch_inputs), batch_size)):
-#     outputs = model.generate(
-#         torch.tensor(simple_batch_inputs[i:i+16], device=model.device),
-#         generation_config=GenerationConfig(
-#             max_new_tokens=25, eos_token_id=tokenizer.eos_token_id, pad_token_id=tokenizer.pad_token_id
-#         ),
-#     )
-#     full_outputs.extend(outputs.tolist())
 
-# end_time_simple = time.time()
-# print(f"\nSimple batch generation took: {end_time_simple - start_time_simple:.2f} seconds")
+model.config.attn_implementation = "sdpa"
+start_time_simple = time.time()
+batch_size = 32
+full_outputs = []
+from tqdm import tqdm
 
-# print("\nResults from simple generate_batch:")
-# for i, request in enumerate(full_outputs):
-#     output_text = tokenizer.decode(request, skip_special_tokens=False)
-#     print("-" * 20)
-#     print(f"  Request: {request}:")
-#     print(f"  Output: {output_text}")
-# print("-" * 20)
-# print("--- Finished Simple Batch Generation Example ---\n\n")
+for i in tqdm(range(0, len(simple_batch_inputs), batch_size)):
+    outputs = model.generate(
+        torch.tensor(simple_batch_inputs[i:i+batch_size], device=model.device),
+        generation_config=GenerationConfig(
+            max_new_tokens=16, eos_token_id=tokenizer.eos_token_id, pad_token_id=tokenizer.pad_token_id
+        ),
+    )
+    full_outputs.extend(outputs.tolist())
+
+end_time_simple = time.time()
+print(f"\nSimple batch generation took: {end_time_simple - start_time_simple:.2f} seconds")
+
+print("\nResults from simple generate_batch:")
+for i, request in enumerate(full_outputs):
+    output_text = tokenizer.decode(request, skip_special_tokens=False)
+    print("-" * 20)
+    print(f"  Output: {output_text}")
+print("-" * 20)
+print("--- Finished Simple Batch Generation Example ---\n\n")
 
 # --- Example 1: Simple Version using generate_batch ---
 print("--- Running CB Generation Example ---")
@@ -102,8 +101,8 @@ tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
 simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
 
 
-tokenized_test_prompts = tokenizer(_TEST_PROMPTS, truncation=True, max_length=512)
-simple_batch_inputs = list(tokenized_test_prompts["input_ids"])
+# tokenized_test_prompts = tokenizer(_TEST_PROMPTS, truncation=True, max_length=512)
+# simple_batch_inputs = list(tokenized_test_prompts["input_ids"])
 
 start_time_simple = time.time()
 # Call the simple batch generation function
