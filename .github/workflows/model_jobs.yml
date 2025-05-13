@@ -95,7 +95,7 @@ jobs:
 
       - name: Installed torch 2.7 RC
         working-directory: /transformers
-        run: python3 -m pip install torch==2.7.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cu126
+        run: python3 -m pip install torch==2.7.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cu126
 
       - name: Show installed libraries and their versions
         working-directory: /transformers
