@@ -118,14 +118,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    @unittest.skip("flaky on main")  # FIXME @raushan
-    def test_structured_kwargs_nested_from_dict_video(self):
-        super().test_structured_kwargs_nested_from_dict_video()
-
-    @unittest.skip("flaky on main")  # FIXME @raushan
-    def test_structured_kwargs_nested_video(self):
-        super().test_structured_kwargs_nested_video()
-
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", padding_side="left")
