@@ -65,6 +65,7 @@ class NemotronModelTester(CausalLMModelTester):
 
 @require_torch
 class NemotronModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = NemotronModelTester
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
