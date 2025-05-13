@@ -82,7 +82,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
     Args:
         image_processor ([`Qwen2VLImageProcessor`], *optional*):
             The image processor.
-        video_processor ([`Qwen2_5OmniVideoProcessor`], *optional*):
+        video_processor ([`Qwen2_VLVideoProcessor`], *optional*):
             The video processor.
         feature_extractor ([`WhisperFeatureExtractor`], *optional*):
             The audio feature extractor.
@@ -94,7 +94,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "video_processor", "feature_extractor", "tokenizer"]
     image_processor_class = "Qwen2VLImageProcessor"
-    video_processor_class = "Qwen2_5OmniVideoProcessor"
+    video_processor_class = "Qwen2_VLVideoProcessor"
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
     valid_kwargs = ["chat_template"]

@@ -19,6 +19,7 @@
 # limitations under the License.
 """video processor class for Qwen2-VL."""
 
+import math
 from typing import List, Optional, Union
 
 from ...image_processing_utils import (
@@ -63,16 +64,18 @@ if is_torch_available():
     import torch
 
 
-class Qwen2VLVideoProcessorInitKwargs(VideosKwargs):
+class Qwen2_VLVideoProcessorInitKwargs(VideosKwargs):
     min_pixels: Optional[int]
     max_pixels: Optional[int]
     patch_size: Optional[int]
     temporal_patch_size: Optional[int]
     merge_size: Optional[int]
+    min_frames: Optional[int]
+    max_frames: Optional[int]
 
 
 @add_start_docstrings(
-    "Constructs a fast Qwen2-VL image processor that dynamically resizes videos based on the original videos.",
+    "Constructs a fast Qwen2.VL image processor that dynamically resizes videos based on the original videos.",
     BASE_VIDEO_PROCESSOR_DOCSTRING,
     """
         min_pixels (`int`, *optional*, defaults to `56 * 56`):
@@ -85,30 +88,108 @@ class Qwen2VLVideoProcessorInitKwargs(VideosKwargs):
             The temporal patch size of the vision encoder.
         merge_size (`int`, *optional*, defaults to 2):
             The merge size of the vision encoder to llm encoder.
+        min_frames (`int`, *optional*, defaults to 4):
+            The minimum number of frames that can be sampled.
+        max_frames (`int`, *optional*, defaults to 768):
+            The maximum number of frames that can be sampled.
     """,
 )
 @requires(backends=("torchvision",))
-class Qwen2VLVideoProcessor(BaseVideoProcessor):
+class Qwen2_VLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
-    size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
+    size = {"shortest_edge": 128 * 28 * 28, "longest_edge": 28 * 28 * 768}
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
     do_resize = True
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    min_pixels = 56 * 56
-    max_pixels = 28 * 28 * 1280
+    min_pixels = 128 * 28 * 28
+    max_pixels = 28 * 28 * 768
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
+    min_frames = 4
+    max_frames = 768
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
-    valid_kwargs = Qwen2VLVideoProcessorInitKwargs
+    valid_kwargs = Qwen2_VLVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Qwen2VLVideoProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[Qwen2_VLVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
         self.size = {"shortest_edge": self.min_pixels, "longest_edge": self.max_pixels}
+
+    def sample_frames(
+        self,
+        video: "torch.Tensor",
+        frame_factor: int,
+        min_frames: int,
+        max_frames: int,
+        metadata: Optional[Union[VideoMetadata, dict]] = None,
+        num_frames: Optional[int] = None,
+        fps: Optional[int] = None,
+    ):
+        """
+        Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
+        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformty. Arguments `num_frames`
+        and `fps` are mutually exclusive.
+
+        Args:
+            video (`torch.Tensor`):
+                Video that need to be sampled.
+            frame_factor (`int`):
+                The temporal patch size of the vision encoder. Number of sampled frames will be rounded to be divisible by frame factor.
+            min_frames (`int`):
+                The minimum number of frames that can be sampled.
+            max_frames (`int`):
+                The maximum number of frames that can be sampled.
+            metadata (`VideoMetadata`, *optional*):
+                Metadata of the video containing information about total duration, fps and total number of frames.
+            num_frames (`int`, *optional*):
+                Maximum number of frames to sample. Defaults to `self.num_frames`.
+            fps (`int`, *optional*):
+                Target frames to sample per second. Defaults to `self.fps`.
+
+        Returns:
+            torch.Tensor:
+                Sampled video frames.
+        """
+        if fps is not None and num_frames is not None:
+            raise ValueError(
+                "`num_frames`, `fps`, and `sample_indices_fn` are mutually exclusive arguments, please use only one!"
+            )
+
+        num_frames = num_frames if num_frames is not None else self.num_frames
+        fps = fps if fps is not None else self.fps
+        total_num_frames = video.shape[0]
+
+        # If num_frames is not given but fps is, calculate num_frames from fps
+        if num_frames is not None:
+            num_frames = round(num_frames / frame_factor) * frame_factor
+        elif fps is not None:
+            if metadata is None:
+                raise ValueError(
+                    "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
+                    "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
+                )
+            max_frames = math.floor(min(max_frames, total_num_frames) / frame_factor) * frame_factor
+            num_frames = total_num_frames / metadata.fps * fps
+            num_frames = min(min(max(num_frames, min_frames), max_frames), total_num_frames)
+            num_frames = math.floor(num_frames / frame_factor) * frame_factor
+
+        if num_frames > total_num_frames:
+            raise ValueError(
+                f"Video can't be sampled. The inferred `num_frames={num_frames}` exceeds `total_num_frames={total_num_frames}`. "
+                "Decrease `num_frames` or `fps` for sampling."
+            )
+
+        if num_frames is not None:
+            indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
+        else:
+            indices = torch.arange(0, total_num_frames).int()
+        video = video[indices].contiguous()
+
+        return video
 
     def _preprocess(
         self,
@@ -131,6 +212,8 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         video_metadata: Optional[Union[List[List[VideoMetadata]], List[List[dict]]]] = None,
         fps: Optional[int] = None,
         num_frames: Optional[int] = None,
+        min_frames: Optional[int] = None,
+        max_frames: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
@@ -141,7 +224,15 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
             else:
                 batch_metadata = [None] * len(videos)
             videos = [
-                self.sample_frames(video, metadata=metadata, num_frames=num_frames, fps=fps)
+                self.sample_frames(
+                    video,
+                    frame_factor=temporal_patch_size,
+                    min_frames=min_frames,
+                    max_frames=max_frames,
+                    metadata=metadata,
+                    num_frames=num_frames,
+                    fps=fps,
+                )
                 for video, metadata in zip(videos, batch_metadata)
             ]
 
@@ -221,4 +312,4 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         )
 
 
-__all__ = ["Qwen2VLVideoProcessor"]
+__all__ = ["Qwen2_VLVideoProcessor"]
