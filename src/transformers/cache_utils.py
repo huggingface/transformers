@@ -1922,7 +1922,7 @@ class HybridCache(Cache):
             self.value_cache[layer_idx].zero_()
 
     def get_mask_sizes_and_patterns(
-        self, cache_position: torch.Tensor, num_layers: int
+        self, cache_position: torch.Tensor
     ) -> tuple[list[tuple], list[int]]:
         """
         Return a list of tuples (kv_length, kv_offset, sliding_window, chunk_size), corresponding to all unique mask pattern we may need,
@@ -1951,14 +1951,23 @@ class HybridCache(Cache):
         full_mask_kv_offset = 0
         full_mask_kv_length = self.get_max_cache_shape()
 
-        sizes_and_patterns = [(full_mask_kv_length, full_mask_kv_offset, None, None)]
-        layer_mapping = [0] * len(self.is_sliding)
-        # Only in this case, do we need to add another mask with sliding pattern
-        if local_mask_kv_length != full_mask_kv_length:
-            sizes_and_patterns.append((local_mask_kv_length, local_mask_kv_offset, self.sliding_window, None))
-            layer_mapping = [1 if is_sliding else 0 for is_sliding in self.is_sliding]
+        # sizes_and_patterns = [(full_mask_kv_length, full_mask_kv_offset, None, None)]
+        # layer_mapping = [0] * len(self.is_sliding)
+        # # Only in this case, do we need to add another mask with sliding pattern
+        # if local_mask_kv_length != full_mask_kv_length:
+        #     sizes_and_patterns.append((local_mask_kv_length, local_mask_kv_offset, self.sliding_window, None))
+        #     layer_mapping = [1 if is_sliding else 0 for is_sliding in self.is_sliding]
 
-        return sizes_and_patterns, layer_mapping
+        # return sizes_and_patterns, layer_mapping
+
+        sizes = []
+        for is_sliding in self.is_sliding:
+            if is_sliding:
+                sizes.append((local_mask_kv_length, local_mask_kv_offset))
+            else:
+                sizes.append((full_mask_kv_length, full_mask_kv_offset))
+        return sizes
+
 
 
 class HybridChunkedCache(Cache):

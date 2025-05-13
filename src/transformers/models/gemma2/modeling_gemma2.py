@@ -28,7 +28,7 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
 from ...generation import GenerationMixin
-from ...masking_utils import get_causal_masks
+from ...masking_utils import get_causal_masks, LayerType
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -262,7 +262,7 @@ class Gemma2DecoderLayer(nn.Module):
 
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.sliding_window = config.sliding_window
+        self.layer_type = LayerType("sliding" if self.is_sliding else "full", config.sliding_window if self.is_sliding else None)
 
     @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
@@ -386,6 +386,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
         )
         self.norm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Gemma2RotaryEmbedding(config=config)
+        self.layer_types = [layer.layer_type for layer in self.layers]
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -451,7 +452,8 @@ class Gemma2Model(Gemma2PreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_masks = get_causal_masks(
-            self.config,
+            self.layer_types,
+            self.config._attn_implementation,
             inputs_embeds,
             attention_mask,
             cache_position,

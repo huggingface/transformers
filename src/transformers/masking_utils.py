@@ -14,6 +14,7 @@
 # limitations under the License.
 import itertools
 from typing import Callable, Optional, Union
+from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
@@ -23,6 +24,40 @@ from .cache_utils import Cache
 from .configuration_utils import PretrainedConfig
 from .modeling_utils import GeneralInterface
 from .utils.import_utils import is_torchdynamo_compiling
+
+
+@dataclass(unsafe_hash=True)
+class LayerType(object):
+    type_: str
+    value: int = None
+
+    def get_mask_function(self):
+        if self.type_ == "full":
+            mask_function = causal_mask_function
+        elif self.type_ == "sliding":
+            mask_function = sliding_window_causal_mask_function(self.value)
+        # Chunked attention mask
+        elif self.type_ == "chunked":
+            mask_function = chunked_causal_mask_function(self.value)
+        return mask_function
+    
+
+@dataclass(unsafe_hash=True)
+class MaskParameterization(object):
+    layer_type: LayerType
+    kv_length: int
+    kv_offset: int
+
+    def __init__(self, layer_type: LayerType, kv_length: int, kv_offset: int):
+        # If the layer is sliding or chunked, but the cumulative sequence length is lower than the window/chunk,
+        # the layer behaves as a full layer from an attention perspective (we are not yet beyond the window/chunk size)
+        if layer_type.type_ in ("sliding", "chunked") and kv_offset + kv_length > layer_type.value:
+            self.layer_type = LayerType("full")
+        else:
+            self.layer_type = layer_type
+
+        self.kv_length = kv_length
+        self.kv_offset = kv_offset
 
 
 def and_masks(*mask_functions: list[Callable]) -> Callable:
@@ -158,8 +193,7 @@ def sdpa_mask(
     kv_length: int,
     kv_offset: int = 0,
     attention_mask: Optional[torch.Tensor] = None,
-    sliding_window: Optional[int] = None,
-    chunk_size: Optional[int] = None,
+    layer_type = None,
     allow_is_causal_skip: bool = True,
     **kwargs,
 ) -> Optional[torch.Tensor]:
@@ -257,7 +291,7 @@ def sdpa_mask(
 
     # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
     if allow_is_causal_skip and _ignore_causal_mask_sdpa(
-        padding_mask, q_length, kv_length, sliding_window, chunk_size
+        padding_mask, q_length, kv_length, layer_type.value
     ):
         return None
 
@@ -266,15 +300,7 @@ def sdpa_mask(
     kv_arange = torch.arange(kv_length, device=cache_position.device)
     kv_arange += kv_offset
 
-    # Sliding window mask
-    if sliding_window is not None:
-        mask_function = sliding_window_causal_mask_function(sliding_window)
-    # CHunked attention mask
-    elif chunk_size is not None:
-        mask_function = chunked_causal_mask_function(chunk_size)
-    # Simple causal mask
-    else:
-        mask_function = causal_mask_function
+    mask_function = layer_type.get_mask_function()
 
     # This creates the 4D mask easily. Note that we do not include vmap over the batch_idx dimension as well,
     # as vmap cannot handle slicing a tensor from scalar tensor (it internally calls `.item()` which vmap does not allow
@@ -294,8 +320,7 @@ def eager_mask(
     kv_length: int,
     kv_offset: int = 0,
     attention_mask: Optional[torch.Tensor] = None,
-    sliding_window: Optional[int] = None,
-    chunk_size: Optional[int] = None,
+    layer_type = None,
     dtype: torch.dtype = torch.float32,
     **kwargs,
 ) -> torch.Tensor:
@@ -329,8 +354,7 @@ def eager_mask(
         kv_length=kv_length,
         kv_offset=kv_offset,
         attention_mask=attention_mask,
-        sliding_window=sliding_window,
-        chunk_size=chunk_size,
+        layer_type=layer_type,
         allow_is_causal_skip=False,
         **kwargs,
     )
@@ -346,8 +370,7 @@ def flash_attention_mask(
     kv_length: int,
     kv_offset: int = 0,
     attention_mask: Optional[torch.Tensor] = None,
-    sliding_window: Optional[int] = None,
-    chunk_size: Optional[int] = None,
+    layer_type = None,
     **kwargs,
 ):
     """
@@ -372,14 +395,14 @@ def flash_attention_mask(
             An optional chunk size, if we are using chunked attention. Mutually exclusive with `sliding_window`.
     """
     # Raise if using chunked attention on context too large
-    if chunk_size is not None and kv_offset + kv_length > chunk_size:
+    if layer_type.type_ == "chunked":
         raise ValueError(
             "Flash attention 2 cannot handle attention chunked attention, and the key-value length is larger than the chunk size "
             "so the chunked pattern cannot be respected. You should use another `attn_implementation` when instantiating the model"
         )
 
     # Here we need to slice from the right (padding is always left)
-    if sliding_window is not None or chunk_size is not None:
+    if layer_type.type_ != "full":
         if attention_mask is not None:
             attention_mask = attention_mask[:, -kv_length:]
 
@@ -396,8 +419,7 @@ def flex_attention_mask(
     kv_length: int,
     kv_offset: int = 0,
     attention_mask: Optional[torch.Tensor] = None,
-    sliding_window: Optional[int] = None,
-    chunk_size: Optional[int] = None,
+    layer_type = None,
     **kwargs,
 ) -> "BlockMask":
     """
@@ -422,15 +444,7 @@ def flex_attention_mask(
     """
     q_length, q_offset = cache_position.shape[0], cache_position[0]
 
-    # Sliding window mask
-    if sliding_window is not None:
-        mask_function = sliding_window_causal_mask_function(sliding_window)
-    # CHunked attention mask
-    elif chunk_size is not None:
-        mask_function = chunked_causal_mask_function(chunk_size)
-    # Simple causal mask
-    else:
-        mask_function = causal_mask_function
+    mask_function = layer_type.get_mask_function()
 
     # Potentially add the padding 2D mask
     if attention_mask is not None:
@@ -469,7 +483,8 @@ ALL_MASK_CREATION_FUNCTIONS: AttentionMaskInterface = AttentionMaskInterface()
 
 
 def get_causal_masks(
-    config: PretrainedConfig,
+    layer_types: list[LayerType],
+    attn_implementation: str,
     input_embeds: torch.Tensor,
     attention_mask: Optional[Union[torch.Tensor, list[torch.Tensor]]],
     cache_position: torch.Tensor,
@@ -496,8 +511,7 @@ def get_causal_masks(
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
     """
-    num_layers = config.num_hidden_layers
-
+    num_layers = len(layer_types)
     # It means the masks were already prepared outside the `forward`, e.g. by `generate` when compiling - return immediately
     if isinstance(attention_mask, list):
         return attention_mask
@@ -506,40 +520,46 @@ def get_causal_masks(
     if (
         isinstance(attention_mask, torch.Tensor)
         and attention_mask.ndim == 4
-        and config._attn_implementation in ("sdpa", "eager")
+        and attn_implementation in ("sdpa", "eager")
     ):
         return [attention_mask] * num_layers
 
     # For TGI/vLLM backends, or other custom attention without equivalent mask creation: we don't need a mask!
-    if config._attn_implementation not in ALL_MASK_CREATION_FUNCTIONS:
+    if attn_implementation not in ALL_MASK_CREATION_FUNCTIONS:
         return [None] * num_layers
 
     batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
 
-    # If using a cache, it can give all informations about mask size and patterns based on seen tokens
+    # If using a cache, it can give all informations about mask sizes based on seen tokens
     if past_key_values is not None:
-        sizes_and_patterns, layer_to_mask_mapping = past_key_values.get_mask_sizes_and_patterns(
-            cache_position, num_layers
-        )
+        mask_sizes = past_key_values.get_mask_sizes_and_patterns(cache_position)
     # We are either training, or running inference without cache -> extract patterns from config
     else:
         kv_length = input_embeds.shape[1]
-        sizes_and_patterns, layer_to_mask_mapping = infer_mask_sizes_patterns_from_config(config, kv_length)
+        mask_sizes = [(kv_length, 0)] * num_layers
+
+    mask_configs = [MaskParameterization(layer_type, *sizes) for layer_type, sizes in zip(layer_types, mask_sizes)]
+    unique_masks = list(set(mask_configs))
+    layer_to_mask_mapping = [unique_masks.index(config) for config in mask_configs]
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
     if attention_mask is not None:
         attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
 
-    mask_interface = ALL_MASK_CREATION_FUNCTIONS[config._attn_implementation]
+    mask_interface = ALL_MASK_CREATION_FUNCTIONS[attn_implementation]
     # Sdpa fallbacks to eager in the Attention modules if `output_attentions=True`
-    if config._attn_implementation == "sdpa" and output_attentions:
+    if attn_implementation == "sdpa" and output_attentions:
         mask_interface = ALL_MASK_CREATION_FUNCTIONS["eager"]
     # We now create all the masks
     masks = []
-    for kv_length, kv_offset, window, chunk in sizes_and_patterns:
+    # for kv_length, kv_offset, window, chunk in sizes_and_patterns:
+    for parameterization in unique_masks:
         # Raise if both are provided somehow
-        if window is not None and chunk is not None:
-            raise ValueError("`sliding_window` and `chunk_size` are mutually exclusive for mask creation")
+        # if window is not None and chunk is not None:
+        #     raise ValueError("`sliding_window` and `chunk_size` are mutually exclusive for mask creation")
+
+        kv_length, kv_offset = parameterization.kv_length, parameterization.kv_offset
+        layer_type = parameterization.layer_type
 
         causal_mask = mask_interface(
             batch_size=batch_size,
@@ -547,12 +567,11 @@ def get_causal_masks(
             kv_length=kv_length,
             kv_offset=kv_offset,
             attention_mask=attention_mask,
-            sliding_window=window,
-            chunk_size=chunk,
+            layer_type=layer_type,
             # Additional kwargs for eager
             dtype=dtype,
             # Pass the config as well, in case someone wants to easily have their own mask_interface
-            config=config,
+            # config=config,
         )
         masks.append(causal_mask)
 
@@ -565,8 +584,7 @@ def _ignore_causal_mask_sdpa(
     padding_mask: Optional[torch.Tensor],
     query_length: int,
     kv_length: int,
-    sliding_window: Optional[int] = None,
-    chunk_size: Optional[int] = None,
+    local_attention_size = None,
 ) -> bool:
     """
     Detects whether the causal mask can be ignored in case PyTorch's SDPA is used, rather relying on SDPA's `is_causal` argument.
@@ -577,7 +595,7 @@ def _ignore_causal_mask_sdpa(
     passed).
     """
     is_tracing = torch.jit.is_tracing() or isinstance(padding_mask, torch.fx.Proxy) or is_torchdynamo_compiling()
-    local_attention_size = sliding_window or chunk_size
+    # local_attention_size = sliding_window or chunk_size
 
     if padding_mask is None:
         # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
@@ -591,7 +609,7 @@ def _ignore_causal_mask_sdpa(
         ):
             return True
     elif local_attention_size is None or kv_length < local_attention_size:
-        if len(apadding_mask.shape) == 4:
+        if len(padding_mask.shape) == 4:
             return False
         elif not is_tracing and torch.all(padding_mask == 1):
             if query_length == 1 or kv_length == query_length:

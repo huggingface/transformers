@@ -657,7 +657,8 @@ class GenerationMixin:
             # If it's not defined, it means the model uses the new general mask API
             if causal_mask_creation_function is None:  # can't be found
                 attention_mask = get_causal_masks(
-                    self.config,
+                    base_model.layer_types,
+                    self.config._attn_implementation,
                     torch.empty(
                         (batch_size, sequence_length), dtype=self.dtype
                     ),  # we only need batch size, seq_length and dtype here - we don't care about the values
