@@ -584,10 +584,12 @@ def require_read_token(test_case):
         def wrapper(*args, **kwargs):
             if token is not None:
                 with patch("huggingface_hub.utils._headers.get_token", return_value=token):
-                    if "test_config" in str(test_case):
-                        breakpoint()
                     return test_case(*args, **kwargs)
             else:  # Allow running locally with the default token env variable
+                # dealing with static/class methods and called by `self.xxx`
+                if len(args) > 0 and "self" not in inspect.signature(test_case).parameters.keys():
+                    if isinstance(args[0], unittest.TestCase):
+                        return test_case(*args[1:], **kwargs)
                 return test_case(*args, **kwargs)
 
         wrapper.__require_read_token__ = True
