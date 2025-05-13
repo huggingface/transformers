@@ -884,7 +884,7 @@ class ProcessorTesterMixin:
             tokenize=True,
             return_dict=True,
             return_tensors=return_tensors,
-            num_frames=4,  # by default no more than 4 frames, otherwise too slow
+            num_frames=2,  # by default no more than 2 frames, otherwise too slow
         )
         input_name = getattr(self, input_name)
         self.assertTrue(input_name in out_dict)

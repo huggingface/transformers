@@ -278,7 +278,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
         if num_frames > total_num_frames:
             raise ValueError(
-                f"Video can't be sampled. The `num_frames={num_frames}1` exceeds `total_num_frames={total_num_frames}`. "
+                f"Video can't be sampled. The `num_frames={num_frames}` exceeds `total_num_frames={total_num_frames}`. "
             )
 
         if num_frames is not None:

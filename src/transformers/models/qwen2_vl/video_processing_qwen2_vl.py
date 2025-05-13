@@ -155,9 +155,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                 Sampled video frames.
         """
         if fps is not None and num_frames is not None:
-            raise ValueError(
-                "`num_frames`, `fps`, and `sample_indices_fn` are mutually exclusive arguments, please use only one!"
-            )
+            raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
 
         num_frames = num_frames if num_frames is not None else self.num_frames
         fps = fps if fps is not None else self.fps

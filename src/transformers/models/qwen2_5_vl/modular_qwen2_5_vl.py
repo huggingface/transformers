@@ -916,7 +916,6 @@ class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": False,
         },
-        "videos_kwargs": {"fps": 2.0},
     }
 
 
