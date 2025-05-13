@@ -3552,13 +3552,15 @@ class GenerationMixin:
             if self.config._attn_implementation == "flash_attention_2" and isinstance(
                 model_kwargs.get("past_key_values"), (StaticCache, HybridCache, HybridChunkedCache)
             ):
-                # only raise warning if using a non-default compile-config (otherwise, let's just change the default without confusing the user)
-                if generation_config.compile_config.fullgraph and generation_config.compile_config != CompileConfig():
+                if generation_config.compile_config is None:
+                    generation_config.compile_config = CompileConfig(fullgraph=False)
+                # only raise warning if the user passed an explicit compile-config (otherwise, simply change the default without confusing the user)
+                elif generation_config.compile_config.fullgraph:
                     logger.warning_once(
                         "When using Flash Attention 2 and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
                         "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
                     )
-                generation_config.compile_config.fullgraph = False
+                    generation_config.compile_config.fullgraph = False
             model_forward = self.get_compiled_call(generation_config.compile_config)
 
         if generation_config.prefill_chunk_size is not None:
