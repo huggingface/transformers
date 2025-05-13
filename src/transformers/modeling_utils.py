@@ -3479,59 +3479,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 current_peft_config = self.peft_config[active_adapter]
                 current_peft_config.save_pretrained(save_directory)
 
-        # for offloaded modules
-        module_map = {}
-
-        # Save the model
-        if state_dict is None:
-            # if any model parameters are offloaded, make module map
-            if (
-                hasattr(self, "hf_device_map")
-                and len(set(self.hf_device_map.values())) > 1
-                and ("cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values())
-            ):
-                warnings.warn(
-                    "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory exceeds the `shard_size` (5GB default)"
-                )
-                for name, module in model_to_save.named_modules():
-                    if name == "":
-                        continue
-                    module_state_dict = module.state_dict()
-
-                    for key in module_state_dict:
-                        module_map[name + f".{key}"] = module
-            state_dict = model_to_save.state_dict()
-
-        if any(allowed_name in self.__class__.__name__.lower() for allowed_name in VLMS):
-            reverse_key_mapping = {v: k for k, v in self._checkpoint_conversion_mapping.items()}
-
-            original_state_dict = {}
-            for key, value in state_dict.items():
-                for pattern, replacement in reverse_key_mapping.items():
-                    replacement = replacement.lstrip("^")  # strip off un-needed chars and patterns
-                    replacement = re.sub(r"\(.*?\)", "", pattern)
-                    key, n_replace = re.subn(pattern, replacement, key)
-                    # Early exit of the loop
-                    if n_replace > 0:
-                        break
-                original_state_dict[key] = value
-            state_dict = original_state_dict
-
-        # Translate state_dict from smp to hf if saving with smp >= 1.10
-        if IS_SAGEMAKER_MP_POST_1_10:
-            for smp_to_hf, _ in smp.state.module_manager.translate_functions:
-                state_dict = smp_to_hf(state_dict)
-
-        # Handle the case where some state_dict keys shouldn't be saved
-        if self._keys_to_ignore_on_save is not None:
-            for ignore_key in self._keys_to_ignore_on_save:
-                if ignore_key in state_dict.keys():
-                    del state_dict[ignore_key]
-
-        # Rename state_dict keys before saving to file. Do nothing unless overridden in a particular model.
-        # (initially introduced with TimmWrapperModel to remove prefix and make checkpoints compatible with timm)
+        # ── Materialize & De-share ─────────────────────────────────────────────
+        raw_sd     = state_dict if state_dict is not None else model_to_save.state_dict()
+        state_dict = {
+                        name: tensor.detach().cpu().clone()
+                        for name, tensor in raw_sd.items()
+                    }
         state_dict = self._fix_state_dict_keys_on_save(state_dict)
 
+        # Now every parameter is a real CPU tensor with no shared storage or meta placeholders.
         if safe_serialization:
             # Safetensors does not allow tensor aliasing.
             # We're going to remove aliases before saving
@@ -3866,6 +3822,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         revision: str = "main",
         use_safetensors: Optional[bool] = None,
         weights_only: bool = True,
+        low_cpu_mem_usage: bool = False,
         **kwargs,
     ) -> SpecificPreTrainedModelType:
         r"""
@@ -4116,7 +4073,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         _ = kwargs.pop("trust_remote_code", None)
         _ = kwargs.pop("mirror", None)
         _ = kwargs.pop("_fast_init", True)
-        _ = kwargs.pop("low_cpu_mem_usage", None)
 
         if state_dict is not None and (pretrained_model_name_or_path is not None or gguf_file is not None):
             raise ValueError(
