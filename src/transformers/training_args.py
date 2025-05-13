@@ -119,11 +119,6 @@ def default_logdir() -> str:
     return os.path.join("runs", current_time + "_" + socket.gethostname())
 
 
-
-
-
-
-
 def get_int_from_env(env_keys, default):
     """Returns the first positive env value found in the `env_keys` list or the default."""
     for e in env_keys:
@@ -133,23 +128,14 @@ def get_int_from_env(env_keys, default):
     return default
 
 
-
-
-
-
 def get_xla_device_type(device: "torch.device") -> Optional[str]:
     """
     Returns the xla device type (CPU|GPU|TPU) or None if the device is a non-xla device.
     """
     if is_torch_xla_available():
-
-
         if device.type == "cpu":
             return "CPU"
         return xm.xla_real_devices([device])[0].split(":")[0]
-
-
-
 
     return None
 
