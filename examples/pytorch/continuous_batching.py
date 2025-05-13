@@ -1,3 +1,4 @@
+from tqdm import tqdm
 import time
 
 import datasets
@@ -67,7 +68,7 @@ model.config.attn_implementation = "sdpa"
 start_time_simple = time.time()
 batch_size = 32
 full_outputs = []
-from tqdm import tqdm
+
 
 for i in tqdm(range(0, len(simple_batch_inputs), batch_size)):
     outputs = model.generate(

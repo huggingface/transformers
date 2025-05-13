@@ -571,7 +571,7 @@ class ContinuousBatchProcessor:
         )
 
     def __repr__(self):
-        return f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.active_requests}, waiting_requests={self.waiting_requests})" + self.get_model_kwargs().__repr__() 
+        return f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.active_requests}, waiting_requests={self.waiting_requests})" + self.get_model_kwargs().__repr__()
 
     def _setup_metrics(self):
         """Initialize OpenTelemetry metrics and tracing if the library is available."""
@@ -931,7 +931,7 @@ class ContinuousBatchProcessor:
             self.attention_mask[...,query_range,key_range].copy_(
                 torch.triu(
                     torch.full(self.attention_mask[...,query_range,key_range].shape,
-                            fill_value=torch.finfo(self.model_dtype).min, 
+                            fill_value=torch.finfo(self.model_dtype).min,
                             dtype=self.model_dtype,
                             device=self.model_device
                         ),
@@ -1081,7 +1081,7 @@ class ContinuousBatchingManager:
     """
 
     def __init__(
-        self, model: GenerationMixin, generation_config: GenerationConfig, max_queue_size=0, streaming: bool = True 
+        self, model: GenerationMixin, generation_config: GenerationConfig, max_queue_size=0, streaming: bool = True
     ):
         """Initialize the continuous batching manager.
 

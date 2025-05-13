@@ -1,7 +1,6 @@
 from typing import Optional, Tuple
 
 import torch
-from torch.nn.attention import SDPBackend, sdpa_kernel
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
