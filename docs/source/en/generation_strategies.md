@@ -331,11 +331,11 @@ If a model repository holds a custom decoding method, the easiest way to try it 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# `joaogante/test_generate_from_hub_model` holds a copy of `Qwen/Qwen2.5-0.5B-Instruct`, but
+# `transformers-community/custom_generate_example` holds a copy of `Qwen/Qwen2.5-0.5B-Instruct`, but
 # with custom generation code -> calling `generate` uses the custom decoding method!
-tokenizer = AutoTokenizer.from_pretrained("joaogante/test_generate_from_hub_model")
+tokenizer = AutoTokenizer.from_pretrained("transformers-community/custom_generate_example")
 model = AutoModelForCausalLM.from_pretrained(
-    "joaogante/test_generate_from_hub_model", device_map="auto", trust_remote_code=True
+    "transformers-community/custom_generate_example", device_map="auto", trust_remote_code=True
 )
 
 inputs = tokenizer(["The quick brown"], return_tensors="pt").to(model.device)
@@ -356,8 +356,8 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct", devic
 
 inputs = tokenizer(["The quick brown"], return_tensors="pt").to(model.device)
 # `custom_generate` replaces the original `generate` by the custom decoding method defined in
-# `joaogante/test_generate_from_hub_model`
-gen_out = model.generate(**inputs, custom_generate="joaogante/test_generate_from_hub_model", trust_remote_code=True)
+# `transformers-community/custom_generate_example`
+gen_out = model.generate(**inputs, custom_generate="transformers-community/custom_generate_example", trust_remote_code=True)
 print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
 'The quick brown fox jumps over a lazy dog, and the dog is a type of animal. Is'
 ```
@@ -367,20 +367,20 @@ You should read the `README.md` file of the repository containing the custom gen
 > [!TIP]
 > You can find all custom decoding methods by [searching for their custom tag](https://huggingface.co/models?other=custom_generate), `custom_generate`
 
-Consider the Hub repository [joaogante/test_generate_from_hub_model](https://huggingface.co/joaogante/test_generate_from_hub_model) as an example. The `README.md` states that it has an additional input argument, `left_padding`, which adds a number of padding tokens before the prompt.
+Consider the Hub repository [transformers-community/custom_generate_example](https://huggingface.co/transformers-community/custom_generate_example) as an example. The `README.md` states that it has an additional input argument, `left_padding`, which adds a number of padding tokens before the prompt.
 
 ```py
 gen_out = model.generate(
-    **inputs, custom_generate="joaogante/test_generate_from_hub_model", trust_remote_code=True, left_padding=5
+    **inputs, custom_generate="transformers-community/custom_generate_example", trust_remote_code=True, left_padding=5
 )
 print(tokenizer.batch_decode(gen_out)[0])
 '<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>The quick brown fox jumps over the lazy dog.\n\nThe sentence "The quick'
 ```
 
-If the custom method has pinned Python requirements that your environment doesn't meet, you'll get an exception about missing requirements. For instance, [joaogante/test_generate_from_hub_bad_requirements](https://huggingface.co/joaogante/test_generate_from_hub_bad_requirements) has an impossible set of requirements defined in its `custom_generate/requirements.txt` file, and you'll see the error message below if you try to run it.
+If the custom method has pinned Python requirements that your environment doesn't meet, you'll get an exception about missing requirements. For instance, [transformers-community/custom_generate_bad_requirements](https://huggingface.co/transformers-community/custom_generate_bad_requirements) has an impossible set of requirements defined in its `custom_generate/requirements.txt` file, and you'll see the error message below if you try to run it.
 
 ```
-ImportError: Missing requirements in your local environment for `joaogante/test_generate_from_hub_bad_requirements`:
+ImportError: Missing requirements in your local environment for `transformers-community/custom_generate_bad_requirements`:
 foo (installed: None)
 bar==0.0.0 (installed: None)
 torch>=99.0 (installed: 2.6.0)
