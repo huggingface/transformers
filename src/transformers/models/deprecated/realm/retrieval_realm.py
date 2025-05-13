@@ -76,7 +76,7 @@ class RealmRetriever:
 
         Parameters:
             block_records (`np.ndarray`):
-                A numpy array which cantains evidence texts.
+                A numpy array which contains evidence texts.
             tokenizer ([`RealmTokenizer`]):
                 The tokenizer to encode retrieved texts.
     """
