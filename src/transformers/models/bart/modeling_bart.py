@@ -44,7 +44,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_bart import BartConfig
 
 
@@ -166,6 +166,10 @@ class BartAttention(nn.Module):
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
+    # Kept for BC dependencies
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
@@ -886,7 +890,7 @@ class BartDecoder(BartPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input)
 
-        _unsupported_features = output_attentions is True or cross_attn_head_mask is not None
+        _unsupported_features = output_attentions is True or cross_attn_head_mask is not None or head_mask is not None
         attention_mask = self._update_causal_mask(
             attention_mask,
             input_shape,

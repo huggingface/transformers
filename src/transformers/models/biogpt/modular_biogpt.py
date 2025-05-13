@@ -21,7 +21,6 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
-from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -44,7 +43,6 @@ from ...utils import (
     auto_docstring,
     is_torch_flex_attn_available,
     logger,
-    logging,
 )
 from ..bart.modeling_bart import (
     BartAttention,
