@@ -4309,7 +4309,7 @@ class ModelTesterMixin:
         return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
 
     def test_sliding_window_mask(self):
-        """ Tests that we can control the sliding window attention behavior of a model. """
+        """Tests that we can control the sliding window attention behavior of a model."""
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
         if not self.has_attentions:

@@ -2127,7 +2127,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
                 -1, 1
             )
             text_config = config.get_text_config()
-            if getattr(text_config, "use_sliding_window", False) and text_config.sliding_window is not None:
+            if getattr(text_config, "use_sliding_window", True) and text_config.sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
@@ -2775,7 +2775,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
                 -1, 1
             )
             text_config = config.get_text_config()
-            if getattr(text_config, "use_sliding_window", False) and text_config.sliding_window is not None:
+            if getattr(text_config, "use_sliding_window", True) and text_config.sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
