@@ -303,11 +303,16 @@ model = LlavaOnevisionForConditionalGeneration.from_pretrained(
 ## LlavaOnevisionImageProcessor
 
 [[autodoc]] LlavaOnevisionImageProcessor
+    - preprocess
 
 ## LlavaOnevisionImageProcessorFast
 
 [[autodoc]] LlavaOnevisionImageProcessorFast
     - preprocess
+
+## LlavaOnevisionVideoProcessor
+
+[[autodoc]] LlavaOnevisionVideoProcessor
 
 ## LlavaOnevisionVideoProcessor
 
