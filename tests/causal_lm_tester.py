@@ -28,6 +28,8 @@ from .test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
+import unittest
+
 
 # TODO Matt: Add this to a proper file later
 class CausalLMModelTester:
@@ -307,6 +309,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
+    @unittest.skipIf(rotary_embedding_layer is None, "Rotary embedding layer not set")
     def test_model_rope_scaling(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         scaling_factor = 10
