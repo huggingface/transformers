@@ -35,7 +35,7 @@ try:
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
     from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace import Tracer, TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
     from opentelemetry.trace import Status, StatusCode, get_tracer
 
@@ -61,6 +61,46 @@ from ..generation.utils import GenerationMixin
 from ..utils import (
     logging,
 )
+
+
+class TelemetryProfilerCallback:
+    def __init__(self, tracer: Tracer):
+        self.tracer = tracer
+
+    def __call__(self, prof: torch.profiler.profile):
+        with self.tracer.start_as_current_span("pytorch_profiler_trace") as parent_span:
+            parent_span.set_attribute("profile.step_count", getattr(prof, "_step_count", 0))
+            self._create_trace_from_events(prof.profiler.function_events, parent_span)
+
+    def _create_trace_from_events(self, events, parent_span):
+        """Recursively convert PyTorch profiler events to OpenTelemetry spans.
+
+        Args:
+            events: PyTorch profiler events or event tree
+            parent_span: Parent OpenTelemetry span
+        """
+        if not events:
+            return
+
+        # Process events in time order to properly capture parent-child relationships
+        for event in sorted(events, key=lambda e: e.start_us()):
+            with self.tracer.start_as_current_span(
+                event.name(), start_time=event.start_ns(), end_time=event.end_ns()
+            ) as span:
+                span.set_attribute("event.name", event.name())
+                span.set_attribute("event.type", event.tag() or "unknown")
+                span.set_attribute("event.duration_us", event.duration_us())
+
+                if event.cpu_time_total > 0:
+                    span.set_attribute("cpu.duration_us", event.cpu_time_total)
+                if event.cuda_time_total > 0:
+                    span.set_attribute("cuda.duration_us", event.cuda_time_total)
+
+                if event.input_shapes:
+                    span.set_attribute("input_shapes", str(event.input_shapes))
+
+                if hasattr(event, "cpu_children") and event.cpu_children:
+                    self._create_trace_from_events(event.cpu_children, span)
 
 
 def traced(func=None, *, span_name=None):
@@ -572,66 +612,6 @@ class ContinuousBatchProcessor:
 
     def __repr__(self):
         return f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.active_requests}, waiting_requests={self.waiting_requests})" + self.get_model_kwargs().__repr__() 
-
-    def _setup_metrics(self):
-        """Initialize OpenTelemetry metrics and tracing if the library is available."""
-
-        if not _has_opentelemetry:
-            logger.info("OpenTelemetry is not installed. Metrics and tracing will not be recorded.")
-            return
-
-        # Create a resource to identify this component in the metrics system
-        resource = Resource.create({"service.name": "transformers.generation.continuous_batching_processor"})
-
-        metrics_exporter = OTLPMetricExporter()
-        meter_provider = MeterProvider(resource=resource, metric_readers=[metrics_exporter])
-        metrics.set_meter_provider(meter_provider)
-
-        # Set up the tracer provider with an OTLP exporter for tracing
-        trace_exporter = OTLPSpanExporter()
-        tracer_provider = TracerProvider(resource=resource)
-        tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
-        trace.set_tracer_provider(tracer_provider)
-
-        # Create a tracer for our functions
-        self.tracer = get_tracer("transformers.generation")
-
-        # Create a meter for our metrics
-        self.meter = metrics.get_meter("transformers.generation")
-
-        # Create histogram for time to first token
-        self.ttft_histogram = self.meter.create_histogram(
-            name="ttft_milliseconds",
-            description="Time to first token in milliseconds",
-            unit="ms",
-        )
-
-        # Create histogram for decode/prefill ratio
-        self.decode_prefill_ratio_gauge = self.meter.create_gauge(
-            name="decode_prefill_ratio",
-            description="Ratio of decode tokens to prefill tokens in a batch",
-            unit="ratio",
-        )
-
-        # Create counters for decode and prefill tokens
-        self.prefill_tokens_counter = self.meter.create_counter(
-            name="prefill_tokens_processed",
-            description="Number of prefill tokens processed",
-            unit="tokens",
-        )
-
-        self.decode_tokens_counter = self.meter.create_counter(
-            name="decode_tokens_processed",
-            description="Number of decode tokens processed",
-            unit="tokens",
-        )
-
-        # Create histogram for batch fill percentage
-        self.batch_fill_percentage_histogram = self.meter.create_histogram(
-            name="batch_fill_percentage",
-            description="Percentage of max_batch_tokens utilized in each batch",
-            unit="percent",
-        )
 
     def _setup_metrics(self):
         """Initialize OpenTelemetry metrics and tracing if the library is available."""
@@ -1201,7 +1181,7 @@ class ContinuousBatchingManager:
             self.add_request(input_ids, request_id=req_id, **kwargs)
 
     @traced
-    def get_result(self, timeout=None) -> Optional[Dict]:
+    def get_result(self, timeout=None) -> Optional[RequestState]:
         """Retrieve one result from the output queue.
 
         Args:
@@ -1213,7 +1193,7 @@ class ContinuousBatchingManager:
         if self._generation_thread is None and self.output_queue.empty():
             return None
         try:
-            result = self.output_queue.get(block=True, timeout=timeout)  # TODO Pop here rather?
+            result = self.output_queue.get(block=True, timeout=timeout)
             logger.debug(f"Retrieved result for request {result.request_id}")
             return result
         except queue.Empty:
@@ -1277,23 +1257,40 @@ class ContinuousBatchingManager:
                 self.model.dtype,
                 self.streaming,
             )
-            first = True
-            while not self.stop_event.is_set() or batch_processor.has_pending_requests():
-                batch_processor.prepare_next_batch()
-                if torch.cuda.is_available():
-                    if first:
-                        self.warmup(batch_processor)
-                        first = False
-                    try:
-                        self.graph.replay()
-                    except Exception as e:
-                        logger.error(f"Model forward pass failed: {e}", exc_info=True)
-                        batch_processor.handle_batch_error(e)
-                        continue
-                else:
-                    self._generation_step(batch_processor)
 
-                batch_processor.update_batch()
+            telemetry_callback = None
+            if _has_opentelemetry:
+                telemetry_callback = TelemetryProfilerCallback(self.tracer)
+
+            with torch.profiler.profile(
+                activities=[
+                    torch.profiler.ProfilerActivity.CPU,
+                    torch.profiler.ProfilerActivity.CUDA,
+                ],
+                schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
+                on_trace_ready=telemetry_callback,
+                record_shapes=True,
+                profile_memory=True,
+                with_stack=True,
+            ) as prof:
+                first = True
+                while not self.stop_event.is_set() or batch_processor.has_pending_requests():
+                    batch_processor.prepare_next_batch()
+                    if torch.cuda.is_available():
+                        if first:
+                            self.warmup(batch_processor)
+                            first = False
+                        try:
+                            self.graph.replay()
+                        except Exception as e:
+                            logger.error(f"Model forward pass failed: {e}", exc_info=True)
+                            batch_processor.handle_batch_error(e)
+                            continue
+                    else:
+                        self._generation_step(batch_processor)
+
+                    batch_processor.update_batch()
+                    prof.step()
 
         except Exception as e:
             logger.error(f"Error in generation loop: {e}", exc_info=True)
