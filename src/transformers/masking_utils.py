@@ -609,7 +609,10 @@ def infer_mask_sizes_patterns_from_config(config: PretrainedConfig, kv_length: i
     Return a list of tuples (kv_length, kv_offset, sliding_window, chunk_size), corresponding to all unique mask pattern we may need,
     as well as a mapping of indices from the pattern to each layers in the model.
     The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns (sliding_window, chunk_size), and
-    mapped back to the corresponding layers to be easily indexed in the modleing code (in case of different patterns par layers).
+    mapped back to the corresponding layers to be easily indexed in the modeling code (in case of different patterns par layers).
+
+    For example, for most models it will return a single pattern that will be mapped to all layers, but for models alternating full/sliding
+    layer patterns, it will return a different one for "full" and "sliding" layers, along with the corresponding layer mapping.
     """
 
     # Extract sliding window and chunk size from config
