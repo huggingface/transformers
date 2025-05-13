@@ -1372,7 +1372,7 @@ class ProcessorMixin(PushToHubMixin):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
                     {"type": "text", "text": "Please describe this image in detail."},
                 ],
             },
@@ -1387,7 +1387,8 @@ class ProcessorMixin(PushToHubMixin):
         """
 
         # Try to use deprecated kwarg is passed. TODO; remove deprecated after v4.58
-        kwargs["fps"] = kwargs.pop("video_fps") if "video_fps" in kwargs else kwargs.get("fps", None)
+        if "video_fps" in kwargs and "fps" not in kwargs:
+            kwargs["fps"] = kwargs.pop("video_fps")
 
         if chat_template is None:
             if isinstance(self.chat_template, dict) and "default" in self.chat_template:
@@ -1537,8 +1538,8 @@ class ProcessorMixin(PushToHubMixin):
                 kwargs["add_special_tokens"] = False
 
             # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`video_fps`
-            # sampling will not done, thus it is not BC breaking.
-            if "do_sample_frames" not in kwargs:
+            # sampling should not done for BC.
+            if "do_sample_frames" not in kwargs and ("fps" in kwargs or "num_frames" in kwargs):
                 kwargs["do_sample_frames"] = True
 
             out = self(

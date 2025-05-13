@@ -235,7 +235,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     def sample_frames(
         self,
         video: "torch.Tensor",
-        metadata: VideoMetadata = None,
+        metadata: Optional[Union[VideoMetadata, dict]] = None,
         num_frames: Optional[int] = None,
         fps: Optional[int] = None,
     ):
@@ -258,6 +258,11 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             torch.Tensor:
                 Sampled video frames.
         """
+        if fps is not None and num_frames is not None:
+            raise ValueError(
+                "`num_frames`, `fps`, and `sample_indices_fn` are mutually exclusive arguments, please use only one!"
+            )
+
         num_frames = num_frames if num_frames is not None else self.num_frames
         fps = fps if fps is not None else self.fps
         total_num_frames = video.shape[0]
@@ -270,11 +275,11 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                     "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
                 )
             num_frames = int(total_num_frames / metadata.fps * fps)
-            if num_frames > total_num_frames:
-                raise ValueError(
-                    f"When loading the video with `fps`={fps}, we computed `num_frames`={num_frames} "
-                    f"which exceeds `total_num_frames`={total_num_frames}. Make sure `fps` doesn't exceed total video length."
-                )
+
+        if num_frames > total_num_frames:
+            raise ValueError(
+                f"Video can't be sampled. The `num_frames={num_frames}1` exceeds `total_num_frames={total_num_frames}`."
+            )
 
         if num_frames is not None:
             indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
@@ -359,7 +364,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         do_sample_frames: Optional[bool] = None,
         fps: Optional[int] = None,
         num_frames: Optional[int] = None,
-        video_metadata: Optional[List[List[VideoMetadata]]] = None,
+        video_metadata: Optional[Union[List[List[VideoMetadata]], List[List[dict]]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ) -> BatchFeature:
         if do_sample_frames:
@@ -369,7 +374,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             else:
                 batch_metadata = [None] * len(videos)
             videos = [
-                self.sample_frames(video, metadata, num_frames, fps) for video, metadata in zip(videos, batch_metadata)
+                self.sample_frames(video, metadata=metadata, num_frames=num_frames, fps=fps)
+                for video, metadata in zip(videos, batch_metadata)
             ]
 
         # Group videos by size for batched resizing

@@ -385,10 +385,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(rendered, expected_rendered)
 
-    @unittest.skip(reason="SmolVLM replaced `type=video` with `type=image` in chat templates")
-    def test_apply_chat_template_video_special_processing(self):
-        pass
-
     @require_av
     @require_torch
     def test_apply_chat_template_video_frame_sampling(self):

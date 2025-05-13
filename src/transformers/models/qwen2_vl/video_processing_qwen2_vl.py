@@ -45,7 +45,7 @@ from ...video_processing_utils import (
     BASE_VIDEO_PROCESSOR_DOCSTRING,
     BaseVideoProcessor,
 )
-from ...video_utils import group_videos_by_shape, reorder_videos
+from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
 if is_vision_available():
@@ -102,6 +102,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
+    do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
     valid_kwargs = Qwen2VLVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
@@ -119,6 +120,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
+        do_sample_frames: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
         min_pixels: Optional[int] = None,
@@ -126,9 +128,23 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         patch_size: Optional[int] = None,
         temporal_patch_size: Optional[int] = None,
         merge_size: Optional[int] = None,
+        video_metadata: Optional[Union[List[List[VideoMetadata]], List[List[dict]]]] = None,
+        fps: Optional[int] = None,
+        num_frames: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
+        if do_sample_frames:
+            # Sample video frames
+            if video_metadata is not None:
+                batch_metadata = [metadata for batch_list in video_metadata for metadata in batch_list]
+            else:
+                batch_metadata = [None] * len(videos)
+            videos = [
+                self.sample_frames(video, metadata=metadata, num_frames=num_frames, fps=fps)
+                for video, metadata in zip(videos, batch_metadata)
+            ]
+
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}

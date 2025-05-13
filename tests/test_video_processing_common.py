@@ -293,6 +293,33 @@ class VideoProcessingTestMixin:
                 (self.video_processor_tester.batch_size, *expected_output_video_shape),
             )
 
+    def test_call_sample_frames(self):
+        for video_processing_class in self.video_processor_list:
+            video_processing = video_processing_class(**self.video_processor_dict)
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False,
+                return_tensors="torch",
+                num_frames=8,
+            )
+
+            # Force set sampling to False. No sampling is expected even when `num_frames` exists
+            video_processing.do_sample_frames = False
+            video_processing.num_frames = 3
+            video_processing.fps = None
+
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt")[self.input_name]
+            encoded_videos_batched = video_processing(video_inputs, return_tensors="pt")[self.input_name]
+            self.assertEqual(encoded_videos.shape[1], 8)
+            self.assertEqual(encoded_videos_batched.shape[1], 8)
+
+            # Set sampling to True. Video frames should be sampled with `num_frames` in the output
+            video_processing.do_sample_frames = False
+
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt")[self.input_name]
+            encoded_videos_batched = video_processing(video_inputs, return_tensors="pt")[self.input_name]
+            self.assertEqual(encoded_videos.shape[1], video_processing.num_frames)
+            self.assertEqual(encoded_videos_batched.shape[1], video_processing.num_frames)
+
     def test_nested_input(self):
         """Tests that the processor can work with nested list where each video is a list of arrays"""
         for video_processing_class in self.video_processor_list:
