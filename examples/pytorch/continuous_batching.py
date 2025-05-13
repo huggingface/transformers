@@ -23,7 +23,7 @@ tokenizer = AutoTokenizer.from_pretrained(
     "meta-llama/Llama-3.2-3b-Instruct", torch_dtype=torch.float16, padding_side="left"
 )
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = "mps"
 
 # Set pad token if missing (common for Llama models)
 if tokenizer.pad_token is None:
@@ -33,6 +33,7 @@ if tokenizer.pad_token is None:
 # Configure generation parameters
 generation_config = GenerationConfig(
     max_new_tokens=16,
+    top_k=0,
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
     # Add other parameters like temperature, top_k etc. if needed
@@ -40,13 +41,13 @@ generation_config = GenerationConfig(
     # temperature=0.7,
     # top_k=50,
     # Parameters relevant for Continuous Batching (can be tuned)
-    num_blocks=256,
-    block_size=128,
-    max_batch_tokens=1024,  # Maximum number of tokens to process in a single batch
+    num_blocks=20,
+    block_size=64,
+    max_batch_tokens=32,  # Maximum number of tokens to process in a single batch
 )
 
 # Prepare data (using a smaller subset for demonstration)
-train_dataset = datasets.load_dataset("imdb", split="test")
+train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
 train_dataset = train_dataset.select(range(100))  # Use only 5 examples for the simple version
 
 
@@ -57,8 +58,7 @@ train_dataset = train_dataset.select(range(100))  # Use only 5 examples for the 
 
 # tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
 # simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
-# # tokenized_test_prompts = tokenizer(_TEST_PROMPTS, truncation=True, max_length=512)
-# # simple_batch_inputs = list(tokenized_test_prompts["input_ids"])
+
 
 # model.config.attn_implementation = "sdpa"
 # start_time_simple = time.time()
@@ -91,11 +91,15 @@ train_dataset = train_dataset.select(range(100))  # Use only 5 examples for the 
 print("--- Running CB Generation Example ---")
 def tokenize_function(examples):
     # Truncate to avoid overly long prompts exceeding max context length
-    return tokenizer(examples["text"])
+    return tokenizer(examples["question"])
 
 
 tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
 simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
+
+
+tokenized_test_prompts = tokenizer(_TEST_PROMPTS, truncation=True, max_length=512)
+simple_batch_inputs = list(tokenized_test_prompts["input_ids"])
 
 start_time_simple = time.time()
 # Call the simple batch generation function
@@ -113,8 +117,14 @@ print(f"\nSimple batch generation took: {end_time_simple - start_time_simple:.2f
 # Decode and print results
 print("\nResults from simple generate_batch:")
 for request in batch_outputs:
-    input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=False)
-    output_text = tokenizer.decode(batch_outputs[request].static_outputs, skip_special_tokens=False)
+    input_text = tokenizer.decode(batch_outputs[request].full_prompt_ids, skip_special_tokens=False)
+    try:
+        # Decode the static outputs
+        output_text = tokenizer.decode(batch_outputs[request].static_outputs, skip_special_tokens=False)
+    except Exception as e:
+        # Handle the case where decoding fails
+        print(f"Decoding failed for request {request}: {e}")
+        output_text = tokenizer.decode(batch_outputs[request].static_outputs[1:], skip_special_tokens=False)
     if len(output_text) > 0:
         print("-" * 20)
         print(f"Result for Request {request}:")

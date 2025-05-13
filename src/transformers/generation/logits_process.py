@@ -88,6 +88,9 @@ class LogitsProcessorList(list):
                 scores = processor(input_ids, scores)
 
         return scores
+    
+    def __repr__(self):
+        return f"LogitsProcessorList([{self}]) length={len(self)})]"
 
 
 class MinLengthLogitsProcessor(LogitsProcessor):

@@ -136,11 +136,10 @@ class RequestState:
 
     # Required fields
     request_id: str
-    prompt_ids: List[int] = None
-
-    # Optional/generated fields
-    static_outputs: List[int] = field(default_factory=list)
+    prompt_ids: List[int] = None            # the one being processed
+    full_prompt_ids: List[int] = None       # the full prompt
     remaining_prompt_ids: List[int] = field(default_factory=list)  # For split requests
+    static_outputs: List[int] = field(default_factory=list)
     allocated_blocks: List[int] = field(default_factory=list)
     position_offset: int = 0  # Current position in the sequence for position_ids
     status: str = "pending"
@@ -774,7 +773,7 @@ class ContinuousBatchProcessor:
             if batch_token_count + token_budget > self.max_batch_tokens:
                 remaining_space = self.max_batch_tokens - batch_token_count
                 # Only split if we have enough space for a meaningful chunk
-                if remaining_space >= 16:
+                if remaining_space >= 1:
                     token_budget = remaining_space
                 else:
                     continue  # Not enough space to split
@@ -912,12 +911,10 @@ class ContinuousBatchProcessor:
             write_index.extend(write_indices)
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + seq_len_q)
             cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + seq_len_k)
-            if state.status != "prefilling_split":
+            if state.status != "prefilling_split" or len(state.remaining_prompt_ids) == 0:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
                 logits_to_track += 1
-            if state.status == "prefilling_split":
-                self.attention_mask[..., cumulative_seqlens_q[-2]:cumulative_seqlens_q[-1], cumulative_seqlens_k[-2]:cumulative_seqlens_k[-1]-(seq_len_k-seq_len_q)] = 0
-                self.attention_mask[..., cumulative_seqlens_q[-2]:cumulative_seqlens_q[-1], cumulative_seqlens_k[-2]:cumulative_seqlens_k[-1]-(seq_len_k-seq_len_q)] = 0
+
             self.max_seqlen_q = max(self.max_seqlen_q, seq_len_q)
             self.max_seqlen_k = max(self.max_seqlen_k, seq_len_k)
 
@@ -939,10 +936,16 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_q[:cumq_ptr].copy_(torch.tensor(cumulative_seqlens_q, **self.tensor_metadata))
         self.cumulative_seqlens_k[:cumk_ptr].copy_(torch.tensor(cumulative_seqlens_k, **self.tensor_metadata))
         self.logits_indices[:logits_to_track].copy_(torch.tensor(logits_indices, **self.tensor_metadata))
-
-        attention_mask = create_document_mask(self.cumulative_seqlens_q, self.cumulative_seqlens_k)
-        causal_mask = torch.where(attention_mask, 0, torch.finfo(torch.bfloat16).min)
-        self.attention_mask[..., :token_position, : attention_mask.shape[-1]].copy_(causal_mask)
+        for i in range(len(cumulative_seqlens_q) - 1):
+            if cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] < cumulative_seqlens_k[i+1] - cumulative_seqlens_k[i] and cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] >= 1:
+                diagonal = cumulative_seqlens_k[i+1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
+                diagonal = diagonal - cumulative_seqlens_k[i]
+            else:
+                diagonal = 1
+            self.attention_mask[...,cumulative_seqlens_q[i] : cumulative_seqlens_q[i+1],cumulative_seqlens_k[i] : cumulative_seqlens_k[i+1]].copy_(
+                torch.triu(torch.ones(self.attention_mask[...,cumulative_seqlens_q[i] : cumulative_seqlens_q[i+1],cumulative_seqlens_k[i] : cumulative_seqlens_k[i+1]].shape), 
+                           diagonal=diagonal) * torch.finfo(self.model_dtype).min
+            )
 
     @traced
     def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
@@ -960,11 +963,6 @@ class ContinuousBatchProcessor:
     @traced
     def update_batch(self):
         """Update request states based on generated tokens."""
-        # TODO I think many slowdowns can come from here
-        # this should be probably vectorized
-        # we need to batch adding the tokens
-        # and potentially have a tensor with values containing the status
-
         # TODO I ANM HERE NEED TO FIGURE LOGIC OPTIAML HERE
         token_idx = 0
         has_eos = self.output_ids == self.generation_config.eos_token_id
@@ -979,18 +977,15 @@ class ContinuousBatchProcessor:
                 continue
 
             state = self.active_requests[req_id]
-            if state.status in ["prefilling", "decoding"] or not state.remaining_prompt_ids:
+            if len(state.remaining_prompt_ids) == 0:
                 self._record_ttft_metric(state)
-
                 state.status = "decoding"
-                # state.prompt_ids = []  # Clear prompt as it's now in cache
                 token = out_tokens[token_idx]
                 token_idx += 1
                 if state.update_with_token(token):
                     finished_request_ids.append(req_id)
                 self._maybe_send_output(state, token)
             elif state.status == "prefilling_split":
-                token_idx += 1  # Skip the token
                 state.status = "split_pending_remainder"
             elif state.status == "split_pending_remainder":
                 logger.warning(f"Request {req_id} in 'split_pending_remainder' state during update.")
@@ -1121,6 +1116,7 @@ class ContinuousBatchingManager:
         self._generation_thread = None
         self._request_counter = 0
         self._request_lock = threading.Lock()
+        self.model.generation_config.top_p = None
         self.logit_processor = self.model._get_logits_processor(self.model.generation_config)
         self.do_sample = getattr(generation_config, "do_sample", False)
         self._setup_tracer()
@@ -1203,6 +1199,7 @@ class ContinuousBatchingManager:
         state = RequestState(
             request_id=request_id,
             prompt_ids=list(input_ids),
+            full_prompt_ids=list(input_ids),
             max_new_tokens=max_new_tokens,
             eos_token_id=self.generation_config.eos_token_id,
         )
@@ -1325,7 +1322,6 @@ class ContinuousBatchingManager:
                     self._generation_step(batch_processor)
 
                 batch_processor.update_batch()
-                # batch_processor._maybe_send_output()
 
         except Exception as e:
             logger.error(f"Error in generation loop: {e}", exc_info=True)
