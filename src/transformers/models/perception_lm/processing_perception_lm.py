@@ -64,7 +64,7 @@ class PerceptionLMProcessor(ProcessorMixin):
             extra tokens appended, no need to set this arg.
     """
 
-    attributes = ["image_processor", "tokenizer"]
+    attributes = ["video_processor", "image_processor", "tokenizer"]
     valid_kwargs = [
         "chat_template",
         "patch_size",
@@ -73,16 +73,18 @@ class PerceptionLMProcessor(ProcessorMixin):
         "num_additional_image_tokens",
     ]
     image_processor_class = "AutoImageProcessor"
+    video_processor_class = "AutoVideoProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,
+        video_processor=None,
         image_processor=None,
         tokenizer=None,
         patch_size=None,
         vision_feature_select_strategy=None,
         chat_template=None,
-        image_token="<|image|>", 
+        media_token="<|image|>", 
         num_additional_image_tokens=0,
         pooling_ratio=2,
         **kwargs,
@@ -90,14 +92,14 @@ class PerceptionLMProcessor(ProcessorMixin):
         self.patch_size = patch_size
         self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.media_token = tokenizer.media_token if hasattr(tokenizer, "media_token") else media_token
         self.pooling_ratio = pooling_ratio
-        self.image_token_id = (
-            tokenizer.image_token_id
-            if getattr(tokenizer, "image_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.image_token)
+        self.media_token_id = (
+            tokenizer.media_token_id
+            if getattr(tokenizer, "media_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.media_token)
         )
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        super().__init__(video_processor, image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
@@ -149,12 +151,17 @@ class PerceptionLMProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        if images is not None or videos is not None:
+        if images is not None:
             print("image_processor class", self.image_processor.__class__)
             images = [] if images is None else images
-            image_inputs = self.image_processor(images=images, videos=videos, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
+
+        if videos is not None:
+            videos_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
+        else:
+            videos_inputs = {}
 
         if isinstance(text, str):
             text = [text]
@@ -162,27 +169,38 @@ class PerceptionLMProcessor(ProcessorMixin):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         # try to expand inputs in processing if we have the necessary parts
-        prompt_strings = text
+        prompt_strings = []
+        pixel_values = None
+        pixel_values_videos = None
+
         if image_inputs.get("pixel_values") is not None:
-            # Replace the image token with the expanded image token sequence
             pixel_values = image_inputs["pixel_values"]
-            print("pixel_values", pixel_values.shape)
-            height, width = get_image_size(to_numpy_array(pixel_values[0]))
-            num_tiles = pixel_values[0].shape[0]
-            num_image_tokens = (height // self.patch_size // self.pooling_ratio) * (
+        if videos_inputs.get("pixel_values_videos") is not None:
+            pixel_values_videos = videos_inputs["pixel_values_videos"]
+        for i, sample in enumerate(text):
+            if pixel_values is not None:
+                media = pixel_values[i]
+            elif pixel_values_videos is not None:
+                media = pixel_values_videos[i]
+            else:
+                continue 
+            
+            # Replace the media token with the expanded media token sequence
+            print("media.shape", media.shape)
+            height, width = get_image_size(to_numpy_array(media))
+            num_tiles = media.shape[0]
+            num_media_tokens = (height // self.patch_size // self.pooling_ratio) * (
                 width // self.patch_size // self.pooling_ratio
             ) * num_tiles
-            print("num_image_tokens", num_image_tokens)
-            print("self.image_token", self.image_token)
-            prompt_strings = []
-            for sample in text:
-                sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
-                prompt_strings.append(sample)
+            print("num_media_tokens", num_media_tokens)
+            print("self.media_token", self.media_token)
+            sample = sample.replace(self.media_token, self.media_token * num_media_tokens)
+            prompt_strings.append(sample)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["media"])
+        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

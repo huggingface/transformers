@@ -392,6 +392,7 @@ class PerceptionLMForConditionalGeneration(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -463,6 +464,8 @@ class PerceptionLMForConditionalGeneration(
             raise ValueError(
                 "You must specify exactly one of input_ids or inputs_embeds"
             )
+        if pixel_values_videos is not None:
+            pixel_values = pixel_values_videos
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
@@ -548,6 +551,7 @@ class PerceptionLMForConditionalGeneration(
         past_key_values=None,
         inputs_embeds=None,
         pixel_values=None,
+        pixel_values_videos=None,
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
@@ -569,7 +573,7 @@ class PerceptionLMForConditionalGeneration(
             # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
             # Otherwise we need pixel values to be passed to model
             model_inputs["pixel_values"] = pixel_values
-
+            model_inputs["pixel_values_videos"] = pixel_values_videos
         return model_inputs
 
 
