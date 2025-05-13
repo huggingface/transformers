@@ -6126,3 +6126,30 @@ class AttentionInterface(GeneralInterface):
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
 ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()
+
+
+@dataclass(unsafe_hash=True)
+class LayerPattern(object):
+    """
+    This is a structure to describe the attention pattern used in a DecoderLayer. It is mostly used to correctly
+    create the causal mask for the given layer.
+
+    Args:
+        pattern (`str`):
+            The attention pattern for the given layer. Must be one of `("full", "sliding", "chunked")`.
+        local_size (`int`, *optional*):
+            The size of the local attention, if `pattern` is one of `("sliding", "chunked")`. That is, the size
+            of the sliding window or the chunk size. If `pattern="full"`, this argument is ignored.
+    """
+
+    pattern: str
+    local_size: Optional[int] = None
+
+    def __init__(self, pattern: str, local_size: Optional[int] = None):
+        if pattern not in ("full", "sliding", "chunked"):
+            raise ValueError(f"Could not recognised attention pattern `{pattern}`")
+        self.pattern = pattern
+        self.local_size = local_size
+        # Ignore the potential `local_size` passed if the layer uses full attention pattern
+        if self.pattern == "full":
+            self.local_size = None
