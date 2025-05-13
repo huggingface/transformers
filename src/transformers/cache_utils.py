@@ -92,16 +92,28 @@ def _sliding_cache_update(
         v_cache.copy_(new_v)
         return key_states, value_states
 
-    # Sliding window logic for generation phase or prefill < window
-    slicing = torch.arange(max_cache_len, device=value_states.device)
     current_seq_len = cache_position[-1] + 1  # Use last position to determine current length
+    
+    # Use optimized path for short sequences when not compiling
+    if not torch.compiler.is_compiling() and current_seq_len <= max_cache_len:
+        try:
+            k_cache.index_copy_(2, cache_position, key_states)
+            v_cache.index_copy_(2, cache_position, value_states)
+        except NotImplementedError:
+            # Fallback for MPS: direct assignment
+            k_cache[:, :, cache_position] = key_states
+            v_cache[:, :, cache_position] = value_states
+        return k_cache, v_cache
+
+    # Sliding window logic for when we exceed max_cache_len
+    slicing = torch.arange(max_cache_len, device=value_states.device)
     to_shift = current_seq_len > max_cache_len
     indices = (slicing + to_shift.sum()) % max_cache_len
 
     k_out_shifted = k_cache[:, :, indices]
     v_out_shifted = v_cache[:, :, indices]
 
-    # Clamp cache_position to determine the *target index* within the shifted cache view
+    # Only need to clamp when we're doing sliding window
     update_position = cache_position.clamp(min=0, max=max_cache_len - 1)
 
     try:
