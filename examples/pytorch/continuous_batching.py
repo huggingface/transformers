@@ -8,8 +8,8 @@ from transformers.generation import GenerationConfig
 
 
 _TEST_PROMPTS = [
-    "Describe a fruit that is of orange color and round. It is a sweet fruit and a great source of Vitamine C. The fruit I'm thinking of is an",
     "A man is a walking his dog down the street, and a the turn he sees",
+    "Describe a fruit that is of orange color and round. It is a sweet fruit and a great source of Vitamine C. The fruit I'm thinking of is an",
     "A plane is flying high in the sky, out of the window are clouds and mountains. Where could the plane be located?",
     "Please fill in the form to",
     "For safety reasons, the train is stopped in the middle of the",
@@ -24,7 +24,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 
 device = "mps"
-
+model.use_cache = False
 # Set pad token if missing (common for Llama models)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
@@ -36,20 +36,23 @@ generation_config = GenerationConfig(
     top_k=0,
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
+    use_cache=False,
     # Add other parameters like temperature, top_k etc. if needed
     # Example:
     # temperature=0.7,
     # top_k=50,
     # Parameters relevant for Continuous Batching (can be tuned)
-    num_blocks=64,
-    block_size=64,
-    max_batch_tokens=64,  # Maximum number of tokens to process in a single batch
+    num_blocks=128,
+    block_size=32,
+    max_batch_tokens=16,  # Maximum number of tokens to process in a single batch
 )
 
 # Prepare data (using a smaller subset for demonstration)
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
 train_dataset = train_dataset.select(range(100))  # Use only 5 examples for the simple version
 
+tokenized_test_prompts = tokenizer(_TEST_PROMPTS, padding=True, padding_side="left", truncation=True, max_length=512)
+simple_batch_inputs = list(tokenized_test_prompts["input_ids"])
 
 # def tokenize_function(examples):
 #     # Truncate to avoid overly long prompts exceeding max context length
@@ -82,13 +85,14 @@ train_dataset = train_dataset.select(range(100))  # Use only 5 examples for the 
 # for i, request in enumerate(full_outputs):
 #     output_text = tokenizer.decode(request, skip_special_tokens=False)
 #     print("-" * 20)
-#     print(f"Result for Request {request}:")
+#     print(f"  Request: {request}:")
 #     print(f"  Output: {output_text}")
 # print("-" * 20)
 # print("--- Finished Simple Batch Generation Example ---\n\n")
 
 # --- Example 1: Simple Version using generate_batch ---
 print("--- Running CB Generation Example ---")
+model.config.attn_implementation = "eager_paged"
 def tokenize_function(examples):
     # Truncate to avoid overly long prompts exceeding max context length
     return tokenizer(examples["question"])

@@ -29,6 +29,7 @@ def eager_paged_attention_forward(
     cache = kwargs.pop("cache", None)
     if cache is not None:
         key, value = cache.update(key, value, module.layer_idx, **kwargs)
+
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
 
@@ -38,7 +39,6 @@ def eager_paged_attention_forward(
         attn_weights = attn_weights + causal_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
