@@ -219,22 +219,19 @@ TORCH_INIT_FUNCTIONS = {
 # DO NOT MODIFY, KEPT FOR BC ONLY
 VLMS = [
     "aria",
-    "aya_vision",
+    "ayavision",
     "emu3",
     "fuyu",
-    "got_ocr2",
+    "gotocr2",
     "gemma3",
     "internvl",
-    "llava",
-    "llava_next",
-    "llava_next_video",
-    "llava_onevision",
+    "llava",  # all llava prefixed models fall under this check
     "mistral3",
     "mllama",
     "paligemma",
-    "qwen2_vl",
-    "qwem2_5_vl",
-    "video_llava",
+    "qwen2vl",
+    "qwen2_5_vl",
+    "videollava",
     "vipllava",
 ]
 
@@ -3429,9 +3426,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # Attach architecture to the config
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
-
-        # Unset attn implementation so it can be set to another one when loading back
-        model_to_save.config._attn_implementation_autoset = False
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
