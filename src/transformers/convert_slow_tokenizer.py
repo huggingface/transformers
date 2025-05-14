@@ -19,6 +19,7 @@ allow to make our dependency on SentencePiece optional.
 """
 
 import warnings
+from typing import Optional
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -326,7 +327,9 @@ class OpenAIGPTConverter(Converter):
 
 
 class GPT2Converter(Converter):
-    def converted(self, vocab: dict[str, int] = None, merges: list[tuple[str, str]] = None) -> Tokenizer:
+    def converted(
+        self, vocab: Optional[dict[str, int]] = None, merges: Optional[list[tuple[str, str]]] = None
+    ) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -395,7 +398,9 @@ class HerbertConverter(Converter):
 
 
 class Qwen2Converter(Converter):
-    def converted(self, vocab: dict[str, int] = None, merges: list[tuple[str, str]] = None) -> Tokenizer:
+    def converted(
+        self, vocab: Optional[dict[str, int]] = None, merges: Optional[list[tuple[str, str]]] = None
+    ) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -1587,7 +1592,7 @@ class TikTokenConverter:
             from tiktoken.load import load_tiktoken_bpe
         except Exception:
             raise ValueError(
-                "`tiktoken` is required to read a `tiktoken` file. Install it with " "`pip install tiktoken`."
+                "`tiktoken` is required to read a `tiktoken` file. Install it with `pip install tiktoken`."
             )
 
         bpe_ranks = load_tiktoken_bpe(tiktoken_url)
@@ -1730,7 +1735,7 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
             ).converted()
         except Exception:
             raise ValueError(
-                f"Converting from Tiktoken failed, if a converter for SentencePiece is available, provide a model path "
+                f"Converting from SentencePiece and Tiktoken failed, if a converter for SentencePiece is available, provide a model path "
                 f"with a SentencePiece tokenizer.model file."
                 f"Currently available slow->fast converters: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
             )

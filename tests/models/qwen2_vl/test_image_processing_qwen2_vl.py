@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
 import numpy as np
@@ -21,7 +21,7 @@ import requests
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs, prepare_video_inputs
 
@@ -34,8 +34,8 @@ if is_vision_available():
 
     from transformers import Qwen2VLImageProcessor
 
-    if is_torchvision_available():
-        from transformers import Qwen2VLImageProcessorFast
+    # if is_torchvision_available():
+    #     from transformers import Qwen2VLImageProcessorFast
 
 
 class Qwen2VLImageProcessingTester:
@@ -118,7 +118,7 @@ class Qwen2VLImageProcessingTester:
 @require_vision
 class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Qwen2VLImageProcessor if is_vision_available() else None
-    fast_image_processing_class = Qwen2VLImageProcessorFast if is_torchvision_available() else None
+    # fast_image_processing_class = Qwen2VLImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -297,6 +297,20 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 encoded_video = prcocess_out.pixel_values_videos
                 expected_output_video_shape = (171500, 1176)
                 self.assertEqual(tuple(encoded_video.shape), expected_output_video_shape)
+
+    def test_custom_image_size(self):
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                image_processing.save_pretrained(tmpdirname)
+                image_processor_loaded = image_processing_class.from_pretrained(
+                    tmpdirname, max_pixels=56 * 56, min_pixels=28 * 28
+                )
+
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            prcocess_out = image_processor_loaded(image_inputs, return_tensors="pt")
+            expected_output_video_shape = [112, 1176]
+            self.assertListEqual(list(prcocess_out.pixel_values.shape), expected_output_video_shape)
 
     @require_vision
     @require_torch

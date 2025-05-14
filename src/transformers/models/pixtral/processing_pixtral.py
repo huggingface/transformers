@@ -103,6 +103,7 @@ class PixtralProcessor(ProcessorMixin):
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
         self.image_token = image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.image_break_token = image_break_token
         self.image_end_token = image_end_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
@@ -119,7 +120,7 @@ class PixtralProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
@@ -156,6 +157,8 @@ class PixtralProcessor(ProcessorMixin):
             **kwargs,
         )
 
+        patch_size = self.patch_size * self.spatial_merge_size
+
         if images is not None:
             if is_image_or_image_url(images):
                 images = [images]
@@ -172,7 +175,7 @@ class PixtralProcessor(ProcessorMixin):
                     "Invalid input images. Please provide a single image, a list of images, or a list of lists of images."
                 )
             images = [load_image(im) if isinstance(im, str) else im for im in images]
-            image_inputs = self.image_processor(images, patch_size=self.patch_size, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(images, patch_size=patch_size, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
 
@@ -194,8 +197,8 @@ class PixtralProcessor(ProcessorMixin):
             for sample in text:
                 while self.image_token in sample:
                     height, width = next(image_sizes)
-                    num_height_tokens = height // (self.patch_size * self.spatial_merge_size)
-                    num_width_tokens = width // (self.patch_size * self.spatial_merge_size)
+                    num_height_tokens = height // patch_size
+                    num_width_tokens = width // patch_size
                     replace_tokens = [
                         [self.image_token] * num_width_tokens + [self.image_break_token]
                     ] * num_height_tokens
@@ -211,10 +214,10 @@ class PixtralProcessor(ProcessorMixin):
                     sample = sample.replace("<placeholder>", replace_str, 1)
                 prompt_strings.append(sample)
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-        return BatchFeature(
-            data={**text_inputs, **image_inputs}, tensor_type=output_kwargs["common_kwargs"]["return_tensors"]
-        )
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

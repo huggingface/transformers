@@ -91,7 +91,7 @@ class TFSwinEncoderOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
     reshaped_hidden_states: Tuple[tf.Tensor, ...] | None = None
@@ -126,7 +126,7 @@ class TFSwinModelOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     pooler_output: tf.Tensor | None = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
@@ -163,7 +163,7 @@ class TFSwinMaskedImageModelingOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    reconstruction: tf.Tensor = None
+    reconstruction: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
     reshaped_hidden_states: Tuple[tf.Tensor, ...] | None = None
@@ -208,7 +208,7 @@ class TFSwinImageClassifierOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
     attentions: Tuple[tf.Tensor, ...] | None = None
     reshaped_hidden_states: Tuple[tf.Tensor, ...] | None = None
@@ -307,7 +307,7 @@ class TFSwinEmbeddings(keras.layers.Layer):
                 self.dropout.build(None)
 
     def call(
-        self, pixel_values: tf.Tensor, bool_masked_pos: bool = None, training: bool = False
+        self, pixel_values: tf.Tensor, bool_masked_pos: Optional[bool] = None, training: bool = False
     ) -> Tuple[tf.Tensor, Tuple[int, int]]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values, training=training)
         embeddings = self.norm(embeddings, training=training)
@@ -474,7 +474,7 @@ class TFSwinPatchMerging(keras.layers.Layer):
 class TFSwinDropPath(keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: float = None, scale_by_keep: bool = True, **kwargs) -> None:
+    def __init__(self, drop_prob: Optional[float] = None, scale_by_keep: bool = True, **kwargs) -> None:
         super(TFSwinDropPath, self).__init__(**kwargs)
         self.drop_prob = drop_prob
         self.scale_by_keep = scale_by_keep

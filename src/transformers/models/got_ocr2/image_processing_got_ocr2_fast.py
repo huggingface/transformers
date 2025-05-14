@@ -18,8 +18,6 @@ from typing import List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
@@ -35,7 +33,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -54,26 +52,24 @@ if is_torchvision_available():
 
 
 class GotOcr2ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    crop_to_patches (`bool`, *optional*, defaults to `False`):
+        Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
+        `preprocess` method.
+    min_patches (`int`, *optional*, defaults to 1):
+        The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+    max_patches (`int`, *optional*, defaults to 12):
+        The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+    """
+
     crop_to_patches: Optional[bool]
     min_patches: Optional[int]
     max_patches: Optional[int]
 
 
-@add_start_docstrings(
-    "Constructs a fast GotOcr2 image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        crop_to_patches (`bool`, *optional*, defaults to `False`):
-            Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
-            `preprocess` method.
-        min_patches (`int`, *optional*, defaults to 1):
-            The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-            set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
-        max_patches (`int`, *optional*, defaults to 12):
-            The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-            set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
-    """,
-)
+@auto_docstring
 class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
@@ -88,24 +84,11 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
     max_patches = 12
     valid_kwargs = GotOcr2ImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[valid_kwargs]):
+    def __init__(self, **kwargs: Unpack[GotOcr2ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            crop_to_patches (`bool`, *optional*, defaults to `False`):
-                Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
-                `preprocess` method.
-            min_patches (`int`, *optional*, defaults to 1):
-                The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-                set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
-            max_patches (`int`, *optional*, defaults to 12):
-                The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-                set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
-        """,
-    )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_kwargs]) -> BatchFeature:
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[GotOcr2ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def crop_image_to_patches(
@@ -114,7 +97,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         min_patches: int,
         max_patches: int,
         use_thumbnail: bool = True,
-        patch_size: Union[Tuple, int, dict] = None,
+        patch_size: Optional[Union[Tuple, int, dict]] = None,
         interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """

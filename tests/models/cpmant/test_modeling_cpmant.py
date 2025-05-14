@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The OpenBMB Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -161,7 +160,7 @@ class CpmAntModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         unittest.skip(
             "CPMAnt doesn't support retain grad in hidden_states or attentions, because prompt management will peel off the output.hidden_states from graph.\
-                 So is attentions. We strongly recommand you use loss to tune model."
+                 So is attentions. We strongly recommend you use loss to tune model."
         )(self.test_retain_grad_hidden_states_attentions)
 
     def test_cpmant_model(self):

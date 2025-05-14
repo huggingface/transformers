@@ -15,33 +15,25 @@
 """PyTorch RT-DETR model."""
 
 import math
-import os
 import warnings
 from dataclasses import dataclass
 from functools import partial
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from torch.autograd import Function
-from torch.autograd.function import once_differentiable
 
 from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_ninja_available,
-    is_torch_cuda_available,
-    is_torchdynamo_compiling,
+    auto_docstring,
     logging,
-    replace_return_docstrings,
     torch_int,
 )
 from ...utils.backbone_utils import load_backbone
@@ -50,94 +42,64 @@ from .configuration_rt_detr import RTDetrConfig
 
 logger = logging.get_logger(__name__)
 
-MultiScaleDeformableAttention = None
 
-
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.load_cuda_kernels
-def load_cuda_kernels():
-    from torch.utils.cpp_extension import load
-
-    global MultiScaleDeformableAttention
-
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deformable_detr"
-    src_files = [
-        root / filename
-        for filename in [
-            "vision.cpp",
-            os.path.join("cpu", "ms_deform_attn_cpu.cpp"),
-            os.path.join("cuda", "ms_deform_attn_cuda.cu"),
-        ]
-    ]
-
-    MultiScaleDeformableAttention = load(
-        "MultiScaleDeformableAttention",
-        src_files,
-        with_cuda=True,
-        extra_include_paths=[str(root)],
-        extra_cflags=["-DWITH_CUDA=1"],
-        extra_cuda_cflags=[
-            "-DCUDA_HAS_FP16=1",
-            "-D__CUDA_NO_HALF_OPERATORS__",
-            "-D__CUDA_NO_HALF_CONVERSIONS__",
-            "-D__CUDA_NO_HALF2_OPERATORS__",
-        ],
-    )
-
-
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
-class MultiScaleDeformableAttentionFunction(Function):
-    @staticmethod
-    def forward(
-        context,
-        value,
-        value_spatial_shapes,
-        value_level_start_index,
-        sampling_locations,
-        attention_weights,
-        im2col_step,
-    ):
-        context.im2col_step = im2col_step
-        output = MultiScaleDeformableAttention.ms_deform_attn_forward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            context.im2col_step,
-        )
-        context.save_for_backward(
-            value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights
-        )
-        return output
-
-    @staticmethod
-    @once_differentiable
-    def backward(context, grad_output):
-        (
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-        ) = context.saved_tensors
-        grad_value, grad_sampling_loc, grad_attn_weight = MultiScaleDeformableAttention.ms_deform_attn_backward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            grad_output,
-            context.im2col_step,
-        )
-
-        return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
-
-
-logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "RTDetrConfig"
 # TODO: Replace all occurrences of the checkpoint with the final one
-_CHECKPOINT_FOR_DOC = "PekingU/rtdetr_r50vd"
+
+
+@use_kernel_forward_from_hub("MultiScaleDeformableAttention")
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttention
+class MultiScaleDeformableAttention(nn.Module):
+    def forward(
+        self,
+        value: Tensor,
+        value_spatial_shapes: Tensor,
+        value_spatial_shapes_list: List[Tuple],
+        level_start_index: Tensor,
+        sampling_locations: Tensor,
+        attention_weights: Tensor,
+        im2col_step: int,
+    ):
+        batch_size, _, num_heads, hidden_dim = value.shape
+        _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
+        value_list = value.split([height * width for height, width in value_spatial_shapes_list], dim=1)
+        sampling_grids = 2 * sampling_locations - 1
+        sampling_value_list = []
+        for level_id, (height, width) in enumerate(value_spatial_shapes_list):
+            # batch_size, height*width, num_heads, hidden_dim
+            # -> batch_size, height*width, num_heads*hidden_dim
+            # -> batch_size, num_heads*hidden_dim, height*width
+            # -> batch_size*num_heads, hidden_dim, height, width
+            value_l_ = (
+                value_list[level_id]
+                .flatten(2)
+                .transpose(1, 2)
+                .reshape(batch_size * num_heads, hidden_dim, height, width)
+            )
+            # batch_size, num_queries, num_heads, num_points, 2
+            # -> batch_size, num_heads, num_queries, num_points, 2
+            # -> batch_size*num_heads, num_queries, num_points, 2
+            sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
+            # batch_size*num_heads, hidden_dim, num_queries, num_points
+            sampling_value_l_ = nn.functional.grid_sample(
+                value_l_,
+                sampling_grid_l_,
+                mode="bilinear",
+                padding_mode="zeros",
+                align_corners=False,
+            )
+            sampling_value_list.append(sampling_value_l_)
+        # (batch_size, num_queries, num_heads, num_levels, num_points)
+        # -> (batch_size, num_heads, num_queries, num_levels, num_points)
+        # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
+        attention_weights = attention_weights.transpose(1, 2).reshape(
+            batch_size * num_heads, 1, num_queries, num_levels * num_points
+        )
+        output = (
+            (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
+            .sum(-1)
+            .view(batch_size, num_heads * hidden_dim, num_queries)
+        )
+        return output.transpose(1, 2).contiguous()
 
 
 @dataclass
@@ -157,6 +119,10 @@ class RTDetrDecoderOutput(ModelOutput):
             Stacked intermediate logits (logits of each layer of the decoder).
         intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
             Stacked intermediate reference points (reference points of each layer of the decoder).
+        intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+        initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Stacked initial reference points (initial reference points of each layer of the decoder).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
@@ -171,10 +137,12 @@ class RTDetrDecoderOutput(ModelOutput):
             used to compute the weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_logits: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_logits: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -234,17 +202,19 @@ class RTDetrModelOutput(ModelOutput):
             Extra dictionary for the denoising related values
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_logits: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_logits: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    init_reference_points: torch.FloatTensor = None
+    init_reference_points: Optional[torch.FloatTensor] = None
     enc_topk_logits: Optional[torch.FloatTensor] = None
     enc_topk_bboxes: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
@@ -283,6 +253,10 @@ class RTDetrObjectDetectionOutput(ModelOutput):
             Stacked intermediate logits (logits of each layer of the decoder).
         intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
             Stacked intermediate reference points (reference points of each layer of the decoder).
+        intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+        initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+            Stacked initial reference points (initial reference points of each layer of the decoder).
         decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, num_queries, hidden_size)`. Hidden-states of the decoder at the output of each layer
@@ -323,13 +297,15 @@ class RTDetrObjectDetectionOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
-    logits: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
     auxiliary_outputs: Optional[List[Dict]] = None
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_logits: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_logits: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    intermediate_predicted_corners: Optional[torch.FloatTensor] = None
+    initial_reference_points: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -620,7 +596,7 @@ class RTDetrEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         **kwargs,
     ):
@@ -728,49 +704,6 @@ class RTDetrCSPRepLayer(nn.Module):
         return self.conv3(hidden_state_1 + hidden_state_2)
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
-def multi_scale_deformable_attention(
-    value: Tensor,
-    value_spatial_shapes: Union[Tensor, List[Tuple]],
-    sampling_locations: Tensor,
-    attention_weights: Tensor,
-) -> Tensor:
-    batch_size, _, num_heads, hidden_dim = value.shape
-    _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-    value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
-    sampling_grids = 2 * sampling_locations - 1
-    sampling_value_list = []
-    for level_id, (height, width) in enumerate(value_spatial_shapes):
-        # batch_size, height*width, num_heads, hidden_dim
-        # -> batch_size, height*width, num_heads*hidden_dim
-        # -> batch_size, num_heads*hidden_dim, height*width
-        # -> batch_size*num_heads, hidden_dim, height, width
-        value_l_ = (
-            value_list[level_id].flatten(2).transpose(1, 2).reshape(batch_size * num_heads, hidden_dim, height, width)
-        )
-        # batch_size, num_queries, num_heads, num_points, 2
-        # -> batch_size, num_heads, num_queries, num_points, 2
-        # -> batch_size*num_heads, num_queries, num_points, 2
-        sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
-        # batch_size*num_heads, hidden_dim, num_queries, num_points
-        sampling_value_l_ = nn.functional.grid_sample(
-            value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
-        )
-        sampling_value_list.append(sampling_value_l_)
-    # (batch_size, num_queries, num_heads, num_levels, num_points)
-    # -> (batch_size, num_heads, num_queries, num_levels, num_points)
-    # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
-    attention_weights = attention_weights.transpose(1, 2).reshape(
-        batch_size * num_heads, 1, num_queries, num_levels * num_points
-    )
-    output = (
-        (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
-        .sum(-1)
-        .view(batch_size, num_heads * hidden_dim, num_queries)
-    )
-    return output.transpose(1, 2).contiguous()
-
-
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->RTDetr
 class RTDetrMultiscaleDeformableAttention(nn.Module):
     """
@@ -780,12 +713,7 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
     def __init__(self, config: RTDetrConfig, num_heads: int, n_points: int):
         super().__init__()
 
-        kernel_loaded = MultiScaleDeformableAttention is not None
-        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
-            try:
-                load_cuda_kernels()
-            except Exception as e:
-                logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+        self.attn = MultiScaleDeformableAttention()
 
         if config.d_model % num_heads != 0:
             raise ValueError(
@@ -872,27 +800,16 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
 
-        if self.disable_custom_kernels or MultiScaleDeformableAttention is None or is_torchdynamo_compiling():
-            # PyTorch implementation
-            output = multi_scale_deformable_attention(
-                value, spatial_shapes_list, sampling_locations, attention_weights
-            )
-        else:
-            try:
-                # custom kernel
-                output = MultiScaleDeformableAttentionFunction.apply(
-                    value,
-                    spatial_shapes,
-                    level_start_index,
-                    sampling_locations,
-                    attention_weights,
-                    self.im2col_step,
-                )
-            except Exception:
-                # PyTorch implementation
-                output = multi_scale_deformable_attention(
-                    value, spatial_shapes_list, sampling_locations, attention_weights
-                )
+        output = self.attn(
+            value,
+            spatial_shapes,
+            spatial_shapes_list,
+            level_start_index,
+            sampling_locations,
+            attention_weights,
+            self.im2col_step,
+        )
+
         output = self.output_proj(output)
 
         return output, attention_weights
@@ -1125,6 +1042,7 @@ class RTDetrDecoderLayer(nn.Module):
         return outputs
 
 
+@auto_docstring
 class RTDetrPreTrainedModel(PreTrainedModel):
     config_class = RTDetrConfig
     base_model_prefix = "rt_detr"
@@ -1132,9 +1050,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
     _no_split_modules = [r"RTDetrHybridEncoder", r"RTDetrDecoderLayer"]
 
     def _init_weights(self, module):
-        """Initalize the weights"""
-
-        """initialize linear layer bias value according to a given probability value."""
+        """Initialize the weights"""
         if isinstance(module, (RTDetrForObjectDetection, RTDetrDecoder)):
             if module.class_embed is not None:
                 for layer in module.class_embed:
@@ -1148,7 +1064,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
                     nn.init.constant_(layer.layers[-1].weight, 0)
                     nn.init.constant_(layer.layers[-1].bias, 0)
 
-        if isinstance(module, RTDetrMultiscaleDeformableAttention):
+        elif isinstance(module, RTDetrMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
@@ -1171,75 +1087,25 @@ class RTDetrPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.output_proj.weight.data)
             nn.init.constant_(module.output_proj.bias.data, 0.0)
 
-        if isinstance(module, RTDetrModel):
+        elif isinstance(module, RTDetrModel):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
             nn.init.xavier_uniform_(module.enc_score_head.weight)
             nn.init.constant_(module.enc_score_head.bias, bias)
 
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
+
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             nn.init.xavier_uniform_(module.weight_embedding.weight)
         if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
             nn.init.xavier_uniform_(module.denoising_class_embed.weight)
-
-
-RTDETR_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`RTDetrConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-RTDETR_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`RTDetrImageProcessor.__call__`] for details.
-        pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
-
-            - 1 for pixels that are real (i.e. **not masked**),
-            - 0 for pixels that are padding (i.e. **masked**).
-
-            [What are attention masks?](../glossary#attention-mask)
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
-            can choose to directly pass a flattened representation of an image.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
-            embedded representation.
-        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
 
 
 class RTDetrEncoder(nn.Module):
@@ -1559,8 +1425,8 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
 
             # hack implementation for iterative bounding box refinement
             if self.bbox_embed is not None:
-                tmp = self.bbox_embed[idx](hidden_states)
-                new_reference_points = F.sigmoid(tmp + inverse_sigmoid(reference_points))
+                predicted_corners = self.bbox_embed[idx](hidden_states)
+                new_reference_points = F.sigmoid(predicted_corners + inverse_sigmoid(reference_points))
                 reference_points = new_reference_points.detach()
 
             intermediate += (hidden_states,)
@@ -1636,11 +1502,10 @@ class RTDetrMLPPredictionHead(nn.Module):
         return x
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     RT-DETR Model (consisting of a backbone and encoder-decoder) outputting raw hidden states without any head on top.
-    """,
-    RTDETR_START_DOCSTRING,
+    """
 )
 class RTDetrModel(RTDetrPreTrainedModel):
     def __init__(self, config: RTDetrConfig):
@@ -1759,8 +1624,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         return anchors, valid_mask
 
-    @add_start_docstrings_to_model_forward(RTDETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=RTDetrModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1774,7 +1638,17 @@ class RTDetrModel(RTDetrPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], RTDetrModelOutput]:
         r"""
-        Returns:
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
+            can choose to directly pass a flattened representation of an image.
+        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
+            embedded representation.
+        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
 
         Examples:
 
@@ -1956,6 +1830,8 @@ class RTDetrModel(RTDetrPreTrainedModel):
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_logits=decoder_outputs.intermediate_logits,
             intermediate_reference_points=decoder_outputs.intermediate_reference_points,
+            intermediate_predicted_corners=decoder_outputs.intermediate_predicted_corners,
+            initial_reference_points=decoder_outputs.initial_reference_points,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -1971,12 +1847,11 @@ class RTDetrModel(RTDetrPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     RT-DETR Model (consisting of a backbone and encoder-decoder) outputting bounding boxes and logits to be further
     decoded into scores and classes.
-    """,
-    RTDETR_START_DOCSTRING,
+    """
 )
 class RTDetrForObjectDetection(RTDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
@@ -2017,8 +1892,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         # as a dict having both a Tensor and a list.
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
-    @add_start_docstrings_to_model_forward(RTDETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=RTDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -2033,13 +1907,17 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         **loss_kwargs,
     ) -> Union[Tuple[torch.FloatTensor], RTDetrObjectDetectionOutput]:
         r"""
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
+            can choose to directly pass a flattened representation of an image.
+        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
+            embedded representation.
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
             in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
-        Returns:
 
         Examples:
 
@@ -2091,7 +1969,6 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.model(
@@ -2112,6 +1989,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
 
         outputs_class = outputs.intermediate_logits if return_dict else outputs[2]
         outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[3]
+        predicted_corners = outputs.intermediate_predicted_corners if return_dict else outputs[4]
+        initial_reference_points = outputs.initial_reference_points if return_dict else outputs[5]
 
         logits = outputs_class[:, -1]
         pred_boxes = outputs_coord[:, -1]
@@ -2131,6 +2010,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
                 enc_topk_logits=enc_topk_logits,
                 enc_topk_bboxes=enc_topk_bboxes,
                 denoising_meta_values=denoising_meta_values,
+                predicted_corners=predicted_corners,
+                initial_reference_points=initial_reference_points,
                 **loss_kwargs,
             )
 
@@ -2151,6 +2032,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             intermediate_hidden_states=outputs.intermediate_hidden_states,
             intermediate_logits=outputs.intermediate_logits,
             intermediate_reference_points=outputs.intermediate_reference_points,
+            intermediate_predicted_corners=outputs.intermediate_predicted_corners,
+            initial_reference_points=outputs.initial_reference_points,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,

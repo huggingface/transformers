@@ -29,6 +29,7 @@ import sentencepiece as spm
 from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
@@ -51,6 +52,7 @@ If a question does not make any sense, or is not factually coherent, explain why
 correct. If you don't know the answer to a question, please don't share false information."""  # fmt: skip
 
 
+@requires(backends=("sentencepiece",))
 class LlamaTokenizer(PreTrainedTokenizer):
     """
     Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as there is

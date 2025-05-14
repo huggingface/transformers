@@ -394,11 +394,11 @@ class OriginalOneFormerCheckpointToOursConverter:
                 [
                     (
                         f"{src_prefix}.norm{layer_idx}.weight",
-                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx+1}.weight",
+                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx + 1}.weight",
                     ),
                     (
                         f"{src_prefix}.norm{layer_idx}.bias",
-                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx+1}.bias",
+                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx + 1}.bias",
                     ),
                 ]
             )
@@ -531,11 +531,11 @@ class OriginalOneFormerCheckpointToOursConverter:
                 [
                     (
                         f"{src_prefix}.norm{layer_idx}.weight",
-                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx+1}.weight",
+                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx + 1}.weight",
                     ),
                     (
                         f"{src_prefix}.norm{layer_idx}.bias",
-                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx+1}.bias",
+                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx + 1}.bias",
                     ),
                 ]
             )
@@ -1010,9 +1010,9 @@ def test(
         for original_model_feature, our_model_feature in zip(
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states
         ):
-            assert torch.allclose(
-                original_model_feature, our_model_feature, atol=3e-3
-            ), "The backbone features are not the same."
+            assert torch.allclose(original_model_feature, our_model_feature, atol=3e-3), (
+                "The backbone features are not the same."
+            )
         mask_features, _, multi_scale_features, _, _ = original_model.sem_seg_head.pixel_decoder.forward_features(
             original_model_backbone_features
         )
@@ -1025,9 +1025,9 @@ def test(
         for original_model_feature, our_model_feature in zip(
             original_pixel_decoder_features, our_model_output.pixel_decoder_hidden_states
         ):
-            assert torch.allclose(
-                original_model_feature, our_model_feature, atol=3e-4
-            ), "The pixel decoder feature are not the same"
+            assert torch.allclose(original_model_feature, our_model_feature, atol=3e-4), (
+                "The pixel decoder feature are not the same"
+            )
 
         tr_complete = T.Compose(
             [
@@ -1049,9 +1049,9 @@ def test(
 
         our_segmentation = post_process_sem_seg_output(our_model_out, target_size=(640, 640))[0]
 
-        assert torch.allclose(
-            original_segmentation, our_segmentation, atol=1e-3
-        ), "The segmentation image is not the same."
+        assert torch.allclose(original_segmentation, our_segmentation, atol=1e-3), (
+            "The segmentation image is not the same."
+        )
 
         logger.info("✅ Test passed!")
 

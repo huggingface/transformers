@@ -15,7 +15,7 @@
 """BARK model generation configuration"""
 
 import copy
-from typing import Dict
+from typing import Dict, Optional
 
 from ...generation.configuration_utils import GenerationConfig
 from ...utils import logging
@@ -240,15 +240,14 @@ class BarkFineGenerationConfig(GenerationConfig):
 
 class BarkGenerationConfig(GenerationConfig):
     model_type = "bark"
-    is_composition = True
 
     # TODO (joao): nested from_dict
 
     def __init__(
         self,
-        semantic_config: Dict = None,
-        coarse_acoustics_config: Dict = None,
-        fine_acoustics_config: Dict = None,
+        semantic_config: Optional[Dict] = None,
+        coarse_acoustics_config: Optional[Dict] = None,
+        fine_acoustics_config: Optional[Dict] = None,
         sample_rate=24_000,
         codebook_size=1024,
         **kwargs,

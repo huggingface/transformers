@@ -247,7 +247,7 @@ class FlaxT5Attention(nn.Module):
             relative_buckets += (relative_position > 0) * num_buckets
             relative_position = jnp.abs(relative_position)
         else:
-            relative_position = -jnp.clip(relative_position, max=0)
+            relative_position = -jnp.clip(relative_position, a_max=0)
         # now relative_position is in the range [0, inf)
 
         # half of the buckets are for exact increments in positions
@@ -258,7 +258,7 @@ class FlaxT5Attention(nn.Module):
         relative_position_if_large = max_exact + (
             jnp.log(relative_position / max_exact) / jnp.log(max_distance / max_exact) * (num_buckets - max_exact)
         )
-        relative_position_if_large = jnp.clip(relative_position_if_large, max=num_buckets - 1)
+        relative_position_if_large = jnp.clip(relative_position_if_large, a_max=num_buckets - 1)
 
         relative_buckets += jnp.where(is_small, relative_position, relative_position_if_large)
 
@@ -993,7 +993,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1078,7 +1078,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""
@@ -1134,12 +1134,12 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         encoder_outputs,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
-        past_key_values: dict = None,
+        past_key_values: Optional[dict] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""
@@ -1462,7 +1462,7 @@ class FlaxT5EncoderModel(FlaxT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1612,12 +1612,12 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
         encoder_outputs,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
-        past_key_values: dict = None,
+        past_key_values: Optional[dict] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""
