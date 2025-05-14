@@ -133,16 +133,8 @@ class AlbertConfig(PretrainedConfig):
     # Not part of __init__
     model_type = "albert"
 
-    def __post_init__(self):
-        """Called after `__init__`: validates the instance."""
-        self.validate()
-
-    def validate(self):
-        """Ensures the configuration is valid by assessing combinations of arguments."""
-        # Generic config validation
-        super().validate()
-
-        # Architecture validation
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "

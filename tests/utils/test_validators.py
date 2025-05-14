@@ -161,9 +161,16 @@ class ValidatorsIntegrationTests(unittest.TestCase):
         with self.assertRaises(StrictDataclassFieldValidationError):
             config = AlbertConfig(eos_token_id=-1)
 
-        # `validate()` is called in `__post_init__`, i.e. after `__init__`. A special token must be in the vocabulary.
+        # `@strict` calls `validate()` in `__post_init__`, i.e. after `__init__`. All functions defined as
+        # `validate_XXX(self)` will be called as part of the validation process. In this case, a special token must
+        # be in the vocabulary, and the validation function is defined in the base config class.
         with self.assertRaises(ValueError):
             config = AlbertConfig(vocab_size=10, eos_token_id=99)
+
+        # Similar to the previous case, but the validation function is defined in the model config class. The hidden
+        # size must be divisible by the number of attention heads.
+        with self.assertRaises(ValueError):
+            config = AlbertConfig(hidden_size=10, num_attention_heads=3)
 
         # vocab size is assigned after init, individual attributes are checked on assignment
         with self.assertRaises(StrictDataclassFieldValidationError):
