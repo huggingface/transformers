@@ -46,21 +46,17 @@ class Mamba2ConfigTester(ConfigTester):
         _input_dict["head_dim"] = head_dim
         return self.config_class(**_input_dict)
 
-    def test_consistence(self):
+    def test_hidden_size_compatibility(self):
         self._create_config(hidden_size=2, num_heads=2, expand=2, head_dim=2)
         self._create_config(hidden_size=4, num_heads=4, expand=2, head_dim=2)
         self._create_config(hidden_size=2, num_heads=4, expand=4, head_dim=2)
         with self.parent.assertRaises(ValueError):
-            self._create_config(hidden_size=2, num_heads=2, expand=4, head_dim=4)
+            self._create_config(hidden_size=2, num_heads=4, expand=2, head_dim=4)
         with self.parent.assertRaises(ValueError):
             self._create_config(hidden_size=4, num_heads=2, expand=4, head_dim=2)
 
-    def test_mamba2_offset_properties(self):
-        self.test_attn_offsets()
-        self.test_expert_offsets()
-
     def run_common_tests(self):
-        self.test_mamba2_offset_properties()
+        self.test_hidden_size_compatibility()
         return super().run_common_tests()
 
 
