@@ -296,7 +296,7 @@ class Kosmos2_5ModelOutput(ModelOutput):
 
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
-            (self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple())
+            (self[k] if k not in ["vision_model_output"] else getattr(self, k).to_tuple())
             for k in self.keys()
         )
 
@@ -360,7 +360,7 @@ class Kosmos2_5ForConditionalGenerationModelOutput(ModelOutput):
 
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
-            (self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple())
+            (self[k] if k not in ["vision_model_output"] else getattr(self, k).to_tuple())
             for k in self.keys()
         )
 
