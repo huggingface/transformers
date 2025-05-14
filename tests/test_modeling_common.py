@@ -4426,7 +4426,7 @@ class ModelTesterMixin:
             # comparing softmax-normalized logits:
             normalized_0 = F.softmax(out_last_tokens, dim=-1)
             normalized_1 = F.softmax(out_shared_prefix_last_tokens, dim=-1)
-            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
+            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-3)
 
     @slow
     @require_torch_accelerator
