@@ -382,11 +382,8 @@ class PretrainedConfig(PushToHubMixin):
     def _attn_implementation(self, value):
         self._attn_implementation_internal = value
 
-    def validate(self):
-        """
-        Validates the contents of the config.
-        """
-        # Special token validation
+    def validate_token_ids(self):
+        """Part of `@strict`-powered validation. Validates the contents of the special tokens."""
         text_config = self.get_text_config()
         vocab_size = getattr(text_config, "vocab_size", None)
         if vocab_size is not None:
