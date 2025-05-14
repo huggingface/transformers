@@ -16,18 +16,30 @@ Callbacks to use with the Trainer class and customize the training loop.
 """
 
 import dataclasses
+import importlib
+import inspect
 import json
 import math
-from dataclasses import dataclass
-from typing import Optional, Union
-
+import operator
+import os
 import numpy as np
+import torch
+from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _version
+from typing import Any, Callable
+from typing import Optional, Union
+from functools import lru_cache, partial
+
+
+from packaging.version import Version
+from torch.autograd.profiler import EventList
+from torch.profiler import profile, ProfilerActivity, ProfilerAction
 from tqdm.auto import tqdm
 
 from .trainer_utils import HPSearchBackend, IntervalStrategy, SaveStrategy, has_length
 from .training_args import TrainingArguments
 from .utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -783,3 +795,138 @@ class EarlyStoppingCallback(TrainerCallback, ExportableState):
                 "early_stopping_patience_counter": self.early_stopping_patience_counter,
             },
         }
+
+def default_sort_by_key(profiler_kwargs: dict) -> str:
+    activities = profiler_kwargs.get("activities", [])
+    is_cuda = ((activities and ProfilerActivity.CUDA in activities)
+        or (not activities and torch.cuda.is_available())
+    )
+    return f"{'cuda' if is_cuda else 'cpu'}_time_total"
+
+
+
+class PytorchProfilerCallback(TrainerCallback):
+    AVAILABLE_SORT_KEYS = {
+        "cpu_time",
+        "cuda_time",
+        "cpu_time_total",
+        "cuda_time_total",
+        "cpu_memory_usage",
+        "cuda_memory_usage",
+        "self_cpu_memory_usage",
+        "self_cuda_memory_usage",
+        "count",
+    }
+
+
+
+    def __init__(
+            self,
+            activities: list[ProfilerActivity] = None,
+            record_shapes=False,
+            with_stack=False,
+            with_flops=False,
+            profile_memory=True,
+            export_chrome_trace=True,
+            sort_by_key: Optional[str] = None,
+            table_kwargs: Optional[dict[str, Any]] = None,
+            table_row_limit=10,
+            **profiler_kwargs: Any
+    ) -> None:
+        self.activities = activities
+        self.record_shapes = record_shapes
+        self.profile_memory = profile_memory
+        self.with_stack = with_stack
+        self.with_flops = with_flops
+        self.export_chrome_trace = export_chrome_trace
+        self.sort_by_key = sort_by_key
+        self.table_row_limit = table_row_limit
+
+        self.profiler: Optional[torch.profiler.profile] = None
+        self.schedule: Optional[torch.profiler.schedule] = None
+        self.profiler_kwargs = profiler_kwargs
+        self.table_kwargs = table_kwargs if table_kwargs is not None else {}
+
+        if self.sort_by_key not in self.AVAILABLE_SORT_KEYS:
+            raise Exception(
+                f"Found sort_by_keyword: {self.sort_by_key}. Should be within {self.AVAILABLE_SORT_KEYS}. "
+            )
+
+        for key in self.table_kwargs:
+            if key in {"sort_by", "row_limit"}:
+                raise KeyError(
+                    f"Found invalid table_kwargs key: {key}. This is already a positional argument of the Profiler."
+                )
+            valid_table_keys = set(inspect.signature(EventList.table).parameters.keys()) - {
+                "self",
+                "sort_by",
+                "row_limit",
+            }
+            if key not in valid_table_keys:
+                raise KeyError(f"Found invalid table_kwargs key: {key}. Should be within {valid_table_keys}.")
+
+    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        self.init_pytorch_profiler(args)
+        self.profiler = self.create_profiler()
+        self.profiler.start()
+
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        self.profiler.step()
+
+    def on_train_end(self, args, state, control, **kwargs):
+        self.profiler.stop()
+
+
+
+    def init_pytorch_profiler(self, args: TrainingArguments) -> None:
+        self.schedule = self.default_schedule()
+        self.profiler_kwargs["schedule"] = self.schedule
+
+        activities = self.profiler_kwargs.get("activities", None)
+        self.profiler_kwargs["activities"] = activities or self.default_activities()
+
+        with_stack = self.profiler_kwargs.get("with_stack", False)
+        self.profiler_kwargs["with_stack"] = with_stack or self.with_stack
+
+        record_shapes = self.profiler_kwargs.get("record_shapes", False)
+        self.profiler_kwargs["record_shapes"] = record_shapes or self.record_shapes
+
+        profile_memory = self.profiler_kwargs.get("profile_memory", False)
+        self.profiler_kwargs["profile_memory"] = profile_memory or self.profile_memory
+
+        self.sort_by_key = self.sort_by_key or default_sort_by_key(self.profiler_kwargs)
+
+        def on_trace_ready(profiler: torch.profiler.profile) -> None:
+            if self.export_chrome_trace:
+                profiler.export_chrome_trace(os.path.join(args.output_dir, f"rank_{args.local_rank}_trace.json"))
+            output_table = profiler.key_averages().table(
+                sort_by=self.sort_by_key, row_limit=self.table_row_limit, **self.table_kwargs
+            )
+            logger.info("===== PROFILER SUMMARY =====")
+            logger.info(output_table)
+            pass
+
+        self.profiler_kwargs["on_trace_ready"] = on_trace_ready
+        pass
+
+    @staticmethod
+    def default_activities() -> list["ProfilerActivity"]:
+        activities = [
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ]
+        return activities
+
+    @staticmethod
+    @lru_cache(1)
+    def default_schedule() -> Optional[Callable]:
+        # A schedule defaults allow the profiling overhead to be negligible over training time.
+        # The profiler will wait for 1 step, then do the warmup for 1 step, then do the active recording for 3 steps,
+        # and then repeat the cycle starting with ``wait`` steps.
+        # TODO: make this configurable
+        return torch.profiler.schedule(wait=1, warmup=1, active=3)
+
+    def create_profiler(self) -> torch.profiler.profile:
+        init_parameters = inspect.signature(torch.profiler.profile.__init__).parameters
+        kwargs = {k: v for k, v in self.profiler_kwargs.items() if k in init_parameters}
+        return torch.profiler.profile(**kwargs)

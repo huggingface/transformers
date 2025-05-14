@@ -85,6 +85,7 @@ from .trainer_callback import (
     TrainerCallback,
     TrainerControl,
     TrainerState,
+    PytorchProfilerCallback,
 )
 from .trainer_pt_utils import (
     DistributedTensorGatherer,
@@ -2167,8 +2168,16 @@ class Trainer:
         if self.neftune_noise_alpha is not None:
             self.model = self._activate_neftune(self.model)
 
+        # Add PytorchProfilerCallback if required
+        if args.profiler == "pytorch":
+            profiler_callback = PytorchProfilerCallback(
+                profile_memory = True,
+                export_chrome_trace = True,
+                profiler_kwargs = args.profiler_kwargs,
+                table_kwargs = args.profiler_table_kwargs)
+            self.add_callback(profiler_callback)
+
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
-        # the following is a workaround:
         if (
             (args.fp16_full_eval or args.bf16_full_eval)
             and not args.do_train
@@ -2465,39 +2474,6 @@ class Trainer:
         if args.eval_on_start:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
-        if self.args.enable_profiler:
-            from torch.profiler import profile, schedule, tensorboard_trace_handler, ProfilerActivity
-            activities = [ProfilerActivity.CPU]
-            if torch.cuda.is_available():
-                activities.append(ProfilerActivity.CUDA)
-            prof_schedule = schedule(wait=1, warmup=1, active=2, repeat=1)
-            def trace_handler(p):
-                p.export_chrome_trace(os.path.join(self.args.output_dir, f"rank_{self.args.local_rank}_profiler"))
-                if torch.cuda.is_available():
-                    print("cuda is supported")
-                    device = 'cuda'
-                elif torch.xpu.is_available():
-                    print("xpu is supported")
-                    device = 'xpu'
-                else:
-                    logger.warning(
-                        'Neither CUDA nor XPU devices are available to demonstrate profiling on acceleration devices')
-                    return
-                sort_by_keyword = device + "_time_total"
-                output = p.key_averages().table(sort_by=sort_by_keyword, row_limit=10)
-                logger.info(output)
-                pass
-
-            self.profiler = profile(
-                activities=activities,
-                schedule=prof_schedule,
-                on_trace_ready=trace_handler,
-                record_shapes=True,
-                profile_memory=True
-            )
-            self.profiler.start()
-
-
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_dataloader = train_dataloader
             if hasattr(epoch_dataloader, "set_epoch"):
@@ -2642,9 +2618,6 @@ class Trainer:
                         # get leaning rate before update
                         learning_rate = self._get_learning_rate()
 
-                        if self.args.enable_profiler:
-                            self.profiler.step()
-
                         if not self.accelerator.optimizer_step_was_skipped:
                             # Delay optimizer scheduling until metrics are generated
                             if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
@@ -2753,8 +2726,6 @@ class Trainer:
                     shutil.rmtree(checkpoint, ignore_errors=True)
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
-        if self.args.enable_profiler:
-            self.profiler.stop()
         # Wait for the checkpoint to be uploaded.
         self._finish_current_push()
 

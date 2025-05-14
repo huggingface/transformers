@@ -794,6 +794,15 @@ class TrainingArguments:
             Whether or not to average tokens across devices. If enabled, will use all_reduce to synchronize
             num_tokens_in_batch for precise loss calculation. Reference:
             https://github.com/huggingface/transformers/issues/34242
+        profiler (`str`, *optional*):
+            The profiler to use during training, Possible choices are `"pytorch"`, `"none"`. Reference:
+            https://github.com/pytorch/pytorch/blob/main/torch/profiler/profiler.py
+        profiler_kwargs (`dict`, *optional*, defaults to `None`):
+            Dictionary of keyword arguments to initialize the profiler. For pytorch profiler, reference:
+            https://github.com/pytorch/pytorch/blob/main/torch/profiler/profiler.py
+        profiler_table_kwargs (`dict`, *optional*, defaults to `None`):
+            Dictionary of keyword arguments to configure the output table of the profiling result. For pytorch profiler, reference:
+            https://github.com/pytorch/pytorch/blob/main/torch/autograd/profiler_util.py
     """
 
     # Sometimes users will pass in a `str` repr of a dict in the CLI
@@ -1531,6 +1540,28 @@ class TrainingArguments:
             "synchronize num_tokens_in_batch for precise loss calculation. Reference: "
             "https://github.com/huggingface/transformers/issues/34242"
         },
+    )
+    profiler: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "The profiler to use during training. For pytorch profiler, reference:"
+            "https://github.com/pytorch/pytorch/blob/main/torch/profiler/profiler.py",
+            "choices": ["pytorch", "none", None],
+        }
+    )
+    profiler_kwargs: Optional[dict] = field(
+        default_factory=dict,
+        metadata={
+            "help": "Dictionary of keyword arguments to initialize the profiler. For pytorch profiler, reference:"
+            "https://github.com/pytorch/pytorch/blob/main/torch/profiler/profiler.py"
+        }
+    )
+    profiler_table_kwargs: Optional[dict] = field(
+        default_factory=dict,
+        metadata={
+            "help": "Dictionary of keyword arguments to configure the output table of the profiling result. For pytorch profiler, reference:"
+            "https://github.com/pytorch/pytorch/blob/main/torch/autograd/profiler_util.py"
+        }
     )
 
     def __post_init__(self):
