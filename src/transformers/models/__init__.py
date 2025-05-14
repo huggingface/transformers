@@ -195,6 +195,7 @@ if TYPE_CHECKING:
     from .modernbert import *
     from .moonshine import *
     from .moshi import *
+    from .moshi_asr import *
     from .mpnet import *
     from .mpt import *
     from .mra import *
