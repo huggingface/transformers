@@ -346,10 +346,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         pass
 
     @unittest.skip(reason="Compile not yet supported because in Qwen2_5_VL models")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in Qwen2_5_VL models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 

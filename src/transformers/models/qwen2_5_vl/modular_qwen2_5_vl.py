@@ -686,18 +686,20 @@ class Qwen2_5_VLModel(Qwen2VLModel):
 
         # if we get 4D attention mask we cannot calculate rope deltas anymore. TODO @raushan fixme
         if position_ids is None and (attention_mask is None or attention_mask.ndim == 2):
+            attention_mask_2d = attention_mask
+            if attention_mask is not None and attention_mask.ndim == 4:
+                attention_mask_2d = torch.diagonal(attention_mask_2d[:, 0], dim1=1, dim2=2)
+                attention_mask_2d = attention_mask_2d / torch.finfo(attention_mask_2d.dtype).min
+                attention_mask_2d = (1.0 - attention_mask_2d).int()
+
             # calculate RoPE index once per generation in the pre-fill stage only
             if (
-                (cache_position is not None and cache_position[0] == 0)
-                or self.rope_deltas is None
-                or (past_key_values is None or past_key_values.get_seq_length() == 0)
+                (input_ids is not None and input_ids.shape[1] != 1)
+                or (inputs_embeds is not None and inputs_embeds.shape[1] != 1)
+                and self.rope_deltas is None
             ):
                 position_ids, rope_deltas = self.get_rope_index(
-                    input_ids,
-                    image_grid_thw,
-                    video_grid_thw,
-                    second_per_grid_ts,
-                    attention_mask,
+                    input_ids, image_grid_thw, video_grid_thw, attention_mask_2d
                 )
                 self.rope_deltas = rope_deltas
             # then use the prev pre-calculated rope-deltas to get the correct position ids
