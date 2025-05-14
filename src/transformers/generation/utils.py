@@ -48,7 +48,7 @@ from ..dynamic_module_utils import (
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
-from ..masking_utils import get_causal_masks
+from ..masking_utils import create_masks_for_generate
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
@@ -656,15 +656,16 @@ class GenerationMixin:
 
             # If it's not defined, it means the model uses the new general mask API
             if causal_mask_creation_function is None:  # can't be found
-                attention_mask = get_causal_masks(
-                    base_model.layer_attention_patterns,
-                    self.config._attn_implementation,
+                output_attentions = kwargs.get("output_attentions", False)
+                attention_mask = create_masks_for_generate(
+                    base_model,
                     torch.empty(
                         (batch_size, sequence_length), dtype=self.dtype
                     ),  # we only need batch size, seq_length and dtype here - we don't care about the values
                     attention_mask,
                     cache_position,
                     past_key_values,
+                    output_attentions,
                 )
             else:
                 attention_mask = causal_mask_creation_function(

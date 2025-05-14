@@ -463,7 +463,7 @@ def _create_mask(
     layer_pattern: LayerPattern,
     config: PretrainedConfig,
     input_embeds: torch.Tensor,
-    attention_mask: Optional[Union[torch.Tensor, list[torch.Tensor]]],
+    attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     layer_idx: int,
@@ -482,10 +482,9 @@ def _create_mask(
         input_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
             batch size, query length and dtype.
-        attention_mask (`torch.Tensor` or `list[torch.Tensor]`, optional):
+        attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
-            It can also be an already prepared 4D mask, in which case it is replicated for each layer. Can also be
-            a list of masks, in which case it is returned as-is.
+            It can also be an already prepared 4D mask, in which case it is returned as-is.
         cache_position (`torch.Tensor`):
             A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
         past_key_values (`Cache`, optional):
@@ -540,7 +539,7 @@ def _create_mask(
 def create_causal_mask(
     config: PretrainedConfig,
     input_embeds: torch.Tensor,
-    attention_mask: Optional[Union[torch.Tensor, list[torch.Tensor]]],
+    attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     layer_idx: int,
@@ -555,10 +554,9 @@ def create_causal_mask(
         input_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
             batch size, query length and dtype.
-        attention_mask (`torch.Tensor` or `list[torch.Tensor]`, optional):
+        attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
-            It can also be an already prepared 4D mask, in which case it is replicated for each layer. Can also be
-            a list of masks, in which case it is returned as-is.
+            It can also be an already prepared 4D mask, in which case it is returned as-is.
         cache_position (`torch.Tensor`):
             A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
         past_key_values (`Cache`, optional):
@@ -582,7 +580,7 @@ def create_causal_mask(
 def create_sliding_window_causal_mask(
     config: PretrainedConfig,
     input_embeds: torch.Tensor,
-    attention_mask: Optional[Union[torch.Tensor, list[torch.Tensor]]],
+    attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     layer_idx: int,
@@ -598,10 +596,9 @@ def create_sliding_window_causal_mask(
         input_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
             batch size, query length and dtype.
-        attention_mask (`torch.Tensor` or `list[torch.Tensor]`, optional):
+        attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
-            It can also be an already prepared 4D mask, in which case it is replicated for each layer. Can also be
-            a list of masks, in which case it is returned as-is.
+            It can also be an already prepared 4D mask, in which case it is returned as-is.
         cache_position (`torch.Tensor`):
             A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
         past_key_values (`Cache`, optional):
@@ -625,7 +622,7 @@ def create_sliding_window_causal_mask(
 def create_chunked_causal_mask(
     config: PretrainedConfig,
     input_embeds: torch.Tensor,
-    attention_mask: Optional[Union[torch.Tensor, list[torch.Tensor]]],
+    attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     layer_idx: int,
@@ -641,10 +638,9 @@ def create_chunked_causal_mask(
         input_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
             batch size, query length and dtype.
-        attention_mask (`torch.Tensor` or `list[torch.Tensor]`, optional):
+        attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
-            It can also be an already prepared 4D mask, in which case it is replicated for each layer. Can also be
-            a list of masks, in which case it is returned as-is.
+            It can also be an already prepared 4D mask, in which case it is returned as-is.
         cache_position (`torch.Tensor`):
             A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
         past_key_values (`Cache`, optional):
@@ -707,6 +703,36 @@ def _ignore_causal_mask_sdpa(
             # Reference: https://github.com/pytorch/pytorch/issues/108108
 
     return False
+
+
+MASK_FUNCTION_MAPPING = {
+    "full": create_causal_mask,
+    "sliding": create_sliding_window_causal_mask,
+    "chunked": create_chunked_causal_mask,
+}
+
+
+def create_masks_for_generate(
+    base_model,
+    input_embeds: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    cache_position: torch.Tensor,
+    past_key_values: Optional[Cache],
+    output_attentions: bool = False,
+):
+    causal_masks = {}
+    for layer_idx, layer_pattern in enumerate(base_model.layer_attention_patterns):
+        if layer_pattern not in causal_masks:
+            causal_masks[layer_pattern] = MASK_FUNCTION_MAPPING[layer_pattern](
+                base_model.config,
+                input_embeds,
+                attention_mask,
+                cache_position,
+                past_key_values,
+                layer_idx,
+                output_attentions,
+            )
+    return causal_masks
 
 
 # Below are utilities to pretty-print the different masks

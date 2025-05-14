@@ -28,7 +28,7 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
 from ...generation import GenerationMixin
-from ...masking_utils import get_causal_masks
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -37,7 +37,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, LayerPattern, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
@@ -371,6 +371,12 @@ class Gemma2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
+GEMMA2_MASK_FUNCTIONS = {
+    "full": create_causal_mask,
+    "sliding": create_sliding_window_causal_mask,
+}
+
+
 @auto_docstring
 class Gemma2Model(Gemma2PreTrainedModel):
     def __init__(self, config: Gemma2Config):
@@ -384,9 +390,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
         )
         self.norm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Gemma2RotaryEmbedding(config=config)
-        self.layer_attention_patterns = [
-            LayerPattern(pattern, config.sliding_window) for pattern in config.layer_attention_patterns
-        ]
+        self.layer_attention_patterns = config.layer_attention_patterns
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -451,15 +455,18 @@ class Gemma2Model(Gemma2PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_masks = get_causal_masks(
-            self.layer_attention_patterns,
-            self.config._attn_implementation,
-            inputs_embeds,
-            attention_mask,
-            cache_position,
-            past_key_values,
-            output_attentions,
-        )
+        causal_masks = {} if not isinstance(attention_mask, dict) else attention_mask
+        for layer_idx, layer_pattern in enumerate(self.layer_attention_patterns):
+            if layer_pattern not in causal_masks:
+                causal_masks[layer_pattern] = GEMMA2_MASK_FUNCTIONS[layer_pattern](
+                    self.config,
+                    inputs_embeds,
+                    attention_mask,
+                    cache_position,
+                    past_key_values,
+                    layer_idx,
+                    output_attentions,
+                )
 
         # embed positions
         hidden_states = inputs_embeds
