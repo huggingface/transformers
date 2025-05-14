@@ -320,7 +320,7 @@ class PagedAttentionCache(Cache):
         physical_indices = physical_block_nums * block_size + block_offsets
         return physical_indices
 
-    # @traced
+    @torch.compile
     def update(
         self,
         key_states: torch.Tensor,
@@ -538,6 +538,7 @@ class ContinuousBatchProcessor:
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
 
+    @torch.compile
     def reset_static_tensors(self):
         """Reset static tensors for the next batch."""
         self.input_ids.zero_()
@@ -554,7 +555,7 @@ class ContinuousBatchProcessor:
 
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
-        return PagedAttentionArgs(
+        return dict(
             input_ids=self.input_ids,
             position_ids=self.position_ids,
             attention_mask=self.attention_mask,
@@ -1014,10 +1015,8 @@ class ContinuousBatchProcessor:
         try:
             if prefill_tokens > 0:
                 self.prefill_tokens_counter.add(prefill_tokens)
-
             if decode_tokens > 0:
                 self.decode_tokens_counter.add(decode_tokens)
-
             if prefill_tokens > 0:
                 ratio = decode_tokens / prefill_tokens
             elif decode_tokens > 0:
@@ -1244,10 +1243,10 @@ class ContinuousBatchingManager:
         """Perform a single generation step. This is cuda graphed"""
         batch_data = batch_processor.get_model_kwargs()
         with torch.no_grad():
-            logits = self.model(**batch_data.__dict__).logits
+            logits = self.model(**batch_data).logits
             if self.log_prob_generation:
                 batch_processor.output_probs.copy_(logits)  # TODO
-            probs = self.logit_processor(batch_data.input_ids, logits)
+            probs = self.logit_processor(batch_data["input_ids"], logits)
             if self.do_sample:  # sample
                 probs = nn.functional.softmax(probs, dim=-1)
                 next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
