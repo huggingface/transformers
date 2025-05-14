@@ -294,7 +294,7 @@ def write_model(
         }
         for k, v in loaded.items():
             if "vision_model" in k:
-                state_dict[k] = v
+                state_dict[k.replace("vision_model", "vision_tower")] = v
         for k, v in state_dict.items():
             index_dict["weight_map"][k] = filename
             param_count += v.numel()
