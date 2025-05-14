@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import collections
-import copy
 import csv
 import importlib
 import json
@@ -31,6 +30,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from ..dynamic_module_utils import custom_object_save
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
+from ..generation import GenerationConfig
 from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto import AutoConfig, AutoTokenizer
@@ -1020,9 +1020,21 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         )
         if self.model.can_generate():
             self.prefix = self.model.config.prefix if hasattr(self.model.config, "prefix") else None
-            self.generation_config = copy.deepcopy(self.model.generation_config)
-            # Update the generation config with task specific params if they exist
-            # NOTE: `prefix` is pipeline-specific and doesn't exist in the generation config.
+            # each pipeline with text generation capabilities should define its own default generation in a
+            # `_default_generation_config` class attribute
+            default_pipeline_generation_config = getattr(self, "_default_generation_config", GenerationConfig())
+            # Uses `generate`'s logic to enforce the following priority of arguments:
+            # 1. user-defined config options in `**kwargs`
+            # 2. model's generation config values
+            # 3. pipeline's default generation config values
+            # (_prepare_generation_config creates a deep copy of the generation config before updating it)
+            prepared_generation_config, _ = self.model._prepare_generation_config(
+                generation_config=default_pipeline_generation_config, use_model_defaults=True, **kwargs
+            )
+            self.generation_config = prepared_generation_config
+            # Update the generation config with task specific params if they exist.
+            # NOTE: 1. `prefix` is pipeline-specific and doesn't exist in the generation config.
+            #       2. `task_specific_params` is a legacy feature and should be removed in a future version.
             task_specific_params = self.model.config.task_specific_params
             if task_specific_params is not None and task in task_specific_params:
                 this_task_params = task_specific_params.get(task)

@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Dict, Optional, Union
 import numpy as np
 import requests
 
+from ..generation import GenerationConfig
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import is_torch_available, is_torchaudio_available, logging
 from .audio_utils import ffmpeg_read
@@ -131,6 +132,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     The input can be either a raw waveform or a audio file. In case of the audio file, ffmpeg should be installed for
     to support multiple audio formats
 
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 4
+
     Example:
 
     ```python
@@ -191,6 +197,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             `torch.float16` or `torch.bfloat16` to use half-precision in the respective dtypes.
 
     """
+
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+        num_beams=4,
+    )
 
     def __init__(
         self,

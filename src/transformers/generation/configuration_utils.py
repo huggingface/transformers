@@ -611,7 +611,7 @@ class GenerationConfig(PushToHubMixin):
         if self.max_new_tokens is not None and self.max_new_tokens <= 0:
             raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
         if self.pad_token_id is not None and self.pad_token_id < 0:
-            warnings.warn(
+            logger.info(
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "
                 "generating, if there is padding. Please set `pad_token_id` explicitly as "
                 "`model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation"
@@ -633,46 +633,39 @@ class GenerationConfig(PushToHubMixin):
                 + fix_location
             )
             if self.temperature is not None and self.temperature != 1.0:
-                warnings.warn(
+                logger.info(
                     greedy_wrong_parameter_msg.format(flag_name="temperature", flag_value=self.temperature),
-                    UserWarning,
                 )
             if self.top_p is not None and self.top_p != 1.0:
-                warnings.warn(
+                logger.info(
                     greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p),
-                    UserWarning,
                 )
             if self.min_p is not None:
-                warnings.warn(
+                logger.info(
                     greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p),
-                    UserWarning,
                 )
             if self.typical_p is not None and self.typical_p != 1.0:
-                warnings.warn(
+                logger.info(
                     greedy_wrong_parameter_msg.format(flag_name="typical_p", flag_value=self.typical_p),
-                    UserWarning,
                 )
             if (
                 self.top_k is not None and self.top_k != 50 and self.penalty_alpha is None
             ):  # contrastive search uses top_k
-                warnings.warn(
+                logger.info(
                     greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k),
-                    UserWarning,
                 )
             if self.epsilon_cutoff is not None and self.epsilon_cutoff != 0.0:
-                warnings.warn(
+                logger.info(
                     greedy_wrong_parameter_msg.format(flag_name="epsilon_cutoff", flag_value=self.epsilon_cutoff),
-                    UserWarning,
                 )
             if self.eta_cutoff is not None and self.eta_cutoff != 0.0:
-                warnings.warn(
+                logger.info(
                     greedy_wrong_parameter_msg.format(flag_name="eta_cutoff", flag_value=self.eta_cutoff),
-                    UserWarning,
                 )
 
         # 2. detect beam-only parameterization when not in beam mode
         if self.num_beams is None:
-            warnings.warn("`num_beams` is set to None - defaulting to 1.", UserWarning)
+            logger.info("`num_beams` is set to None - defaulting to 1.")
             self.num_beams = 1
 
         if self.num_beams == 1:
@@ -681,33 +674,28 @@ class GenerationConfig(PushToHubMixin):
                 "in beam-based generation modes. You should set `num_beams>1` or unset `{flag_name}`." + fix_location
             )
             if self.early_stopping is not False:
-                warnings.warn(
+                logger.info(
                     single_beam_wrong_parameter_msg.format(flag_name="early_stopping", flag_value=self.early_stopping),
-                    UserWarning,
                 )
             if self.num_beam_groups is not None and self.num_beam_groups != 1:
-                warnings.warn(
+                logger.info(
                     single_beam_wrong_parameter_msg.format(
                         flag_name="num_beam_groups", flag_value=self.num_beam_groups
                     ),
-                    UserWarning,
                 )
             if self.diversity_penalty is not None and self.diversity_penalty != 0.0:
-                warnings.warn(
+                logger.info(
                     single_beam_wrong_parameter_msg.format(
                         flag_name="diversity_penalty", flag_value=self.diversity_penalty
                     ),
-                    UserWarning,
                 )
             if self.length_penalty is not None and self.length_penalty != 1.0:
-                warnings.warn(
+                logger.info(
                     single_beam_wrong_parameter_msg.format(flag_name="length_penalty", flag_value=self.length_penalty),
-                    UserWarning,
                 )
             if self.constraints is not None:
-                warnings.warn(
+                logger.info(
                     single_beam_wrong_parameter_msg.format(flag_name="constraints", flag_value=self.constraints),
-                    UserWarning,
                 )
 
         # 3. detect incorrect parameterization specific to advanced beam modes
@@ -746,11 +734,10 @@ class GenerationConfig(PushToHubMixin):
                     )
             # DoLa generation
             if self.dola_layers is not None and (self.repetition_penalty is None or self.repetition_penalty < 1.2):
-                warnings.warn(
+                logger.info(
                     "`dola_layers` is set to trigger DoLa decoding, but `repetition_penalty` is set to a value of "
                     f"{self.repetition_penalty}, which could induce unwanted repetition. The recommended value for "
                     "DoLa decoding is `repetition_penalty>=1.2`.",
-                    UserWarning,
                 )
 
         # 4. check `num_return_sequences`
@@ -823,10 +810,9 @@ class GenerationConfig(PushToHubMixin):
         if self.return_dict_in_generate is not True:
             for extra_output_flag in self.extra_output_flags:
                 if getattr(self, extra_output_flag) is True:
-                    warnings.warn(
+                    logger.info(
                         f"`return_dict_in_generate` is NOT set to `True`, but `{extra_output_flag}` is. When "
                         f"`return_dict_in_generate` is not `True`, `{extra_output_flag}` is ignored.",
-                        UserWarning,
                     )
 
         # 8. check common issue: passing `generate` arguments inside the generation config
