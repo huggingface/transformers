@@ -391,20 +391,6 @@ class Kosmos2_5LayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-try:
-    from apex.normalization import FusedRMSNorm
-
-    Kosmos2_5LayerNorm = FusedRMSNorm  # noqa
-
-    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of Kosmos2_5LayerNorm")
-except ImportError:
-    # using the normal Kosmos2_5LayerNorm
-    pass
-except Exception:
-    logger.warning("Discovered apex but it failed to load, falling back to Kosmos2_5LayerNorm")
-    pass
-
-
 # similar to transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionEmbeddings but with `inplace=False`
 # TODO: check with krip
 class Kosmos2_5VisionEmbeddings(nn.Module):
