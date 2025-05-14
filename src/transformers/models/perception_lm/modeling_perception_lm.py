@@ -194,9 +194,6 @@ class PerceptionLMPreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
 
     def _init_weights(self, module):
-        # important: this ported version of PerceptionLM isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/perception_lm should serve for that purpose
         std = getattr(
             self.config,
             "initializer_range",
@@ -337,16 +334,12 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, List[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
-        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        image_sizes: Optional[torch.Tensor] = None,
         **lm_kwargs,
     ) -> Union[Tuple, PerceptionLMCausalLMOutputWithPast]:
         r"""
@@ -452,11 +445,10 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
     def __init__(self, config: PerceptionLMConfig, **super_kwargs):
         super().__init__(config, **super_kwargs)
         self.model = PerceptionLMModel(config)
-        if self.model.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [
-                f"model.language_model.{k}" for k in self.model.language_model._tied_weights_keys
-            ]
         self.post_init()
+
+    def get_output_embeddings(self):
+        return self.model.get_output_embeddings()
 
     def prepare_inputs_for_generation(
         self,
@@ -500,8 +492,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, List[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -509,7 +499,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        image_sizes: Optional[torch.Tensor] = None,
         **lm_kwargs,
     ) -> Union[Tuple, PerceptionLMCausalLMOutputWithPast]:
         r"""
@@ -549,16 +538,12 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
-            labels=labels,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
-            image_sizes=image_sizes,
             **lm_kwargs,
         )
 
