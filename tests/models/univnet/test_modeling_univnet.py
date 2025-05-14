@@ -227,7 +227,7 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
             noise_sequence_shape = (64, noise_length)
         else:
             noise_sequence_shape = (num_samples, 64, noise_length)
-        # Explicity generate noise_sequence on CPU for consistency.
+        # Explicitly generate noise_sequence on CPU for consistency.
         noise_sequence = torch.randn(noise_sequence_shape, generator=generator, dtype=torch.float32, device="cpu")
         # Put noise_sequence on the desired device.
         noise_sequence = noise_sequence.to(device)

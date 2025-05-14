@@ -57,8 +57,8 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         feature_size: int = 1,
         sampling_rate: int = 24000,
         padding_value: float = 0.0,
-        chunk_length_s: float = None,
-        overlap: float = None,
+        chunk_length_s: Optional[float] = None,
+        overlap: Optional[float] = None,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)

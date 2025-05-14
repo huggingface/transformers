@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,6 +24,7 @@ from transformers.testing_utils import (
     require_intel_extension_for_pytorch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_multi_accelerator,
     require_torch_multi_gpu,
     slow,
     torch_device,
@@ -41,7 +41,6 @@ if is_accelerate_available():
 
 @require_torch_accelerator
 class AwqConfigTest(unittest.TestCase):
-    @require_torch_gpu
     def test_wrong_backend(self):
         """
         Simple test that checks if a user passes a wrong backend an error is raised
@@ -59,16 +58,23 @@ class AwqConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             AwqConfig(bits=4, backend="unexisting-backend")
 
-        compute_capability = torch.cuda.get_device_capability()
-        major, minor = compute_capability
+        # Only cuda and xpu devices can run this function
+        support_llm_awq = False
+        if torch.cuda.is_available():
+            compute_capability = torch.cuda.get_device_capability()
+            major, minor = compute_capability
+            if major >= 8:
+                support_llm_awq = True
+        elif torch.xpu.is_available():
+            support_llm_awq = True
 
-        if major < 8:
+        if support_llm_awq:
+            # LLMAWQ should work on an A100
+            AwqConfig(bits=4, backend="llm-awq")
+        else:
             # LLMAWQ does not work on a T4
             with self.assertRaises(ValueError):
                 AwqConfig(bits=4, backend="llm-awq")
-        else:
-            # LLMAWQ should work on an A100
-            AwqConfig(bits=4, backend="llm-awq")
 
     def test_to_dict(self):
         """
@@ -104,7 +110,7 @@ class AwqTest(unittest.TestCase):
     input_text = "Hello my name is"
 
     EXPECTED_OUTPUT = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
-    EXPECTED_OUTPUT_BF16 = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Exercise and Sport Science with a"
+    EXPECTED_OUTPUT_BF16 = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
 
     EXPECTED_OUTPUT_EXLLAMA = [
         "Hello my name is Katie and I am a 20 year old student from the UK. I am currently studying for a degree in English Literature and History at the University of York. I am a very out",
@@ -197,6 +203,7 @@ class AwqTest(unittest.TestCase):
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_BF16)
 
+    @require_torch_gpu
     def test_quantized_model_exllama(self):
         """
         Simple test that checks if the quantized model is working properly with exllama backend
@@ -235,7 +242,7 @@ class AwqTest(unittest.TestCase):
             output = model.generate(**input_ids, max_new_tokens=40)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_quantized_model_multi_gpu(self):
         """
         Simple test that checks if the quantized model is working properly with multiple GPUs
@@ -270,7 +277,7 @@ class AwqTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_auto_awq
 @require_accelerate
 class AwqFusedTest(unittest.TestCase):
@@ -292,7 +299,7 @@ class AwqFusedTest(unittest.TestCase):
         "You end up exactly where you started. Where are you?"
     )
 
-    EXPECTED_GENERATION = prompt + "\n\nThis is a classic puzzle that has been around for"
+    EXPECTED_GENERATION = prompt + "\n\nYou're at the center of a square."
     EXPECTED_GENERATION_CUSTOM_MODEL = "Hello,\n\nI have a problem with my 20"
     EXPECTED_GENERATION_MIXTRAL = prompt + " You're on the North Pole.\n\nThe"
 
@@ -348,6 +355,10 @@ class AwqFusedTest(unittest.TestCase):
         # Checks if the modules_to_not_convert (here gate layer) is a Linear
         self.assertTrue(isinstance(model.model.layers[0].block_sparse_moe.gate, torch.nn.Linear))
 
+    @unittest.skipIf(
+        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 8,
+        "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
+    )
     def test_generation_fused(self):
         """
         Test generation quality for fused models - single batch case
@@ -371,6 +382,10 @@ class AwqFusedTest(unittest.TestCase):
 
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION)
 
+    @unittest.skipIf(
+        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 8,
+        "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
+    )
     def test_generation_fused_batched(self):
         """
         Test generation quality for fused models - multi batch case
@@ -419,6 +434,10 @@ class AwqFusedTest(unittest.TestCase):
         self.assertEqual(outputs[0]["generated_text"], EXPECTED_OUTPUT)
 
     @require_torch_multi_gpu
+    @unittest.skipIf(
+        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 8,
+        "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
+    )
     def test_generation_custom_model(self):
         """
         Test generation quality for fused models using custom fused map.

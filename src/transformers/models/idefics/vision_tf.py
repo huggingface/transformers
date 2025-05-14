@@ -55,7 +55,7 @@ class TFIdeficsVisionModelOutput(ModelOutput):
     """
 
     image_embeds: Optional[tf.Tensor] = None
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
 

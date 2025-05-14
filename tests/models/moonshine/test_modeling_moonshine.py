@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -108,41 +107,6 @@ class MoonshineModelTester:
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
         )
-
-    def create_and_check_model(self, config, input_values, attention_mask):
-        model = MoonshineModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_values, attention_mask=attention_mask)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
-        )
-
-    def create_and_check_batch_inference(self, config, input_values, *args):
-        # test does not pass for models making use of `group_norm`
-        # check: https://github.com/pytorch/fairseq/issues/3227
-        model = MoonshineModel(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
-
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-
-        # pad input
-        for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
-            attention_mask[i, input_lengths[i] :] = 0.0
-
-        batch_outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
-
-        for i in range(input_values.shape[0]):
-            input_slice = input_values[i : i + 1, : input_lengths[i]]
-            output = model(input_slice).last_hidden_state
-
-            batch_output = batch_outputs[i : i + 1, : output.shape[1]]
-            self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
     def check_output_attentions(self, config, input_values, attention_mask):
         model = MoonshineModel(config=config)

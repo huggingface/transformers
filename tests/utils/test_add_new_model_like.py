@@ -92,7 +92,7 @@ class TestAddNewModelLike(unittest.TestCase):
             f.write(content)
 
     def check_result(self, file_name, expected_result):
-        with open(file_name, "r", encoding="utf-8") as f:
+        with open(file_name, encoding="utf-8") as f:
             result = f.read()
             self.assertEqual(result, expected_result)
 
@@ -436,7 +436,7 @@ NEW_BERT_CONSTANT = "value"
 
             self.init_file(file_name, bert_test)
             duplicate_module(file_name, bert_model_patterns, new_bert_model_patterns)
-            # There should not be a new Copied from statement, the old one should be adapated.
+            # There should not be a new Copied from statement, the old one should be adapted.
             self.check_result(dest_file_name, bert_expected)
 
             self.init_file(file_name, bert_test)

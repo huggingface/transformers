@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -67,6 +66,19 @@ class AutoImageProcessorTest(unittest.TestCase):
             config_tmpfile = Path(tmpdirname) / "config.json"
             json.dump(
                 {"feature_extractor_type": "CLIPFeatureExtractor", "processor_class": "CLIPProcessor"},
+                open(processor_tmpfile, "w"),
+            )
+            json.dump({"model_type": "clip"}, open(config_tmpfile, "w"))
+
+            config = AutoImageProcessor.from_pretrained(tmpdirname)
+            self.assertIsInstance(config, CLIPImageProcessor)
+
+    def test_image_processor_from_new_filename(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            config_tmpfile = Path(tmpdirname) / "config.json"
+            json.dump(
+                {"image_processor_type": "CLIPImageProcessor", "processor_class": "CLIPProcessor"},
                 open(processor_tmpfile, "w"),
             )
             json.dump({"model_type": "clip"}, open(config_tmpfile, "w"))

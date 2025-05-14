@@ -15,9 +15,8 @@
 """PyTorch DeiT model."""
 
 import collections.abc
-import math
 from dataclasses import dataclass
-from typing import Optional, Set, Tuple, Union
+from typing import Callable, Optional, Set, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -31,32 +30,13 @@ from ...modeling_outputs import (
     ImageClassifierOutput,
     MaskedImageModelingOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_deit import DeiTConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "DeiTConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/deit-base-distilled-patch16-224"
-_EXPECTED_OUTPUT_SHAPE = [1, 198, 768]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "facebook/deit-base-distilled-patch16-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 class DeiTEmbeddings(nn.Module):
@@ -180,25 +160,58 @@ class DeiTPatchEmbeddings(nn.Module):
         return x
 
 
+# Copied from transformers.models.vit.modeling_vit.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+
+    # Normalize the attention scores to probabilities.
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+
+    # This is actually dropping out entire tokens to attend to, which might
+    # seem a bit unusual, but is taken from the original Transformer paper.
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    # Mask heads if we want to
+    if attention_mask is not None:
+        attn_weights = attn_weights * attention_mask
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->DeiT
 class DeiTSelfAttention(nn.Module):
     def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
+        self.config = config
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -208,85 +221,37 @@ class DeiTSelfAttention(nn.Module):
     def forward(
         self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTSdpaSelfAttention with ViT->DeiT
-class DeiTSdpaSelfAttention(DeiTSelfAttention):
-    def __init__(self, config: DeiTConfig) -> None:
-        super().__init__(config)
-        self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
-
-    def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        if output_attentions or head_mask is not None:
-            logger.warning_once(
-                "`DeiTSdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
-                "`output_attentions=True` or `head_mask`. Falling back to the manual attention implementation, but "
-                "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
-                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                head_mask=head_mask,
-                output_attentions=output_attentions,
-            )
-
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        context_layer = torch.nn.functional.scaled_dot_product_attention(
+        context_layer, attention_probs = attention_interface(
+            self,
             query_layer,
             key_layer,
             value_layer,
             head_mask,
-            self.attention_probs_dropout_prob if self.training else 0.0,
-            is_causal=False,
-            scale=None,
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.dropout_prob,
         )
 
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
+        context_layer = context_layer.reshape(new_context_layer_shape)
 
-        return context_layer, None
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        return outputs
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->DeiT
@@ -348,13 +313,6 @@ class DeiTAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSdpaAttention with ViT->DeiT
-class DeiTSdpaAttention(DeiTAttention):
-    def __init__(self, config: DeiTConfig) -> None:
-        super().__init__(config)
-        self.attention = DeiTSdpaSelfAttention(config)
-
-
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->DeiT
 class DeiTIntermediate(nn.Module):
     def __init__(self, config: DeiTConfig) -> None:
@@ -388,12 +346,6 @@ class DeiTOutput(nn.Module):
         return hidden_states
 
 
-DEIT_ATTENTION_CLASSES = {
-    "eager": DeiTAttention,
-    "sdpa": DeiTSdpaAttention,
-}
-
-
 # Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->DeiT,VIT->DEIT
 class DeiTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
@@ -402,7 +354,7 @@ class DeiTLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = DEIT_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.attention = DeiTAttention(config)
         self.intermediate = DeiTIntermediate(config)
         self.output = DeiTOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -489,18 +441,15 @@ class DeiTEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class DeiTPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = DeiTConfig
     base_model_prefix = "deit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DeiTLayer"]
     _supports_sdpa = True
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -515,50 +464,23 @@ class DeiTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, DeiTEmbeddings):
+            module.cls_token.data.zero_()
+            module.position_embeddings.data.zero_()
+            module.distillation_token.data.zero_()
+            if module.mask_token is not None:
+                module.mask_token.data.zero_()
 
 
-DEIT_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`DeiTConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-DEIT_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`DeiTImageProcessor.__call__`] for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to interpolate the pre-trained position encodings.
-"""
-
-
-@add_start_docstrings(
-    "The bare DeiT Model transformer outputting raw hidden-states without any specific head on top.",
-    DEIT_START_DOCSTRING,
-)
+@auto_docstring
 class DeiTModel(DeiTPreTrainedModel):
     def __init__(self, config: DeiTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False) -> None:
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+            Whether to use a mask token for masked image modeling.
+        """
         super().__init__(config)
         self.config = config
 
@@ -582,14 +504,7 @@ class DeiTModel(DeiTPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -656,8 +571,8 @@ class DeiTModel(DeiTPreTrainedModel):
 class DeiTPooler(nn.Module):
     def __init__(self, config: DeiTConfig):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
+        self.dense = nn.Linear(config.hidden_size, config.pooler_output_size)
+        self.activation = ACT2FN[config.pooler_act]
 
     def forward(self, hidden_states):
         # We "pool" the model by simply taking the hidden state corresponding
@@ -668,8 +583,9 @@ class DeiTPooler(nn.Module):
         return pooled_output
 
 
-@add_start_docstrings(
-    """DeiT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).
+@auto_docstring(
+    custom_intro="""
+    DeiT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).
 
     <Tip>
 
@@ -677,8 +593,7 @@ class DeiTPooler(nn.Module):
     directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
 
     </Tip>
-    """,
-    DEIT_START_DOCSTRING,
+    """
 )
 class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
     def __init__(self, config: DeiTConfig) -> None:
@@ -698,8 +613,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -713,8 +627,6 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
-        Returns:
 
         Examples:
         ```python
@@ -787,12 +699,11 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     DeiT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
     the [CLS] token) e.g. for ImageNet.
-    """,
-    DEIT_START_DOCSTRING,
+    """
 )
 class DeiTForImageClassification(DeiTPreTrainedModel):
     def __init__(self, config: DeiTConfig) -> None:
@@ -807,8 +718,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -824,8 +734,6 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
 
         Examples:
 
@@ -927,15 +835,15 @@ class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
             the self-attention heads.
     """
 
-    logits: torch.FloatTensor = None
-    cls_logits: torch.FloatTensor = None
-    distillation_logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    cls_logits: Optional[torch.FloatTensor] = None
+    distillation_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     DeiT Model transformer with image classification heads on top (a linear layer on top of the final hidden state of
     the [CLS] token and a linear layer on top of the final hidden state of the distillation token) e.g. for ImageNet.
 
@@ -943,8 +851,7 @@ class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
 
            This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet
            supported.
-    """,
-    DEIT_START_DOCSTRING,
+    """
 )
 class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
     def __init__(self, config: DeiTConfig) -> None:
@@ -964,13 +871,7 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=DeiTForImageClassificationWithTeacherOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,

@@ -37,7 +37,7 @@ class CLIPSegProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "ViTImageProcessor"
+    image_processor_class = ("ViTImageProcessor", "ViTImageProcessorFast")
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
@@ -63,7 +63,7 @@ class CLIPSegProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        ViTImageProcessor's [`~ViTImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring of
+        ViTImageProcessor's [`~ViTImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring of
         the above two methods for more information.
 
         Args:

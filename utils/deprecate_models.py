@@ -344,7 +344,7 @@ def deprecate_models(models):
         print("Removing #Copied from statements from model's files")
         remove_copied_from_statements(model)
 
-        # Move the model file to deprecated: src/transfomers/models/model -> src/transformers/models/deprecated/model
+        # Move the model file to deprecated: src/transformers/models/model -> src/transformers/models/deprecated/model
         print("Moving model files to deprecated for model")
         move_model_files_to_deprecated(model)
 

@@ -20,6 +20,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 SPIECE_UNDERLINE = "▁"
@@ -31,6 +32,9 @@ logger = logging.get_logger(__name__)
 
 
 # TODO ArthurZ refactor this to only use the added_tokens_encoder
+
+
+@requires(backends=("sentencepiece",))
 class PegasusTokenizer(PreTrainedTokenizer):
     r"""
     Construct a PEGASUS tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).

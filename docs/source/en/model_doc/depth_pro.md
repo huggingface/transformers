@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # DepthPro
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The DepthPro model was proposed in [Depth Pro: Sharp Monocular Metric Depth in Less Than a Second](https://arxiv.org/abs/2410.02073) by Aleksei Bochkovskii, Amaël Delaunoy, Hugo Germain, Marcel Santos, Yichao Zhou, Stephan R. Richter, Vladlen Koltun.
@@ -86,7 +90,7 @@ The `DepthProEncoder` further uses two encoders:
 - `image_encoder`
    - Input image is also rescaled to `patch_size` and processed by the **`image_encoder`**
 
-Both these encoders can be configured via `patch_model_config` and `image_model_config` respectively, both of which are seperate `Dinov2Model` by default.
+Both these encoders can be configured via `patch_model_config` and `image_model_config` respectively, both of which are separate `Dinov2Model` by default.
 
 Outputs from both encoders (`last_hidden_state`) and selected intermediate states (`hidden_states`) from **`patch_encoder`** are fused by a `DPT`-based `FeatureFusionStage` for depth estimation.
 

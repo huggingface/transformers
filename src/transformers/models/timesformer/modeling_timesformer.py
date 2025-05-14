@@ -26,14 +26,14 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    auto_docstring,
+    logging,
+)
 from .configuration_timesformer import TimesformerConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "TimesformerConfig"
-_CHECKPOINT_FOR_DOC = "facebook/timesformer"
 
 
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L155
@@ -295,7 +295,7 @@ class TimesformerLayer(nn.Module):
         attention_type = config.attention_type
 
         drop_path_rates = [
-            x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)
+            x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")
         ]  # stochastic depth decay rule
         drop_path_rate = drop_path_rates[layer_index]
 
@@ -458,12 +458,8 @@ class TimesformerEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class TimesformerPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = TimesformerConfig
     base_model_prefix = "timesformer"
     main_input_name = "pixel_values"
@@ -484,38 +480,7 @@ class TimesformerPreTrainedModel(PreTrainedModel):
             module.patch_embeddings.apply(self._init_weights)
 
 
-TIMESFORMER_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`TimesformerConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-TIMESFORMER_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`VideoMAEImageProcessor.preprocess`] for details.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare TimeSformer Model transformer outputting raw hidden-states without any specific head on top.",
-    TIMESFORMER_START_DOCSTRING,
-)
+@auto_docstring
 class TimesformerModel(TimesformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -540,8 +505,7 @@ class TimesformerModel(TimesformerPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(TIMESFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -550,8 +514,6 @@ class TimesformerModel(TimesformerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -653,10 +615,11 @@ class TimesformerModel(TimesformerPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """TimeSformer Model transformer with a video classification head on top (a linear layer on top of the final hidden state
-of the [CLS] token) e.g. for ImageNet.""",
-    TIMESFORMER_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+        TimeSformer Model transformer with a video classification head on top (a linear layer on top of the final hidden state
+    of the [CLS] token) e.g. for ImageNet.
+    """
 )
 class TimesformerForVideoClassification(TimesformerPreTrainedModel):
     def __init__(self, config):
@@ -671,8 +634,7 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(TIMESFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -686,8 +648,6 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
 
         Examples:
 

@@ -9,13 +9,9 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     SizeDict,
-    add_start_docstrings,
     get_image_size_for_max_height_width,
     get_max_height_width,
     safe_squeeze,
@@ -35,11 +31,13 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from .image_processing_rt_detr import get_size_with_aspect_ratio
 
 
@@ -53,21 +51,32 @@ elif is_torchvision_available():
     from torchvision.transforms import functional as F
 
 
-class RTDetrFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+class RTDetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    r"""
+    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
+        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
+    do_convert_annotations (`bool`, *optional*, defaults to `True`):
+        Controls whether to convert the annotations to the format expected by the RT_DETR model. Converts the
+        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
+    do_pad (`bool`, *optional*, defaults to `True`):
+        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
+        method. If `True`, padding will be applied to the bottom and right of the image with zeros.
+        If `pad_size` is provided, the image will be padded to the specified dimensions.
+        Otherwise, the image will be padded to the maximum height and width of the batch.
+    pad_size (`Dict[str, int]`, *optional*):
+        The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+        provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+        height and width in the batch.
+    return_segmentation_masks (`bool`, *optional*, defaults to `False`):
+        Whether to return segmentation masks.
+    """
+
     format: Optional[Union[str, AnnotationFormat]]
     do_convert_annotations: Optional[bool]
     do_pad: Optional[bool]
     pad_size: Optional[Dict[str, int]]
-
-
-class RTDetrFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
-    format: Optional[AnnotationFormat]
-    annotations: Optional[Dict]
-    do_convert_annotations: Optional[bool]
-    do_pad: Optional[bool]
-    pad_size: Optional[Dict[str, int]]
     return_segmentation_masks: Optional[bool]
-    masks_path: Optional[Union[str, pathlib.Path]]
 
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
@@ -132,27 +141,8 @@ def prepare_coco_detection_annotation(
     return new_target
 
 
-@add_start_docstrings(
-    "Constructs a fast RTDetr image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-            Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-        do_convert_annotations (`bool`, *optional*, defaults to `True`):
-            Controls whether to convert the annotations to the format expected by the RT_DETR model. Converts the
-            bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-            Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-            method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-            If `pad_size` is provided, the image will be padded to the specified dimensions.
-            Otherwise, the image will be padded to the maximum height and width of the batch.
-        pad_size (`Dict[str, int]`, *optional*):
-            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-            height and width in the batch.
-    """,
-)
+@auto_docstring
+@requires(backends=("torchvision", "torch"))
 class RTDetrImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -165,11 +155,10 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
     size = {"height": 640, "width": 640}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_init_kwargs = RTDetrFastImageProcessorInitKwargs
-    valid_preprocess_kwargs = RTDetrFastImageProcessorPreprocessKwargs
+    valid_kwargs = RTDetrFastImageProcessorKwargs
     do_convert_annotations = True
 
-    def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorInitKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorKwargs]) -> None:
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations", None)
         do_normalize = kwargs.get("do_normalize", None)
@@ -183,7 +172,7 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         image: torch.Tensor,
         target: Dict,
         format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
@@ -388,9 +377,15 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
 
         return image, pixel_mask, annotation
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        masks_path: Optional[Union[str, pathlib.Path]] = None,
+        **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
         annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
             List of annotations associated with the image or batch of images. If annotation is for object
             detection, the annotations should be a dictionary with the following keys:
@@ -404,29 +399,10 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             - "file_name" (`str`): The file name of the image.
         format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
             Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-        do_convert_annotations (`bool`, *optional*, defaults to `True`):
-            Controls whether to convert the annotations to the format expected by the DETR model. Converts the
-            bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-            Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-            method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-            If `pad_size` is provided, the image will be padded to the specified dimensions.
-            Otherwise, the image will be padded to the maximum height and width of the batch.
-        pad_size (`Dict[str, int]`, *optional*):
-            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-            height and width in the batch.
-        return_segmentation_masks (`bool`, *optional*, defaults to `False`):
-            Whether to return segmentation masks.
         masks_path (`str` or `pathlib.Path`, *optional*):
             Path to the directory containing the segmentation masks.
-        """,
-    )
-    def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[RTDetrFastImageProcessorPreprocessKwargs]
-    ) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
+        """
+        return super().preprocess(images, annotations=annotations, masks_path=masks_path, **kwargs)
 
     def _preprocess(
         self,
@@ -491,15 +467,8 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                         target_size=resized_image.size()[-2:],
                     )
                 image = resized_image
-
-            if do_rescale and do_normalize:
-                # fused rescale and normalize
-                image = F.normalize(image.to(dtype=torch.float32), image_mean, image_std)
-            elif do_rescale:
-                image = image * rescale_factor
-            elif do_normalize:
-                image = F.normalize(image, image_mean, image_std)
-
+            # Fused rescale and normalize
+            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
             if do_convert_annotations and annotations is not None:
                 annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
 
