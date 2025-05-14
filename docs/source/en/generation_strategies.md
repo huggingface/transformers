@@ -365,7 +365,7 @@ print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
 You should read the `README.md` file of the repository containing the custom generation strategy to see what the new arguments and output type differences are, if they exist. Otherwise, you can assume it works like the base [`~GenerationMixin.generate`] method.
 
 > [!TIP]
-> You can find all custom decoding methods by [searching for their custom tag](https://huggingface.co/models?other=custom_generate), `custom_generate`
+> You can find all custom decoding methods by [searching for their custom tag.](https://huggingface.co/models?other=custom_generate), `custom_generate`
 
 Consider the Hub repository [transformers-community/custom_generate_example](https://huggingface.co/transformers-community/custom_generate_example) as an example. The `README.md` states that it has an additional input argument, `left_padding`, which adds a number of padding tokens before the prompt.
 
@@ -462,11 +462,11 @@ Follow the recommended practices below to ensure your custom decoding method wor
 
 #### requirements.txt
 
-You can optionaly specify additional Python requirements in a `requirements.txt` file inside the `custom_generate` folder. These are checked at runtime and an exception will be thrown if they're missing, nudging users to update their environment accordingly.
+You can optionally specify additional Python requirements in a `requirements.txt` file inside the `custom_generate` folder. These are checked at runtime and an exception will be thrown if they're missing, nudging users to update their environment accordingly.
 
 #### README.md
 
-The root level `README.md` in the model repository usually describes the model in therein. However, since the focus of the repository is the custom decoding method, we highly recomend to shift its focus towards describing the custom decoding method. In addition to a description of the method, we recommend documenting any input and/or output differences to the original [`~GenerationMixin.generate`]. This way, users can focus on what's new, and rely on Transformers docs for generic implementation details.
+The root level `README.md` in the model repository usually describes the model therein. However, since the focus of the repository is the custom decoding method, we highly recommend to shift its focus towards describing the custom decoding method. In addition to a description of the method, we recommend documenting any input and/or output differences to the original [`~GenerationMixin.generate`]. This way, users can focus on what's new, and rely on Transformers docs for generic implementation details.
 
 Recommended practices:
 - Document input and output differences in [`~GenerationMixin.generate`].
