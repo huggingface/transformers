@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from ..utils import is_accelerate_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
@@ -44,16 +44,17 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 "please make sure the weights are in PyTorch format."
             )
 
-        if not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed for FP8 quantization.")
+        if not (torch.cuda.is_available() or is_torch_xpu_available()):
+            raise RuntimeError("No GPU or XPU found. A GPU or XPU is needed for FP8 quantization.")
 
-        compute_capability = torch.cuda.get_device_capability()
-        major, minor = compute_capability
-        if (major < 8) or (major == 8 and minor < 9):
-            raise ValueError(
-                "FP8 quantized models is only supported on GPUs with compute capability >= 8.9 (e.g 4090/H100)"
-                f", actual = `{major}.{minor}`"
-            )
+        if torch.cuda.is_available():
+            compute_capability = torch.cuda.get_device_capability()
+            major, minor = compute_capability
+            if (major < 8) or (major == 8 and minor < 9):
+                raise ValueError(
+                    "FP8 quantized models is only supported on GPUs with compute capability >= 8.9 (e.g 4090/H100)"
+                    f", actual = `{major}.{minor}`"
+                )
 
         device_map = kwargs.get("device_map", None)
         if device_map is None:
@@ -217,7 +218,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
             config.base_model_tp_plan = text_plan
 
-            return config
+        return config
 
     def is_serializable(self, safe_serialization=None):
         return True

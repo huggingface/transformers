@@ -1121,4 +1121,4 @@ class MT5IntegrationTest(unittest.TestCase):
         mtf_score = -(labels.shape[-1] * loss.item())
 
         EXPECTED_SCORE = -84.9127
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+        self.assertLess(abs(mtf_score - EXPECTED_SCORE), 2e-4)

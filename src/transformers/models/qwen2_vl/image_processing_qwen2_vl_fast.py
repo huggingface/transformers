@@ -35,9 +35,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    VideoInput,
     get_image_size,
-    make_batched_videos,
     make_flat_list_of_images,
     valid_images,
 )
@@ -50,6 +48,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
+from ...video_utils import VideoInput, make_batched_videos
 from .image_processing_qwen2_vl import smart_resize
 
 
@@ -334,8 +333,6 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
 
         if images is not None:
             images = make_flat_list_of_images(images)
-        if videos is not None:
-            videos = make_batched_videos(videos)
 
         if images is not None and not valid_images(images):
             raise ValueError(
@@ -343,6 +340,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
+        data = {}
         if images is not None:
             pixel_values, vision_grid_thws = [], []
             for image in images:
@@ -367,10 +365,17 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                 vision_grid_thws.append(image_grid_thw)
             pixel_values = torch.stack(pixel_values)
             vision_grid_thws = torch.tensor(vision_grid_thws)
-            data = {"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws}
+            data.update({"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws})
 
+        # kept for BC only and should be removed after v5.0
         if videos is not None:
-            pixel_values, vision_grid_thws = [], []
+            logger.warning(
+                "`Qwen2VLImageProcessorFast` works only with image inputs and doesn't process videos anymore. "
+                "This is a deprecated behavior and will be removed in v5.0. "
+                "Your videos should be forwarded to `Qwen2VLVideoProcessor`. "
+            )
+            videos = make_batched_videos(videos)
+            pixel_values_videos, vision_grid_thws_videos = [], []
             for images in videos:
                 patches, video_grid_thw = self._preprocess(
                     images,
@@ -389,11 +394,11 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                     input_data_format=input_data_format,
                     device=device,
                 )
-                pixel_values.extend(patches)
-                vision_grid_thws.append(video_grid_thw)
-            pixel_values = torch.stack(pixel_values)
-            vision_grid_thws = torch.tensor(vision_grid_thws)
-            data = {"pixel_values_videos": pixel_values, "video_grid_thw": vision_grid_thws}
+                pixel_values_videos.extend(patches)
+                vision_grid_thws_videos.append(video_grid_thw)
+            pixel_values_videos = torch.stack(pixel_values_videos)
+            vision_grid_thws_videos = torch.tensor(vision_grid_thws_videos)
+            data.update({"pixel_values_videos": pixel_values_videos, "video_grid_thw": vision_grid_thws_videos})
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 

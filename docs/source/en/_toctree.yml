@@ -39,6 +39,8 @@
       title: Tokenizers
     - local: image_processors
       title: Image processors
+    - local: video_processors
+      title: Video processors
     - local: backbones
       title: Backbones
     - local: feature_extractors
@@ -362,7 +364,9 @@
       title: Feature Extractor
     - local: main_classes/image_processor
       title: Image Processor
-    title: Main classes
+    - local: main_classes/video_processor
+      title: Video Processor
+    title: Main Classes
   - sections:
     - sections:
       - local: model_doc/albert

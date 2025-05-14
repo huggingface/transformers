@@ -1381,6 +1381,7 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
 
 @auto_docstring
 class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
+    base_model_prefix = ""
     _checkpoint_conversion_mapping = {"^model": "language_model"}
     config_class = Qwen2_5_VLConfig
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]

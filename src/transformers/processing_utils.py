@@ -32,16 +32,9 @@ from huggingface_hub.errors import EntryNotFoundError
 from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
-from .image_utils import (
-    ChannelDimension,
-    ImageInput,
-    VideoInput,
-    is_valid_image,
-    is_vision_available,
-    load_image,
-    load_video,
-)
+from .image_utils import ChannelDimension, ImageInput, is_valid_image, is_vision_available, load_image
 from .utils.chat_template_utils import render_jinja_template
+from .video_utils import VideoInput, load_video
 
 
 if is_vision_available():
@@ -84,6 +77,7 @@ AUTO_TO_BASE_CLASS_MAPPING = {
     "AutoTokenizer": "PreTrainedTokenizerBase",
     "AutoFeatureExtractor": "FeatureExtractionMixin",
     "AutoImageProcessor": "ImageProcessingMixin",
+    "AutoVideoProcessor": "BaseVideoProcessor",
 }
 
 if sys.version_info >= (3, 11):
@@ -193,7 +187,7 @@ class ImagesKwargs(TypedDict, total=False):
     do_resize: Optional[bool]
     size: Optional[dict[str, int]]
     size_divisor: Optional[int]
-    crop_size: Optional[dict[str, int]]
+    crop_size: Optional[Dict[str, int]]
     resample: Optional[Union["PILImageResampling", int]]
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
@@ -213,37 +207,45 @@ class VideosKwargs(TypedDict, total=False):
     Keyword arguments for video processing.
 
     Attributes:
+        do_convert_rgb (`bool`):
+            Whether to convert the video to RGB fromat.
         do_resize (`bool`):
-            Whether to resize the image.
+            Whether to resize the video.
         size (`Dict[str, int]`, *optional*):
             Resize the shorter side of the input to `size["shortest_edge"]`.
+        default_to_square (`bool`, *optional*, defaults to `self.default_to_square`):
+            Whether to default to a square when resizing, if size is an int.
         size_divisor (`int`, *optional*):
             The size by which to make sure both the height and width can be divided.
         resample (`PILImageResampling`, *optional*):
-            Resampling filter to use if resizing the image.
+            Resampling filter to use if resizing the video.
         do_rescale (`bool`, *optional*):
-            Whether to rescale the image by the specified scale `rescale_factor`.
+            Whether to rescale the video by the specified scale `rescale_factor`.
         rescale_factor (`int` or `float`, *optional*):
-            Scale factor to use if rescaling the image.
+            Scale factor to use if rescaling the video.
         do_normalize (`bool`, *optional*):
-            Whether to normalize the image.
+            Whether to normalize the video.
         image_mean (`float` or `List[float]`, *optional*):
-            Mean to use if normalizing the image.
+            Mean to use if normalizing the video.
         image_std (`float` or `List[float]`, *optional*):
-            Standard deviation to use if normalizing the image.
+            Standard deviation to use if normalizing the video.
         do_pad (`bool`, *optional*):
-            Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
+            Whether to pad the video to the `(max_height, max_width)` of the videos in the batch.
         do_center_crop (`bool`, *optional*):
-            Whether to center crop the image.
+            Whether to center crop the video.
+        crop_size (`Dict[str, int]`, *optional*):
+            Desired output size when applying center-cropping.
         data_format (`ChannelDimension` or `str`, *optional*):
-            The channel dimension format for the output image.
+            The channel dimension format for the output video.
         input_data_format (`ChannelDimension` or `str`, *optional*):
-            The channel dimension format for the input image.
+            The channel dimension format for the input video.
     """
 
+    do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
     size: Optional[dict[str, int]]
     size_divisor: Optional[int]
+    default_to_square: Optional[bool]
     resample: Optional["PILImageResampling"]
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
@@ -252,8 +254,10 @@ class VideosKwargs(TypedDict, total=False):
     image_std: Optional[Union[float, list[float]]]
     do_pad: Optional[bool]
     do_center_crop: Optional[bool]
+    crop_size: Optional[Dict[str, int]]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
+    device: Optional[str]
 
 
 class AudioKwargs(TypedDict, total=False):
@@ -532,6 +536,8 @@ class ProcessorMixin(PushToHubMixin):
             del output["tokenizer"]
         if "image_processor" in output:
             del output["image_processor"]
+        if "video_processor" in output:
+            del output["video_processor"]
         if "feature_extractor" in output:
             del output["feature_extractor"]
         if "chat_template" in output:
@@ -1248,6 +1254,7 @@ class ProcessorMixin(PushToHubMixin):
             return getattr(transformers_module, module_name)
         lookup_locations = [
             transformers_module.IMAGE_PROCESSOR_MAPPING,
+            transformers_module.VIDEO_PROCESSOR_MAPPING,
             transformers_module.TOKENIZER_MAPPING,
             transformers_module.FEATURE_EXTRACTOR_MAPPING,
         ]
