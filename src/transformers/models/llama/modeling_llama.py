@@ -38,7 +38,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, LayerPattern, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
@@ -353,6 +353,11 @@ class LlamaPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
+LLAMA_MASK_FUNCTIONS = {
+    "full": create_causal_mask,
+}
+
+
 @auto_docstring
 class LlamaModel(LlamaPreTrainedModel):
     def __init__(self, config: LlamaConfig):
@@ -366,7 +371,7 @@ class LlamaModel(LlamaPreTrainedModel):
         )
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = LlamaRotaryEmbedding(config=config)
-        self.layer_attention_patterns = [LayerPattern("full") for _ in range(config.num_hidden_layers)]
+        self.layer_attention_patterns = ["full" for _ in range(config.num_hidden_layers)]
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -427,15 +432,18 @@ class LlamaModel(LlamaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_masks = get_causal_masks(
-            self.layer_attention_patterns,
-            self.config._attn_implementation,
-            inputs_embeds,
-            attention_mask,
-            cache_position,
-            past_key_values,
-            output_attentions,
-        )
+        causal_masks = {} if not isinstance(attention_mask, dict) else attention_mask
+        for layer_idx, layer_pattern in enumerate(self.layer_attention_patterns):
+            if layer_pattern not in causal_masks:
+                causal_masks[layer_pattern] = LLAMA_MASK_FUNCTIONS[layer_pattern](
+                    self.config,
+                    inputs_embeds,
+                    attention_mask,
+                    cache_position,
+                    past_key_values,
+                    layer_idx,
+                    output_attentions,
+                )
 
         hidden_states = inputs_embeds
 
@@ -452,7 +460,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
             layer_outputs = self.layers[i](
                 hidden_states,
-                attention_mask=causal_masks[i],
+                attention_mask=causal_masks[self.layer_attention_patterns[i]],
                 position_ids=position_ids,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,

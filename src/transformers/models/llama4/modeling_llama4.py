@@ -27,11 +27,11 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, HybridChunkedCache
 from ...generation import GenerationMixin
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, LayerPattern, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_llama4 import Llama4Config, Llama4TextConfig
@@ -486,6 +486,12 @@ class Llama4PreTrainedModel(PreTrainedModel):
             module.positional_embedding_vlm.data.normal_(std=module.scale)
 
 
+LLAMA4_MASK_FUNCTIONS = {
+    "full": create_causal_mask,
+    "chunked": create_chunked_causal_mask,
+}
+
+
 @auto_docstring
 class Llama4TextModel(Llama4PreTrainedModel):
     _no_split_modules = ["Llama4TextDecoderLayer"]
@@ -503,9 +509,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         )
         self.norm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Llama4TextRotaryEmbedding(config=config)
-        self.layer_attention_patterns = [
-            LayerPattern(pattern, config.attention_chunk_size) for pattern in config.layer_attention_patterns
-        ]
+        self.layer_attention_patterns = config.layer_attention_patterns
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -567,15 +571,18 @@ class Llama4TextModel(Llama4PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_masks = get_causal_masks(
-            self.layer_attention_patterns,
-            self.config._attn_implementation,
-            inputs_embeds,
-            attention_mask,
-            cache_position,
-            past_key_values,
-            output_attentions,
-        )
+        causal_masks = {} if not isinstance(attention_mask, dict) else attention_mask
+        for layer_idx, layer_pattern in enumerate(self.layer_attention_patterns):
+            if layer_pattern not in causal_masks:
+                causal_masks[layer_pattern] = LLAMA4_MASK_FUNCTIONS[layer_pattern](
+                    self.config,
+                    inputs_embeds,
+                    attention_mask,
+                    cache_position,
+                    past_key_values,
+                    layer_idx,
+                    output_attentions,
+                )
 
         hidden_states = inputs_embeds
 
@@ -594,7 +601,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     self.layers[i].__call__,
                     hidden_states,
-                    causal_masks[i],
+                    causal_masks[self.layer_attention_patterns[i]],
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -606,7 +613,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             else:
                 layer_outputs = self.layers[i](
                     hidden_states,
-                    attention_mask=causal_masks[i],
+                    attention_mask=causal_masks[self.layer_attention_patterns[i]],
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,

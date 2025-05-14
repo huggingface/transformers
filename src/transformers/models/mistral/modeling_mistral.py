@@ -13,7 +13,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -24,7 +24,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, LayerPattern, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_mistral import MistralConfig
@@ -324,6 +324,12 @@ class MistralRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+MISTRAL_MASK_FUNCTIONS = {
+    "full": create_causal_mask,
+    "sliding": create_sliding_window_causal_mask,
+}
+
+
 @auto_docstring
 class MistralModel(MistralPreTrainedModel):
     def __init__(self, config: MistralConfig):
@@ -338,9 +344,7 @@ class MistralModel(MistralPreTrainedModel):
         self.norm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = MistralRotaryEmbedding(config=config)
         pattern = "sliding" if config.sliding_window is not None else "full"
-        self.layer_attention_patterns = [
-            LayerPattern(pattern, config.sliding_window) for _ in range(config.num_hidden_layers)
-        ]
+        self.layer_attention_patterns = [pattern for _ in range(config.num_hidden_layers)]
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -401,15 +405,18 @@ class MistralModel(MistralPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_masks = get_causal_masks(
-            self.layer_attention_patterns,
-            self.config._attn_implementation,
-            inputs_embeds,
-            attention_mask,
-            cache_position,
-            past_key_values,
-            output_attentions,
-        )
+        causal_masks = {} if not isinstance(attention_mask, dict) else attention_mask
+        for layer_idx, layer_pattern in enumerate(self.layer_attention_patterns):
+            if layer_pattern not in causal_masks:
+                causal_masks[layer_pattern] = MISTRAL_MASK_FUNCTIONS[layer_pattern](
+                    self.config,
+                    inputs_embeds,
+                    attention_mask,
+                    cache_position,
+                    past_key_values,
+                    layer_idx,
+                    output_attentions,
+                )
 
         hidden_states = inputs_embeds
 
@@ -426,7 +433,7 @@ class MistralModel(MistralPreTrainedModel):
 
             layer_outputs = self.layers[i](
                 hidden_states,
-                attention_mask=causal_masks[i],
+                attention_mask=causal_masks[self.layer_attention_patterns[i]],
                 position_ids=position_ids,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,
