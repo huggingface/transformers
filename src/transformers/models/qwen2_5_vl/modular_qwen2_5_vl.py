@@ -684,7 +684,6 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
-        # if we get 4D attention mask we cannot calculate rope deltas anymore. TODO @raushan fixme
         if position_ids is None and (attention_mask is None or attention_mask.ndim == 2):
             attention_mask_2d = attention_mask
             if attention_mask is not None and attention_mask.ndim == 4:
