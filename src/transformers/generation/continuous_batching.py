@@ -840,13 +840,13 @@ class ContinuousBatchProcessor:
             cumq_ptr += 1
             cumk_ptr += 1
         # now if sdpa or eager, create the attention mask!
-        self.input_ids[:, : len(input_ids)].copy_(torch.tensor(input_ids, **self.tensor_metadata))
-        self.position_ids[:, :token_position].copy_(torch.tensor(position_ids, **self.tensor_metadata))
-        self.write_index[:write_position].copy_(torch.tensor(write_index, **self.tensor_metadata))
-        self.read_index[:read_position].copy_(torch.tensor(read_index, **self.tensor_metadata))
-        self.cumulative_seqlens_q[:cumq_ptr].copy_(torch.tensor(cumulative_seqlens_q, **self.tensor_metadata))
-        self.cumulative_seqlens_k[:cumk_ptr].copy_(torch.tensor(cumulative_seqlens_k, **self.tensor_metadata))
-        self.logits_indices[:logits_to_track].copy_(torch.tensor(logits_indices, **self.tensor_metadata))
+        self.input_ids[:, : len(input_ids)] = torch.tensor(input_ids, **self.tensor_metadata)
+        self.position_ids[:, :token_position] = torch.tensor(position_ids, **self.tensor_metadata)
+        self.write_index[:write_position] = torch.tensor(write_index, **self.tensor_metadata)
+        self.read_index[:read_position] = torch.tensor(read_index, **self.tensor_metadata)
+        self.cumulative_seqlens_q[:cumq_ptr] = torch.tensor(cumulative_seqlens_q, **self.tensor_metadata)
+        self.cumulative_seqlens_k[:cumk_ptr] = torch.tensor(cumulative_seqlens_k, **self.tensor_metadata)
+        self.logits_indices[:logits_to_track] = torch.tensor(logits_indices, **self.tensor_metadata)
         for i in range(len(cumulative_seqlens_q) - 1):
             if (
                 cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
@@ -859,8 +859,7 @@ class ContinuousBatchProcessor:
                 diagonal = 1
             query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
             key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
-            self.attention_mask[..., query_range, key_range].copy_(
-                torch.triu(
+            self.attention_mask[..., query_range, key_range]= torch.triu(
                     torch.full(
                         self.attention_mask[..., query_range, key_range].shape,
                         fill_value=torch.finfo(self.model_dtype).min,
@@ -869,7 +868,6 @@ class ContinuousBatchProcessor:
                     ),
                     diagonal=diagonal,
                 )
-            )
 
     @traced
     def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
@@ -887,21 +885,16 @@ class ContinuousBatchProcessor:
     @traced
     def update_batch(self):
         """Update request states based on generated tokens."""
-        # TODO I ANM HERE NEED TO FIGURE LOGIC OPTIAML HERE
-        # has_eos = self.output_ids == self.generation_config.eos_token_id
-        # is_max_len = self.cumulative_seqlens_q[1:] + 1 >= self.max_context_len
-        # to_remove = has_eos | is_max_len
-        # tokens_to_keep = torch.where(~to_remove & self.output_ids >= 0)[1]  # can get request ids with this
-        out_tokens = self.output_ids.clone().detach().cpu()  # should be the only synch we do
+        out_tokens = self.output_ids.clone().detach().tolist()[0]  # should be the only synch we do
         finished_request_ids = []
         for i, state in enumerate(self.requests_in_batch):
             req_id = state.request_id
             if len(state.remaining_prompt_ids) == 0:
                 self._record_ttft_metric(state)
                 state.status = "decoding"
-                token = out_tokens[:, self.logits_indices[i]]
-                state.static_outputs.extend(token.tolist())
-                state.prompt_ids = token.tolist()
+                token = out_tokens[self.logits_indices[i]]
+                state.static_outputs.extend([token])
+                state.prompt_ids = [token]
                 if state.update_with_token(token):
                     finished_request_ids.append(req_id)
                 self._maybe_send_output(state, token)
@@ -1195,6 +1188,7 @@ class ContinuousBatchingManager:
                 next_tokens = torch.argmax(probs, dim=-1)
             batch_processor.output_ids.copy_(next_tokens)
 
+
     @traced(span_name="generation_loop")
     def _run_generation_loop(self):
         """Main processing loop running in the background thread."""
@@ -1226,8 +1220,9 @@ class ContinuousBatchingManager:
                         self.warmup(batch_processor)
                         first = False
                     try:
-                        with self.tracer.start_as_current_span("graph_replay"):
-                            self.graph.replay()
+                        # with self.tracer.start_as_current_span("graph_replay"):
+                        self.graph.replay()
+                        torch.cuda.synchronize()
                     except Exception as e:
                         logger.error(f"Model forward pass failed: {e}", exc_info=True)
                         batch_processor.handle_batch_error(e)
