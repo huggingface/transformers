@@ -396,6 +396,18 @@ To create a new decoding method, you need to create a new [**Model**](https://hu
 3. `custom_generate/requirements.txt`, used to optionally add new Python requirements and/or lock specific versions to correctly use your method.
 4. `README.md`, where you should add the `custom_generate` tag and document any new arguments or output type differences of your custom method here.
 
+After you've added all required files, your repository should look like this
+
+```
+your_repo/
+├── README.md          # include the 'custom_generate' tag
+├── config.json
+├── ...
+└── custom_generate/
+    ├── generate.py
+    └── requirements.txt
+```
+
 #### Adding the base model
 
 The starting point for your custom decoding method is a model repository just like any other. The model to add to this repository should be the model you've designed your method with, and it is meant to be part of a working self-contained model-generate pair. When the model in this repository is loaded, your custom decoding method will override `generate`. Don't worry -- your decoding method can still be loaded with any other Transformers model, as explained in the section above.
@@ -467,6 +479,18 @@ You can optionally specify additional Python requirements in a `requirements.txt
 #### README.md
 
 The root level `README.md` in the model repository usually describes the model therein. However, since the focus of the repository is the custom decoding method, we highly recommend to shift its focus towards describing the custom decoding method. In addition to a description of the method, we recommend documenting any input and/or output differences to the original [`~GenerationMixin.generate`]. This way, users can focus on what's new, and rely on Transformers docs for generic implementation details.
+
+For discoverability, we highly recommend you to add the `custom_generate` tag to your repository. To do so, the top of your `README.md` file should look like the example below. After you push the file, you should see the tag in your repository!
+
+```
+---
+library_name: transformers
+tags:
+  - custom_generate
+---
+
+(your markdown content here)
+```
 
 Recommended practices:
 - Document input and output differences in [`~GenerationMixin.generate`].
