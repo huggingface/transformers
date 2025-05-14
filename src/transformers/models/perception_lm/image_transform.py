@@ -419,12 +419,10 @@ class VariableSizeImageTransform(object):
         ar = self._fit_image_to_canvas(
             img_width=w, img_height=h, area_limit=self.area_limit
         )
-        print("orginal w, h", w, h)
         if ar is None:
             # If we did not find a canvas, we have to find the closest aspect ratio and downsample the image
             ar = self._find_closest_aspect_ratio(img_width=w, img_height=h)
 
-        print("closest aspect ratio", ar)
         image = _resize(
             image,
             (ar[1] * self.size, ar[0] * self.size),  # (h, w)
