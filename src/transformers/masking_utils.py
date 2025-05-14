@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import itertools
-from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
 import torch
@@ -528,7 +527,6 @@ def get_causal_masks(
     masks = {}
     # for kv_length, kv_offset, window, chunk in sizes_and_patterns:
     for layer_pattern, kv_length, kv_offset in mask_configs:
-
         # Checking here does not incur graph breaks for dynamo, in comparison to finding unique values ahead of the loop
         if layer_pattern.as_tuple() in masks:
             continue

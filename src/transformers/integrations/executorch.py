@@ -18,7 +18,7 @@ import torch
 from transformers.generation.configuration_utils import GenerationConfig
 
 from ..masking_utils import ALL_MASK_CREATION_FUNCTIONS, _ignore_causal_mask_sdpa, prepare_padding_mask
-from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ..modeling_utils import ALL_ATTENTION_FUNCTIONS, LayerPattern
 from ..utils.import_utils import is_torch_available
 
 
@@ -710,9 +710,8 @@ def sdpa_mask_without_vmap(
     cache_position: torch.Tensor,
     kv_length: int,
     kv_offset: int = 0,
+    layer_pattern: LayerPattern = LayerPattern("full"),
     attention_mask: Optional[torch.Tensor] = None,
-    sliding_window: Optional[int] = None,
-    chunk_size: Optional[int] = None,
     allow_is_causal_skip: bool = True,
     **kwargs,
 ) -> Optional[torch.Tensor]:
@@ -747,10 +746,8 @@ def sdpa_mask_without_vmap(
     # Potentially pad the 2D mask, and slice it correctly
     padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
 
-    # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
-    if allow_is_causal_skip and _ignore_causal_mask_sdpa(
-        padding_mask, q_length, kv_length, sliding_window, chunk_size
-    ):
+    #  Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
+    if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, layer_pattern.local_size):
         return None
 
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
@@ -762,12 +759,14 @@ def sdpa_mask_without_vmap(
     # Simplest and most efficient way to obtain a causal mask
     causal_mask = kv_arange <= reshaped_cache_position
     # If using sliding window, add the sliding mask
-    if sliding_window is not None:
-        sliding_mask_overlay = kv_arange > reshaped_cache_position - sliding_window
+    if layer_pattern.pattern == "sliding":
+        sliding_mask_overlay = kv_arange > reshaped_cache_position - layer_pattern.local_size
         causal_mask *= sliding_mask_overlay
     # If using chunk attention, add the chunked mask
-    elif chunk_size is not None:
-        chunked_mask_overlay = kv_arange // chunk_size == reshaped_cache_position // chunk_size
+    elif layer_pattern.pattern == "chunked":
+        chunked_mask_overlay = (
+            kv_arange // layer_pattern.local_size == reshaped_cache_position // layer_pattern.local_size
+        )
         causal_mask *= chunked_mask_overlay
 
     causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
