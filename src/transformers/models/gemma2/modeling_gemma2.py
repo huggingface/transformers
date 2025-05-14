@@ -493,7 +493,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
                     partial(self.layers[i].__call__, **flash_attn_kwargs),
                     hidden_states,
                     position_embeddings,
-                    causal_masks[self.layer_attention_patterns[i].as_tuple()],
+                    causal_masks[self.layer_attention_patterns[i]],
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -504,7 +504,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
                 layer_outputs = self.layers[i](
                     hidden_states,
                     position_embeddings=position_embeddings,
-                    attention_mask=causal_masks[self.layer_attention_patterns[i].as_tuple()],
+                    attention_mask=causal_masks[self.layer_attention_patterns[i]],
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
