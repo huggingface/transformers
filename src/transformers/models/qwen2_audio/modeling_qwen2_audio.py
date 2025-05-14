@@ -362,7 +362,8 @@ QWEN2AUDIO_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.whisper.modeling_whisper.WhisperEncoderLayer with Whisper->Qwen2Audio, WHISPER->QWEN2AUDIO
+# (BC Dep) Copied from transformers.models.whisper.modeling_whisper.WhisperEncoderLayer with Whisper->Qwen2Audio, WHISPER->QWEN2AUDIO
+# TODO(vasqu): fix copies when enabling whisper attn interface
 class Qwen2AudioEncoderLayer(nn.Module):
     def __init__(self, config: Qwen2AudioConfig):
         super().__init__()

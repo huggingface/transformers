@@ -31,6 +31,13 @@ from ..time_series_transformer.modeling_time_series_transformer import (
 from .configuration_informer import InformerConfig
 
 
+def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the negative log likelihood loss from input distribution with respect to target.
+    """
+    return -input.log_prob(target)
+
+
 class InformerFeatureEmbedder(TimeSeriesFeatureEmbedder):
     pass
 
@@ -78,6 +85,7 @@ class InformerPreTrainedModel(PreTrainedModel):
 
 class InformerAttention(BartAttention):
     pass
+
 
 class InformerProbSparseAttention(nn.Module):
     """Probabilistic Attention mechanism to select the "active"

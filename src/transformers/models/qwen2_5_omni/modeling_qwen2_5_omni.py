@@ -736,6 +736,8 @@ QWEN2_5_OMNI_AUDIO_ATTENTION_CLASSES = {
 }
 
 
+# (BC Dep) Copied from transformers.models.whisper.modeling_whisper.WhisperEncoderLayer with Whisper->Qwen25OmniAudio, WHISPER->Qwen25OmniAudio
+# TODO(vasqu): fix copies when enabling whisper attn interface
 class Qwen2_5OmniAudioEncoderLayer(nn.Module):
     def __init__(self, config: Qwen2_5OmniAudioEncoderConfig):
         super().__init__()

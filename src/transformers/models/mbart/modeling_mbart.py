@@ -278,7 +278,6 @@ class MBartAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-
 class MBartEncoderLayer(nn.Module):
     def __init__(self, config: MBartConfig):
         super().__init__()

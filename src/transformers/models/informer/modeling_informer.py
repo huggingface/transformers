@@ -1692,13 +1692,6 @@ class InformerModel(InformerPreTrainedModel):
         )
 
 
-def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
-    """
-    Computes the negative log likelihood loss from input distribution with respect to target.
-    """
-    return -input.log_prob(target)
-
-
 def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
     """
     Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
@@ -1721,6 +1714,13 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
         return (weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()) / sum_weights
     else:
         return input_tensor.mean(dim=dim)
+
+
+def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the negative log likelihood loss from input distribution with respect to target.
+    """
+    return -input.log_prob(target)
 
 
 @auto_docstring

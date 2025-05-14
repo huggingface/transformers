@@ -33,7 +33,7 @@ from .configuration_patchtsmixer import PatchTSMixerConfig
 
 
 if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
+    pass
 
 
 logger = logging.get_logger(__name__)
