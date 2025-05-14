@@ -839,8 +839,8 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, Gemma3ForCausalLM
 
-        >>> model = Gemma3ForCausalLM.from_pretrained("google/gemma-2-9b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
+        >>> model = Gemma3ForCausalLM.from_pretrained("google/gemma-3-4b-pt")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-3-4b-pt")
 
         >>> prompt = "What is your favorite condiment?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -848,7 +848,7 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "What is your favorite condiment?"
+        "What is your favorite condiment? Mine is obviously hot sauce. I like my meats and sandwiches just spicy enough to make me sweat and salivate all"
         ```"""
 
         if self.training and self.config._attn_implementation != "eager":
