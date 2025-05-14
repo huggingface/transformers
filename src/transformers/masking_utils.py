@@ -514,7 +514,6 @@ def get_causal_masks(
         kv_length = input_embeds.shape[1]
         mask_sizes = [(kv_length, 0)] * num_layers
 
-    mask_configs = [(layer_pattern, *sizes) for layer_pattern, sizes in zip(layer_patterns, mask_sizes)]
     # Move the mask to correct device, and potentially switch dtype for efficiency
     if attention_mask is not None:
         attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
@@ -526,7 +525,7 @@ def get_causal_masks(
     # We now create all the masks
     masks = {}
     # for kv_length, kv_offset, window, chunk in sizes_and_patterns:
-    for layer_pattern, kv_length, kv_offset in mask_configs:
+    for layer_pattern, (kv_length, kv_offset) in zip(layer_patterns, mask_sizes):
         # Checking here does not incur graph breaks for dynamo, in comparison to finding unique values ahead of the loop
         if layer_pattern.as_tuple() in masks:
             continue
