@@ -200,7 +200,7 @@ class TFWhisperModelTester:
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
         model = TFWhisperModel(config=config).get_decoder()
-        # take a slice so we're shorter than the seqeuence length and can append later
+        # take a slice so we're shorter than the sequence length and can append later
         input_ids = inputs_dict["decoder_input_ids"][:, :-10]
         attention_mask = inputs_dict["decoder_attention_mask"][:, :-10]
 

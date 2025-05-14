@@ -52,7 +52,7 @@ if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
 
 if is_torch_xla_available():
-    import torch_xla.core.xla_model as xm
+    import torch_xla.runtime as xr
 
 if is_torch_available():
     from torch.optim.lr_scheduler import LRScheduler
@@ -398,9 +398,9 @@ class SequentialDistributedSampler(Sampler):
 
 
 def get_tpu_sampler(dataset: torch.utils.data.Dataset, batch_size: int):
-    if xm.xrt_world_size() <= 1:
+    if xr.world_size() <= 1:
         return RandomSampler(dataset)
-    return DistributedSampler(dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
+    return DistributedSampler(dataset, num_replicas=xr.world_size(), rank=xr.global_ordinal())
 
 
 def nested_new_like(arrays, num_samples, padding_index=-100):
@@ -921,8 +921,9 @@ def _get_learning_rate(self):
             last_lr = self.optimizer.param_groups[0]["lr"]
         else:
             last_lr = self.lr_scheduler.get_last_lr()[0]
-        if torch.is_tensor(last_lr):
-            last_lr = last_lr.item()
+
+    if torch.is_tensor(last_lr):
+        last_lr = last_lr.item()
     return last_lr
 
 

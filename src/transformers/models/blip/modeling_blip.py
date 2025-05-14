@@ -27,21 +27,12 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_blip import BlipConfig, BlipTextConfig, BlipVisionConfig
 from .modeling_blip_text import BlipTextLMHeadModel, BlipTextModel
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "Salesforce/blip-vqa-base"
 
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss
@@ -64,7 +55,7 @@ class BlipForConditionalGenerationModelOutput(ModelOutput):
 
     Args:
         loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            Languge modeling loss from the text decoder.
+            Language modeling loss from the text decoder.
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`, *optional*):
             Prediction scores of the language modeling head of the text decoder model.
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*):
@@ -109,7 +100,7 @@ class BlipTextVisionModelOutput(ModelOutput):
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Languge modeling loss from the text decoder.
+            Language modeling loss from the text decoder.
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
             The image embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -145,7 +136,7 @@ class BlipImageTextMatchingModelOutput(ModelOutput):
         itm_score (`torch.FloatTensor`):
             The image-text similarity scores.
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Languge modeling loss from the text decoder.
+            Language modeling loss from the text decoder.
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
             The image embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -462,12 +453,8 @@ class BlipEncoderLayer(nn.Module):
         return outputs
 
 
+@auto_docstring
 class BlipPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = BlipConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
@@ -502,108 +489,6 @@ class BlipPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
-
-
-BLIP_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`BlipConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-BLIP_TEXT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoProcessor`]. See [`BlipProcessor.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-BLIP_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`BlipImageProcessor`]. See [`BlipImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to interpolate the pre-trained position encodings.
-"""
-
-BLIP_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoProcessor`]. See [`BlipProcessor.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`BlipImageProcessor`]. See [`BlipImageProcessor.__call__`] for details.
-        return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to interpolate the pre-trained position encodings.
-"""
 
 
 class BlipEncoder(nn.Module):
@@ -707,8 +592,7 @@ class BlipVisionModel(BlipPreTrainedModel):
 
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=BlipVisionConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -717,10 +601,6 @@ class BlipVisionModel(BlipPreTrainedModel):
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -759,11 +639,10 @@ class BlipVisionModel(BlipPreTrainedModel):
         return self.embeddings
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     This model is going to be deprecated in future versions. Please use `BlipForConditionalGeneration`, `BlipForQuestionAnswering` or `BlipForImageTextRetrieval` depending on your usecase.
-    """,
-    BLIP_START_DOCSTRING,
+    """
 )
 class BlipModel(BlipPreTrainedModel):
     config_class = BlipConfig
@@ -810,7 +689,7 @@ class BlipModel(BlipPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
-    @add_start_docstrings_to_model_forward(BLIP_TEXT_INPUTS_DOCSTRING)
+    @auto_docstring
     def get_text_features(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -848,7 +727,7 @@ class BlipModel(BlipPreTrainedModel):
 
         return text_features
 
-    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -890,7 +769,7 @@ class BlipModel(BlipPreTrainedModel):
 
         return image_features
 
-    @add_start_docstrings_to_model_forward(BLIP_INPUTS_DOCSTRING)
+    @auto_docstring
     def get_multimodal_features(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -945,8 +824,7 @@ class BlipModel(BlipPreTrainedModel):
 
         return multimodal_features
 
-    @add_start_docstrings_to_model_forward(BLIP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BlipOutput, config_class=BlipConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -960,7 +838,8 @@ class BlipModel(BlipPreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BlipOutput]:
         r"""
-        Returns:
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
 
         Examples:
 
@@ -1042,14 +921,13 @@ class BlipModel(BlipPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     BLIP Model for image captioning. The model consists of a vision encoder and a text decoder. One can optionally pass
     `input_ids` to the model, which serve as a text prompt, to make the text decoder continue the prompt. Otherwise,
     the decoder starts generating text from the [BOS] (beginning-of-sequence) token. will start generating the caption
     from the text input. If no text input is provided, the decoder will start with the [BOS] token only.
-    """,
-    BLIP_START_DOCSTRING,
+    """
 )
 class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
     config_class = BlipConfig
@@ -1075,8 +953,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.text_decoder.set_input_embeddings(value)
 
-    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BlipForConditionalGenerationModelOutput, config_class=BlipVisionConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1089,8 +966,6 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
         interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BlipForConditionalGenerationModelOutput]:
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -1225,13 +1100,12 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
         return outputs
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     BLIP Model for visual question answering. The model consists of a vision encoder, a text encoder as well as a text
     decoder. The vision encoder will encode the input image, the text encoder will encode the input question together
     with the encoding of the image, and the text decoder will output the answer to the question.
-    """,
-    BLIP_START_DOCSTRING,
+    """
 )
 class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
     config_class = BlipConfig
@@ -1259,8 +1133,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
         # This will return shared embeddings if they are shared else specific to encoder.
         return self.text_encoder.get_input_embeddings()
 
-    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BlipTextVisionModelOutput, config_class=BlipVisionConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -1275,8 +1148,6 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
         interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BlipTextVisionModelOutput]:
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -1459,13 +1330,12 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
         return outputs
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     BLIP Model with a vision and text projector, and a classification head on top. The model is used in the context of
     image-text retrieval. Given an image and a text, the model returns the probability of the text being relevant to
     the image.
-    """,
-    BLIP_START_DOCSTRING,
+    """
 )
 class BlipForImageTextRetrieval(BlipPreTrainedModel):
     config_class = BlipConfig
@@ -1506,8 +1376,7 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_encoder.set_input_embeddings(value)
 
-    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BlipTextVisionModelOutput, config_class=BlipVisionConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -1520,7 +1389,8 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BlipTextVisionModelOutput]:
         r"""
-        Returns:
+        use_itm_head (`bool`, *optional*, defaults to `True`):
+            Whether or not to use the image-text matching head.
 
         Examples:
 

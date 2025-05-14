@@ -20,6 +20,7 @@ from transformers import MptConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -483,6 +484,7 @@ class MptIntegrationTests(unittest.TestCase):
         decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
         self.assertEqual(decoded_output, expected_output)
 
+    @require_deterministic_for_xpu
     def test_generation_batched(self):
         model_id = "mosaicml/mpt-7b"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -498,10 +500,19 @@ class MptIntegrationTests(unittest.TestCase):
 
         inputs = tokenizer(input_texts, return_tensors="pt", padding=True).to(torch_device)
 
-        expected_output = [
-            "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for the",
-            "Today I am going at the gym and then I am going to go to the grocery store. I am going to buy some food and some",
-        ]
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): [
+                    "Hello my name is Tiffany. I am a mother of two beautiful children. I have been a nanny for over",
+                    "Today I am going at the gym and then I am going to go to the mall with my mom. I am going to go to the",
+                ],
+                ("cuda", 7): [
+                    "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for the",
+                    "Today I am going at the gym and then I am going to go to the grocery store. I am going to buy some food and some",
+                ],
+            }
+        )
+        expected_output = expected_outputs.get_expectation()
         outputs = model.generate(**inputs, max_new_tokens=20)
 
         decoded_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
