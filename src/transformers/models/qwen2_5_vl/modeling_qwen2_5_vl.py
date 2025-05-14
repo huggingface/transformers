@@ -40,7 +40,7 @@ from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask,
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, is_torchdynamo_compiling, logging
 from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLTextConfig, Qwen2_5_VLVisionConfig
 
 
@@ -1629,9 +1629,9 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)
                 image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
-                n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
+                n_image_tokens = (input_ids == self.config.image_token_id).sum()
                 n_image_features = image_embeds.shape[0]
-                if n_image_tokens != n_image_features:
+                if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
                     raise ValueError(
                         f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                     )
@@ -1647,9 +1647,9 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
                 video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
-                n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
+                n_video_tokens = (input_ids == self.config.video_token_id).sum()
                 n_video_features = video_embeds.shape[0]
-                if n_video_tokens != n_video_features:
+                if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
                     raise ValueError(
                         f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
                     )
@@ -1673,10 +1673,15 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 attention_mask_2d = (1.0 - attention_mask_2d).int()
 
             # calculate RoPE index once per generation in the pre-fill stage only
-            if (
+            prefill_compiled_stage = is_torchdynamo_compiling() and (
                 (input_ids is not None and input_ids.shape[1] != 1)
                 or (inputs_embeds is not None and inputs_embeds.shape[1] != 1)
-            ) or self.rope_deltas is None:
+            )
+            prefill_noncompiled_stage = not is_torchdynamo_compiling() and (
+                (cache_position is not None and cache_position[0] == 0)
+                or (past_key_values is None or past_key_values.get_seq_length() == 0)
+            )
+            if (prefill_compiled_stage or prefill_noncompiled_stage) or self.rope_deltas is None:
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
                     image_grid_thw,
