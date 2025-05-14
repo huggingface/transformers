@@ -312,6 +312,24 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             expected_output_video_shape = [112, 1176]
             self.assertListEqual(list(prcocess_out.pixel_values.shape), expected_output_video_shape)
 
+    def test_temporal_padding(self):
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # Create random video inputs with a number of frames not divisible by temporal_patch_size
+            image_processor_tester = Qwen2VLImageProcessingTester(self, num_frames=5, temporal_patch_size=4)
+            video_inputs = image_processor_tester.prepare_video_inputs(equal_resolution=True)
+
+            # Process the video inputs
+            process_out = image_processing(None, videos=video_inputs, return_tensors="pt")
+            encoded_video = process_out.pixel_values_videos
+
+            # Check the shape after padding
+            expected_output_video_shape = (102900, 1176)  # Adjusted based on padding
+            self.assertEqual(tuple(encoded_video.shape), expected_output_video_shape)
+            # Check divisibility by temporal_patch_size
+            self.assertEqual(encoded_video.shape[0] % 4, 0)
+
     @require_vision
     @require_torch
     def test_slow_fast_equivalence(self):

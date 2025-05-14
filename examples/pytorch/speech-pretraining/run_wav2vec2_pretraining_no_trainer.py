@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Union
 
+import aiohttp
 import datasets
 import torch
 from accelerate import Accelerator
@@ -454,6 +455,7 @@ def main():
             split=train_split_name,
             cache_dir=args.cache_dir,
             trust_remote_code=args.trust_remote_code,
+            storage_options={"client_kwargs": {"timeout": aiohttp.ClientTimeout(total=60 * 60)}},
         )
         datasets_splits.append(dataset_split)
 
