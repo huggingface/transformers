@@ -1806,8 +1806,8 @@ class BitNetQuantConfig(QuantizationConfigMixin):
         modules_to_not_convert: Optional[List] = None,
         linear_class: Optional[str] = "bitlinear",
         quantization_mode: Optional[str] = "offline",
-        use_rms_norm: bool = None,
-        rms_norm_eps: float = None,
+        use_rms_norm: Optional[bool] = False,
+        rms_norm_eps: Optional[float] = 1e-6,
         **kwargs,
     ):
         if linear_class not in ["bitlinear", "autobitlinear"]:
