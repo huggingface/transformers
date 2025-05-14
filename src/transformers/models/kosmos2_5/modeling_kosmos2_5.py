@@ -760,7 +760,6 @@ class Kosmos2_5TextFFN(nn.Module):
 class Kosmos2_5TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # Similar to ...models.bart.modeling_bart.BartAttention.__init__ except an additional `inner_attn_ln`.
     def __init__(
         self,
         config,
@@ -768,7 +767,6 @@ class Kosmos2_5TextAttention(nn.Module):
         num_heads: int,
         dropout: float = 0.0,
         is_decoder: bool = False,
-        add_inner_attn_layernorm: bool = False,
         bias: bool = True,
         is_causal=True,
         layer_idx: Optional[int] = None,
@@ -794,11 +792,6 @@ class Kosmos2_5TextAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.is_causal = is_causal
-
-        # End opy
-        self.inner_attn_ln = None
-        if add_inner_attn_layernorm:
-            self.inner_attn_ln = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     # Copied from transformers.models.kosmos2.modeling_kosmos2.KosmosTextAttention._shape
     def _shape(self, projection: torch.Tensor) -> torch.Tensor:
@@ -858,10 +851,6 @@ class Kosmos2_5TextAttention(nn.Module):
         )
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1)
-
-        if self.inner_attn_ln is not None:
-            attn_output = self.inner_attn_ln(attn_output)
-
         attn_output = self.out_proj(attn_output)
         return attn_output, attn_weights
 
@@ -877,7 +866,6 @@ class Kosmos2_5TextBlock(GradientCheckpointingLayer):
             num_heads=config.attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
-            add_inner_attn_layernorm=False,
             is_causal=True,
             layer_idx=layer_idx,
         )
@@ -1223,7 +1211,6 @@ class Kosmos2_5ImageToTextProjection(nn.Module):
             config.text_config.attention_heads,
             dropout=config.text_config.attention_dropout,
             is_decoder=False,
-            add_inner_attn_layernorm=False,
             is_causal=False,
         )
 
