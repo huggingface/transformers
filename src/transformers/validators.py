@@ -19,6 +19,8 @@ describe the constraints of your dataclass fields, for the best user experience 
 
 from typing import Callable, Optional
 
+from huggingface_hub.dataclasses import as_validated_field
+
 from .activations import ACT2CLS
 
 
@@ -63,6 +65,7 @@ def interval(
     min = min or float("-inf")
     max = max or float("inf")
 
+    @as_validated_field
     def _inner(value: int | float):
         min_valid = min <= value if not exclude_min else min < value
         max_valid = value <= max if not exclude_max else value < max
@@ -72,12 +75,14 @@ def interval(
     return _inner
 
 
+@as_validated_field
 def probability(value: float):
     """Ensures that `value` is a valid probability number, i.e. [0,1]."""
     if not 0 <= value <= 1:
         raise ValueError(f"Value must be a probability between 0.0 and 1.0, got {value}.")
 
 
+@as_validated_field
 def token(value: Optional[int]):
     """Ensures that `value` is a potential token. A token, when set, must be a non-negative integer."""
     if value is not None and value < 0:
@@ -87,6 +92,7 @@ def token(value: Optional[int]):
 # String validators
 
 
+@as_validated_field
 def activation_fn_key(value: str):
     """Ensures that `value` is a string corresponding to an activation function."""
     # TODO (joao): in python 3.11+, we can build a Literal type from the keys of ACT2CLS
