@@ -27,6 +27,7 @@ from packaging import version
 from torch import nn
 from torch.nn import functional as F
 
+from transformers.generation.beam_constraints import OrderedConstraint, TemplateConstraint
 from transformers.generation.candidate_generator import AssistantVocabTranslatorCache
 
 from ..cache_utils import (
@@ -88,12 +89,14 @@ from .logits_process import (
     MinPLogitsWarper,
     NoBadWordsLogitsProcessor,
     NoRepeatNGramLogitsProcessor,
+    OrderedConstraintLogitsProcessor,
     PrefixConstrainedLogitsProcessor,
     RepetitionPenaltyLogitsProcessor,
     SequenceBiasLogitsProcessor,
     SuppressTokensAtBeginLogitsProcessor,
     SuppressTokensLogitsProcessor,
     TemperatureLogitsWarper,
+    TemplateConstraintLogitsProcessor,
     TopKLogitsWarper,
     TopPLogitsWarper,
     TypicalLogitsWarper,
@@ -1022,6 +1025,7 @@ class GenerationMixin:
         model_kwargs: Optional[Dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
+        constraints: Optional[List[str]] = None,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsProcessor`]
@@ -1242,6 +1246,21 @@ class GenerationMixin:
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
             processors.append(LogitNormalization())
+
+        if constraints is not None:
+            for constraint in constraints:
+                if isinstance(constraint, TemplateConstraint):
+                    processors.append(
+                        TemplateConstraintLogitsProcessor(
+                            template=constraint.template, vocab_size=self.config.vocab_size
+                        )
+                    )
+                elif isinstance(constraint, OrderedConstraint):
+                    processors.append(
+                        OrderedConstraintLogitsProcessor(
+                            ordered_token_ids=constraint.ordered_token_ids, vocab_size=self.config.vocab_size
+                        )
+                    )
         return processors
 
     def _get_stopping_criteria(
@@ -2399,6 +2418,7 @@ class GenerationMixin:
             model_kwargs=model_kwargs,
             negative_prompt_ids=negative_prompt_ids,
             negative_prompt_attention_mask=negative_prompt_attention_mask,
+            constraints=kwargs.get("constraints", []),
         )
         prepared_stopping_criteria = self._get_stopping_criteria(
             generation_config=generation_config, stopping_criteria=stopping_criteria, tokenizer=tokenizer, **kwargs

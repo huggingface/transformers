@@ -2962,3 +2962,135 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             The expected mean g-value for watermarked text.
         """
         return coinflip_prob + coinflip_prob * (1 - coinflip_prob) * (1 - (1 / vocab_size))
+
+
+class TemplateConstraintLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] that constrains generation based on a template structure, such as slot-filling tokens.
+    This processor is paired with a TemplateConstraint to generate output tokens. The processor is used when
+    a TemplateConstraint object is passed to a generation function.
+
+    The constraint is defined via a template sequence, where special placeholder token ids (e.g. None) indicate positions
+    to be generated freely, while fixed token ids must appear exactly at that position.
+
+    Args:
+        template (`List[Optional[int]]`):
+            A list representing the output format, with fixed token ids and placeholder values.
+        placeholder_token_id (`int`, *optional*, defaults to -1):
+            The token id representing a free-to-generate position.
+
+    Example:
+    ```python
+    >>> from transformers import AutoTokenizer, GPT2LMHeadModel
+    >>> from transformers.generation.beam_constraints import TemplateConstraint
+
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> model = GPT2LMHeadModel.from_pretrained("gpt2")
+    >>> template = [" the", None, " School", " of", None, " in"]
+    >>> ids = [tokenizer.encode(t, add_special_tokens=False)[0] if t else None for t in template]
+    >>> constraint = TemplateConstraint(ids)
+
+    >>> inputs = tokenizer("The woman attended", return_tensors="pt")
+    >>> outputs = model.generate(inputs.input_ids, constraints=[constraint], num_beams=5, max_length=20)
+
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    She studied at the London School
+    ```
+    """
+
+    def __init__(self, template: List[Optional[int]], vocab_size: int):
+        self.template = template
+        self.vocab_size = vocab_size
+        self.position = 0
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if self.position >= len(self.template):
+            return scores
+
+        expected = self.template[self.position]
+        self.position += 1
+
+        if expected is None:
+            return scores
+        else:
+            mask = torch.full_like(scores, -float("inf"))
+            mask[..., expected] = 0
+            return scores + mask
+
+
+class OrderedConstraintLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] that enforces an ordered constraint on token generation. Ensures that specified sequences of
+    tokens appear in the generated text in a given order, allowing other tokens in between. This processor is paired
+    with a OrderedConstraint to generate output tokens. The processor is used when a OrderedConstraint object is passed
+    to a generation function.
+
+    Please note that `penality_strength` and `boost_strength` are emperical values. Users are encouraged to experiment
+    with these parameters to achieve the best results.
+
+    Args:
+        ordered_token_sequences (`List[int]`):
+            A list of token sequences that must appear in order during generation. Each sequence is a list of token ids.
+        current_index (`int`, *optional*, defaults to 0):
+            Tracks which ordered constraint the model is currently expected to generate next.
+
+    Example:
+
+    ```python
+    >>> from transformers import AutoTokenizer, GPT2LMHeadModel
+    >>> from transformers.generation.beam_constraints import OrderedConstraint
+
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> model = GPT2LMHeadModel.from_pretrained("gpt2")
+    >>> phrase = [" be", " will", " well"]
+    >>> ids = [tokenizer.encode(p, add_special_tokens=False)[0] for p in phrase]
+    >>> constraint = OrderedConstraint(ids)
+
+    >>> inputs = tokenizer("Healthier life", return_tensors="pt")
+    >>> outputs = model.generate(inputs.input_ids, constraints=[constraint], num_beams=5)
+
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Healthier life can be challenging but will improve your well being
+    ```
+    """
+
+    def __init__(
+        self,
+        ordered_token_ids: List[int],
+        vocab_size: int,
+        penalty_strength: float = 2,
+        boost_strength: float = 3,
+    ):
+        self.ordered_token_ids = ordered_token_ids
+        self.vocab_size = vocab_size
+        self.position = 0
+        self.penalty_strength = penalty_strength
+        self.boost_strength = boost_strength
+        self.generated_tokens = set()
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if self.position >= len(self.ordered_token_ids):
+            return scores
+
+        expected_token = self.ordered_token_ids[self.position]
+        last_token = input_ids[0, -1].item()
+
+        if last_token == expected_token:
+            self.position += 1
+            if self.position >= len(self.ordered_token_ids):
+                return scores
+            expected_token = self.ordered_token_ids[self.position]
+
+        # Adjust scores by penalizing all tokens except the template token, which is boosted
+        adjusted_scores = scores.clone()
+        penalty_mask = torch.full_like(scores, -self.penalty_strength)
+        penalty_mask[:, expected_token] = self.boost_strength
+
+        adjusted_scores += penalty_mask
+
+        return adjusted_scores
+
+    def advance(self) -> None:
+        self.position += 1
