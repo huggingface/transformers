@@ -1791,10 +1791,10 @@ class BitNetQuantConfig(QuantizationConfigMixin):
             In `offline` mode, quantization parameters are pre-calculated *before* inference.
             These parameters are then fixed and loaded into the quantized model. This
             generally results in lower runtime overhead compared to online quantization.
-        use_rms_norm (`bool`, *optional*, defaults to `False`):
+        use_rms_norm (`bool`, *optional*):
             Whether to apply RMSNorm on the activations before quantization. This matches the original BitNet paper's approach
             of normalizing activations before quantization/packing.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
+        rms_norm_eps (`float`, *optional*):
             The epsilon value used in the RMSNorm layer for numerical stability.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional keyword arguments that may be used by specific quantization
@@ -1806,8 +1806,8 @@ class BitNetQuantConfig(QuantizationConfigMixin):
         modules_to_not_convert: Optional[List] = None,
         linear_class: Optional[str] = "bitlinear",
         quantization_mode: Optional[str] = "offline",
-        use_rms_norm: bool = False,
-        rms_norm_eps: float = 1e-6,
+        use_rms_norm: bool = None,
+        rms_norm_eps: float = None,
         **kwargs,
     ):
         if linear_class not in ["bitlinear", "autobitlinear"]:
