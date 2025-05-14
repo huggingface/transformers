@@ -17,6 +17,7 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
+from ..generation import GenerationConfig
 from ..utils import (
     ExplicitEnum,
     add_end_docstrings,
@@ -106,6 +107,10 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     similar to the (extractive) question answering pipeline; however, the pipeline takes an image (and optional OCR'd
     words/boxes) as input instead of text context.
 
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+
     Example:
 
     ```python
@@ -128,6 +133,11 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     See the up-to-date list of available models on
     [huggingface.co/models](https://huggingface.co/models?filter=document-question-answering).
     """
+
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

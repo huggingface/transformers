@@ -3,6 +3,7 @@ import itertools
 import types
 from typing import Dict
 
+from ..generation import GenerationConfig
 from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
@@ -40,10 +41,16 @@ class Chat:
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class TextGenerationPipeline(Pipeline):
     """
-    Language generation pipeline using any `ModelWithLMHead`. This pipeline predicts the words that will follow a
-    specified text prompt. When the underlying model is a conversational model, it can also accept one or more chats,
-    in which case the pipeline will operate in chat mode and will continue the chat(s) by adding its response(s).
-    Each chat takes the form of a list of dicts, where each dict contains "role" and "content" keys.
+    Language generation pipeline using any `ModelWithLMHead` or `ModelForCausalLM`. This pipeline predicts the words
+    that will follow a specified text prompt. When the underlying model is a conversational model, it can also accept
+    one or more chats, in which case the pipeline will operate in chat mode and will continue the chat(s) by adding
+    its response(s). Each chat takes the form of a list of dicts, where each dict contains "role" and "content" keys.
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - do_sample: True
+    - temperature: 0.7
 
     Examples:
 
@@ -94,6 +101,13 @@ class TextGenerationPipeline(Pipeline):
     the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous, with people, even a bishop,
     begging for his blessing. <eod> </s> <eos>
     """
+
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+        do_sample=True,  # free-form text generation often uses sampling
+        temperature=0.7,
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
