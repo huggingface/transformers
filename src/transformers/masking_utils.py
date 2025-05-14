@@ -20,6 +20,7 @@ import torch.nn.functional as F
 from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 
 from .cache_utils import Cache
+from .configuration_utils import PretrainedConfig
 from .modeling_utils import GeneralInterface, LayerPattern
 from .utils.import_utils import is_torchdynamo_compiling
 
@@ -458,17 +459,95 @@ class AttentionMaskInterface(GeneralInterface):
 ALL_MASK_CREATION_FUNCTIONS: AttentionMaskInterface = AttentionMaskInterface()
 
 
-def get_causal_masks(
-    layer_patterns: list[LayerPattern],
-    attn_implementation: str,
+def _create_mask(
+    layer_pattern: LayerPattern,
+    config: PretrainedConfig,
     input_embeds: torch.Tensor,
     attention_mask: Optional[Union[torch.Tensor, list[torch.Tensor]]],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
+    layer_idx: int,
     output_attentions: bool = False,
-) -> list[Optional[Union[torch.Tensor, "BlockMask"]]]:
+) -> Optional[Union[torch.Tensor, "BlockMask"]]:
     """
-    Create all required masks, one per layer. This is the only function to be called inside the modeling files.
+    General utility function that is able to generate all types of masks, for all attention functions. This is
+    intended to be reused by each public mask creation function (e.g. `create_causal_mask`, `create_sliding_window_causal_mask`,
+    etc)
+
+    Args:
+        layer_pattern (`LayerPattern`):
+            The structure describing the attention pattern used by a DecoderLayer.
+        config (`PretrainedConfig`):
+            The model config.
+        input_embeds (`torch.Tensor`):
+            The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
+            batch size, query length and dtype.
+        attention_mask (`torch.Tensor` or `list[torch.Tensor]`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
+            It can also be an already prepared 4D mask, in which case it is replicated for each layer. Can also be
+            a list of masks, in which case it is returned as-is.
+        cache_position (`torch.Tensor`):
+            A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
+        past_key_values (`Cache`, optional):
+            The past key values, if we use a cache.
+        output_attentions (`bool`, optional):
+            Whether we return the attention scores or not. By default `False`.
+    """
+    # For BC -> if the mask is passed in 4D directly, simply replicate it on all layers
+    if (
+        isinstance(attention_mask, torch.Tensor)
+        and attention_mask.ndim == 4
+        and config._attn_implementation != "flash_attention_2"
+    ):
+        return attention_mask
+
+    # For TGI/vLLM backends, or other custom attention without equivalent mask creation: we don't need a mask!
+    if config._attn_implementation not in ALL_MASK_CREATION_FUNCTIONS:
+        return None
+
+    batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
+    # Move the mask to correct device, and potentially switch dtype for efficiency
+    if attention_mask is not None and attention_mask.ndim == 2:
+        attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
+
+    # If using a cache, it can give all informations about mask sizes based on seen tokens
+    if past_key_values is not None:
+        kv_length, kv_offset = past_key_values.get_mask_sizes(cache_position, layer_idx)
+    # Otherwise, the sizes are simply the input sizes
+    else:
+        kv_length, kv_offset = input_embeds.shape[1], 0
+
+    mask_interface = ALL_MASK_CREATION_FUNCTIONS[config._attn_implementation]
+    # Sdpa fallbacks to eager in the Attention modules if `output_attentions=True`
+    if config._attn_implementation == "sdpa" and output_attentions:
+        mask_interface = ALL_MASK_CREATION_FUNCTIONS["eager"]
+
+    # We now create the mask
+    return mask_interface(
+        batch_size=batch_size,
+        cache_position=cache_position,
+        kv_length=kv_length,
+        kv_offset=kv_offset,
+        layer_pattern=layer_pattern,
+        attention_mask=attention_mask,
+        # Additional kwargs for eager
+        dtype=dtype,
+        # Pass the config as well, in case someone wants to easily have their own mask_interface
+        config=config,
+    )
+
+
+def create_causal_mask(
+    config: PretrainedConfig,
+    input_embeds: torch.Tensor,
+    attention_mask: Optional[Union[torch.Tensor, list[torch.Tensor]]],
+    cache_position: torch.Tensor,
+    past_key_values: Optional[Cache],
+    layer_idx: int,
+    output_attentions: bool = False,
+) -> Optional[Union[torch.Tensor, "BlockMask"]]:
+    """
+    Create a standard causal mask based on the attention implementation used (stored in the config).
 
     Args:
         config (`PretrainedConfig`):
@@ -487,62 +566,103 @@ def get_causal_masks(
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
     """
-    # It means the masks were already prepared outside the `forward`, e.g. by `generate` when compiling - return immediately
-    if isinstance(attention_mask, dict):
-        return attention_mask
+    layer_pattern = LayerPattern("full")
+    return _create_mask(
+        layer_pattern=layer_pattern,
+        config=config,
+        input_embeds=input_embeds,
+        attention_mask=attention_mask,
+        cache_position=cache_position,
+        past_key_values=past_key_values,
+        layer_idx=layer_idx,
+        output_attentions=output_attentions,
+    )
 
-    batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
 
-    # Move the mask to correct device, and potentially switch dtype for efficiency
-    if attention_mask is not None and attention_mask.ndim == 2:
-        attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
+def create_sliding_window_causal_mask(
+    config: PretrainedConfig,
+    input_embeds: torch.Tensor,
+    attention_mask: Optional[Union[torch.Tensor, list[torch.Tensor]]],
+    cache_position: torch.Tensor,
+    past_key_values: Optional[Cache],
+    layer_idx: int,
+    output_attentions: bool = False,
+) -> Optional[Union[torch.Tensor, "BlockMask"]]:
+    """
+    Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
+    of attention pattern was mostly democratized by Mistral.
 
-    mask_interface = ALL_MASK_CREATION_FUNCTIONS[attn_implementation]
-    # Sdpa fallbacks to eager in the Attention modules if `output_attentions=True`
-    if attn_implementation == "sdpa" and output_attentions:
-        mask_interface = ALL_MASK_CREATION_FUNCTIONS["eager"]
-    # We now create all the masks
-    masks = {}
-    # for kv_length, kv_offset, window, chunk in sizes_and_patterns:
-    for i, layer_pattern in enumerate(layer_patterns):
-        # Checking here does not incur graph breaks for dynamo, in comparison to finding unique values ahead of the loop
-        if layer_pattern.as_tuple() in masks:
-            continue
+    Args:
+        config (`PretrainedConfig`):
+            The model config.
+        input_embeds (`torch.Tensor`):
+            The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
+            batch size, query length and dtype.
+        attention_mask (`torch.Tensor` or `list[torch.Tensor]`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
+            It can also be an already prepared 4D mask, in which case it is replicated for each layer. Can also be
+            a list of masks, in which case it is returned as-is.
+        cache_position (`torch.Tensor`):
+            A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
+        past_key_values (`Cache`, optional):
+            The past key values, if we use a cache.
+        output_attentions (`bool`, optional):
+            Whether we return the attention scores or not. By default `False`.
+    """
+    layer_pattern = LayerPattern("sliding", config.sliding_window)
+    return _create_mask(
+        layer_pattern=layer_pattern,
+        config=config,
+        input_embeds=input_embeds,
+        attention_mask=attention_mask,
+        cache_position=cache_position,
+        past_key_values=past_key_values,
+        layer_idx=layer_idx,
+        output_attentions=output_attentions,
+    )
 
-        # For BC -> if the mask is passed in 4D directly, simply replicate it on all layers
-        if (
-            isinstance(attention_mask, torch.Tensor)
-            and attention_mask.ndim == 4
-            and attn_implementation in ("sdpa", "eager")
-        ):
-            causal_mask = attention_mask
-        # For TGI/vLLM backends, or other custom attention without equivalent mask creation: we don't need a mask!
-        elif attn_implementation not in ALL_MASK_CREATION_FUNCTIONS:
-            causal_mask = None
-        else:
-            # If using a cache, it can give all informations about mask sizes based on seen tokens
-            kv_length, kv_offset = (
-                past_key_values.get_mask_sizes(cache_position, i)
-                if past_key_values is not None
-                else (input_embeds.shape[1], 0)
-            )
 
-            causal_mask = mask_interface(
-                batch_size=batch_size,
-                cache_position=cache_position,
-                kv_length=kv_length,
-                kv_offset=kv_offset,
-                layer_pattern=layer_pattern,
-                attention_mask=attention_mask,
-                # Additional kwargs for eager
-                dtype=dtype,
-                # Pass the config as well, in case someone wants to easily have their own mask_interface
-                # config=config,
-            )
+def create_chunked_causal_mask(
+    config: PretrainedConfig,
+    input_embeds: torch.Tensor,
+    attention_mask: Optional[Union[torch.Tensor, list[torch.Tensor]]],
+    cache_position: torch.Tensor,
+    past_key_values: Optional[Cache],
+    layer_idx: int,
+    output_attentions: bool = False,
+) -> Optional[Union[torch.Tensor, "BlockMask"]]:
+    """
+    Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
+    of attention pattern was mostly democratized by Llama4.
 
-        masks[layer_pattern.as_tuple()] = causal_mask
-
-    return masks
+    Args:
+        config (`PretrainedConfig`):
+            The model config.
+        input_embeds (`torch.Tensor`):
+            The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
+            batch size, query length and dtype.
+        attention_mask (`torch.Tensor` or `list[torch.Tensor]`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
+            It can also be an already prepared 4D mask, in which case it is replicated for each layer. Can also be
+            a list of masks, in which case it is returned as-is.
+        cache_position (`torch.Tensor`):
+            A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
+        past_key_values (`Cache`, optional):
+            The past key values, if we use a cache.
+        output_attentions (`bool`, optional):
+            Whether we return the attention scores or not. By default `False`.
+    """
+    layer_pattern = LayerPattern("chunked", config.chunk_attention_size)
+    return _create_mask(
+        layer_pattern=layer_pattern,
+        config=config,
+        input_embeds=input_embeds,
+        attention_mask=attention_mask,
+        cache_position=cache_position,
+        past_key_values=past_key_values,
+        layer_idx=layer_idx,
+        output_attentions=output_attentions,
+    )
 
 
 def _ignore_causal_mask_sdpa(
