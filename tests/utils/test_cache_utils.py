@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_multi_accelerator,
     require_torch_multi_gpu,
     slow,
     torch_device,
@@ -198,19 +199,24 @@ class CacheIntegrationTest(unittest.TestCase):
         )
         cls.model.config.sliding_window = 256  # hack to enable the use of caches with sliding windows
 
-    def _skip_on_uninstalled_cache_dependencies(self, cache_implementation):
-        """Function to skip tests on missing cache dependencies, given a cache implementation"""
+    def _skip_on_failed_cache_prerequisites(self, cache_implementation):
+        """Function to skip tests on failed cache prerequisites, given a cache implementation"""
+        # Installed dependencies
         if cache_implementation == "quantized" and not is_optimum_quanto_available():
             self.skipTest("Quanto is not available")
+        # Devices
         if "offloaded" in cache_implementation:
             has_accelerator = torch_device is not None and torch_device != "cpu"
             if not has_accelerator:
                 self.skipTest("Offloaded caches require an accelerator")
+            if cache_implementation in ["offloaded_static", "offloaded_hybrid_chunked"]:
+                if torch.cuda.device_count() != 1:
+                    self.skipTest("Offloaded static caches require exactly 1 GPU")
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_batched(self, cache_implementation):
         """Sanity check: caches' `.update` function expects batched inputs"""
-        self._skip_on_uninstalled_cache_dependencies(cache_implementation)
+        self._skip_on_failed_cache_prerequisites(cache_implementation)
 
         EXPECTED_GENERATION = ["A sequence: 1, 2, 3, 4, 5, 6, 7, 8,", "A sequence: A, B, C, D, E, F, G, H"]
 
@@ -239,7 +245,7 @@ class CacheIntegrationTest(unittest.TestCase):
         Sanity check: caches' `reorder_cache` is operational. We can confirm this by looking at the beam indices
         (an output sequence contains multiple beam indices).
         """
-        self._skip_on_uninstalled_cache_dependencies(cache_implementation)
+        self._skip_on_failed_cache_prerequisites(cache_implementation)
         if cache_implementation == "offloaded_hybrid_chunked":
             # TODO (joao, cyril): something is off with `offloaded_hybrid_chunked` aka `OffloadedHybridCache`: the
             # output sequence (and the corresponding beam scores, if we add `output_scores=True`) are significantly
@@ -273,7 +279,7 @@ class CacheIntegrationTest(unittest.TestCase):
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_extra_left_padding(self, cache_implementation):
         """Tests that adding extra left-padding does not affect the generation with the cache"""
-        self._skip_on_uninstalled_cache_dependencies(cache_implementation)
+        self._skip_on_failed_cache_prerequisites(cache_implementation)
 
         EXPECTED_GENERATION = ["The cat's whiskers are also a sign of anxiety."]
 
@@ -350,7 +356,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         self.assertIsInstance(gen_out.past_key_values, DynamicCache)  # sanity check
 
     @parameterized.expand([("eager"), ("sdpa")])
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_static_cache_greedy_decoding_pad_left(self, attn_implementation):
         """Tests that different cache implementations work well with eager and SDPA inference"""
@@ -431,7 +437,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         offloaded_peak_memory = torch_accelerator_module.max_memory_allocated(device)
         self.assertTrue(offloaded_peak_memory < original_peak_memory)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_cache_copy(self):
         """Tests that we can manually set a cache, copy, and reuse it for generation"""
@@ -439,14 +445,14 @@ class CacheHardIntegrationTest(unittest.TestCase):
         # lazy init of cache layers
         model_name = "microsoft/Phi-3-mini-4k-instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cuda", torch_dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map=torch_device, torch_dtype=torch.bfloat16)
 
         prompt_cache = StaticCache(
-            config=model.config, max_batch_size=1, max_cache_len=1024, device="cuda", dtype=torch.bfloat16
+            config=model.config, max_batch_size=1, max_cache_len=1024, device=torch_device, dtype=torch.bfloat16
         )
 
         INITIAL_PROMPT = "You are a helpful assistant. "
-        inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to("cuda")
+        inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to(torch_device)
         # This is the common prompt cached, we need to run forward without grad to be able to copy
         with torch.no_grad():
             prompt_cache = model(**inputs_initial_prompt, past_key_values=prompt_cache).past_key_values
@@ -454,7 +460,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         prompts = ["Help me to write a blogpost about travelling.", "What is the capital of France?"]
         responses = []
         for prompt in prompts:
-            new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to("cuda")
+            new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to(torch_device)
             past_key_values = copy.deepcopy(prompt_cache)
             outputs = model.generate(
                 **new_inputs, past_key_values=past_key_values, max_new_tokens=40, disable_compile=True
@@ -469,6 +475,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
             "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital "
             "of France.\n\n\n\n\n\n\n<|endoftext|>",
         ]
+
         self.assertEqual(responses, EXPECTED_DECODED_TEXT)
 
     @require_torch_multi_gpu
@@ -521,11 +528,11 @@ class CacheHardIntegrationTest(unittest.TestCase):
             model.generate(**inputs, max_new_tokens=2, cache_implementation="static")
         self.assertNotIn("cuda", cap.err.lower())
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     @slow
     @require_read_token
-    def test_static_cache_multi_gpu(self):
-        """Regression test for #35164: static cache with multi-gpu"""
+    def test_static_cache_multi_accelerator(self):
+        """Regression test for #35164: static cache with multi-accelerator"""
 
         model_id = "google/gemma-2-2b-it"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
