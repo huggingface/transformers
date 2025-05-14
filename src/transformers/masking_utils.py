@@ -487,27 +487,14 @@ def get_causal_masks(
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
     """
-    num_layers = len(layer_patterns)
     # It means the masks were already prepared outside the `forward`, e.g. by `generate` when compiling - return immediately
     if isinstance(attention_mask, dict):
         return attention_mask
 
-    # For BC -> if the mask is passed in 4D directly, simply replicate it on all layers
-    if (
-        isinstance(attention_mask, torch.Tensor)
-        and attention_mask.ndim == 4
-        and attn_implementation in ("sdpa", "eager")
-    ):
-        return [attention_mask] * num_layers
-
-    # For TGI/vLLM backends, or other custom attention without equivalent mask creation: we don't need a mask!
-    if attn_implementation not in ALL_MASK_CREATION_FUNCTIONS:
-        return [None] * num_layers
-
     batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
-    if attention_mask is not None:
+    if attention_mask is not None and attention_mask.ndim == 2:
         attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
 
     mask_interface = ALL_MASK_CREATION_FUNCTIONS[attn_implementation]
@@ -522,25 +509,37 @@ def get_causal_masks(
         if layer_pattern.as_tuple() in masks:
             continue
 
-        # If using a cache, it can give all informations about mask sizes based on seen tokens
-        if past_key_values is not None:
-            kv_length, kv_offset = past_key_values.get_mask_sizes(cache_position, i)
-        # We are either training, or running inference without cache -> extract patterns from config
+        # For BC -> if the mask is passed in 4D directly, simply replicate it on all layers
+        if (
+            isinstance(attention_mask, torch.Tensor)
+            and attention_mask.ndim == 4
+            and attn_implementation in ("sdpa", "eager")
+        ):
+            causal_mask = attention_mask
+        # For TGI/vLLM backends, or other custom attention without equivalent mask creation: we don't need a mask!
+        elif attn_implementation not in ALL_MASK_CREATION_FUNCTIONS:
+            causal_mask = None
         else:
-            kv_length, kv_offset = input_embeds.shape[1], 0
+            # If using a cache, it can give all informations about mask sizes based on seen tokens
+            kv_length, kv_offset = (
+                past_key_values.get_mask_sizes(cache_position, i)
+                if past_key_values is not None
+                else (input_embeds.shape[1], 0)
+            )
 
-        causal_mask = mask_interface(
-            batch_size=batch_size,
-            cache_position=cache_position,
-            kv_length=kv_length,
-            kv_offset=kv_offset,
-            layer_pattern=layer_pattern,
-            attention_mask=attention_mask,
-            # Additional kwargs for eager
-            dtype=dtype,
-            # Pass the config as well, in case someone wants to easily have their own mask_interface
-            # config=config,
-        )
+            causal_mask = mask_interface(
+                batch_size=batch_size,
+                cache_position=cache_position,
+                kv_length=kv_length,
+                kv_offset=kv_offset,
+                layer_pattern=layer_pattern,
+                attention_mask=attention_mask,
+                # Additional kwargs for eager
+                dtype=dtype,
+                # Pass the config as well, in case someone wants to easily have their own mask_interface
+                # config=config,
+            )
+
         masks[layer_pattern.as_tuple()] = causal_mask
 
     return masks

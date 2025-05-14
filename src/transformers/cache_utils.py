@@ -1906,6 +1906,7 @@ class HybridCache(Cache):
         full_mask_kv_length = self.get_max_cache_shape()
         return full_mask_kv_length, full_mask_kv_offset
 
+
 class HybridChunkedCache(Cache):
     """
     Hybrid Cache class to be used with `torch.compile` for models that alternate between a local sliding window
@@ -2116,7 +2117,10 @@ class HybridChunkedCache(Cache):
             if first_cache_position >= self.sliding_window:
                 # Here the Cache is already full
                 local_mask_kv_length = self.sliding_window + query_length - 1
-            elif first_cache_position < self.sliding_window and first_cache_position + query_length > self.sliding_window:
+            elif (
+                first_cache_position < self.sliding_window
+                and first_cache_position + query_length > self.sliding_window
+            ):
                 # Here the Cache becomes full with the new input
                 local_mask_kv_length = first_cache_position + query_length
             else:
