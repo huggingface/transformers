@@ -648,7 +648,7 @@ def create_chunked_causal_mask(
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
     """
-    layer_pattern = LayerPattern("chunked", config.chunk_attention_size)
+    layer_pattern = LayerPattern("chunked", config.attention_chunk_size)
     return _create_mask(
         layer_pattern=layer_pattern,
         config=config,
