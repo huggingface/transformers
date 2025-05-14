@@ -495,7 +495,6 @@ LLAMA4_MASK_FUNCTIONS = {
 @auto_docstring
 class Llama4TextModel(Llama4PreTrainedModel):
     _no_split_modules = ["Llama4TextDecoderLayer"]
-    base_model_prefix = "model"
     config_class = Llama4TextConfig
 
     def __init__(self, config: Llama4TextConfig):
@@ -647,7 +646,7 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer"]
-    base_model_prefix = "language_model"
+    base_model_prefix = "model"
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     config_class = Llama4TextConfig
@@ -1139,7 +1138,7 @@ class Llama4VisionRotaryEmbedding(nn.Module):
 
 
 class Llama4VisionModel(Llama4PreTrainedModel):
-    base_model_prefix = "vision_model"
+    base_model_prefix = "model"
     _no_split_modules = ["Llama4VisionEncoderLayer"]
     config_class = Llama4VisionConfig
 
