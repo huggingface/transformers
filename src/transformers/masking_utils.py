@@ -506,14 +506,6 @@ def get_causal_masks(
 
     batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
 
-    # If using a cache, it can give all informations about mask sizes based on seen tokens
-    if past_key_values is not None:
-        mask_sizes = past_key_values.get_mask_sizes(cache_position, num_layers)
-    # We are either training, or running inference without cache -> extract patterns from config
-    else:
-        kv_length = input_embeds.shape[1]
-        mask_sizes = [(kv_length, 0)] * num_layers
-
     # Move the mask to correct device, and potentially switch dtype for efficiency
     if attention_mask is not None:
         attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
@@ -525,10 +517,17 @@ def get_causal_masks(
     # We now create all the masks
     masks = {}
     # for kv_length, kv_offset, window, chunk in sizes_and_patterns:
-    for layer_pattern, (kv_length, kv_offset) in zip(layer_patterns, mask_sizes):
+    for i, layer_pattern in enumerate(layer_patterns):
         # Checking here does not incur graph breaks for dynamo, in comparison to finding unique values ahead of the loop
         if layer_pattern.as_tuple() in masks:
             continue
+
+        # If using a cache, it can give all informations about mask sizes based on seen tokens
+        if past_key_values is not None:
+            kv_length, kv_offset = past_key_values.get_mask_sizes(cache_position, i)
+        # We are either training, or running inference without cache -> extract patterns from config
+        else:
+            kv_length, kv_offset = input_embeds.shape[1], 0
 
         causal_mask = mask_interface(
             batch_size=batch_size,
