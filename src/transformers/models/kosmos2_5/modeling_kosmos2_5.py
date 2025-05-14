@@ -511,9 +511,6 @@ class Kosmos2_5VisionAttention(nn.Module):
         """
         Self-attention block
         """
-        # Input is (batch_size, seq_length, dim)
-        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
-        # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
         batch_size, seq_length, _ = hidden_states.size()
 
         query_states = self.query(hidden_states)
