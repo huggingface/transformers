@@ -396,7 +396,7 @@ def add_fast_image_processor_file(
 
     content_header = get_fast_image_processing_content_header(content_base_file)
     content_base_file = (
-        f"@auto_docstring(\n"
+        f"@auto_docstring\n"
         f"class {fast_image_processor_name}(BaseImageProcessorFast):\n"
         "    # This generated class can be used as a starting point for the fast image processor.\n"
         "    # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,\n"
