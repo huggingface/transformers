@@ -42,7 +42,6 @@ if is_torch_available():
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
-# Copied from tests.models.llama.test_modeling_llama.LlamaModelTester with Llama->Persimmon
 class PersimmonModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = PersimmonConfig
