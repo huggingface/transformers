@@ -459,45 +459,6 @@ class AttentionMaskInterface(GeneralInterface):
 ALL_MASK_CREATION_FUNCTIONS: AttentionMaskInterface = AttentionMaskInterface()
 
 
-@dataclass(unsafe_hash=True)
-class MaskParameterization(object):
-    """
-    This is a structure to describe both the attention pattern used in a DecoderLayer, as well as the KV length
-    and offsets. This is used to be able to compare the masks needed at every Layer.
-    This structure may mutate the `layer_pattern` passed to it based on the `kv_length` and `kv_offset` in order
-    to simplify mask creation and always create the minimum number of causal masks.
-
-    Args:
-        layer_pattern (`LayerPattern`):
-            The attention pattern used for a given Layer.
-        kv_length (`int`):
-            The size that the key and value states will have during the attention computation.
-        kv_offset (`int`):
-            An offset to indicate at which first position the key and values states will refer to.
-    """
-
-    layer_pattern: LayerPattern
-    kv_length: int
-    kv_offset: int
-
-    def __init__(self, layer_pattern: LayerPattern, kv_length: int, kv_offset: int):
-        # If the layer is sliding or chunked, but the cumulative sequence length is lower than the window/chunk,
-        # the layer behaves as a full layer from an attention perspective (we are not yet beyond the window/chunk size)
-        if layer_pattern.pattern in ("sliding", "chunked") and kv_offset + kv_length <= layer_pattern.local_size:
-            self.layer_pattern = LayerPattern("full")
-        else:
-            self.layer_pattern = layer_pattern
-
-        self.kv_length = kv_length
-        self.kv_offset = kv_offset
-
-    def __iter__(self):
-        """To be able to easily get fields as a tuple/list."""
-        yield self.layer_pattern
-        yield self.kv_length
-        yield self.kv_offset
-
-
 def get_causal_masks(
     layer_patterns: list[LayerPattern],
     attn_implementation: str,
@@ -529,7 +490,7 @@ def get_causal_masks(
     """
     num_layers = len(layer_patterns)
     # It means the masks were already prepared outside the `forward`, e.g. by `generate` when compiling - return immediately
-    if isinstance(attention_mask, list):
+    if isinstance(attention_mask, dict):
         return attention_mask
 
     # For BC -> if the mask is passed in 4D directly, simply replicate it on all layers
@@ -554,14 +515,7 @@ def get_causal_masks(
         kv_length = input_embeds.shape[1]
         mask_sizes = [(kv_length, 0)] * num_layers
 
-    # Casting to `MaskParameterization` allows to very easily find unique needed patterns
-    mask_configs = [
-        MaskParameterization(layer_pattern, *sizes) for layer_pattern, sizes in zip(layer_patterns, mask_sizes)
-    ]
-    unique_mask_configs = list(set(mask_configs))
-    # Compute the layer mapping from unique configs
-    layer_to_mask_mapping = [unique_mask_configs.index(config) for config in mask_configs]
-
+    mask_configs = [(layer_pattern, *sizes) for layer_pattern, sizes in zip(layer_patterns, mask_sizes)]
     # Move the mask to correct device, and potentially switch dtype for efficiency
     if attention_mask is not None:
         attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
@@ -571,26 +525,29 @@ def get_causal_masks(
     if attn_implementation == "sdpa" and output_attentions:
         mask_interface = ALL_MASK_CREATION_FUNCTIONS["eager"]
     # We now create all the masks
-    masks = []
+    masks = {}
     # for kv_length, kv_offset, window, chunk in sizes_and_patterns:
-    for effective_layer_pattern, kv_length, kv_offset in unique_mask_configs:
+    for layer_pattern, kv_length, kv_offset in mask_configs:
+
+        # Checking here does not incur graph breaks for dynamo, in comparison to finding unique values ahead of the loop
+        if layer_pattern.as_tuple() in masks:
+            continue
+
         causal_mask = mask_interface(
             batch_size=batch_size,
             cache_position=cache_position,
             kv_length=kv_length,
             kv_offset=kv_offset,
-            layer_pattern=effective_layer_pattern,
+            layer_pattern=layer_pattern,
             attention_mask=attention_mask,
             # Additional kwargs for eager
             dtype=dtype,
             # Pass the config as well, in case someone wants to easily have their own mask_interface
             # config=config,
         )
-        masks.append(causal_mask)
+        masks[layer_pattern.as_tuple()] = causal_mask
 
-    # Map back to each layer (note that this does not incur any copy of the masks)
-    mask_per_layers = [masks[layer_to_mask_mapping[i]] for i in range(num_layers)]
-    return mask_per_layers
+    return masks
 
 
 def _ignore_causal_mask_sdpa(

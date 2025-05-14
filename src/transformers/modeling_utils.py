@@ -6128,7 +6128,6 @@ class AttentionInterface(GeneralInterface):
 ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()
 
 
-@dataclass(unsafe_hash=True)
 class LayerPattern(object):
     """
     This is a structure to describe the attention pattern used in a DecoderLayer. It is mostly used to correctly
@@ -6153,3 +6152,7 @@ class LayerPattern(object):
         # Ignore the potential `local_size` passed if the layer uses full attention pattern
         if self.pattern == "full":
             self.local_size = None
+
+    def as_tuple(self) -> tuple[str, Optional[int]]:
+        """This is needed as torch dynamo tracing cannot handle hasing custom objects."""
+        return self.pattern, self.local_size
