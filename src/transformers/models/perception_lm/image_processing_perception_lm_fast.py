@@ -34,24 +34,10 @@ from ...utils import (
     TensorType,
     add_start_docstrings,
     is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    is_vision_available,
 )
-
-
-if is_vision_available():
-    from ...image_utils import PILImageResampling
 
 if is_torch_available():
     import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
 
 class PerceptionLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     vision_input_type: str = "thumb+tile"
