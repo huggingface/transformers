@@ -1794,7 +1794,7 @@ class BitNetQuantConfig(QuantizationConfigMixin):
         use_rms_norm (`bool`, *optional*, defaults to `False`):
             Whether to apply RMSNorm on the activations before quantization. This matches the original BitNet paper's approach
             of normalizing activations before quantization/packing.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon value used in the RMSNorm layer for numerical stability.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional keyword arguments that may be used by specific quantization
