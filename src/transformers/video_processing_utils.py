@@ -34,6 +34,7 @@ from .image_utils import (
 )
 from .processing_utils import Unpack, VideosKwargs
 from .utils import (
+    PROCESSOR_NAME,
     VIDEO_PROCESSOR_NAME,
     TensorType,
     add_model_info_to_auto_map,
@@ -579,26 +580,42 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                     subfolder=subfolder,
                 )
             except EnvironmentError:
-                video_processor_file = "preprocessor_config.json"
-                resolved_video_processor_file = cached_file(
-                    pretrained_model_name_or_path,
-                    video_processor_file,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
-                )
-                logger.warning_once(
-                    "You have video processor config saved in `preprocessor.json` file which is deprecated. "
-                    "Video processor configs should be saved in their own `video_preprocessor.json` file. You can rename "
-                    "the file or load and save the processor back which renames it automatically. "
-                    "Loading from `preprocessor.json` will be removed in v5.0."
-                )
+                try:
+                    video_processor_file = "preprocessor_config.json"
+                    resolved_video_processor_file = cached_file(
+                        pretrained_model_name_or_path,
+                        video_processor_file,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        resume_download=resume_download,
+                        local_files_only=local_files_only,
+                        token=token,
+                        user_agent=user_agent,
+                        revision=revision,
+                        subfolder=subfolder,
+                    )
+                    logger.warning_once(
+                        "You have video processor config saved in `preprocessor.json` file which is deprecated. "
+                        "Video processor configs should be saved in their own `video_preprocessor.json` file. You can rename "
+                        "the file or load and save the processor back which renames it automatically. "
+                        "Loading from `preprocessor.json` will be removed in v5.0."
+                    )
+                except EnvironmentError:
+                    video_processor_file = PROCESSOR_NAME
+                    resolved_video_processor_file = cached_file(
+                        pretrained_model_name_or_path,
+                        PROCESSOR_NAME,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        resume_download=resume_download,
+                        local_files_only=local_files_only,
+                        token=token,
+                        user_agent=user_agent,
+                        revision=revision,
+                        subfolder=subfolder,
+                    )
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -617,6 +634,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             with open(resolved_video_processor_file, "r", encoding="utf-8") as reader:
                 text = reader.read()
             video_processor_dict = json.loads(text)
+            video_processor_dict = video_processor_dict.get("video_processor", video_processor_dict)
 
         except json.JSONDecodeError:
             raise EnvironmentError(

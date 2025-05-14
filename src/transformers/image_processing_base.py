@@ -27,6 +27,7 @@ from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .utils import (
     IMAGE_PROCESSOR_NAME,
+    PROCESSOR_NAME,
     PushToHubMixin,
     add_model_info_to_auto_map,
     add_model_info_to_custom_pipelines,
@@ -350,6 +351,22 @@ class ImageProcessingMixin(PushToHubMixin):
                     revision=revision,
                     subfolder=subfolder,
                 )
+            except EnvironmentError:
+                image_processor_file = PROCESSOR_NAME
+                # Load from local folder or from cache or download from model Hub and cache
+                resolved_image_processor_file = cached_file(
+                    pretrained_model_name_or_path,
+                    image_processor_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                )
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -368,6 +385,7 @@ class ImageProcessingMixin(PushToHubMixin):
             with open(resolved_image_processor_file, encoding="utf-8") as reader:
                 text = reader.read()
             image_processor_dict = json.loads(text)
+            image_processor_dict = image_processor_dict.get("image_processor", image_processor_dict)
 
         except json.JSONDecodeError:
             raise OSError(
