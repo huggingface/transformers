@@ -235,8 +235,14 @@ class PagedAttentionCache(Cache):
         self.value_cache: List[torch.Tensor] = []
         for idx in range(config.num_hidden_layers):
             layer_device = layer_device_map[idx] if layer_device_map is not None else device
-            self.key_cache.append(torch.zeros(self.cache_shape, dtype=self.dtype, device=layer_device))
-            self.value_cache.append(torch.zeros(self.cache_shape, dtype=self.dtype, device=layer_device))
+            new_layer_key_cache = torch.zeros(self.cache_shape, dtype=self.dtype, device=layer_device)
+            new_layer_value_cache = torch.zeros(self.cache_shape, dtype=self.dtype, device=layer_device)
+            # Note: `mark_static_address` is used to tag the cache as a fixed data pointer,
+            # preventing compiled graph breaks when updating the cache.
+            torch._dynamo.mark_static_address(new_layer_key_cache)
+            torch._dynamo.mark_static_address(new_layer_value_cache)
+            self.key_cache.append(new_layer_key_cache)
+            self.value_cache.append(new_layer_value_cache)
 
         # Block management data structures
         self._free_blocks = deque(range(num_blocks))
@@ -1170,6 +1176,7 @@ class ContinuousBatchingManager:
             self._generation_step(batch_processor)
 
     @traced
+    @torch.compile
     def _generation_step(self, batch_processor: ContinuousBatchProcessor):
         """Perform a single generation step. This is cuda graphed"""
         batch_data = batch_processor.get_model_kwargs()
@@ -1215,7 +1222,7 @@ class ContinuousBatchingManager:
             first = True
             while not self.stop_event.is_set() or batch_processor.has_pending_requests():
                 batch_processor.prepare_next_batch()
-                if torch.cuda.is_available():
+                if torch.cuda.is_available() and False:
                     if first:
                         self.warmup(batch_processor)
                         first = False
