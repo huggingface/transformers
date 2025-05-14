@@ -19,7 +19,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Literal, Mapping, Optional
 
-from huggingface_hub.dataclasses import strict, validated_field
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -109,26 +109,26 @@ class AlbertConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    vocab_size: int = validated_field(interval(min=1), default=30000)
-    embedding_size: int = validated_field(interval(min=1), default=128)
-    hidden_size: int = validated_field(interval(min=1), default=4096)
-    num_hidden_layers: int = validated_field(interval(min=1), default=12)
-    num_hidden_groups: int = validated_field(interval(min=1), default=1)
-    num_attention_heads: int = validated_field(interval(min=0), default=64)
-    intermediate_size: int = validated_field(interval(min=1), default=16384)
-    inner_group_num: int = validated_field(interval(min=0), default=1)
-    hidden_act: str = validated_field(activation_fn_key, default="gelu_new")
-    hidden_dropout_prob: float = validated_field(probability, default=0.0)
-    attention_probs_dropout_prob: float = validated_field(probability, default=0.0)
-    max_position_embeddings: int = validated_field(interval(min=0), default=512)
-    type_vocab_size: int = validated_field(interval(min=1), default=2)
-    initializer_range: float = validated_field(interval(min=0.0), default=0.02)
-    layer_norm_eps: float = validated_field(interval(min=0.0), default=1e-12)
-    classifier_dropout_prob: float = validated_field(probability, default=0.1)
+    vocab_size: int = interval(min=1)(default=30000)
+    embedding_size: int = interval(min=1)(default=128)
+    hidden_size: int = interval(min=1)(default=4096)
+    num_hidden_layers: int = interval(min=1)(default=12)
+    num_hidden_groups: int = interval(min=1)(default=1)
+    num_attention_heads: int = interval(min=0)(default=64)
+    intermediate_size: int = interval(min=1)(default=16384)
+    inner_group_num: int = interval(min=0)(default=1)
+    hidden_act: str = activation_fn_key(default="gelu_new")
+    hidden_dropout_prob: float = probability(default=0.0)
+    attention_probs_dropout_prob: float = probability(default=0.0)
+    max_position_embeddings: int = interval(min=0)(default=512)
+    type_vocab_size: int = interval(min=1)(default=2)
+    initializer_range: float = interval(min=0.0)(default=0.02)
+    layer_norm_eps: float = interval(min=0.0)(default=1e-12)
+    classifier_dropout_prob: float = probability(default=0.1)
     position_embedding_type: Literal["absolute", "relative_key", "relative_key_query"] = "absolute"
-    pad_token_id: Optional[int] = validated_field(token, default=0)
-    bos_token_id: Optional[int] = validated_field(token, default=2)
-    eos_token_id: Optional[int] = validated_field(token, default=3)
+    pad_token_id: Optional[int] = token(default=0)
+    bos_token_id: Optional[int] = token(default=2)
+    eos_token_id: Optional[int] = token(default=3)
 
     # Not part of __init__
     model_type = "albert"
@@ -139,21 +139,15 @@ class AlbertConfig(PretrainedConfig):
 
     def validate(self):
         """Ensures the configuration is valid by assessing combinations of arguments."""
+        # Generic config validation
+        super().validate()
+
         # Architecture validation
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads}"
             )
-
-        # Token validation
-        for token_name in ["pad_token_id", "bos_token_id", "eos_token_id"]:
-            token_id = getattr(self, token_name)
-            if token_id is not None and not 0 <= token_id < self.vocab_size:
-                raise ValueError(
-                    f"{token_name} must be in the vocabulary with size {self.vocab_size}, i.e. between 0 and "
-                    f"{self.vocab_size - 1}, got {token_id}."
-                )
 
 
 # Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Roberta->Albert
