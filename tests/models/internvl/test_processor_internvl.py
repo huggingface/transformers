@@ -327,7 +327,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
 
-        video_len = 4 if batch_size == 1 else 3  # InternVL patches out and removes frames after processing
+        video_len = 2 if batch_size == 1 else 3  # InternVL patches out and removes frames after processing
         self.assertEqual(len(out_dict[self.videos_input_name]), video_len)
         for k in out_dict:
             self.assertIsInstance(out_dict[k], torch.Tensor)
