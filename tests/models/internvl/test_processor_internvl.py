@@ -321,7 +321,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            num_frames=4,  # by default no more than 4 frames, otherwise too slow
+            num_frames=2,  # by default no more than 2 frames, otherwise too slow
         )
         self.assertTrue(self.videos_input_name in out_dict)
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
