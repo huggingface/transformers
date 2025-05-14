@@ -907,7 +907,7 @@ class ContinuousBatchProcessor:
         # is_max_len = self.cumulative_seqlens_q[1:] + 1 >= self.max_context_len
         # to_remove = has_eos | is_max_len
         # tokens_to_keep = torch.where(~to_remove & self.output_ids >= 0)[1]  # can get request ids with this
-        out_tokens = self.output_ids.detach().cpu()  # should be the only synch we do
+        out_tokens = self.output_ids.clone().detach().cpu()  # should be the only synch we do
         finished_request_ids = []
         for i, state in enumerate(self.requests_in_batch):
             req_id = state.request_id
@@ -944,6 +944,7 @@ class ContinuousBatchProcessor:
     @traced
     def _record_batch_metrics(self, requests_in_batch: List[RequestState]) -> None:
         """Record metrics about the batch composition including decode/prefill ratio and batch fill percentage."""
+        # TODO wondering if any of these need to live in this class? As the creation time is in the request state
         if not _has_opentelemetry or not requests_in_batch:
             return
 
