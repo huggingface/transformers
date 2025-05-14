@@ -106,7 +106,7 @@ batch_outputs = model.generate_batch(
     # You can pass request-specific overrides here, e.g., max_new_tokens=100
 )
 end_time_simple = time.time()
-# model.__call__ = torch.compile(model.__call__)
+model.__call__ = torch.compile(model.__call__)
 
 print(f"CB generation took: a{end_time_simple - start_time_simple:.2f} seconds")
 
