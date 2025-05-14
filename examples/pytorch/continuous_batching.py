@@ -1,8 +1,8 @@
-from tqdm import tqdm
 import time
 
 import datasets
 import torch
+from tqdm import tqdm
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
@@ -20,9 +20,7 @@ _TEST_PROMPTS = [
 model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.2-3b-Instruct", attn_implementation="sdpa_paged", torch_dtype=torch.bfloat16, device_map="auto"
 ).eval()
-tokenizer = AutoTokenizer.from_pretrained(
-    "meta-llama/Llama-3.2-3b-Instruct", padding_side="left"
-)
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", padding_side="left")
 
 device = "mps"
 model.use_cache = False
@@ -55,6 +53,7 @@ train_dataset = train_dataset.select(range(100))  # Use only 5 examples for the 
 # tokenized_test_prompts = tokenizer(_TEST_PROMPTS, padding=True, padding_side="left", truncation=True, max_length=512)
 # simple_batch_inputs = list(tokenized_test_prompts["input_ids"])
 
+
 def tokenize_function(examples):
     # Truncate to avoid overly long prompts exceeding max context length
     return tokenizer(examples["question"], padding=True, truncation=True, max_length=512)
@@ -72,7 +71,7 @@ full_outputs = []
 
 for i in tqdm(range(0, len(simple_batch_inputs), batch_size)):
     outputs = model.generate(
-        torch.tensor(simple_batch_inputs[i:i+batch_size], device=model.device),
+        torch.tensor(simple_batch_inputs[i : i + batch_size], device=model.device),
         generation_config=GenerationConfig(
             max_new_tokens=16, eos_token_id=tokenizer.eos_token_id, pad_token_id=tokenizer.pad_token_id
         ),
@@ -93,6 +92,8 @@ print("--- Finished Simple Batch Generation Example ---\n\n")
 # --- Example 1: Simple Version using generate_batch ---
 print("--- Running CB Generation Example ---")
 model.config.attn_implementation = "eager_paged"
+
+
 def tokenize_function(examples):
     # Truncate to avoid overly long prompts exceeding max context length
     return tokenizer(examples["question"])

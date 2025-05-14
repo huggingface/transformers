@@ -136,8 +136,8 @@ class RequestState:
 
     # Required fields
     request_id: str
-    prompt_ids: List[int] = None            # the one being processed
-    full_prompt_ids: List[int] = None       # the full prompt
+    prompt_ids: List[int] = None  # the one being processed
+    full_prompt_ids: List[int] = None  # the full prompt
     remaining_prompt_ids: List[int] = field(default_factory=list)  # For split requests
     static_outputs: List[int] = field(default_factory=list)
     allocated_blocks: List[int] = field(default_factory=list)
@@ -226,7 +226,7 @@ class PagedAttentionCache(Cache):
 
         self.block_size = block_size
         self.num_blocks = num_blocks
-        self.cache_shape = (self.num_key_value_heads, num_blocks,  self.block_size, self.head_dim)
+        self.cache_shape = (self.num_key_value_heads, num_blocks, self.block_size, self.head_dim)
 
         self.dtype = dtype
         self.device = device
@@ -571,7 +571,10 @@ class ContinuousBatchProcessor:
         )
 
     def __repr__(self):
-        return f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.active_requests}, waiting_requests={self.waiting_requests})" + self.get_model_kwargs().__repr__()
+        return (
+            f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.active_requests}, waiting_requests={self.waiting_requests})"
+            + self.get_model_kwargs().__repr__()
+        )
 
     def _setup_metrics(self):
         """Initialize OpenTelemetry metrics and tracing if the library is available."""
@@ -718,8 +721,8 @@ class ContinuousBatchProcessor:
     @traced
     def _handle_request_error(self, error, state: RequestState):
         """Handle general request processing error."""
-        state.status="failed"
-        state.error=str(error)
+        state.status = "failed"
+        state.error = str(error)
 
         # Include any generated tokens if this is an active request
         if isinstance(state.request_id, str) and state.request_id in self.active_requests:
@@ -802,9 +805,7 @@ class ContinuousBatchProcessor:
         return selected_requests
 
     @traced(span_name="prepare_request")
-    def _prepare_request_for_processing(
-        self, state: RequestState, token_budget, request_ids_to_remove_from_waiting
-    ):
+    def _prepare_request_for_processing(self, state: RequestState, token_budget, request_ids_to_remove_from_waiting):
         """Prepare a request for processing in the current batch."""
         request_tokens = state.remaining_prompt_ids if state.status == "split_pending_remainder" else state.prompt_ids
         if len(request_tokens) < token_budget:
@@ -868,7 +869,7 @@ class ContinuousBatchProcessor:
                 next_input_ids = state.prompt_ids
                 input_ids.extend(next_input_ids)
                 positions_to_add = [state.current_len()]
-                if not self._allocate_blocks_if_needed(state, state.current_len()+1):
+                if not self._allocate_blocks_if_needed(state, state.current_len() + 1):
                     continue
 
                 # Map logical indices to physical block indices for this request
@@ -877,7 +878,7 @@ class ContinuousBatchProcessor:
 
                 seq_len_q = 1  # Query length is 1 for generation
                 seq_len_k = state.current_len() + 1
-                state.position_offset += 1 # FUCK YOU THIS IS SO IMPORTANT
+                state.position_offset += 1  # FUCK YOU THIS IS SO IMPORTANT
             else:
                 next_input_ids = state.prompt_ids
                 input_ids.extend(next_input_ids)
@@ -891,7 +892,7 @@ class ContinuousBatchProcessor:
                 write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
                 read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))
                 seq_len_q = len(next_input_ids)
-                seq_len_k = state.current_len() # Key length includes previously split context #TODO not sure about +1
+                seq_len_k = state.current_len()  # Key length includes previously split context #TODO not sure about +1
 
             position_ids.extend(positions_to_add)
             read_index.extend(read_indices)
@@ -911,9 +912,7 @@ class ContinuousBatchProcessor:
             cumq_ptr += 1
             cumk_ptr += 1
         # now if sdpa or eager, create the attention mask!
-        self.input_ids[:, :len(input_ids)].copy_(
-            torch.tensor(input_ids, **self.tensor_metadata)
-        )
+        self.input_ids[:, : len(input_ids)].copy_(torch.tensor(input_ids, **self.tensor_metadata))
         self.position_ids[:, :token_position].copy_(torch.tensor(position_ids, **self.tensor_metadata))
         self.write_index[:write_position].copy_(torch.tensor(write_index, **self.tensor_metadata))
         self.read_index[:read_position].copy_(torch.tensor(read_index, **self.tensor_metadata))
@@ -921,21 +920,26 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_k[:cumk_ptr].copy_(torch.tensor(cumulative_seqlens_k, **self.tensor_metadata))
         self.logits_indices[:logits_to_track].copy_(torch.tensor(logits_indices, **self.tensor_metadata))
         for i in range(len(cumulative_seqlens_q) - 1):
-            if cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] < cumulative_seqlens_k[i+1] - cumulative_seqlens_k[i] and cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] >= 1:
-                diagonal = cumulative_seqlens_k[i+1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
+            if (
+                cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
+                < cumulative_seqlens_k[i + 1] - cumulative_seqlens_k[i]
+                and cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] >= 1
+            ):
+                diagonal = cumulative_seqlens_k[i + 1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
                 diagonal = diagonal - cumulative_seqlens_k[i]
             else:
                 diagonal = 1
             query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
             key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
-            self.attention_mask[...,query_range,key_range].copy_(
+            self.attention_mask[..., query_range, key_range].copy_(
                 torch.triu(
-                    torch.full(self.attention_mask[...,query_range,key_range].shape,
-                            fill_value=torch.finfo(self.model_dtype).min,
-                            dtype=self.model_dtype,
-                            device=self.model_device
-                        ),
-                    diagonal=diagonal
+                    torch.full(
+                        self.attention_mask[..., query_range, key_range].shape,
+                        fill_value=torch.finfo(self.model_dtype).min,
+                        dtype=self.model_dtype,
+                        device=self.model_device,
+                    ),
+                    diagonal=diagonal,
                 )
             )
 
@@ -960,14 +964,14 @@ class ContinuousBatchProcessor:
         # is_max_len = self.cumulative_seqlens_q[1:] + 1 >= self.max_context_len
         # to_remove = has_eos | is_max_len
         # tokens_to_keep = torch.where(~to_remove & self.output_ids >= 0)[1]  # can get request ids with this
-        out_tokens = self.output_ids.detach().cpu() # should be the only synch we do
+        out_tokens = self.output_ids.detach().cpu()  # should be the only synch we do
         finished_request_ids = []
         for i, state in enumerate(self.requests_in_batch):
             req_id = state.request_id
             if len(state.remaining_prompt_ids) == 0:
                 self._record_ttft_metric(state)
                 state.status = "decoding"
-                token = out_tokens[:,self.logits_indices[i]]
+                token = out_tokens[:, self.logits_indices[i]]
                 state.static_outputs.extend(token.tolist())
                 state.prompt_ids = token.tolist()
                 if state.update_with_token(token):
