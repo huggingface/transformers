@@ -1598,8 +1598,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             if (
                 (input_ids is not None and input_ids.shape[1] != 1)
                 or (inputs_embeds is not None and inputs_embeds.shape[1] != 1)
-                and self.rope_deltas is None
-            ):
+            ) or self.rope_deltas is None:
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids, image_grid_thw, video_grid_thw, attention_mask_2d
                 )

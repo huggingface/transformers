@@ -684,7 +684,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
-        if position_ids is None and (attention_mask is None or attention_mask.ndim == 2):
+        if position_ids is None:
             attention_mask_2d = attention_mask
             if attention_mask is not None and attention_mask.ndim == 4:
                 attention_mask_2d = torch.diagonal(attention_mask_2d[:, 0], dim1=1, dim2=2)
@@ -695,10 +695,13 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             if (
                 (input_ids is not None and input_ids.shape[1] != 1)
                 or (inputs_embeds is not None and inputs_embeds.shape[1] != 1)
-                and self.rope_deltas is None
-            ):
+            ) or self.rope_deltas is None:
                 position_ids, rope_deltas = self.get_rope_index(
-                    input_ids, image_grid_thw, video_grid_thw, attention_mask_2d
+                    input_ids,
+                    image_grid_thw,
+                    video_grid_thw,
+                    second_per_grid_ts=second_per_grid_ts,
+                    attention_mask=attention_mask_2d,
                 )
                 self.rope_deltas = rope_deltas
             # then use the prev pre-calculated rope-deltas to get the correct position ids
