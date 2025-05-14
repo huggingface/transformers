@@ -556,7 +556,7 @@ class ContinuousBatchProcessor:
 
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
-        return PagedAttentionArgs(
+        return dict(
             input_ids=self.input_ids,
             position_ids=self.position_ids,
             attention_mask=self.attention_mask,
@@ -808,34 +808,19 @@ class ContinuousBatchProcessor:
         self._record_batch_metrics(self.requests_in_batch)
 
         for state in self.requests_in_batch:
-            if state.status == "decoding":
-                next_input_ids = state.prompt_ids
-                input_ids.extend(next_input_ids)
-                positions_to_add = [state.current_len()]
-                if not self._allocate_blocks_if_needed(state, state.current_len() + 1):
-                    continue
+            next_input_ids = state.prompt_ids
+            input_ids.extend(next_input_ids)
+            start_pos = state.current_len()
+            positions_to_add = list(range(start_pos, start_pos + len(next_input_ids)))
+            state.position_offset += len(next_input_ids)
 
-                # Map logical indices to physical block indices for this request
-                write_indices = self.cache._get_physical_indices(state.request_id, [state.current_len()])
-                read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len() + 1)))
+            if not self._allocate_blocks_if_needed(state, state.current_len()):
+                continue
 
-                seq_len_q = 1  # Query length is 1 for generation
-                seq_len_k = state.current_len() + 1
-                state.position_offset += 1  # FUCK YOU THIS IS SO IMPORTANT
-            else:
-                next_input_ids = state.prompt_ids
-                input_ids.extend(next_input_ids)
-                start_pos = state.current_len()
-                positions_to_add = list(range(start_pos, start_pos + len(next_input_ids)))
-                state.position_offset += len(next_input_ids)
-
-                if not self._allocate_blocks_if_needed(state, state.current_len()):
-                    continue
-
-                write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
-                read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))
-                seq_len_q = len(next_input_ids)
-                seq_len_k = state.current_len()  # Key length includes previously split context #TODO not sure about +1
+            write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
+            read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))
+            seq_len_q = len(next_input_ids)
+            seq_len_k = state.current_len()  # Key length includes previously split context #TODO not sure about +1
 
             position_ids.extend(positions_to_add)
             read_index.extend(read_indices)
@@ -1198,18 +1183,18 @@ class ContinuousBatchingManager:
         """Perform a single generation step. This is cuda graphed"""
         batch_data = batch_processor.get_model_kwargs()
         with torch.no_grad():
-            with self.tracer.start_as_current_span("model_forward"):
-                logits = self.model(**batch_data.__dict__).logits
+            # with self.tracer.start_as_current_span("model_forward"):
+            logits = self.model(**batch_data).logits
             if self.log_prob_generation:
                 batch_processor.output_probs.copy_(logits)  # TODO
-            with self.tracer.start_as_current_span("logit_processing"):
-                probs = self.logit_processor(batch_data.input_ids, logits)
-            with self.tracer.start_as_current_span("sampling"):
-                if self.do_sample:  # sample
-                    probs = nn.functional.softmax(probs, dim=-1)
-                    next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
-                else:
-                    next_tokens = torch.argmax(probs, dim=-1)
+        # with self.tracer.start_as_current_span("logit_processing"):
+            probs = self.logit_processor(batch_data["input_ids"], logits)
+        # with self.tracer.start_as_current_span("sampling"):
+            if self.do_sample:  # sample
+                probs = nn.functional.softmax(probs, dim=-1)
+                next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
+            else:
+                next_tokens = torch.argmax(probs, dim=-1)
             batch_processor.output_ids.copy_(next_tokens)
 
     @traced(span_name="generation_loop")
