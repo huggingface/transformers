@@ -35,7 +35,7 @@ try:
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
     from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace import Tracer, TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
     from opentelemetry.trace import Status, StatusCode, get_tracer
 
@@ -136,8 +136,8 @@ class RequestState:
 
     # Required fields
     request_id: str
-    prompt_ids: List[int] = None            # the one being processed
-    full_prompt_ids: List[int] = None       # the full prompt
+    prompt_ids: List[int] = None  # the one being processed
+    full_prompt_ids: List[int] = None  # the full prompt
     remaining_prompt_ids: List[int] = field(default_factory=list)  # For split requests
     static_outputs: List[int] = field(default_factory=list)
     allocated_blocks: List[int] = field(default_factory=list)
@@ -226,7 +226,7 @@ class PagedAttentionCache(Cache):
 
         self.block_size = block_size
         self.num_blocks = num_blocks
-        self.cache_shape = (self.num_key_value_heads, num_blocks,  self.block_size, self.head_dim)
+        self.cache_shape = (self.num_key_value_heads, num_blocks, self.block_size, self.head_dim)
 
         self.dtype = dtype
         self.device = device
@@ -320,7 +320,7 @@ class PagedAttentionCache(Cache):
         physical_indices = physical_block_nums * block_size + block_offsets
         return physical_indices
 
-    @torch.compile
+    @traced
     def update(
         self,
         key_states: torch.Tensor,
@@ -519,6 +519,7 @@ class ContinuousBatchProcessor:
         self._configure_batch_parameters()
         self.setup_static_tensors()
 
+    @traced
     def setup_static_tensors(self):
         T = self.max_batch_tokens
         max_token_budget = self.cache.num_blocks * self.cache.block_size
@@ -538,7 +539,7 @@ class ContinuousBatchProcessor:
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
 
-    @torch.compile
+    @traced
     def reset_static_tensors(self):
         """Reset static tensors for the next batch."""
         self.input_ids.zero_()
@@ -572,66 +573,9 @@ class ContinuousBatchProcessor:
         )
 
     def __repr__(self):
-        return f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.active_requests}, waiting_requests={self.waiting_requests})" + self.get_model_kwargs().__repr__() 
-
-    def _setup_metrics(self):
-        """Initialize OpenTelemetry metrics and tracing if the library is available."""
-
-        if not _has_opentelemetry:
-            logger.info("OpenTelemetry is not installed. Metrics and tracing will not be recorded.")
-            return
-
-        # Create a resource to identify this component in the metrics system
-        resource = Resource.create({"service.name": "transformers.generation.continuous_batching_processor"})
-
-        metrics_exporter = OTLPMetricExporter()
-        meter_provider = MeterProvider(resource=resource, metric_readers=[metrics_exporter])
-        metrics.set_meter_provider(meter_provider)
-
-        # Set up the tracer provider with an OTLP exporter for tracing
-        trace_exporter = OTLPSpanExporter()
-        tracer_provider = TracerProvider(resource=resource)
-        tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
-        trace.set_tracer_provider(tracer_provider)
-
-        # Create a tracer for our functions
-        self.tracer = get_tracer("transformers.generation")
-
-        # Create a meter for our metrics
-        self.meter = metrics.get_meter("transformers.generation")
-
-        # Create histogram for time to first token
-        self.ttft_histogram = self.meter.create_histogram(
-            name="ttft_milliseconds",
-            description="Time to first token in milliseconds",
-            unit="ms",
-        )
-
-        # Create histogram for decode/prefill ratio
-        self.decode_prefill_ratio_gauge = self.meter.create_gauge(
-            name="decode_prefill_ratio",
-            description="Ratio of decode tokens to prefill tokens in a batch",
-            unit="ratio",
-        )
-
-        # Create counters for decode and prefill tokens
-        self.prefill_tokens_counter = self.meter.create_counter(
-            name="prefill_tokens_processed",
-            description="Number of prefill tokens processed",
-            unit="tokens",
-        )
-
-        self.decode_tokens_counter = self.meter.create_counter(
-            name="decode_tokens_processed",
-            description="Number of decode tokens processed",
-            unit="tokens",
-        )
-
-        # Create histogram for batch fill percentage
-        self.batch_fill_percentage_histogram = self.meter.create_histogram(
-            name="batch_fill_percentage",
-            description="Percentage of max_batch_tokens utilized in each batch",
-            unit="percent",
+        return (
+            f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.active_requests}, waiting_requests={self.waiting_requests})"
+            + self.get_model_kwargs().__repr__()
         )
 
     def _setup_metrics(self):
@@ -679,6 +623,7 @@ class ContinuousBatchProcessor:
             unit="percent",
         )
 
+    @traced
     def _configure_batch_parameters(self):
         """Set up batch processing parameters based on generation config."""
         # Calculate total cache capacity
@@ -719,8 +664,8 @@ class ContinuousBatchProcessor:
     @traced
     def _handle_request_error(self, error, state: RequestState):
         """Handle general request processing error."""
-        state.status="failed"
-        state.error=str(error)
+        state.status = "failed"
+        state.error = str(error)
 
         # Include any generated tokens if this is an active request
         if isinstance(state.request_id, str) and state.request_id in self.active_requests:
@@ -803,9 +748,7 @@ class ContinuousBatchProcessor:
         return selected_requests
 
     @traced(span_name="prepare_request")
-    def _prepare_request_for_processing(
-        self, state: RequestState, token_budget, request_ids_to_remove_from_waiting
-    ):
+    def _prepare_request_for_processing(self, state: RequestState, token_budget, request_ids_to_remove_from_waiting):
         """Prepare a request for processing in the current batch."""
         request_tokens = state.remaining_prompt_ids if state.status == "split_pending_remainder" else state.prompt_ids
         if len(request_tokens) < token_budget:
@@ -865,34 +808,19 @@ class ContinuousBatchProcessor:
         self._record_batch_metrics(self.requests_in_batch)
 
         for state in self.requests_in_batch:
-            if state.status == "decoding":
-                next_input_ids = state.prompt_ids
-                input_ids.extend(next_input_ids)
-                positions_to_add = [state.current_len()]
-                if not self._allocate_blocks_if_needed(state, state.current_len()+1):
-                    continue
+            next_input_ids = state.prompt_ids
+            input_ids.extend(next_input_ids)
+            start_pos = state.current_len()
+            positions_to_add = list(range(start_pos, start_pos + len(next_input_ids)))
+            state.position_offset += len(next_input_ids)
 
-                # Map logical indices to physical block indices for this request
-                write_indices = self.cache._get_physical_indices(state.request_id, [state.current_len()])
-                read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len() + 1)))
+            if not self._allocate_blocks_if_needed(state, state.current_len()):
+                continue
 
-                seq_len_q = 1  # Query length is 1 for generation
-                seq_len_k = state.current_len() + 1
-                state.position_offset += 1 # FUCK YOU THIS IS SO IMPORTANT
-            else:
-                next_input_ids = state.prompt_ids
-                input_ids.extend(next_input_ids)
-                start_pos = state.current_len()
-                positions_to_add = list(range(start_pos, start_pos + len(next_input_ids)))
-                state.position_offset += len(next_input_ids)
-
-                if not self._allocate_blocks_if_needed(state, state.current_len()):
-                    continue
-
-                write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
-                read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))
-                seq_len_q = len(next_input_ids)
-                seq_len_k = state.current_len() # Key length includes previously split context #TODO not sure about +1
+            write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
+            read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))
+            seq_len_q = len(next_input_ids)
+            seq_len_k = state.current_len()  # Key length includes previously split context #TODO not sure about +1
 
             position_ids.extend(positions_to_add)
             read_index.extend(read_indices)
@@ -912,9 +840,7 @@ class ContinuousBatchProcessor:
             cumq_ptr += 1
             cumk_ptr += 1
         # now if sdpa or eager, create the attention mask!
-        self.input_ids[:, :len(input_ids)].copy_(
-            torch.tensor(input_ids, **self.tensor_metadata)
-        )
+        self.input_ids[:, : len(input_ids)].copy_(torch.tensor(input_ids, **self.tensor_metadata))
         self.position_ids[:, :token_position].copy_(torch.tensor(position_ids, **self.tensor_metadata))
         self.write_index[:write_position].copy_(torch.tensor(write_index, **self.tensor_metadata))
         self.read_index[:read_position].copy_(torch.tensor(read_index, **self.tensor_metadata))
@@ -922,21 +848,26 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_k[:cumk_ptr].copy_(torch.tensor(cumulative_seqlens_k, **self.tensor_metadata))
         self.logits_indices[:logits_to_track].copy_(torch.tensor(logits_indices, **self.tensor_metadata))
         for i in range(len(cumulative_seqlens_q) - 1):
-            if cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] < cumulative_seqlens_k[i+1] - cumulative_seqlens_k[i] and cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] >= 1:
-                diagonal = cumulative_seqlens_k[i+1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
+            if (
+                cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
+                < cumulative_seqlens_k[i + 1] - cumulative_seqlens_k[i]
+                and cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] >= 1
+            ):
+                diagonal = cumulative_seqlens_k[i + 1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
                 diagonal = diagonal - cumulative_seqlens_k[i]
             else:
                 diagonal = 1
             query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
             key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
-            self.attention_mask[...,query_range,key_range].copy_(
+            self.attention_mask[..., query_range, key_range].copy_(
                 torch.triu(
-                    torch.full(self.attention_mask[...,query_range,key_range].shape,
-                            fill_value=torch.finfo(self.model_dtype).min, 
-                            dtype=self.model_dtype,
-                            device=self.model_device
-                        ),
-                    diagonal=diagonal
+                    torch.full(
+                        self.attention_mask[..., query_range, key_range].shape,
+                        fill_value=torch.finfo(self.model_dtype).min,
+                        dtype=self.model_dtype,
+                        device=self.model_device,
+                    ),
+                    diagonal=diagonal,
                 )
             )
 
@@ -961,14 +892,14 @@ class ContinuousBatchProcessor:
         # is_max_len = self.cumulative_seqlens_q[1:] + 1 >= self.max_context_len
         # to_remove = has_eos | is_max_len
         # tokens_to_keep = torch.where(~to_remove & self.output_ids >= 0)[1]  # can get request ids with this
-        out_tokens = self.output_ids.detach().cpu() # should be the only synch we do
+        out_tokens = self.output_ids.clone().detach().cpu()  # should be the only synch we do
         finished_request_ids = []
         for i, state in enumerate(self.requests_in_batch):
             req_id = state.request_id
             if len(state.remaining_prompt_ids) == 0:
                 self._record_ttft_metric(state)
                 state.status = "decoding"
-                token = out_tokens[:,self.logits_indices[i]]
+                token = out_tokens[:, self.logits_indices[i]]
                 state.static_outputs.extend(token.tolist())
                 state.prompt_ids = token.tolist()
                 if state.update_with_token(token):
@@ -998,6 +929,7 @@ class ContinuousBatchProcessor:
     @traced
     def _record_batch_metrics(self, requests_in_batch: List[RequestState]) -> None:
         """Record metrics about the batch composition including decode/prefill ratio and batch fill percentage."""
+        # TODO wondering if any of these need to live in this class? As the creation time is in the request state
         if not _has_opentelemetry or not requests_in_batch:
             return
 
@@ -1041,10 +973,12 @@ class ContinuousBatchProcessor:
         elif state.status == "finished":
             self.output_queue.put(state)
 
+    @traced
     def has_pending_requests(self) -> bool:
         """Check if there are any active or waiting requests."""
         return bool(self.active_requests or self.waiting_requests)
 
+    @traced
     def handle_batch_error(self, error):
         """Handle errors during batch processing."""
         failed_ids = self.requests_to_process_next
@@ -1054,6 +988,7 @@ class ContinuousBatchProcessor:
                 self.cache.free_blocks(req_id)
                 del self.active_requests[req_id]
 
+    @traced
     def fail_all_requests(self, error):
         """Fail all active requests with the given error.
 
@@ -1080,7 +1015,7 @@ class ContinuousBatchingManager:
     """
 
     def __init__(
-        self, model: GenerationMixin, generation_config: GenerationConfig, max_queue_size=0, streaming: bool = True 
+        self, model: GenerationMixin, generation_config: GenerationConfig, max_queue_size=0, streaming: bool = True
     ):
         """Initialize the continuous batching manager.
 
@@ -1112,6 +1047,7 @@ class ContinuousBatchingManager:
 
         self.tracer = get_tracer("transformers.generation.continuous_batching_manager")
 
+    @traced
     def start(self):
         """Start the background generation thread."""
         if self._generation_thread is not None and self._generation_thread.is_alive():
@@ -1200,7 +1136,7 @@ class ContinuousBatchingManager:
             self.add_request(input_ids, request_id=req_id, **kwargs)
 
     @traced
-    def get_result(self, timeout=None) -> Optional[Dict]:
+    def get_result(self, timeout=None) -> Optional[RequestState]:
         """Retrieve one result from the output queue.
 
         Args:
@@ -1212,7 +1148,7 @@ class ContinuousBatchingManager:
         if self._generation_thread is None and self.output_queue.empty():
             return None
         try:
-            result = self.output_queue.get(block=True, timeout=timeout)  # TODO Pop here rather?
+            result = self.output_queue.get(block=True, timeout=timeout)
             logger.debug(f"Retrieved result for request {result.request_id}")
             return result
         except queue.Empty:
@@ -1227,6 +1163,7 @@ class ContinuousBatchingManager:
             if result is not None:
                 yield result
 
+    @traced
     def warmup(self, batch_processor):
         stream = torch.cuda.Stream()
         stream.wait_stream(torch.cuda.current_stream())
@@ -1239,14 +1176,18 @@ class ContinuousBatchingManager:
         with torch.cuda.graph(self.graph):
             self._generation_step(batch_processor)
 
+    @traced
     def _generation_step(self, batch_processor: ContinuousBatchProcessor):
         """Perform a single generation step. This is cuda graphed"""
         batch_data = batch_processor.get_model_kwargs()
         with torch.no_grad():
+            # with self.tracer.start_as_current_span("model_forward"):
             logits = self.model(**batch_data).logits
             if self.log_prob_generation:
                 batch_processor.output_probs.copy_(logits)  # TODO
+        # with self.tracer.start_as_current_span("logit_processing"):
             probs = self.logit_processor(batch_data["input_ids"], logits)
+        # with self.tracer.start_as_current_span("sampling"):
             if self.do_sample:  # sample
                 probs = nn.functional.softmax(probs, dim=-1)
                 next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
@@ -1276,6 +1217,7 @@ class ContinuousBatchingManager:
                 self.model.dtype,
                 self.streaming,
             )
+
             first = True
             while not self.stop_event.is_set() or batch_processor.has_pending_requests():
                 batch_processor.prepare_next_batch()
@@ -1284,7 +1226,8 @@ class ContinuousBatchingManager:
                         self.warmup(batch_processor)
                         first = False
                     try:
-                        self.graph.replay()
+                        with self.tracer.start_as_current_span("graph_replay"):
+                            self.graph.replay()
                     except Exception as e:
                         logger.error(f"Model forward pass failed: {e}", exc_info=True)
                         batch_processor.handle_batch_error(e)
@@ -1351,6 +1294,7 @@ class ContinuousMixin:
             model=self, generation_config=gen_config, max_queue_size=max_queue_size, streaming=streaming
         )
 
+    @traced
     @torch.inference_mode()
     def generate_batch(
         self,

@@ -259,8 +259,9 @@ _import_structure = {
     ],
     "utils.quantization_config": [
         "AqlmConfig",
+        "AutoRoundConfig",
         "AwqConfig",
-        "BitNetConfig",
+        "BitNetQuantConfig",
         "BitsAndBytesConfig",
         "CompressedTensorsConfig",
         "EetqConfig",
@@ -275,6 +276,7 @@ _import_structure = {
         "TorchAoConfig",
         "VptqConfig",
     ],
+    "video_utils": [],
 }
 
 # tokenizers-backed objects
@@ -333,6 +335,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
+    _import_structure["video_processing_utils"] = ["BaseVideoProcessor"]
 
 # PyTorch-backed objects
 try:
@@ -344,7 +347,6 @@ except OptionalDependencyNotAvailable:
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
     _import_structure["model_debugging_utils"] = [
-        "model_addition_debugger",
         "model_addition_debugger_context",
     ]
     _import_structure["activations"] = []
@@ -439,6 +441,7 @@ else:
     ]
 
     _import_structure["modeling_flash_attention_utils"] = []
+    _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update"]
     _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
@@ -754,8 +757,9 @@ if TYPE_CHECKING:
     # bitsandbytes config
     from .utils.quantization_config import (
         AqlmConfig,
+        AutoRoundConfig,
         AwqConfig,
-        BitNetConfig,
+        BitNetQuantConfig,
         BitsAndBytesConfig,
         CompressedTensorsConfig,
         EetqConfig,
@@ -807,6 +811,7 @@ if TYPE_CHECKING:
         from .utils.dummy_torchvision_objects import *
     else:
         from .image_processing_utils_fast import BaseImageProcessorFast
+        from .video_processing_utils import BaseVideoProcessor
 
     try:
         if not (is_torchvision_available() and is_timm_available()):
@@ -910,9 +915,9 @@ if TYPE_CHECKING:
             convert_and_export_with_cache,
         )
         from .model_debugging_utils import (
-            model_addition_debugger,
             model_addition_debugger_context,
         )
+        from .modeling_layers import GradientCheckpointingLayer
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
         from .modeling_utils import AttentionInterface, PreTrainedModel
 

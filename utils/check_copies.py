@@ -18,7 +18,7 @@ Utility that checks whether the copies defined in the library match the original
 - The list of models in the main README.md matches the ones in the localized READMEs,
 - Files that are registered as full copies of one another in the `FULL_COPIES` constant of this script.
 
-This also checks the list of models in the README is complete (has all models) and add a line to complete if there is
+This also checks the list of models in the README is complete (has all models) and adds a line to complete if there is
 a model missing.
 
 Use from the root of the repo with:
@@ -390,7 +390,7 @@ def split_code_into_blocks(
 
 
 def find_code_in_transformers(
-    object_name: str, base_path: str = None, return_indices: bool = False
+    object_name: str, base_path: Optional[str] = None, return_indices: bool = False
 ) -> Union[str, Tuple[List[str], int, int]]:
     """
     Find and return the source code of an object.
@@ -420,7 +420,7 @@ def find_code_in_transformers(
 
     # Detail: the `Copied from` statement is originally designed to work with the last part of `TRANSFORMERS_PATH`,
     # (which is `transformers`). The same should be applied for `MODEL_TEST_PATH`. However, its last part is `models`
-    # (to only check and search in it) which is a bit confusing. So we keep the copied statement staring with
+    # (to only check and search in it) which is a bit confusing. So we keep the copied statement starting with
     # `tests.models.` and change it to `tests` here.
     if base_path == MODEL_TEST_PATH:
         base_path = "tests"
@@ -491,7 +491,7 @@ def replace_code(code: str, replace_pattern: str) -> str:
     return code
 
 
-def find_code_and_splits(object_name: str, base_path: str, buffer: dict = None):
+def find_code_and_splits(object_name: str, base_path: str, buffer: Optional[dict] = None):
     """Find the code of an object (specified by `object_name`) and split it into blocks.
 
     Args:
@@ -638,7 +638,9 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
         diff_index += 1
 
 
-def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = None) -> Optional[List[Tuple[str, int]]]:
+def is_copy_consistent(
+    filename: str, overwrite: bool = False, buffer: Optional[dict] = None
+) -> Optional[List[Tuple[str, int]]]:
     """
     Check if the code commented as a copy in a file matches the original.
 
@@ -831,7 +833,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
     return diffs
 
 
-def check_copies(overwrite: bool = False, file: str = None):
+def check_copies(overwrite: bool = False, file: Optional[str] = None):
     """
     Check every file is copy-consistent with the original. Also check the model list in the main README and other
     READMEs are consistent.
@@ -1038,6 +1040,7 @@ SPECIAL_MODEL_NAMES = {
     "OpenAI GPT": "GPT",
     "Perceiver": "Perceiver IO",
     "SAM": "Segment Anything",
+    "SAM_HQ": "Segment Anything High Quality",
     "ViT": "Vision Transformer (ViT)",
 }
 

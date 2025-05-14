@@ -45,7 +45,7 @@ PALIGEMMA_VARIANTS = ["2b-test", "3b-224px", "3b-448px", "3b-896px"]
 
 def get_paligemma_config(variant: str, precision: str):
     config = {
-        "image_token_index": None,
+        "image_token_id": None,
         "pad_token_id": 0,
         "bos_token_id": 2,
         "eos_token_id": 1,
@@ -58,7 +58,7 @@ def get_paligemma_config(variant: str, precision: str):
         patch_size = 14
         num_image_tokens = (image_size**2) // (patch_size**2)
 
-        config["image_token_index"] = 257152 if variant != "2b-test" else 256000
+        config["image_token_id"] = 257152 if variant != "2b-test" else 256000
         text_config = {
             "vocab_size": 257152,
             "num_hidden_layers": 18,

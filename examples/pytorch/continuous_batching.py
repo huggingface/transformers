@@ -2,6 +2,7 @@ import time
 
 import datasets
 import torch
+from tqdm import tqdm
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
@@ -19,9 +20,7 @@ _TEST_PROMPTS = [
 model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.2-3b-Instruct", attn_implementation="sdpa", torch_dtype=torch.bfloat16, device_map="auto"
 ).eval()
-tokenizer = AutoTokenizer.from_pretrained(
-    "meta-llama/Llama-3.2-3b-Instruct", padding_side="left"
-)
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", padding_side="left")
 
 device = "mps"
 model.use_cache = False

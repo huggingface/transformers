@@ -31,20 +31,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "laion/clap-htsat-fused"
 
 
 # Adapted from: https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L191
@@ -829,7 +820,7 @@ class ClapAudioEncoder(nn.Module):
 
         self.num_features = int(config.patch_embeds_hidden_size * 2 ** (self.num_layers - 1))
 
-        drop_path_rate = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        drop_path_rate = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
 
         grid_size = self.patch_embed.grid_size
         self.input_resolutions = [(grid_size[0] // (2**i), grid_size[1] // (2**i)) for i in range(self.num_layers)]
@@ -864,9 +855,9 @@ class ClapAudioEncoder(nn.Module):
         _, _, time_length, freq_length = normalized_input_features.shape
 
         spec_width = int(self.spec_size * self.freq_ratio)
-        spec_heigth = self.spec_size // self.freq_ratio
+        spec_height = self.spec_size // self.freq_ratio
 
-        if time_length > spec_width or freq_length > spec_heigth:
+        if time_length > spec_width or freq_length > spec_height:
             raise ValueError("the wav size should be less than or equal to the swin input size")
 
         # to avoid bicubic zero error
@@ -874,14 +865,14 @@ class ClapAudioEncoder(nn.Module):
             normalized_input_features = nn.functional.interpolate(
                 normalized_input_features, (spec_width, freq_length), mode="bicubic", align_corners=True
             )
-        if freq_length < spec_heigth:
+        if freq_length < spec_height:
             normalized_input_features = nn.functional.interpolate(
-                normalized_input_features, (time_length, spec_heigth), mode="bicubic", align_corners=True
+                normalized_input_features, (time_length, spec_height), mode="bicubic", align_corners=True
             )
 
         batch, channels, time, freq = normalized_input_features.shape
 
-        # batch_size, channels, spec_width, spec_heigth --> batch_size, channels, spec_heigth * freq_ratio, spec_width // freq_ratio
+        # batch_size, channels, spec_width, spec_height --> batch_size, channels, spec_height * freq_ratio, spec_width // freq_ratio
         normalized_input_features = normalized_input_features.reshape(
             batch, channels * self.freq_ratio, time // self.freq_ratio, freq
         )
@@ -1015,109 +1006,6 @@ class ClapAudioEncoder(nn.Module):
             hidden_states=all_reshaped_hidden_states,
             attentions=all_self_attentions,
         )
-
-
-CLAP_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`ClapConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-CLAP_TEXT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-CLAP_AUDIO_INPUTS_DOCSTRING = r"""
-    Args:
-        input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Input audio features. This should be returnes by the [`ClapFeatureExtractor`] class that you can also
-            retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
-        is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
-            Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
-            the features.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-CLAP_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Input audio features. This should be returnes by the [`ClapFeatureExtractor`] class that you can also
-            retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
-        return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
 
 
 class ClapProjectionLayer(nn.Module):
@@ -1663,12 +1551,8 @@ class ClapTextPooler(nn.Module):
         return pooled_output
 
 
+@auto_docstring
 class ClapPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = ClapConfig
     base_model_prefix = "clap"
     supports_gradient_checkpointing = False
@@ -1709,8 +1593,7 @@ class ClapAudioModel(ClapPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.audio_encoder.patch_embed.proj
 
-    @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ClapAudioConfig)
+    @auto_docstring
     def forward(
         self,
         input_features: Optional[torch.FloatTensor] = None,
@@ -1720,7 +1603,12 @@ class ClapAudioModel(ClapPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-        Returns:
+        input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Input audio features. This should be returned by the [`ClapFeatureExtractor`] class that you can also
+            retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
+        is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
+            Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
+            the features.
 
         Examples:
 
@@ -1754,9 +1642,8 @@ class ClapAudioModel(ClapPreTrainedModel):
         )
 
 
-class ClapTextModel(ClapPreTrainedModel):
-    """
-
+@auto_docstring(
+    custom_intro="""
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in *Attention is
     all you need*_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
@@ -1767,12 +1654,16 @@ class ClapTextModel(ClapPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
 
     .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
-
     """
-
+)
+class ClapTextModel(ClapPreTrainedModel):
     config_class = ClapTextConfig
 
     def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        """
         super().__init__(config)
         self.config = config
 
@@ -1790,6 +1681,7 @@ class ClapTextModel(ClapPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1806,26 +1698,6 @@ class ClapTextModel(ClapPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
-        r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1921,7 +1793,7 @@ class ClapTextModel(ClapPreTrainedModel):
         )
 
 
-@add_start_docstrings(CLAP_START_DOCSTRING)
+@auto_docstring
 class ClapModel(ClapPreTrainedModel):
     config_class = ClapConfig
 
@@ -1957,7 +1829,7 @@ class ClapModel(ClapPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CLAP_TEXT_INPUTS_DOCSTRING)
+    @auto_docstring
     def get_text_features(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -2005,7 +1877,7 @@ class ClapModel(ClapPreTrainedModel):
 
         return text_features
 
-    @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
+    @auto_docstring
     def get_audio_features(
         self,
         input_features: Optional[torch.Tensor] = None,
@@ -2016,6 +1888,13 @@ class ClapModel(ClapPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
+        input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Input audio features. This should be returned by the [`ClapFeatureExtractor`] class that you can also
+            retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
+        is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
+            Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
+            the features.
+
         Returns:
             audio_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The audio embeddings obtained by
             applying the projection layer to the pooled output of [`ClapAudioModel`].
@@ -2051,8 +1930,7 @@ class ClapModel(ClapPreTrainedModel):
 
         return audio_features
 
-    @add_start_docstrings_to_model_forward(CLAP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ClapOutput, config_class=ClapConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2066,7 +1944,14 @@ class ClapModel(ClapPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, ClapOutput]:
         r"""
-        Returns:
+        input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Input audio features. This should be returned by the [`ClapFeatureExtractor`] class that you can also
+            retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
+        is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
+            Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
+            the features.
 
         Examples:
 
@@ -2149,12 +2034,7 @@ class ClapModel(ClapPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    CLAP Text Model with a projection layer on top (a linear layer on top of the pooled output).
-    """,
-    CLAP_START_DOCSTRING,
-)
+@auto_docstring
 class ClapTextModelWithProjection(ClapPreTrainedModel):
     config_class = ClapTextConfig
 
@@ -2171,8 +2051,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.word_embeddings = value
 
-    @add_start_docstrings_to_model_forward(CLAP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ClapTextModelOutput, config_class=ClapTextConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -2183,8 +2062,6 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, ClapTextModelOutput]:
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -2225,12 +2102,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    CLAP Audio Model with a projection layer on top (a linear layer on top of the pooled output).
-    """,
-    CLAP_START_DOCSTRING,
-)
+@auto_docstring
 class ClapAudioModelWithProjection(ClapPreTrainedModel):
     config_class = ClapAudioConfig
     main_input_name = "input_features"
@@ -2245,8 +2117,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.audio_model.audio_encoder.patch_embed.proj
 
-    @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ClapAudioModelOutput, config_class=ClapAudioConfig)
+    @auto_docstring
     def forward(
         self,
         input_features: Optional[torch.FloatTensor] = None,
@@ -2256,7 +2127,12 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, ClapAudioModelOutput]:
         r"""
-        Returns:
+        input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Input audio features. This should be returned by the [`ClapFeatureExtractor`] class that you can also
+            retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
+        is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
+            Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
+            the features.
 
         Examples:
 

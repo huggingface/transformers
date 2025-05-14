@@ -1093,7 +1093,7 @@ class CometCallback(TrainerCallback):
             if state.is_hyper_param_search:
                 if mode is not None:
                     logger.warning(
-                        "Hyperparameter Search is enabled, forcing the creation of new experimetns, COMET_MODE value %r  is ignored",
+                        "Hyperparameter Search is enabled, forcing the creation of new experiments, COMET_MODE value %r  is ignored",
                         comet_old_mode,
                     )
                 mode = "create"

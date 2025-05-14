@@ -107,6 +107,8 @@ class GotOcr2Processor(ProcessorMixin):
         self.img_start_token = "<img>"
         self.img_end_token = "</img>"
         self.img_pad_token = "<imgpad>"
+        self.image_token = "<imgpad>"  # keep the above for BC, but we need to call it `image_token`
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.system_query = "system\nYou should follow the instructions carefully and explain your answers in detail."
 
     def _make_list_of_inputs(self, images, text, box, color, multi_page):
@@ -250,8 +252,11 @@ class GotOcr2Processor(ProcessorMixin):
                 )
                 text.append(prompt)
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """
