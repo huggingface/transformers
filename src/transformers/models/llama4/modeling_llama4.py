@@ -534,10 +534,10 @@ class Llama4TextModel(Llama4PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids.to(self.embed_tokens.weight.device))
 
         if use_cache and past_key_values is None:
-            if self.config.get_text_config().get("attention_chunk_size") is not None:
+            if getattr(self.config, "attention_chunk_size", self.config.get_text_config().attention_chunk_size) is not None:
                 past_key_values = HybridChunkedCache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
             else:
-                past_key_values = DynamicCache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
+                past_key_values = DynamicCache()
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1117,7 +1117,7 @@ class Llama4VisionAttention(nn.Module):
             value_states,
             None,
             dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=None,
+            scaling=self.scaling,
             is_causal=False,  # HAS TO BE ENFORCED
             **kwargs,
         )
