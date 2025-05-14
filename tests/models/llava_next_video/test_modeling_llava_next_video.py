@@ -408,7 +408,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
             "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True, cache_dir="./"
         )
 
-        inputs = self.processor(self.prompt_video, videos=self.video, return_tensors="pt")
+        inputs = self.processor(text=self.prompt_video, videos=self.video, return_tensors="pt")
         # verify single forward pass
         inputs = inputs.to(torch_device)
         with torch.no_grad():
@@ -431,7 +431,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         inputs = self.processor(
-            [self.prompt_video, self.prompt_video],
+            text=[self.prompt_video, self.prompt_video],
             videos=[self.video, self.video],
             return_tensors="pt",
             padding=True,
@@ -458,7 +458,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         inputs = self.processor(
-            [self.prompt_image, self.prompt_video],
+            text=[self.prompt_image, self.prompt_video],
             images=self.image,
             videos=self.video,
             return_tensors="pt",
@@ -484,7 +484,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         inputs_batched = self.processor(
-            [self.prompt_video, self.prompt_image],
+            text=[self.prompt_video, self.prompt_image],
             images=[self.image],
             videos=[self.video],
             return_tensors="pt",
