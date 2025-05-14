@@ -517,8 +517,6 @@ class Kosmos2_5VisionAttention(nn.Module):
         key_states = self.key(hidden_states)
         value_states = self.value(hidden_states)
 
-        # get query states
-        # (batch_size, n_heads, seq_length, dim_per_head)
         query_states = query_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
         key_states = key_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
         value_states = value_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
