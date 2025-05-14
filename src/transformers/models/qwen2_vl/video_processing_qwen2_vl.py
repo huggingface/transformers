@@ -192,6 +192,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: List["torch.Tensor"],
+        video_metadata: Union[List[VideoMetadata], List[dict]],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -207,7 +208,6 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         patch_size: Optional[int] = None,
         temporal_patch_size: Optional[int] = None,
         merge_size: Optional[int] = None,
-        video_metadata: Optional[Union[List[List[VideoMetadata]], List[List[dict]]]] = None,
         fps: Optional[int] = None,
         num_frames: Optional[int] = None,
         min_frames: Optional[int] = None,
@@ -217,10 +217,6 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     ):
         if do_sample_frames:
             # Sample video frames
-            if video_metadata is not None:
-                batch_metadata = [metadata for batch_list in video_metadata for metadata in batch_list]
-            else:
-                batch_metadata = [None] * len(videos)
             videos = [
                 self.sample_frames(
                     video,
@@ -231,7 +227,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                     num_frames=num_frames,
                     fps=fps,
                 )
-                for video, metadata in zip(videos, batch_metadata)
+                for video, metadata in zip(videos, video_metadata)
             ]
 
         # Group videos by size for batched resizing

@@ -102,16 +102,31 @@ class InternVLVideoProcessor(BaseVideoProcessor):
         initial_shift = initial_shift if initial_shift is not None else self.initial_shift
         total_num_frames = video.shape[0]
 
+        # If num_frames is not given but fps is, calculate num_frames from fps
+        if num_frames is None and fps is not None:
+            if metadata is None:
+                raise ValueError(
+                    "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
+                    "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
+                )
+            num_frames = int(total_num_frames / metadata["fps"] * fps)
+
         if initial_shift is True:
             initial_shift = total_num_frames / num_frames / 2
-        indices = torch.arange(initial_shift, total_num_frames, total_num_frames / num_frames).int()
 
+        if num_frames > total_num_frames:
+            raise ValueError(
+                f"Video can't be sampled. The `num_frames={num_frames}` exceeds `total_num_frames={total_num_frames}`. "
+            )
+
+        indices = torch.arange(initial_shift, total_num_frames, total_num_frames / num_frames).int()
         video = video[indices].contiguous()
         return video
 
     def _preprocess(
         self,
         videos: List["torch.Tensor"],
+        video_metadata: Union[List[VideoMetadata], List[dict]],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -129,18 +144,13 @@ class InternVLVideoProcessor(BaseVideoProcessor):
         fps: Optional[int] = None,
         num_frames: Optional[int] = None,
         initial_shift: Optional[Union[bool, float, int]] = None,
-        video_metadata: Optional[Union[List[List[VideoMetadata]], List[List[dict]]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ) -> BatchFeature:
         if do_sample_frames:
             # Sample video frames
-            if video_metadata is not None:
-                batch_metadata = [metadata for batch_list in video_metadata for metadata in batch_list]
-            else:
-                batch_metadata = [None] * len(videos)
             videos = [
-                self.sample_frames(video, metadata, num_frames, initial_shift=initial_shift)
-                for video, metadata in zip(videos, batch_metadata)
+                self.sample_frames(video, metadata, fps=fps, num_frames=num_frames, initial_shift=initial_shift)
+                for video, metadata in zip(videos, video_metadata)
             ]
 
         # Group videos by size for batched resizing

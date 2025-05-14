@@ -316,6 +316,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: List["torch.Tensor"],
+        video_metadata: Union[List[VideoMetadata], List[dict]],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -327,7 +328,6 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         do_sample_frames: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
-        video_metadata: Optional[Union[List[List[VideoMetadata]], List[List[dict]]]] = None,
         fps: Optional[int] = None,
         num_frames: Optional[int] = None,
         skip_secs: Optional[int] = 0,
@@ -336,15 +336,14 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
     ):
         # Group videos by size for batched resizing
         if do_sample_frames:
-            if video_metadata is None:
+            if video_metadata[0] is None:
                 raise ValueError(
                     "Frame sampling is enabled but no video metadata was found. SmolVLM requires metadata to correctly sample frames. "
                     "Please pass in `VideoMetadata` object per each input video or set `do_sample_frames=False`"
                 )
-            batch_metadata = [metadata for batch_list in video_metadata for metadata in batch_list]
             processed_videos = []
             timestamps_list, durations_list = [], []
-            for video, metadata in zip(videos, batch_metadata):
+            for video, metadata in zip(videos, video_metadata):
                 video, timestamps, duration = self.sample_frames(video, metadata, num_frames, fps, skip_secs)
                 timestamps_list.append(timestamps)
                 durations_list.append(duration)

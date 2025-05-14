@@ -44,6 +44,7 @@ class InternVLVideoProcessingTester:
         do_normalize=True,
         image_mean=OPENAI_CLIP_MEAN,
         image_std=OPENAI_CLIP_STD,
+        num_frames_to_sample=2,
         do_convert_rgb=True,
     ):
         size = size if size is not None else {"height": 384, "width": 384}

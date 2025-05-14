@@ -121,6 +121,8 @@ BASE_VIDEO_PROCESSOR_DOCSTRING = r"""
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `self.image_std`):
             Whether to convert the video to RGB.
+        video_metadata (`VideoMetadata`, *optional*):
+            Metadata of the video containing information about total duration, fps and total number of frames.
         do_sample_frames (`int`, *optional*, defaults to `self.do_sample_frames`):
             Whether to sample frames from the video before processing or to process the whole video.
         num_frames (`int`, *optional*, defaults to `self.num_frames`):
@@ -292,6 +294,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     def _prepare_input_videos(
         self,
         videos: VideoInput,
+        video_metadata: VideoMetadata = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         device: Optional["torch.device"] = None,
     ) -> List["torch.Tensor"]:
@@ -299,6 +302,11 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         Prepare the input videos for processing.
         """
         videos = make_batched_videos(videos)
+        if video_metadata is not None:
+            batch_metadata = [metadata for batch_list in video_metadata for metadata in batch_list]
+        else:
+            batch_metadata = [None] * len(videos)
+
         processed_videos = []
         for video in videos:
             # `make_batched_videos` always returns a 4D array per video
@@ -312,7 +320,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                 video = video.to(device)
 
             processed_videos.append(video)
-        return processed_videos
+        return processed_videos, batch_metadata
 
     @add_start_docstrings(BASE_VIDEO_PROCESSOR_DOCSTRING)
     def preprocess(
@@ -320,7 +328,12 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         videos: VideoInput,
         **kwargs: Unpack[VideosKwargs],
     ) -> BatchFeature:
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
+        # `return_tensors` is a common kwargs thus not in processing_utils.VideosKwargs
+        validate_kwargs(
+            captured_kwargs=kwargs.keys(),
+            valid_processor_keys=list(self.valid_kwargs.__annotations__.keys()) + ["return_tensors"],
+        )
+
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self.valid_kwargs.__annotations__:
@@ -328,7 +341,10 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
         input_data_format = kwargs.pop("input_data_format")
         device = kwargs.pop("device")
-        videos = self._prepare_input_videos(videos=videos, input_data_format=input_data_format, device=device)
+        video_metadata = kwargs.pop("video_metadata")
+        videos, video_metadata = self._prepare_input_videos(
+            videos=videos, video_metadata=video_metadata, input_data_format=input_data_format, device=device
+        )
 
         kwargs = self._further_process_kwargs(**kwargs)
         self._validate_preprocess_kwargs(**kwargs)
@@ -343,11 +359,12 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         kwargs.pop("default_to_square")
         kwargs.pop("data_format")
 
-        return self._preprocess(videos=videos, **kwargs)
+        return self._preprocess(videos=videos, video_metadata=video_metadata, **kwargs)
 
     def _preprocess(
         self,
         videos: List["torch.Tensor"],
+        video_metadata: Union[List[VideoMetadata], List[dict]],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -364,18 +381,13 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         do_sample_frames: Optional[bool] = None,
         fps: Optional[int] = None,
         num_frames: Optional[int] = None,
-        video_metadata: Optional[Union[List[List[VideoMetadata]], List[List[dict]]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ) -> BatchFeature:
         if do_sample_frames:
             # Sample video frames
-            if video_metadata is not None:
-                batch_metadata = [metadata for batch_list in video_metadata for metadata in batch_list]
-            else:
-                batch_metadata = [None] * len(videos)
             videos = [
                 self.sample_frames(video, metadata=metadata, num_frames=num_frames, fps=fps)
-                for video, metadata in zip(videos, batch_metadata)
+                for video, metadata in zip(videos, video_metadata)
             ]
 
         # Group videos by size for batched resizing
