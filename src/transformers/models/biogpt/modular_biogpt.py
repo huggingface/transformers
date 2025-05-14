@@ -371,7 +371,7 @@ class BioGptModel(BioGptPreTrainedModel):
             cross_attentions=all_cross_attentions,
         )
 
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._update_causal_mask
+    # Copied from transformers.models.bart.modeling_bart.BartDecoder._update_causal_mask with attention_dropout->attention_probs_dropout_prob
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, None],
@@ -395,7 +395,7 @@ class BioGptModel(BioGptPreTrainedModel):
         elif (
             self.config._attn_implementation == "flex_attention"
             and not _unsupported_features
-            and (self.config.attention_dropout == 0 or not self.training)
+            and (self.config.attention_probs_dropout_prob == 0 or not self.training)
         ):
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
