@@ -52,6 +52,7 @@ if is_torch_available():
         SlidingWindowCache,
         StaticCache,
         convert_and_export_with_cache,
+        pipeline,
     )
 
 
@@ -190,6 +191,21 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
 
+def _skip_on_failed_cache_prerequisites(test, cache_implementation):
+    """Function to skip tests on failed cache prerequisites, given a cache implementation"""
+    # Installed dependencies
+    if cache_implementation == "quantized" and not is_optimum_quanto_available():
+        test.skipTest("Quanto is not available")
+    # Devices
+    if "offloaded" in cache_implementation:
+        has_accelerator = torch_device is not None and torch_device != "cpu"
+        if not has_accelerator:
+            test.skipTest("Offloaded caches require an accelerator")
+        if cache_implementation in ["offloaded_static", "offloaded_hybrid_chunked"]:
+            if torch.cuda.device_count() != 1:
+                test.skipTest("Offloaded static caches require exactly 1 GPU")
+
+
 class CacheIntegrationTest(unittest.TestCase):
     """Fast cache integration tests that share the same small model"""
 
@@ -202,24 +218,10 @@ class CacheIntegrationTest(unittest.TestCase):
         )
         cls.model.config.sliding_window = 256  # hack to enable the use of caches with sliding windows
 
-    def _skip_on_failed_cache_prerequisites(self, cache_implementation):
-        """Function to skip tests on failed cache prerequisites, given a cache implementation"""
-        # Installed dependencies
-        if cache_implementation == "quantized" and not is_optimum_quanto_available():
-            self.skipTest("Quanto is not available")
-        # Devices
-        if "offloaded" in cache_implementation:
-            has_accelerator = torch_device is not None and torch_device != "cpu"
-            if not has_accelerator:
-                self.skipTest("Offloaded caches require an accelerator")
-            if cache_implementation in ["offloaded_static", "offloaded_hybrid_chunked"]:
-                if torch.cuda.device_count() != 1:
-                    self.skipTest("Offloaded static caches require exactly 1 GPU")
-
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_batched(self, cache_implementation):
         """Sanity check: caches' `.update` function expects batched inputs"""
-        self._skip_on_failed_cache_prerequisites(cache_implementation)
+        _skip_on_failed_cache_prerequisites(self, cache_implementation)
 
         EXPECTED_GENERATION = ["A sequence: 1, 2, 3, 4, 5, 6, 7, 8,", "A sequence: A, B, C, D, E, F, G, H"]
 
@@ -248,7 +250,7 @@ class CacheIntegrationTest(unittest.TestCase):
         Sanity check: caches' `reorder_cache` is operational. We can confirm this by looking at the beam indices
         (an output sequence contains multiple beam indices).
         """
-        self._skip_on_failed_cache_prerequisites(cache_implementation)
+        _skip_on_failed_cache_prerequisites(self, cache_implementation)
         if cache_implementation == "offloaded_hybrid_chunked":
             # TODO (joao, cyril): something is off with `offloaded_hybrid_chunked` aka `OffloadedHybridCache`: the
             # output sequence (and the corresponding beam scores, if we add `output_scores=True`) are significantly
@@ -282,7 +284,7 @@ class CacheIntegrationTest(unittest.TestCase):
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_extra_left_padding(self, cache_implementation):
         """Tests that adding extra left-padding does not affect the generation with the cache"""
-        self._skip_on_failed_cache_prerequisites(cache_implementation)
+        _skip_on_failed_cache_prerequisites(self, cache_implementation)
 
         EXPECTED_GENERATION = ["The cat's whiskers are also a sign of anxiety."]
 
@@ -305,29 +307,6 @@ class CacheIntegrationTest(unittest.TestCase):
         gen_out = self.model.generate(**inputs_expanded, **generation_kwargs)
         decoded = self.tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
-
-    @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
-    def test_cache_pipe_rope_model(self, cache_implementation):
-        """Tests caches with a RoPE model"""
-        self._skip_on_failed_cache_prerequisites(cache_implementation)
-        from transformers import pipeline
-
-        model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM"
-        pipe = pipeline("text-generation", model=model_id, torch_dtype=torch.bfloat16)
-        pipe.model.config.sliding_window = (
-            10 if cache_implementation in ["sliding_window", "hybrid", "hybrid_chunked"] else None
-        )
-        out = pipe(
-            "h",
-            cache_implementation=cache_implementation,
-            max_new_tokens=10,
-            do_sample=False,
-            disable_compile=True,
-            return_tensors=True,
-        )
-        out = out[0]["generated_token_ids"][-10:]
-        EXPECTED_OUTPUT = [914, 134, 124, 889, 48, 233, 541, 27, 380, 365]
-        self.assertListEqual(out, EXPECTED_OUTPUT)
 
 
 @require_torch_accelerator
@@ -576,6 +555,28 @@ class CacheHardIntegrationTest(unittest.TestCase):
         inputs = tokenizer("Today is a beautiful day!", return_tensors="pt").to(0)
         _ = model(**inputs)
         _ = model.generate(**inputs, max_new_tokens=2, cache_implementation="hybrid")
+
+    @require_torch_gpu
+    @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
+    def test_cache_gptj_model(self, cache_implementation):
+        """Tests caches with GPT-J model. Regression test for https://github.com/huggingface/transformers/pull/34799"""
+        _skip_on_failed_cache_prerequisites(self, cache_implementation)
+
+        model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM"
+        pipe = pipeline("text-generation", model=model_id, torch_dtype=torch.bfloat16)
+        pipe.model.config.sliding_window = (
+            256 if cache_implementation in ["sliding_window", "hybrid", "hybrid_chunked"] else None
+        )
+        out = pipe(
+            "hello world",
+            cache_implementation=cache_implementation,
+            max_new_tokens=10,
+            do_sample=False,
+            disable_compile=True,
+            return_tensors=True,
+        )[0]["generated_token_ids"][-10:]
+        EXPECTED_OUTPUT = [879, 175, 39, 141, 1000, 975, 951, 991, 683, 441]
+        self.assertListEqual(out, EXPECTED_OUTPUT)
 
 
 @require_torch
