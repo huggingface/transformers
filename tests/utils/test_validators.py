@@ -15,7 +15,11 @@ import unittest
 from dataclasses import dataclass
 from typing import Optional, Union
 
-from huggingface_hub.dataclasses import StrictDataclassFieldValidationError, strict
+from huggingface_hub.dataclasses import (
+    StrictDataclassClassValidationError,
+    StrictDataclassFieldValidationError,
+    strict,
+)
 
 from transformers import AlbertConfig
 from transformers.validators import activation_fn_key, interval, probability, token
@@ -138,7 +142,7 @@ class ValidatorsIntegrationTests(unittest.TestCase):
         # 2 - Manual specification, traveling through an invalid config, should be allowed
         config.eos_token_id = 99  # vocab_size = 30000, eos_token_id = 99 -> valid
         config.vocab_size = 10  # vocab_size = 10, eos_token_id = 99 -> invalid (but only throws error in `validate()`)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(StrictDataclassClassValidationError):
             config.validate()
         config.eos_token_id = 9  # vocab_size = 10, eos_token_id = 9 -> valid
         config.validate()
@@ -164,12 +168,12 @@ class ValidatorsIntegrationTests(unittest.TestCase):
         # `@strict` calls `validate()` in `__post_init__`, i.e. after `__init__`. All functions defined as
         # `validate_XXX(self)` will be called as part of the validation process. In this case, a special token must
         # be in the vocabulary, and the validation function is defined in the base config class.
-        with self.assertRaises(ValueError):
+        with self.assertRaises(StrictDataclassClassValidationError):
             config = AlbertConfig(vocab_size=10, eos_token_id=99)
 
         # Similar to the previous case, but the validation function is defined in the model config class. The hidden
         # size must be divisible by the number of attention heads.
-        with self.assertRaises(ValueError):
+        with self.assertRaises(StrictDataclassClassValidationError):
             config = AlbertConfig(hidden_size=10, num_attention_heads=3)
 
         # vocab size is assigned after init, individual attributes are checked on assignment
