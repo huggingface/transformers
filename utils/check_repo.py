@@ -156,6 +156,14 @@ IGNORE_NON_TESTED = (
         "Llama4VisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Emu3VQVAE",  # Building part of bigger (tested) model
         "Emu3TextModel",  # Building part of bigger (tested) model
+        "Qwen2VLTextModel",  # Building part of bigger (tested) model
+        "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
+        "InternVLVisionModel",  # Building part of bigger (tested) model
+        "JanusVisionModel",  # Building part of bigger (tested) model
+        "TimesFmModel",  # Building part of bigger (tested) model
+        "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
+        "CsmDepthDecoderModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
+        "CsmBackboneModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
     ]
 )
 
@@ -232,6 +240,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "JukeboxVQVAE",
     "JukeboxPrior",
     "SamModel",
+    "SamHQModel",
     "DPTForDepthEstimation",
     "DecisionTransformerGPT2Model",
     "GLPNForDepthEstimation",
@@ -355,6 +364,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
     "Emu3VQVAE",  # no autoclass for VQ-VAE models
     "Emu3TextModel",  # Building part of bigger (tested) model
+    "JanusVQVAE",  # no autoclass for VQ-VAE models
+    "JanusVisionModel",  # Building part of bigger (tested) model
     "Qwen2_5OmniTalkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen2_5OmniTalkerModel",  # Building part of a bigger model
     "Qwen2_5OmniThinkerForConditionalGeneration",  # Building part of a bigger model
@@ -362,6 +373,10 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen2_5OmniToken2WavModel",  # Building part of a bigger model
     "Qwen2_5OmniToken2WavBigVGANModel",  # Building part of a bigger model
     "Qwen2_5OmniToken2WavDiTModel",  # Building part of a bigger model
+    "CsmBackboneModel",  # Building part of a bigger model
+    "CsmDepthDecoderModel",  # Building part of a bigger model
+    "CsmDepthDecoderForCausalLM",  # Building part of a bigger model
+    "CsmForConditionalGeneration",  # Building part of a bigger model
 ]
 
 # DO NOT edit this list!

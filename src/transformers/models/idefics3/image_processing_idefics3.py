@@ -295,10 +295,10 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         self,
         do_convert_rgb: bool = True,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.LANCZOS,
         do_image_splitting: bool = True,
-        max_image_size: Dict[str, int] = None,
+        max_image_size: Optional[Dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
@@ -581,7 +581,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
         padded_images_list = [
             [empty_image(pad_size, data_format) for _ in range(max_num_images)] for _ in range(batch_size)
         ]
-        padded_masks = [[np.zeros(pad_size) for _ in range(max_num_images)] for _ in range(batch_size)]
+        padded_masks = [[np.zeros(pad_size, dtype=np.int64) for _ in range(max_num_images)] for _ in range(batch_size)]
 
         for batch_idx in range(batch_size):
             for sample_idx, image in enumerate(images[batch_idx]):

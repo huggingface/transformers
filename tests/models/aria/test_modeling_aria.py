@@ -21,6 +21,7 @@ import requests
 from transformers import (
     AriaConfig,
     AriaForConditionalGeneration,
+    AriaModel,
     AriaTextConfig,
     AutoProcessor,
     AutoTokenizer,
@@ -31,6 +32,7 @@ from transformers.models.idefics3 import Idefics3VisionConfig
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
+    require_torch_large_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -174,7 +176,7 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     Model tester for `AriaForConditionalGeneration`.
     """
 
-    all_model_classes = (AriaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (AriaModel, AriaForConditionalGeneration) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
     _is_composite = True
@@ -280,8 +282,16 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip(reason="Dynamic control flow due to MoE")
-    def test_generate_compile_model_forward(self):
+    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
+    def test_disk_offload_safetensors(self):
         pass
 
 
@@ -295,6 +305,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         torch.cuda.empty_cache()
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -317,6 +328,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_llama_single(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -339,6 +351,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -366,6 +379,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -392,6 +406,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched_regression(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -420,12 +435,15 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_torch
+    @require_torch_large_accelerator
     @require_vision
     @require_bitsandbytes
     def test_batched_generation(self):
-        model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
-
+        # Skip multihead_attn for 4bit because MHA will read the original weight without dequantize.
+        # See https://github.com/huggingface/transformers/pull/37444#discussion_r2045852538.
+        model = AriaForConditionalGeneration.from_pretrained(
+            "rhymes-ai/Aria", load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]
+        )
         processor = AutoProcessor.from_pretrained("rhymes-ai/Aria")
 
         prompt1 = "<image>\n<image>\nUSER: What's the difference of two images?\nASSISTANT:"
@@ -436,24 +454,49 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image1 = Image.open(requests.get(url1, stream=True).raw)
         image2 = Image.open(requests.get(url2, stream=True).raw)
 
-        inputs = processor(
-            images=[image1, image2, image1, image2],
-            text=[prompt1, prompt2, prompt3],
-            return_tensors="pt",
-            padding=True,
-        ).to(torch_device)
-
-        model = model.eval()
-
-        EXPECTED_OUTPUT = [
-            "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one shows a dog standing on a grassy field, while",
-            "\nUSER: Describe the image.\nASSISTANT: The image features a brown and white dog sitting on a sidewalk. The dog is holding a small",
-            "\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the",
+        # Create inputs
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": prompt1},
+                    {"type": "image"},
+                    {"type": "text", "text": prompt2},
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": prompt3},
+                ],
+            },
         ]
 
+        prompts = [processor.apply_chat_template([message], add_generation_prompt=True) for message in messages]
+        images = [[image1, image2], [image2]]
+        inputs = processor(text=prompts, images=images, padding=True, return_tensors="pt").to(
+            device=model.device, dtype=model.dtype
+        )
+
+        EXPECTED_OUTPUT = {
+            "cpu": [
+                "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
+                "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a grassy hill. The alpaca has",
+            ],  # cpu output
+            "cuda": [
+                "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
+                "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a patch of ground with some dry grass. The",
+            ],  # cuda output
+            "xpu": [
+                "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
+                "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a grassy hill. The alpaca has",
+            ],  # xpu output
+        }
         generate_ids = model.generate(**inputs, max_new_tokens=20)
         outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        self.assertEqual(outputs, EXPECTED_OUTPUT)
+        self.assertListEqual(outputs, EXPECTED_OUTPUT[model.device.type])
 
     def test_tokenizer_integration(self):
         model_id = "rhymes-ai/Aria"
@@ -477,6 +520,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_generation_no_images(self):
         model_id = "rhymes-ai/Aria"
