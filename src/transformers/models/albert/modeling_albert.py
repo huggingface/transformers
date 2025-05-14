@@ -351,7 +351,6 @@ class AlbertAttention(nn.Module):
         projected_context_layer = self.dense(context_layer)
         projected_context_layer_dropout = self.output_dropout(projected_context_layer)
         layernormed_context_layer = self.LayerNorm(hidden_states + projected_context_layer_dropout)
-        print(output_attentions)
         return (layernormed_context_layer, attention_probs) if output_attentions else (layernormed_context_layer,)
 
 
