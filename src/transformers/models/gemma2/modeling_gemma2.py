@@ -486,7 +486,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
                     partial(self.layers[i].__call__, **flash_attn_kwargs),
                     hidden_states,
                     position_embeddings,
-                    causal_masks[i],
+                    causal_masks[self.layer_attention_patterns[i].as_tuple()],
                     position_ids,
                     past_key_values,
                     output_attentions,
