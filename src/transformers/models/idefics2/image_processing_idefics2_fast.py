@@ -110,16 +110,12 @@ def make_pixel_mask(image: "torch.Tensor", output_size: Tuple[int, int]) -> "tor
 
 class Idefics2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
-    do_convert_rgb (`bool`, *optional*, defaults to `True`):
-        Whether to convert the image to RGB. This is useful if the input image is of a different format e.g. RGBA.
-        Only has an effect if the input image is in the PIL format.
     do_image_splitting (`bool`, *optional*, defaults to `False`):
         Whether to split the image into a sequence 4 equal sub-images concatenated with the original image.
     do_pad (`bool`, *optional*, defaults to `True`):
         Whether to pad images to the largest height and width in the batch.
     """
 
-    do_convert_rgb: Optional[bool]
     do_image_splitting: Optional[bool]
     do_pad: Optional[bool]
 
@@ -303,7 +299,7 @@ class Idefics2ImageProcessorFast(BaseImageProcessorFast):
             pixel_attention_masks = torch.zeros(
                 len(processed_images),
                 max_num_images,
-                *(1, max_height, max_width),
+                *(max_height, max_width),
                 device=processed_images[0][0].device,
             )
             for i, images in enumerate(processed_images):

@@ -385,7 +385,15 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=False, num_images=5, torchify=True
+        )
+        # pop some images to have non homogenous batches:
+        indices_to_pop = [i if np.random.random() < 0.5 else None for i in range(len(dummy_images))]
+        for i in indices_to_pop:
+            if i is not None:
+                dummy_images[i].pop()
+
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
@@ -393,7 +401,11 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
         self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-
+        self.assertTrue(
+            torch.allclose(
+                encoding_slow.pixel_attention_mask.float(), encoding_fast.pixel_attention_mask.float(), atol=1e-3
+            )
+        )
         self.assertLessEqual(
             torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 2e-3
         )

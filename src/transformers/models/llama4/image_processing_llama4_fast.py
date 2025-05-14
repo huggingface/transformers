@@ -26,11 +26,7 @@ from ...image_processing_utils_fast import (
     group_images_by_shape,
     reorder_images,
 )
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-    SizeDict,
-)
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -395,13 +391,14 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
         possible_resolutions = find_supported_resolutions(max_num_chunks=max_patches, patch_size=size)
         possible_resolutions = torch.tensor(possible_resolutions)
         # process images by batch, grouped by shape
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         grouped_processed_images = {}
         grouped_aspect_ratios = {}
         for shape, stacked_images in grouped_images.items():

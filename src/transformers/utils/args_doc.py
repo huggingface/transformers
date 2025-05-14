@@ -204,6 +204,13 @@ class ImageProcessorArgs:
         "shape": None,
     }
 
+    disable_grouping = {
+        "description": """
+    Whether to disable grouping of images by size to process them individually and not in batches.
+    """,
+        "shape": None,
+    }
+
 
 class ModelArgs:
     labels = {
