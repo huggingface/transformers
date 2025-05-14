@@ -35,7 +35,7 @@ try:
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
     from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace import Tracer, TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
     from opentelemetry.trace import Status, StatusCode, get_tracer
 
@@ -320,7 +320,7 @@ class PagedAttentionCache(Cache):
         physical_indices = physical_block_nums * block_size + block_offsets
         return physical_indices
 
-    # @traced
+    @traced
     def update(
         self,
         key_states: torch.Tensor,
@@ -519,6 +519,7 @@ class ContinuousBatchProcessor:
         self._configure_batch_parameters()
         self.setup_static_tensors()
 
+    @traced
     def setup_static_tensors(self):
         T = self.max_batch_tokens
         max_token_budget = self.cache.num_blocks * self.cache.block_size
@@ -538,6 +539,7 @@ class ContinuousBatchProcessor:
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
 
+    @traced
     def reset_static_tensors(self):
         """Reset static tensors for the next batch."""
         self.input_ids.zero_()
@@ -574,66 +576,6 @@ class ContinuousBatchProcessor:
         return (
             f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.active_requests}, waiting_requests={self.waiting_requests})"
             + self.get_model_kwargs().__repr__()
-        )
-
-    def _setup_metrics(self):
-        """Initialize OpenTelemetry metrics and tracing if the library is available."""
-
-        if not _has_opentelemetry:
-            logger.info("OpenTelemetry is not installed. Metrics and tracing will not be recorded.")
-            return
-
-        # Create a resource to identify this component in the metrics system
-        resource = Resource.create({"service.name": "transformers.generation.continuous_batching_processor"})
-
-        metrics_exporter = OTLPMetricExporter()
-        meter_provider = MeterProvider(resource=resource, metric_readers=[metrics_exporter])
-        metrics.set_meter_provider(meter_provider)
-
-        # Set up the tracer provider with an OTLP exporter for tracing
-        trace_exporter = OTLPSpanExporter()
-        tracer_provider = TracerProvider(resource=resource)
-        tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
-        trace.set_tracer_provider(tracer_provider)
-
-        # Create a tracer for our functions
-        self.tracer = get_tracer("transformers.generation")
-
-        # Create a meter for our metrics
-        self.meter = metrics.get_meter("transformers.generation")
-
-        # Create histogram for time to first token
-        self.ttft_histogram = self.meter.create_histogram(
-            name="ttft_milliseconds",
-            description="Time to first token in milliseconds",
-            unit="ms",
-        )
-
-        # Create histogram for decode/prefill ratio
-        self.decode_prefill_ratio_gauge = self.meter.create_gauge(
-            name="decode_prefill_ratio",
-            description="Ratio of decode tokens to prefill tokens in a batch",
-            unit="ratio",
-        )
-
-        # Create counters for decode and prefill tokens
-        self.prefill_tokens_counter = self.meter.create_counter(
-            name="prefill_tokens_processed",
-            description="Number of prefill tokens processed",
-            unit="tokens",
-        )
-
-        self.decode_tokens_counter = self.meter.create_counter(
-            name="decode_tokens_processed",
-            description="Number of decode tokens processed",
-            unit="tokens",
-        )
-
-        # Create histogram for batch fill percentage
-        self.batch_fill_percentage_histogram = self.meter.create_histogram(
-            name="batch_fill_percentage",
-            description="Percentage of max_batch_tokens utilized in each batch",
-            unit="percent",
         )
 
     def _setup_metrics(self):
@@ -681,6 +623,7 @@ class ContinuousBatchProcessor:
             unit="percent",
         )
 
+    @traced
     def _configure_batch_parameters(self):
         """Set up batch processing parameters based on generation config."""
         # Calculate total cache capacity
@@ -1046,10 +989,12 @@ class ContinuousBatchProcessor:
         elif state.status == "finished":
             self.output_queue.put(state)
 
+    @traced
     def has_pending_requests(self) -> bool:
         """Check if there are any active or waiting requests."""
         return bool(self.active_requests or self.waiting_requests)
 
+    @traced
     def handle_batch_error(self, error):
         """Handle errors during batch processing."""
         failed_ids = self.requests_to_process_next
@@ -1059,6 +1004,7 @@ class ContinuousBatchProcessor:
                 self.cache.free_blocks(req_id)
                 del self.active_requests[req_id]
 
+    @traced
     def fail_all_requests(self, error):
         """Fail all active requests with the given error.
 
@@ -1117,6 +1063,7 @@ class ContinuousBatchingManager:
 
         self.tracer = get_tracer("transformers.generation.continuous_batching_manager")
 
+    @traced
     def start(self):
         """Start the background generation thread."""
         if self._generation_thread is not None and self._generation_thread.is_alive():
@@ -1205,7 +1152,7 @@ class ContinuousBatchingManager:
             self.add_request(input_ids, request_id=req_id, **kwargs)
 
     @traced
-    def get_result(self, timeout=None) -> Optional[Dict]:
+    def get_result(self, timeout=None) -> Optional[RequestState]:
         """Retrieve one result from the output queue.
 
         Args:
@@ -1217,7 +1164,7 @@ class ContinuousBatchingManager:
         if self._generation_thread is None and self.output_queue.empty():
             return None
         try:
-            result = self.output_queue.get(block=True, timeout=timeout)  # TODO Pop here rather?
+            result = self.output_queue.get(block=True, timeout=timeout)
             logger.debug(f"Retrieved result for request {result.request_id}")
             return result
         except queue.Empty:
@@ -1232,6 +1179,7 @@ class ContinuousBatchingManager:
             if result is not None:
                 yield result
 
+    @traced
     def warmup(self, batch_processor):
         stream = torch.cuda.Stream()
         stream.wait_stream(torch.cuda.current_stream())
@@ -1244,19 +1192,23 @@ class ContinuousBatchingManager:
         with torch.cuda.graph(self.graph):
             self._generation_step(batch_processor)
 
+    @traced
     def _generation_step(self, batch_processor: ContinuousBatchProcessor):
         """Perform a single generation step. This is cuda graphed"""
         batch_data = batch_processor.get_model_kwargs()
         with torch.no_grad():
-            logits = self.model(**batch_data.__dict__).logits
+            with self.tracer.start_as_current_span("model_forward"):
+                logits = self.model(**batch_data.__dict__).logits
             if self.log_prob_generation:
                 batch_processor.output_probs.copy_(logits)  # TODO
-            probs = self.logit_processor(batch_data.input_ids, logits)
-            if self.do_sample:  # sample
-                probs = nn.functional.softmax(probs, dim=-1)
-                next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
-            else:
-                next_tokens = torch.argmax(probs, dim=-1)
+            with self.tracer.start_as_current_span("logit_processing"):
+                probs = self.logit_processor(batch_data.input_ids, logits)
+            with self.tracer.start_as_current_span("sampling"):
+                if self.do_sample:  # sample
+                    probs = nn.functional.softmax(probs, dim=-1)
+                    next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
+                else:
+                    next_tokens = torch.argmax(probs, dim=-1)
             batch_processor.output_ids.copy_(next_tokens)
 
     @traced(span_name="generation_loop")
@@ -1281,6 +1233,7 @@ class ContinuousBatchingManager:
                 self.model.dtype,
                 self.streaming,
             )
+
             first = True
             while not self.stop_event.is_set() or batch_processor.has_pending_requests():
                 batch_processor.prepare_next_batch()
@@ -1289,7 +1242,8 @@ class ContinuousBatchingManager:
                         self.warmup(batch_processor)
                         first = False
                     try:
-                        self.graph.replay()
+                        with self.tracer.start_as_current_span("graph_replay"):
+                            self.graph.replay()
                     except Exception as e:
                         logger.error(f"Model forward pass failed: {e}", exc_info=True)
                         batch_processor.handle_batch_error(e)
@@ -1356,6 +1310,7 @@ class ContinuousMixin:
             model=self, generation_config=gen_config, max_queue_size=max_queue_size, streaming=streaming
         )
 
+    @traced
     @torch.inference_mode()
     def generate_batch(
         self,
