@@ -531,7 +531,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             use_cache = False
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids.to(self.embed_tokens.weight.device))
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
             if self.config.get_text_config().get("attention_chunk_size") is not None:
@@ -631,7 +631,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
             return None, None
 
         sequence_length = input_tensor.shape[1]
-        cache_position = cache_position.to(self.device)
         attention_chunk_size = self.config.attention_chunk_size
         using_chunked_attention = attention_chunk_size is not None
 
