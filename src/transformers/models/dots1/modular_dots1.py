@@ -1,35 +1,21 @@
-import math
-from typing import Callable, Optional, Tuple
-
-import torch
-import torch.nn.functional as F
-import torch.utils.checkpoint
-from torch import nn
-
-from ...activations import ACT2FN
-from ...cache_utils import Cache
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_outputs import CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import logging
+from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3DecoderLayer,
+    DeepseekV3MLP,
+    DeepseekV3MoE,
+    DeepseekV3TopkRouter,
+    DeepseekV3PreTrainedModel
+)
 from ..llama.modeling_llama import (
-    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaModel,
-    LlamaPreTrainedModel,
     LlamaRMSNorm,
-    LlamaMLP,
-    LlamaRotaryEmbedding,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
-    rotate_half,
+    KwargsForCausalLM,
 )
 from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3RotaryEmbedding
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MLP, DeepseekV3TopkRouter
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE
-
 from .configuration_dots1 import Dots1Config
-
 
 logger = logging.get_logger(__name__)
 
@@ -58,44 +44,46 @@ class Dots1TopkRouter(DeepseekV3TopkRouter):
     pass
 
 
-class Dots1DecoderLayer(LlamaDecoderLayer, nn.Module):
-    def __init__(self, config: Dots1Config, layer_idx: int):
-        nn.Module().__init__()
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = Dots1Attention(config=config, layer_idx=layer_idx)
-
-        if layer_idx >= config.first_k_dense_replace:
-            self.mlp = Dots1MoE(config)
-        else:
-            self.mlp = Dots1MLP(config)
-
-        self.input_layernorm = Dots1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Dots1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+class Dots1DecoderLayer(DeepseekV3DecoderLayer):
+    pass
 
 
-class Dots1PreTrainedModel(LlamaPreTrainedModel):
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Dots1RMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, Dots1TopkRouter):
-            module.weight.data.normal_(mean=0.0, std=std)
+class Dots1PreTrainedModel(DeepseekV3PreTrainedModel):
+    pass
 
 
 class Dots1Model(LlamaModel):
     pass
 
+
 class Dots1ForCausalLM(LlamaForCausalLM):
-    pass
+    def forward(
+        self,
+        **super_kwargs: Unpack[KwargsForCausalLM],
+    ) -> CausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, Dots1ForCausalLM
+
+        >>> model = Dots1ForCausalLM.from_pretrained("rednote-hilab/dots1.llm1.inst")
+        >>> tokenizer = AutoTokenizer.from_pretrained("rednote-hilab/dots1.llm1.inst")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+        return super().forward(**super_kwargs)
 
 
 __all__ = [

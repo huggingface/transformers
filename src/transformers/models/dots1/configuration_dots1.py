@@ -1,25 +1,23 @@
-from transformers.configuration_utils import PretrainedConfig
-from transformers.utils import logging
+from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 
 logger = logging.get_logger(__name__)
-
-Dots1_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class Dots1Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`XdgMoEModel`]. It is used to instantiate an XdgMoE
+    This is the configuration class to store the configuration of a [`Dots1Model`]. It is used to instantiate an `dots.1`
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the XdgMoE-7B.
+    defaults will yield a similar configuration to that of the dots.llm1.base [rednote-hilab/dots.llm1.base]
+    (https://huggingface.co/rednote-hilab/dots.llm1.base).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
         vocab_size (`int`, *optional*, defaults to 102400):
             Vocabulary size of the Deep model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`XdgMoEModel`]
+            `inputs_ids` passed when calling [`Dots1Model`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -92,10 +90,43 @@ class Dots1Config(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+    ```python
+    >>> from transformers import Dots1Model, Dots1Config
+
+    >>> # Initializing a dots.1 style configuration
+    >>> configuration = Dots1Config()
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "dots.1"
     keys_to_ignore_at_inference = ["past_key_values"]
+
+    base_model_tp_plan = {  # TODO: only replicate attention layers when > first_k_dense_replace
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.*.gate_proj": "local_colwise",
+        "layers.*.mlp.experts.*.up_proj": "local_colwise",
+        "layers.*.mlp.experts.*.down_proj": "local_rowwise",
+        "layers.*.mlp.experts.*": "local",  # each expert is wrapped in a module list
+        "layers.*.mlp.shared_experts.gate_proj": "local_colwise",
+        "layers.*.mlp.shared_experts.up_proj": "local_colwise",
+        "layers.*.mlp.shared_experts.down_proj": "local_rowwise",
+        "layers.*.mlp.shared_experts": "local",
+        "layers.*.mlp.gate_proj": "local_colwise",
+        "layers.*.mlp.up_proj": "local_colwise",
+        "layers.*.mlp.down_proj": "local_rowwise",
+        "layers.*.mlp": "gather",  # This is the only moment where results are gathered
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,
@@ -112,7 +143,7 @@ class Dots1Config(PretrainedConfig):
         moe_layer_freq=1,
         first_k_dense_replace=0,
         norm_topk_prob=False,
-        scoring_func='softmax',
+        scoring_func="softmax",
         aux_loss_alpha=0.001,
         seq_aux=True,
         hidden_act="silu",
@@ -175,3 +206,6 @@ class Dots1Config(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+
+__all__ = ["Dots1Config"]
