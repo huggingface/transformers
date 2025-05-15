@@ -17,12 +17,15 @@ from typing import Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
-from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 
 from .cache_utils import Cache
 from .configuration_utils import PretrainedConfig
 from .modeling_utils import GeneralInterface
-from .utils.import_utils import is_torch_greater_or_equal, is_torchdynamo_compiling
+from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_torchdynamo_compiling
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 
 
 _is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
