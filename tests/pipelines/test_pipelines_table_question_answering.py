@@ -49,7 +49,7 @@ class TQAPipelineTests(unittest.TestCase):
         self.assertIsInstance(model.config.aggregation_labels, dict)
         self.assertIsInstance(model.config.no_aggregation_label_index, int)
 
-        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer)
+        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer, max_new_tokens=20)
         outputs = table_querier(
             table={
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
@@ -151,7 +151,7 @@ class TQAPipelineTests(unittest.TestCase):
         self.assertIsInstance(model.config.aggregation_labels, dict)
         self.assertIsInstance(model.config.no_aggregation_label_index, int)
 
-        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer)
+        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer, max_new_tokens=20)
         outputs = table_querier(
             table={
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
@@ -254,7 +254,7 @@ class TQAPipelineTests(unittest.TestCase):
         model_id = "lysandre/tiny-tapas-random-sqa"
         model = AutoModelForTableQuestionAnswering.from_pretrained(model_id, torch_dtype=torch_dtype)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer)
+        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer, max_new_tokens=20)
 
         inputs = {
             "table": {
@@ -274,7 +274,7 @@ class TQAPipelineTests(unittest.TestCase):
         self.assertNotEqual(sequential_outputs[1], batch_outputs[1])
         # self.assertNotEqual(sequential_outputs[2], batch_outputs[2])
 
-        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer)
+        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer, max_new_tokens=20)
         outputs = table_querier(
             table={
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
@@ -380,7 +380,7 @@ class TQAPipelineTests(unittest.TestCase):
         model_id = "lysandre/tiny-tapas-random-sqa"
         model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id, from_pt=True)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer)
+        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer, max_new_tokens=20)
 
         inputs = {
             "table": {
@@ -400,7 +400,7 @@ class TQAPipelineTests(unittest.TestCase):
         self.assertNotEqual(sequential_outputs[1], batch_outputs[1])
         # self.assertNotEqual(sequential_outputs[2], batch_outputs[2])
 
-        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer)
+        table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer, max_new_tokens=20)
         outputs = table_querier(
             table={
                 "actors": ["brad pitt", "leonardo di caprio", "george clooney"],

@@ -63,6 +63,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
             image_processor=image_processor,
             processor=processor,
             torch_dtype=torch_dtype,
+            max_new_tokens=20,
         )
         examples = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
