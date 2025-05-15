@@ -139,8 +139,9 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        output_attentions: bool = False,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -174,6 +175,8 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
+        if not output_attentions:
+            attn_weights = None
         return attn_output, attn_weights
 
 
@@ -206,24 +209,19 @@ class DiaCrossAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         cross_attention_states: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
-        cross_position_embeddings: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states).view(hidden_shape)
 
-        query_states = apply_rotary_pos_emb(query_states, position_embeddings).transpose(1, 2)
-
         if cross_attention_states is not None:
             cross_shape = (*cross_attention_states.shape[:-1], -1, self.head_dim)
             key_states = self.k_proj(cross_attention_states).view(cross_shape)
             value_states = self.v_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
-            key_states = apply_rotary_pos_emb(key_states, cross_position_embeddings).transpose(1, 2)
             if past_key_values is not None:
                 key_states, value_states = past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_positions": cache_position}
@@ -241,7 +239,7 @@ class DiaCrossAttention(nn.Module):
             query_states,
             key_states,
             value_states,
-            None,  # None for now
+            attention_mask,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.attention_dropout,
             **kwargs,
@@ -249,6 +247,8 @@ class DiaCrossAttention(nn.Module):
 
         attn_output = attn_output.reshape((*input_shape, -1)).contiguous()
         attn_output = self.o_proj(attn_output)
+        if not output_attentions:
+            attn_weights = None
         return attn_output, attn_weights
 
 
@@ -265,11 +265,10 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
 
@@ -278,6 +277,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
             cache_position=cache_position,
             attention_mask=attention_mask,  # I don't mind if this never changes
             position_embeddings=position_embeddings,
+            output_attentions=output_attentions,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -286,7 +286,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
         normed_states = self.post_sa_norm(hidden_states)
         mlp_out = self.mlp(normed_states)
         hidden_states = residual + mlp_out
-        return hidden_states
+        return hidden_states, self_attn_weights
 
 
 class DiaPreTrainedModel(PreTrainedModel):
@@ -339,26 +339,44 @@ class DiaEncoder(DiaPreTrainedModel):
         past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         hidden_states = self.embedding(audio_codes)
         position_embeddings = self.rotary_embeddings(hidden_states, cache_position)
         _attention_mask = torch.ones(
             (audio_codes.shape[0], 1, hidden_states.shape[1], hidden_states.shape[1]), device=hidden_states.device
         )
-        _attention_mask = (_attention_mask.long() & attention_mask[:, None, None, :]) ^ attention_mask[
+        _attention_mask = (_attention_mask.long() & attention_mask[:, None, None, :]) & attention_mask[
             :, None, :, None
         ]
+
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attn_weights = () if output_attentions else None
+
         for layer in self.layers:
-            hidden_states = layer(
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            hidden_states, self_attn_weights = layer(
                 hidden_states=hidden_states,
                 cache_position=cache_position,
                 attention_mask=_attention_mask,
                 position_embeddings=position_embeddings,
                 past_key_values=past_key_values,
+                output_attentions=output_attentions,
             )
 
+            if output_attentions:
+                all_self_attn_weights += (self_attn_weights,)
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
         hidden_states = self.norm(hidden_states)
-        return hidden_states
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        return hidden_states, all_hidden_states, all_self_attn_weights
 
 
 class DiaMLP(nn.Module):  # Modular GlmMLP
@@ -406,12 +424,11 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
-        cross_position_embeddings: torch.Tensor,
         cache_position: torch.LongTensor,
         attention_mask: torch.Tensor,
         past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
         self_mask = torch.ones_like(normed_states)
@@ -433,9 +450,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         cross_states, cross_attn_weights = self.cross_attention(
             hidden_states=hidden_states,
             cross_attention_states=encoder_hidden_states,
-            position_embeddings=position_embeddings,
-            cross_position_embeddings=cross_position_embeddings,
-            # attention_mask=attention_mask,
+            attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values.cross_attention_cache,
             output_attentions=output_attentions,
@@ -447,7 +462,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         x_norm = self.pre_mlp_norm(hidden_states)
         mlp_out = self.mlp(x_norm)
         hidden_states = residual + mlp_out
-        return hidden_states
+        return hidden_states, cross_attn_weights, self_attn_weights
 
 
 class DiaMultiChannelEmbed(nn.Module):
@@ -460,7 +475,7 @@ class DiaMultiChannelEmbed(nn.Module):
     We would have offsets = [0, 256, 512]
     If audio_codes = [0, 1, 2, 3], [1, 3, 4, 7], [5, 6, 7, 8]
     then tokens = audio_codes + offsets
-                = [0, 1, 2, 3, 256, 259, 260, 263, 517, 5128, 519, 520]
+                = [0, 1, 2, 3, 257, 259, 260, 263, 517, 518, 519, 520]
     This allows us to use a single embedding layer for all channels.
     """
 
@@ -496,19 +511,15 @@ class DiaDecoder(DiaPreTrainedModel):
     def forward(
         self,
         audio_codes: torch.Tensor,
-        encoder_hidden_states,
-        cache_position,
-        cross_cache_position,
-        attention_mask,
-        past_key_values,
-        output_attentions,
-        output_hidden_states,
-    ) -> torch.Tensor:
+        encoder_hidden_states: torch.Tensor,
+        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
         if past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
-        cross_position_embeddings = None
-        if encoder_hidden_states is not None:
-            cross_position_embeddings = self.rotary_embeddings(encoder_hidden_states, cross_cache_position)
 
         hidden_states = self.embeddings(audio_codes)
         if cache_position is None:
@@ -517,23 +528,36 @@ class DiaDecoder(DiaPreTrainedModel):
         position_embeddings = self.rotary_embeddings(hidden_states, cache_position)
         if attention_mask is not None:
             attention_mask = 1 - (attention_mask[:, None, None, :])
+
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attn_weights = () if output_attentions else None
+        all_cross_attn_weights = () if output_attentions else None
+
         for i, layer in enumerate(self.layers):
-            hidden_states = layer(
+            hidden_states, cross_attn_weights, self_attn_weights = layer(
                 hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 position_embeddings=position_embeddings,
                 cache_position=cache_position,
                 attention_mask=attention_mask,
-                cross_position_embeddings=cross_position_embeddings,
                 past_key_values=past_key_values,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
             )
+
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            if output_attentions:
+                all_self_attn_weights += (self_attn_weights,)
+                all_cross_attn_weights += (cross_attn_weights,)
 
         hidden_states = self.norm(hidden_states)
         last_hidden_states = self.logits_dense(hidden_states).view(-1, self.num_channels, self.vocab_size)
-        return last_hidden_states.to(torch.float32)
+        return last_hidden_states.to(torch.float32), all_hidden_states, all_self_attn_weights, all_cross_attn_weights
 
 
-class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
+class DiaModel(DiaPreTrainedModel):
     def __init__(self, config: DiaConfig):
         super().__init__(config)
         self.encoder = DiaEncoder(config.encoder_config)
@@ -635,7 +659,16 @@ class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
         ).to_tuple()
 
 
+class DiaForConditionalGeneration(DiaGenerationMixin, DiaPreTrainedModel):
+    def __init__(self, config: DiaConfig):
+        super().__init__(config)
+        self.model = DiaModel(config)
+        self.proj_out = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.max_target_positions = config.max_target_positions
+
+
 __all__ = [
     "DiaModel",
     "DiaPreTrainedModel",
+    "DiaForConditionalGeneration",
 ]
