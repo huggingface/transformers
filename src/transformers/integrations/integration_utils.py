@@ -14,6 +14,7 @@
 """
 Integrations with other Python libraries.
 """
+
 import copy
 import functools
 import importlib.metadata
@@ -937,7 +938,9 @@ class WandbCallback(TrainerCallback):
 
             args_for_fake = copy.deepcopy(args)
             args_for_fake.deepspeed = None
-            fake_trainer = Trainer(args=args_for_fake, model=model, processing_class=processing_class, eval_dataset=["fake"])
+            fake_trainer = Trainer(
+                args=args_for_fake, model=model, processing_class=processing_class, eval_dataset=["fake"]
+            )
             with tempfile.TemporaryDirectory() as temp_dir:
                 fake_trainer.save_model(temp_dir)
                 metadata = (
