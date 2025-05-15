@@ -270,7 +270,7 @@ def main():
                             batch["input_ids"],
                             batch["labels"],
                             batch["position_ids"],
-                        ],  # TODO: need to add attention mask
+                        ],
                         buffer_seq_dims=[1, 1, 1],
                     )
                 )
@@ -291,9 +291,10 @@ def main():
                 all_reduce_grads(model, world_mesh, use_ddp=use_ddp)
 
                 if hasattr(model, "clip_grad_norm_"):
-                    gradnorm = model.clip_grad_norm_(max_norm=1.0, norm_type=2.0)
+                    gradnorm = model.clip_grad_norm_(max_norm=1.0, norm_type=2.0) # TODO: fix reported gradnorm
                 else:
                     # only works with FSDP's NO_SHARD otherwise we should use FSDP's clip_grad_norm_
+                    assert len(list(model.parameters()))>5, "No parameters found in model. Probably DDP bug.."
                     gradnorm = clip_grad_norm_(
                         model.parameters(),
                         max_norm=1.0,
