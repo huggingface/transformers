@@ -59,7 +59,13 @@ class Qwen2MoeModelTester(CausalLMModelTester):
 @require_torch
 class MistralModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
-        (Qwen2MoeModel, Qwen2MoeForCausalLM, Qwen2MoeForSequenceClassification, Qwen2MoeForTokenClassification)
+        (
+            Qwen2MoeModel,
+            Qwen2MoeForCausalLM,
+            Qwen2MoeForSequenceClassification,
+            Qwen2MoeForTokenClassification,
+            Qwen2MoeForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )

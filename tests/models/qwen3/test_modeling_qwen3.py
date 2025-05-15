@@ -61,7 +61,13 @@ class Qwen3ModelTester(CausalLMModelTester):
 @require_torch
 class Qwen3ModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
-        (Qwen3Model, Qwen3ForCausalLM, Qwen3ForSequenceClassification, Qwen3ForTokenClassification)
+        (
+            Qwen3Model,
+            Qwen3ForCausalLM,
+            Qwen3ForSequenceClassification,
+            Qwen3ForTokenClassification,
+            Qwen3ForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )

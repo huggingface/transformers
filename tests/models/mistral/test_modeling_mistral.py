@@ -62,7 +62,13 @@ class MistralModelTester(CausalLMModelTester):
 @require_torch
 class MistralModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
-        (MistralModel, MistralForCausalLM, MistralForSequenceClassification, MistralForTokenClassification)
+        (
+            MistralModel,
+            MistralForCausalLM,
+            MistralForSequenceClassification,
+            MistralForTokenClassification,
+            MistralForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )

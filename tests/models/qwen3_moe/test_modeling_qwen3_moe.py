@@ -37,6 +37,7 @@ if is_torch_available():
     from transformers import (
         Qwen3ForQuestionAnswering,
         Qwen3MoeForCausalLM,
+        Qwen3MoeForQuestionAnswering,
         Qwen3MoeForSequenceClassification,
         Qwen3MoeForTokenClassification,
         Qwen3MoeModel,
@@ -51,13 +52,19 @@ class Qwen3MoeModelTester(CausalLMModelTester):
         causal_lm_class = Qwen3MoeForCausalLM
         sequence_class = Qwen3MoeForSequenceClassification
         token_class = Qwen3MoeForTokenClassification
-        question_answering_class = Qwen3ForQuestionAnswering
+        question_answering_class = Qwen3MoeForQuestionAnswering
 
 
 @require_torch
 class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
-        (Qwen3MoeModel, Qwen3MoeForCausalLM, Qwen3MoeForSequenceClassification, Qwen3MoeForTokenClassification)
+        (
+            Qwen3MoeModel,
+            Qwen3MoeForCausalLM,
+            Qwen3MoeForSequenceClassification,
+            Qwen3MoeForTokenClassification,
+            Qwen3MoeForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )

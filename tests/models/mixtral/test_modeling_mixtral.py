@@ -55,7 +55,13 @@ class MixtralModelTester(CausalLMModelTester):
 @require_torch
 class MistralModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
-        (MixtralModel, MixtralForCausalLM, MixtralForSequenceClassification, MixtralForTokenClassification)
+        (
+            MixtralModel,
+            MixtralForCausalLM,
+            MixtralForSequenceClassification,
+            MixtralForTokenClassification,
+            MixtralForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
