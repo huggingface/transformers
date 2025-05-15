@@ -41,6 +41,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -100,6 +101,7 @@ def apply_tesseract(
     return words, normalized_boxes
 
 
+@requires(backends=("vision",))
 class LayoutLMv3ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a LayoutLMv3 image processor.
@@ -144,13 +146,13 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_value: float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Union[float, Iterable[float]] = None,
-        image_std: Union[float, Iterable[float]] = None,
+        image_mean: Optional[Union[float, Iterable[float]]] = None,
+        image_std: Optional[Union[float, Iterable[float]]] = None,
         apply_ocr: bool = True,
         ocr_lang: Optional[str] = None,
         tesseract_config: Optional[str] = "",
@@ -225,15 +227,15 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
         resample=None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Union[float, Iterable[float]] = None,
-        image_std: Union[float, Iterable[float]] = None,
-        apply_ocr: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, Iterable[float]]] = None,
+        image_std: Optional[Union[float, Iterable[float]]] = None,
+        apply_ocr: Optional[bool] = None,
         ocr_lang: Optional[str] = None,
         tesseract_config: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -324,7 +326,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -372,3 +374,6 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
             data["words"] = words_batch
             data["boxes"] = boxes_batch
         return data
+
+
+__all__ = ["LayoutLMv3ImageProcessor"]

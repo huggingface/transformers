@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,9 +18,10 @@ import json
 import logging
 import math
 import os
+from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
-from typing import Any, List, Mapping, Tuple, Union
+from typing import Any, Union
 
 import albumentations as A
 import datasets
@@ -51,7 +51,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.48.0.dev0")
+check_min_version("4.52.0.dev0")
 
 logging.basicConfig(level=logging.INFO)
 logger = get_logger(__name__)
@@ -61,7 +61,7 @@ require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/sema
 
 # Copied from examples/pytorch/object-detection/run_object_detection.format_image_annotations_as_coco
 def format_image_annotations_as_coco(
-    image_id: str, categories: List[int], areas: List[float], bboxes: List[Tuple[float]]
+    image_id: str, categories: list[int], areas: list[float], bboxes: list[tuple[float]]
 ) -> dict:
     """Format one set of image annotations to the COCO format
 
@@ -96,7 +96,7 @@ def format_image_annotations_as_coco(
 
 
 # Copied from examples/pytorch/object-detection/run_object_detection.convert_bbox_yolo_to_pascal
-def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: Tuple[int, int]) -> torch.Tensor:
+def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: tuple[int, int]) -> torch.Tensor:
     """
     Convert bounding boxes from YOLO format (x_center, y_center, width, height) in range [0, 1]
     to Pascal VOC format (x_min, y_min, x_max, y_max) in absolute coordinates.
@@ -152,7 +152,7 @@ def augment_and_transform_batch(
 
 
 # Copied from examples/pytorch/object-detection/run_object_detection.collate_fn
-def collate_fn(batch: List[BatchFeature]) -> Mapping[str, Union[torch.Tensor, List[Any]]]:
+def collate_fn(batch: list[BatchFeature]) -> Mapping[str, Union[torch.Tensor, list[Any]]]:
     data = {}
     data["pixel_values"] = torch.stack([x["pixel_values"] for x in batch])
     data["labels"] = [x["labels"] for x in batch]
@@ -255,6 +255,12 @@ def parse_args():
         type=int,
         default=1333,
         help="Image longest size will be resized to this value, then image will be padded to square.",
+    )
+    parser.add_argument(
+        "--use_fast",
+        type=bool,
+        default=True,
+        help="Use a fast torchvision-base image processor if it is supported for a given model.",
     )
     parser.add_argument(
         "--cache_dir",
@@ -482,6 +488,7 @@ def main():
         size={"max_height": args.image_square_size, "max_width": args.image_square_size},
         do_pad=True,
         pad_size={"height": args.image_square_size, "width": args.image_square_size},
+        use_fast=args.use_fast,
         **common_pretrained_args,
     )
 
@@ -752,9 +759,6 @@ def main():
 
     logger.info(f"Test metrics: {metrics}")
 
-    if args.with_tracking:
-        accelerator.end_training()
-
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
@@ -776,6 +780,9 @@ def main():
                     token=args.hub_token,
                     ignore_patterns=["epoch_*"],
                 )
+
+    accelerator.wait_for_everyone()
+    accelerator.end_training()
 
 
 if __name__ == "__main__":

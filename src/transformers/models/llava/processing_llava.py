@@ -39,13 +39,13 @@ class LlavaProcessorKwargs(ProcessingKwargs, total=False):
 
 class LlavaProcessor(ProcessorMixin):
     r"""
-    Constructs a Llava processor which wraps a Llava image processor and a Llava tokenizer into a single processor.
+    Constructs a LLaVa processor which wraps a LLaVa image processor and a LLaMa tokenizer into a single processor.
 
-    [`LlavaProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`LlavaProcessor`] offers all the functionalities of [`LlavaImageProcessor`] and [`LlamaTokenizerFast`]. See the
     [`~LlavaProcessor.__call__`] and [`~LlavaProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`CLIPImageProcessor`], *optional*):
+        image_processor ([`LlavaImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
@@ -53,7 +53,7 @@ class LlavaProcessor(ProcessorMixin):
             Patch size from the vision tower.
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
-            Shoudl be same as in model's config
+            Should be same as in model's config
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
         image_token (`str`, *optional*, defaults to `"<image>"`):
@@ -89,6 +89,11 @@ class LlavaProcessor(ProcessorMixin):
         self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -103,7 +108,7 @@ class LlavaProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
@@ -154,30 +159,24 @@ class LlavaProcessor(ProcessorMixin):
         # try to expand inputs in processing if we have the necessary parts
         prompt_strings = text
         if image_inputs.get("pixel_values") is not None:
-            if self.patch_size is not None and self.vision_feature_select_strategy is not None:
-                # Replace the image token with the expanded image token sequence
-                pixel_values = image_inputs["pixel_values"]
-                height, width = get_image_size(to_numpy_array(pixel_values[0]))
-                num_image_tokens = (height // self.patch_size) * (
-                    width // self.patch_size
-                ) + self.num_additional_image_tokens
-                if self.vision_feature_select_strategy == "default":
-                    num_image_tokens -= self.num_additional_image_tokens
+            # Replace the image token with the expanded image token sequence
+            pixel_values = image_inputs["pixel_values"]
+            height, width = get_image_size(to_numpy_array(pixel_values[0]))
+            num_image_tokens = (height // self.patch_size) * (
+                width // self.patch_size
+            ) + self.num_additional_image_tokens
+            if self.vision_feature_select_strategy == "default":
+                num_image_tokens -= 1
 
-                prompt_strings = []
-                for sample in text:
-                    sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
-                    prompt_strings.append(sample)
-            else:
-                logger.warning_once(
-                    "Expanding inputs for image tokens in LLaVa should be done in processing. "
-                    "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
-                    "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
-                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.50."
-                )
+            prompt_strings = []
+            for sample in text:
+                sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
+                prompt_strings.append(sample)
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
@@ -201,3 +200,6 @@ class LlavaProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["LlavaProcessor"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -372,7 +371,6 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (XLMRobertaXLForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": XLMRobertaXLModel,
@@ -427,7 +425,6 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -542,7 +539,7 @@ class XLMRobertaModelXLIntegrationTest(unittest.TestCase):
         output = model(input_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
-        self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))
+        torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)
 
     @unittest.skip(reason="Model is too large to be tested on the CI")
     def test_xlm_roberta_xxl(self):
@@ -561,4 +558,4 @@ class XLMRobertaModelXLIntegrationTest(unittest.TestCase):
         output = model(input_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
-        self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))
+        torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)

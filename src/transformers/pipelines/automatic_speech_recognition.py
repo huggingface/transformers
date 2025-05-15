@@ -348,6 +348,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 raise ValueError("Only Whisper can return language for now.")
             postprocess_params["return_language"] = return_language
 
+        if self.assistant_model is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
         return preprocess_params, forward_params, postprocess_params
 
     def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None):
@@ -420,7 +426,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if isinstance(stride_length_s, (int, float)):
                 stride_length_s = [stride_length_s, stride_length_s]
 
-            # XXX: Carefuly, this variable will not exist in `seq2seq` setting.
+            # XXX: Carefully, this variable will not exist in `seq2seq` setting.
             # Currently chunking is not possible at this level for `seq2seq` so
             # it's ok.
             align_to = getattr(self.model.config, "inputs_to_logits_ratio", 1)

@@ -119,6 +119,12 @@ class DPTConfig(PretrainedConfig):
         backbone_kwargs (`dict`, *optional*):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
             e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
+        pooler_output_size (`int`, *optional*):
+           Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
+        pooler_act (`str`, *optional*, defaults to `"tanh"`):
+           The activation function to be used by the pooler. Keys of ACT2FN are supported for Flax and
+           Pytorch, and elements of https://www.tensorflow.org/api_docs/python/tf/keras/activations are
+           supported for Tensorflow.
 
     Example:
 
@@ -173,6 +179,8 @@ class DPTConfig(PretrainedConfig):
         use_pretrained_backbone=False,
         use_timm_backbone=False,
         backbone_kwargs=None,
+        pooler_output_size=None,
+        pooler_act="tanh",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -268,6 +276,8 @@ class DPTConfig(PretrainedConfig):
         self.auxiliary_loss_weight = auxiliary_loss_weight
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
         self.semantic_classifier_dropout = semantic_classifier_dropout
+        self.pooler_output_size = pooler_output_size if pooler_output_size else hidden_size
+        self.pooler_act = pooler_act
 
     def to_dict(self):
         """
@@ -281,3 +291,10 @@ class DPTConfig(PretrainedConfig):
 
         output["model_type"] = self.__class__.model_type
         return output
+
+    @property
+    def sub_configs(self):
+        return {"backbone_config": type(self.backbone_config)} if self.backbone_config is not None else {}
+
+
+__all__ = ["DPTConfig"]

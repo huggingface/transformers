@@ -19,7 +19,7 @@ import os
 import re
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict, deque
-from typing import Dict, Set
+from typing import Dict, Optional, Set, Union
 
 import libcst as cst
 from check_copies import run_ruff
@@ -58,7 +58,7 @@ def get_module_source_from_name(module_name: str) -> str:
 def preserve_case_replace(text, patterns: dict, default_name: str):
     # Create a regex pattern to match all variations
     regex_pattern = "|".join(re.escape(key) for key in patterns.keys())
-    compiled_regex = re.compile(f"({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
+    compiled_regex = re.compile(f"(?<![a-z0-9])({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
 
     def replace(match):
         matched_pattern = match.group(1)
@@ -79,8 +79,11 @@ def preserve_case_replace(text, patterns: dict, default_name: str):
 
 def get_cased_name(lowercase_name: str) -> str:
     """From a model name in lowercase in the format `my_model`, return the cased name in the format `MyModel`."""
+    alt_lowercase_name = lowercase_name.replace("_", "-")
     if lowercase_name in CONFIG_MAPPING_NAMES:
         return CONFIG_MAPPING_NAMES[lowercase_name].replace("Config", "")
+    elif alt_lowercase_name in CONFIG_MAPPING_NAMES:
+        return CONFIG_MAPPING_NAMES[alt_lowercase_name].replace("Config", "")
     else:
         return "".join(x.title() for x in lowercase_name.split("_"))
 
@@ -106,6 +109,8 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
 
     def __init__(self, old_name: str, new_name: str, original_new_model_name: str = "", only_doc: bool = False):
         super().__init__()
+        old_name = old_name.replace("-", "_")
+        new_name = new_name.replace("-", "_")
         self.old_name = old_name
         self.new_name = new_name
         self.cased_new_name = get_cased_name(self.new_name)
@@ -169,7 +174,7 @@ def is_call_to_super(node, func_name):
     )
 
 
-def get_full_attribute_name(node: cst.Attribute | cst.Name) -> str | None:
+def get_full_attribute_name(node: Union[cst.Attribute, cst.Name]) -> Optional[str]:
     """Get the full name of an Attribute or Name node (e.g. `"nn.Module"` for an Attribute representing it). If the
     successive value of an Attribute are not Name nodes, return `None`."""
     if m.matches(node, m.Name()):
@@ -253,10 +258,40 @@ def get_docstring_indent(docstring):
     return 0
 
 
+def is_full_docstring(original_docstring: str, new_docstring: str, original_level: int) -> bool:
+    """Check if `new_docstring` is a full docstring, or if it is only part of a docstring that should then
+    be merged with the existing old one.
+    """
+    # libcst returns the docstrinbgs with literal `r"""` quotes in front
+    new_docstring = new_docstring.split('"""', 1)[1]
+    # The docstring contains Args definition, so it is self-contained
+    if re.search(r"\n\s*Args:\n", new_docstring):
+        return True
+    elif re.search(r"\n\s*Args:\n", original_docstring):
+        return False
+    # Check if the docstring contains args docstring (meaning it is self contained):
+    param_pattern = re.compile(
+        # |--- Group 1 ---|| Group 2 ||- Group 3 -||---------- Group 4 ----------|
+        rf"^\s{{0,{original_level}}}(\w+)\s*\(\s*([^, \)]*)(\s*.*?)\s*\)\s*:\s*((?:(?!\n^\s{{0,{original_level}}}\w+\s*\().)*)",
+        re.DOTALL | re.MULTILINE,
+    )
+    match_object = param_pattern.search(new_docstring)
+    if match_object is not None:
+        return True
+    # If it contains Returns, but starts with text indented with an additional 4 spaces before, it is self-contained
+    # (this is the scenario when using `@add_start_docstrings_to_model_forward`, but adding more args to docstring)
+    match_object = re.search(r"\n([^\S\n]*)Returns:\n", new_docstring)
+    if match_object is not None:
+        full_indent = match_object.group(1)
+        striped_doc = new_docstring.strip("\n")
+        if striped_doc.startswith(full_indent + " " * 4) or striped_doc.startswith(full_indent + "\t"):
+            return True
+    return False
+
+
 def merge_docstrings(original_docstring, updated_docstring):
-    # indent_level = get_docstring_indent(updated_docstring)
     original_level = get_docstring_indent(original_docstring)
-    if not re.findall(r"\n\s*Args:\n", updated_docstring):
+    if not is_full_docstring(original_docstring, updated_docstring, original_level):
         # Split the docstring at the example section, assuming `"""` is used to define the docstring
         parts = original_docstring.split("```")
         if "```" in updated_docstring and len(parts) > 1:
@@ -267,13 +302,22 @@ def merge_docstrings(original_docstring, updated_docstring):
             parts[1] = new_parts[1]
             updated_docstring = "".join(
                 [
-                    parts[0].rstrip(" \n") + new_parts[0],
-                    f"\n{original_level*' '}```",
+                    f"\n{original_level * ' '}```",
                     parts[1],
                     "```",
                     parts[2],
                 ]
             )
+            docstring_opening, original_start_docstring = parts[0].rstrip(" \n").split('"""')[:2]
+            new_start_docstring = new_parts[0].rstrip(" \n")
+            docstring_opening += '"""'
+            if new_start_docstring.startswith(original_start_docstring):
+                updated_docstring = new_start_docstring + "\n" + updated_docstring
+            elif original_start_docstring.endswith(new_start_docstring):
+                updated_docstring = original_start_docstring + "\n" + updated_docstring
+            else:
+                updated_docstring = original_start_docstring + "\n" + new_start_docstring + "\n" + updated_docstring
+            updated_docstring = docstring_opening + updated_docstring
         elif updated_docstring not in original_docstring:
             # add tabulation if we are at the lowest level.
             if re.search(r"\n\s*.*\(.*\)\:\n\s*\w", updated_docstring):
@@ -430,11 +474,11 @@ class SuperTransformer(cst.CSTTransformer):
 
 def find_all_dependencies(
     dependency_mapping: Dict[str, set],
-    start_entity: str | None = None,
-    initial_dependencies: set | None = None,
-    initial_checked_dependencies: set | None = None,
+    start_entity: Optional[str] = None,
+    initial_dependencies: Optional[set] = None,
+    initial_checked_dependencies: Optional[set] = None,
     return_parent: bool = False,
-) -> list | set:
+) -> Union[list, set]:
     """Return all the dependencies of the given `start_entity` or `initial_dependencies`. This is basically some kind of
     BFS traversal algorithm. It can either start from `start_entity`, or `initial_dependencies`.
 
@@ -494,7 +538,7 @@ def find_all_dependencies(
     all_dependencies = set()
     all_dependencies_with_parent = []
     checked_dependencies = set(initial_checked_dependencies)
-    parents = {initial_dep: start_entity for initial_dep in initial_dependencies}
+    parents = dict.fromkeys(initial_dependencies, start_entity)
     while len(dependency_queue) > 0:
         # Pick element to visit
         current = dependency_queue.popleft()
@@ -505,7 +549,7 @@ def find_all_dependencies(
             if current in dependency_mapping.keys():
                 # Update dependency queue
                 dependency_queue.extend(dependency_mapping[current])
-                parents.update({dep: current for dep in dependency_mapping[current]})
+                parents.update(dict.fromkeys(dependency_mapping[current], current))
             # add visited node to the list
             checked_dependencies.add(current)
 
@@ -515,10 +559,11 @@ def find_all_dependencies(
     return all_dependencies_with_parent
 
 
-# These top-level variables will always use the value in the `modular_xxx.py` file
-ASSIGNMENTS_TO_KEEP = {
-    "_CHECKPOINT_FOR_DOC",
-}
+# Top-level variables that match the following patterns will always use the value in the `modular_xxx.py` file
+ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC", r"_HIDDEN_STATES_START_POSITION"]
+
+# Top-level variables that match the following patterns will use the value in the `modular_xxx.py` file only if they are not None
+ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE = [r"_DOCSTRING"]
 
 
 class ClassDependencyMapper(CSTVisitor):
@@ -527,7 +572,7 @@ class ClassDependencyMapper(CSTVisitor):
     """
 
     def __init__(
-        self, class_name: str, global_names: set[str], objects_imported_from_modeling: set[str] | None = None
+        self, class_name: str, global_names: set[str], objects_imported_from_modeling: Optional[set[str]] = None
     ):
         super().__init__()
         self.class_name = class_name
@@ -555,7 +600,7 @@ def dependencies_for_class_node(node: cst.ClassDef, global_names: set[str]) -> s
 
 
 def augmented_dependencies_for_class_node(
-    node: cst.ClassDef, mapper: "ModuleMapper", objects_imported_from_modeling: set[str] | None = None
+    node: cst.ClassDef, mapper: "ModuleMapper", objects_imported_from_modeling: Optional[set[str]] = None
 ) -> set:
     """Create augmented dependencies for a class node based on a `mapper`.
     Augmented dependencies means immediate dependencies + recursive function and assignments dependencies.
@@ -573,6 +618,7 @@ ALL_FILE_TYPES = (
     "tokenization",
     "processing",
     "image_processing",
+    "video_processing",
     "feature_extractor",
 )
 
@@ -596,6 +642,7 @@ class ModuleMapper(CSTVisitor, ABC):
         self.object_dependency_mapping = defaultdict(set)          # immediate function/assignment dependency mapping (i.e. dependencies immediately in the function/assignment definition)
         self.assignments: Dict[str, cst.SimpleStatementLine] = {}  # mapping of global assignments names to Nodes
         self.current_function = None                               # this keeps track of the current module-scope function
+        self.current_class = None                                  # this keeps track of the current module-scope class
         self.current_assignment = None                             # this keeps track of the current module-scope assignment
         # this keeps track of objects imported from modeling files (`from .configuration import Config`) -> `Config` should not be a dependency
         self.objects_imported_from_modeling = set()
@@ -651,13 +698,19 @@ class ModuleMapper(CSTVisitor, ABC):
             self.current_function = None
 
     def visit_If(self, node):
-        for stmt in node.body.body:
-            if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
-                self.imports.append(node)
+        # If we are inside a function, do not add the import to the list of imports
+        if self.current_function is None and self.current_class is None:
+            for stmt in node.body.body:
+                if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
+                    self.imports.append(node)
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         """Record class nodes to create their dependencies at the end."""
         self.classes[node.name.value] = node
+        self.current_class = node.name.value
+
+    def leave_ClassDef(self, node):
+        self.current_class = None
 
     def visit_Name(self, node: cst.Call):
         """This is used to create a mapping from module-scope functions and assignments to objects used inside them."""
@@ -775,8 +828,11 @@ class ModelFileMapper(ModuleMapper):
                     original_dependencies.append(class_dep)
                 else:
                     merged_dependencies.append(class_dep)
+            # We need to sort deterministically before actual sorting, so that entries missing (i.e. with value 1e10)
+            # will always get the same order independently of the system (they come from a set, which has no deterministic order)
+            original_dependencies = sorted(original_dependencies, reverse=True)
             # Sort both list according to the order in their respective file
-            original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines[x])
+            original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines.get(x, 1e10))
             merged_dependencies = sorted(merged_dependencies, key=lambda x: self.modular_file_start_lines[x])
 
             # Add all original node first, then merged ones
@@ -800,8 +856,11 @@ class ModelFileMapper(ModuleMapper):
                 merged_dependencies.append(dep)
             else:
                 original_dependencies.append(dep)
+        # We need to sort deterministically before actual sorting, so that entries missing (i.e. with value 1e10)
+        # will always get the same order independently of the system (they come from a set, which has no deterministic order)
+        original_dependencies = sorted(original_dependencies, reverse=True)
         # Sort both list according to the order in their respective file
-        original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines[x])
+        original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines.get(x, 1e10))
         merged_dependencies = sorted(merged_dependencies, key=lambda x: self.modular_file_start_lines[x])
 
         # Add all original node first, then merged ones
@@ -828,12 +887,18 @@ class ModelFileMapper(ModuleMapper):
     def _merge_assignments(self, assignments: dict[str, cst.CSTNode], object_mapping: dict[str, set]):
         """Update the global nodes with the assignment from the modular file.
 
-        Merging rule: if any assignment with the same name was redefined in the modular, we use it and its dependencies ONLY if it is
-        in `ASSIGNMENTS_TO_KEEP`. Otherwise, we use the original value and dependencies. This rule was chosen to avoid having to rewrite the
-        big docstrings.
+        Merging rule: if any assignment with the same name was redefined in the modular, we use it and its dependencies ONLY if it matches
+        a pattern in `ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE` and its value is not None, or if it matches a pattern in `ASSIGNMENTS_REGEX_TO_KEEP.
+        Otherwise, we use the original value and dependencies. This rule was chosen to avoid having to rewrite the big docstrings.
         """
         for assignment, node in assignments.items():
-            if assignment in ASSIGNMENTS_TO_KEEP or assignment not in self.assignments:
+            should_keep = any(re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP)
+
+            should_keep_if_not_none = any(
+                re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE
+            ) and not (hasattr(node.body[0].value, "value") and node.body[0].value.value == "None")
+
+            if should_keep or should_keep_if_not_none or assignment not in self.assignments:
                 self.assignments[assignment] = node
                 if assignment in object_mapping:
                     self.object_dependency_mapping[assignment] = object_mapping[assignment]
@@ -990,11 +1055,20 @@ def replace_class_node(
             new_decorators = (
                 updated_methods[name].decorators if len(updated_methods[name].decorators) > 0 else func.decorators
             )
+
+            # Keep return annotation in `modular_xxx.py` if any, else original return annotation
+            new_return_annotation = updated_methods[name].returns if updated_methods[name].returns else func.returns
+
             if not re.match(
                 r"\ndef .*\(.*\):\n    raise.*Error\(.*",
                 mapper.python_module.code_for_node(updated_methods[name]),
             ):
-                func = func.with_changes(body=updated_methods[name].body, params=new_params, decorators=new_decorators)
+                func = func.with_changes(
+                    body=updated_methods[name].body,
+                    params=new_params,
+                    decorators=new_decorators,
+                    returns=new_return_annotation,
+                )
             else:
                 continue
 
@@ -1059,8 +1133,13 @@ TYPE_TO_FILE_TYPE = {
     "Tokenizer": "tokenization",
     "Processor": "processing",
     "ImageProcessor": "image_processing",
+    "ImageProcessorFast": "image_processing*_fast",  # "*" indicates where to insert the model name before the "_fast" suffix
+    "VideoProcessor": "video_processing",
+    "VideoProcessorInitKwargs": "video_processing",
+    "FastImageProcessorKwargs": "image_processing*_fast",
     "FeatureExtractor": "feature_extractor",
     "ProcessorKwargs": "processing",
+    "VideosKwargs": "processing",
     "ImagesKwargs": "processing",
     "TextKwargs": "processing",
 }
@@ -1100,7 +1179,7 @@ def append_new_import_node(
     import_node = node.body[0]
     names_to_keep = []
     for name in import_node.names:
-        name_value = name.evaluated_name
+        name_value = name.evaluated_alias or name.evaluated_name
         if name_value not in unused_imports and name_value not in added_names:
             names_to_keep.append(name.with_changes(comma=cst.MaybeSentinel.DEFAULT))
             added_names.add(name_value)
@@ -1112,7 +1191,7 @@ def append_new_import_node(
 def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
     """Get all the imports needed in the `body`, from the list of `all_imports`.
     `body` is a dict with the following structure `{str: {"insert_idx": int, "node": cst.CSTNode}}`.
-    Note: we need to use `isinstance` on scope assignements, m.matches apparently does not work here yet!
+    Note: we need to use `isinstance` on scope assignments, m.matches apparently does not work here yet!
     """
     new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
     wrapper = MetadataWrapper(cst.Module(body=all_imports + new_body))
@@ -1320,6 +1399,20 @@ class ModularFileMapper(ModuleMapper):
                             self.added_objects_file_mapping[dep] = file
                             self.functions[dep] = visited_module.global_nodes[dep]
 
+                # Add/overwrite the imported functions to other visited modules as well, in case it is absent/different
+                # in he modeling source file of the inherited class. See `examples/modular-tranformers/modular_switch_function.py`
+                # and `examples/modular-tranformers/modular_add_function.py` for examples
+                recursive_dependencies = visited_module.object_recursive_dependency_mapping.get(object_name, set())
+                node_recursive_dependencies_mapping = {
+                    dep: visited_module.global_nodes[dep] for dep in recursive_dependencies
+                }
+                for filename, module_mapper in self.visited_modules.items():
+                    if filename != file:
+                        module_mapper.global_nodes[object_name] = visited_module.functions[object_name]
+                        if len(recursive_dependencies) > 0:
+                            module_mapper.object_recursive_dependency_mapping[object_name] = recursive_dependencies
+                            module_mapper.global_nodes.update(node_recursive_dependencies_mapping)
+
             # Add assignments and their dependencies
             elif object_name in visited_module.assignments and object_name not in self.assignments:
                 self.assignments[object_name] = visited_module.assignments[object_name]
@@ -1389,7 +1482,7 @@ class ModularFileMapper(ModuleMapper):
             ]
             if len(modeling_bases) > 1:
                 raise ValueError(
-                    f"{class_name} was defined with more than 1 model-specific super class. This is unsupported. We found {*modeling_bases,}."
+                    f"{class_name} was defined with more than 1 model-specific super class. This is unsupported. We found {(*modeling_bases,)}."
                 )
             if len(modeling_bases) == 1:
                 filename = self.model_specific_imported_objects[modeling_bases[0]]
@@ -1397,6 +1490,10 @@ class ModularFileMapper(ModuleMapper):
                 suffix = common_partial_suffix(class_name, modeling_bases[0])
                 if len(suffix) > 0 and suffix[0].isupper():
                     cased_model_name = class_name.replace(suffix, "")
+                    # If both the old model and new model share the last part of their name, is is detected as a common
+                    # suffix, but it should not be the case -> use the full name in this case
+                    if len(cased_model_name) < len(cased_default_name) and cased_default_name in class_name:
+                        cased_model_name = cased_default_name
                 prefix_model_name_mapping[filename].update([cased_model_name])
 
         # Check if we found multiple prefixes for some modeling files
@@ -1417,7 +1514,7 @@ class ModularFileMapper(ModuleMapper):
             if final_name != cased_default_name and has_prefix_collision:
                 if len(prefixes_counter) > 1:
                     logger.warning(
-                        f"We detected multiple prefix names when inheriting from {file}: {*set(prefixes_counter),}. However, the "
+                        f"We detected multiple prefix names when inheriting from {file}: {(*set(prefixes_counter),)}. However, the "
                         f"most used one, '{final_name}', is already present in the source file and will likely cause consistency "
                         f"issues. For this reason we fallback to the default prefix '{cased_default_name}' when grabbing args "
                         "and dependencies. Make sure to subclass the intermediate classes with the prefix you want (if different "
@@ -1433,7 +1530,7 @@ class ModularFileMapper(ModuleMapper):
                 final_name = cased_default_name
             elif len(prefixes_counter) > 1:
                 logger.warning(
-                    f"We detected multiple prefix names when inheriting from {file}: {*set(prefixes_counter),}. We will only "
+                    f"We detected multiple prefix names when inheriting from {file}: {(*set(prefixes_counter),)}. We will only "
                     f"use the most used '{final_name}' prefix when grabbing args and dependencies. Make sure to subclass the "
                     f"intermediate classes with the prefix you want (if different from '{final_name}') or use a single prefix "
                     "in all the modular (best)."
@@ -1572,7 +1669,7 @@ def get_class_node_and_dependencies(
 
 
 def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
-    """Create all the new modules based on visiting the modular file. It replaces all classes as necesary."""
+    """Create all the new modules based on visiting the modular file. It replaces all classes as necessary."""
     files = defaultdict(dict)
     current_file_indices = defaultdict(lambda: 0)
 
@@ -1658,11 +1755,16 @@ def convert_modular_file(modular_file):
 
 def save_modeling_file(modular_file, converted_file):
     for file_type in converted_file.keys():
+        file_name_prefix = file_type.split("*")[0]
+        file_name_suffix = file_type.split("*")[-1] if "*" in file_type else ""
+        new_file_name = modular_file.replace("modular_", f"{file_name_prefix}_").replace(
+            ".py", f"{file_name_suffix}.py"
+        )
         non_comment_lines = len(
             [line for line in converted_file[file_type][0].strip().split("\n") if not line.strip().startswith("#")]
         )
         if len(converted_file[file_type][0].strip()) > 0 and non_comment_lines > 0:
-            with open(modular_file.replace("modular_", f"{file_type}_"), "w", encoding="utf-8") as f:
+            with open(new_file_name, "w", encoding="utf-8") as f:
                 f.write(converted_file[file_type][0])
         else:
             non_comment_lines = len(
@@ -1670,7 +1772,7 @@ def save_modeling_file(modular_file, converted_file):
             )
             if len(converted_file[file_type][1].strip()) > 0 and non_comment_lines > 0:
                 logger.warning("The modeling code contains errors, it's written without formatting")
-                with open(modular_file.replace("modular_", f"{file_type}_"), "w", encoding="utf-8") as f:
+                with open(new_file_name, "w", encoding="utf-8") as f:
                     f.write(converted_file[file_type][1])
 
 
@@ -1678,16 +1780,31 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/gemma/modular_gemma.py"],
+        default=["all"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
     args = parser.parse_args()
     if args.files_to_parse == ["all"]:
         args.files_to_parse = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
-        args.files_to_parse += glob.glob("examples/**/modular_*.py", recursive=True)
+    if args.files_to_parse == ["examples"]:
+        args.files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
+    else:
+        for i, model_name in enumerate(args.files_to_parse):
+            if os.sep not in model_name:
+                full_path = os.path.join("src", "transformers", "models", model_name, f"modular_{model_name}.py")
+                # If it does not exist, try in the examples section
+                if not os.path.isfile(full_path):
+                    full_path = os.path.join("examples", "modular-transformers", f"modular_{model_name}.py")
+                # We did not find it anywhere
+                if not os.path.isfile(full_path):
+                    raise ValueError(f"Cannot find a modular file for {model_name}. Please provide the full path.")
+                args.files_to_parse[i] = full_path
 
-    for file_name in find_priority_list(args.files_to_parse):
+    priority_list, _ = find_priority_list(args.files_to_parse)
+    assert len(priority_list) == len(args.files_to_parse), "Some files will not be converted"
+
+    for file_name in priority_list:
         print(f"Converting {file_name} to a single model single file format")
         module_path = file_name.replace("/", ".").replace(".py", "").replace("src.", "")
         converted_files = convert_modular_file(file_name)

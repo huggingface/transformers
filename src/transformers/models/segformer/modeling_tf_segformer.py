@@ -325,8 +325,8 @@ class TFSegformerMixFFN(keras.layers.Layer):
         self,
         config: SegformerConfig,
         in_features: int,
-        hidden_features: int = None,
-        out_features: int = None,
+        hidden_features: Optional[int] = None,
+        out_features: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -1034,3 +1034,12 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
         if getattr(self, "decode_head", None) is not None:
             with tf.name_scope(self.decode_head.name):
                 self.decode_head.build(None)
+
+
+__all__ = [
+    "TFSegformerDecodeHead",
+    "TFSegformerForImageClassification",
+    "TFSegformerForSemanticSegmentation",
+    "TFSegformerModel",
+    "TFSegformerPreTrainedModel",
+]

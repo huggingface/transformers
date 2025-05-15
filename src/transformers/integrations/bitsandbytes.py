@@ -158,7 +158,7 @@ def _replace_with_bnb_linear(
     """
     Private method that wraps the recursion for module replacement.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
     for name, module in model.named_children():
         if current_key_name is None:
@@ -280,7 +280,7 @@ def replace_8bit_linear(*args, **kwargs):
     return replace_with_bnb_linear(*args, **kwargs)
 
 
-# For backward compatiblity
+# For backward compatibility
 def set_module_8bit_tensor_to_device(*args, **kwargs):
     warnings.warn(
         "`set_module_8bit_tensor_to_device` will be deprecated in a future version, please use `set_module_quantized_tensor_to_device` instead",
@@ -363,13 +363,14 @@ def dequantize_bnb_weight(weight: "torch.nn.Parameter", dtype: "torch.dtype", st
     if state.SCB is None:
         state.SCB = weight.SCB
 
-    im = torch.eye(weight.data.shape[-1]).contiguous().half().to(weight.device)
-    im, imt, SCim, SCimt, coo_tensorim = bnb.functional.double_quant(im)
-    im, Sim = bnb.functional.transform(im, "col32")
-    if state.CxB is None:
-        state.CxB, state.SB = bnb.functional.transform(weight.data, to_order=state.formatB)
-    out32, Sout32 = bnb.functional.igemmlt(im, state.CxB, Sim, state.SB)
-    return bnb.functional.mm_dequant(out32, Sout32, SCim, state.SCB, bias=None).t().to(dtype)
+    if hasattr(bnb.functional, "int8_vectorwise_dequant"):
+        # Use bitsandbytes API if available (requires v0.45.0+)
+        dequantized = bnb.functional.int8_vectorwise_dequant(weight.data, state.SCB)
+    else:
+        # Multiply by (scale/127) to dequantize.
+        dequantized = weight.data * state.SCB.view(-1, 1) * 7.874015718698502e-3
+
+    return dequantized.to(dtype)
 
 
 def _create_accelerate_new_hook(old_hook):
@@ -402,7 +403,7 @@ def _dequantize_and_replace(
     some performance drop compared to the original model before quantization - use it only for specific usecases
     such as QLoRA adapters merging.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
     quant_method = quantization_config.quantization_method()
 
@@ -485,7 +486,7 @@ def _validate_bnb_multi_backend_availability(raise_exception):
     import bitsandbytes as bnb
 
     bnb_supported_devices = getattr(bnb, "supported_torch_devices", set())
-    available_devices = get_available_devices()
+    available_devices = set(get_available_devices())
 
     if available_devices == {"cpu"} and not is_ipex_available():
         from importlib.util import find_spec
@@ -495,7 +496,9 @@ def _validate_bnb_multi_backend_availability(raise_exception):
                 "You have Intel IPEX installed but if you're intending to use it for CPU, it might not have the right version. Be sure to double check that your PyTorch and IPEX installs are compatible."
             )
 
-        available_devices.discard("cpu")  # Only Intel CPU is supported by BNB at the moment
+        available_devices = frozenset(
+            [device for device in available_devices if device != "cpu"]
+        )  # Only Intel CPU is supported by BNB at the moment
 
     if not available_devices.intersection(bnb_supported_devices):
         if raise_exception:

@@ -144,6 +144,8 @@ class Blip2QFormerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Index to be used for padding token.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
@@ -233,7 +235,7 @@ class Blip2Config(PretrainedConfig):
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
         image_text_hidden_size (`int`, *optional*, defaults to 256):
-            Dimentionality of the hidden state of the image-text fusion layer.
+            Dimensionality of the hidden state of the image-text fusion layer.
 
         image_token_index (`int`, *optional*):
             Token index of special image token.
@@ -271,6 +273,9 @@ class Blip2Config(PretrainedConfig):
     ```"""
 
     model_type = "blip-2"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
     sub_configs = {"text_config": AutoConfig, "qformer_config": Blip2QFormerConfig, "vision_config": Blip2VisionConfig}
 
     def __init__(
@@ -301,9 +306,6 @@ class Blip2Config(PretrainedConfig):
         self.qformer_config = Blip2QFormerConfig(**qformer_config)
         text_model_type = text_config["model_type"] if "model_type" in text_config else "opt"
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
-
-        self.tie_word_embeddings = self.text_config.tie_word_embeddings
-        self.is_encoder_decoder = self.text_config.is_encoder_decoder
 
         self.num_query_tokens = num_query_tokens
         self.image_text_hidden_size = image_text_hidden_size
@@ -343,3 +345,6 @@ class Blip2Config(PretrainedConfig):
             text_config=text_config.to_dict() if text_config is not None else None,
             **kwargs,
         )
+
+
+__all__ = ["Blip2Config", "Blip2QFormerConfig", "Blip2VisionConfig"]

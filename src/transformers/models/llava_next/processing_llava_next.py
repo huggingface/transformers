@@ -56,7 +56,7 @@ class LlavaNextProcessor(ProcessorMixin):
             Patch size from the vision tower.
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
-            Shoudl be same as in model's config
+            Should be same as in model's config
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
         image_token (`str`, *optional*, defaults to `"<image>"`):
@@ -92,6 +92,11 @@ class LlavaNextProcessor(ProcessorMixin):
         self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -106,7 +111,7 @@ class LlavaNextProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        LlavaNextImageProcessor's [`~LlavaNextImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        LlavaNextImageProcessor's [`~LlavaNextImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
@@ -149,34 +154,28 @@ class LlavaNextProcessor(ProcessorMixin):
 
         prompt_strings = text
         if image_inputs:
-            if self.patch_size is None or self.vision_feature_select_strategy is None:
-                logger.warning_once(
-                    "Expanding inputs for image tokens in LLaVa-NeXT should be done in processing. "
-                    "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
-                    "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
-                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.50."
-                )
-            else:
-                image_sizes = iter(image_inputs["image_sizes"])
-                height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
-                prompt_strings = []
-                for sample in text:
-                    while self.image_token in sample:
-                        image_size = next(image_sizes)
-                        if not isinstance(image_size, (list, tuple)):
-                            # cast to list to avoid numerical precision errors when calculating unpadding
-                            image_size = image_size.tolist()
-                        orig_height, orig_width = image_size
-                        num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
-                        if self.vision_feature_select_strategy == "default":
-                            num_image_tokens -= self.num_additional_image_tokens
-                        sample = sample.replace(self.image_token, "<placeholder>" * num_image_tokens, 1)
-                    prompt_strings.append(sample)
-                prompt_strings = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
+            image_sizes = iter(image_inputs["image_sizes"])
+            height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
+            prompt_strings = []
+            for sample in text:
+                while self.image_token in sample:
+                    image_size = next(image_sizes)
+                    if not isinstance(image_size, (list, tuple)):
+                        # cast to list to avoid numerical precision errors when calculating unpadding
+                        image_size = image_size.tolist()
+                    orig_height, orig_width = image_size
+                    num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+                    if self.vision_feature_select_strategy == "default":
+                        num_image_tokens -= 1
+                    sample = sample.replace(self.image_token, "<placeholder>" * num_image_tokens, 1)
+                prompt_strings.append(sample)
+            prompt_strings = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
         image_grid_pinpoints = self.image_processor.image_grid_pinpoints
@@ -208,11 +207,11 @@ class LlavaNextProcessor(ProcessorMixin):
         original_aspect_ratio = width / height
         current_aspect_ratio = current_width / current_height
         if original_aspect_ratio > current_aspect_ratio:
-            new_height = (height * current_width) // width
+            new_height = int(round(height * (current_width / width), 7))
             padding = (current_height - new_height) // 2
             current_height -= padding * 2
         else:
-            new_width = (width * current_height) // height
+            new_width = int(round(width * (current_height / height), 7))
             padding = (current_width - new_width) // 2
             current_width -= padding * 2
 
@@ -242,3 +241,6 @@ class LlavaNextProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["LlavaNextProcessor"]

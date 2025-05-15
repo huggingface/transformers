@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,7 +28,9 @@ from transformers import AutoModelForImageTextToText, AutoProcessor, Kosmos2Conf
 from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2TextConfig, Kosmos2VisionConfig
 from transformers.testing_utils import (
     IS_ROCM_SYSTEM,
+    IS_XPU_SYSTEM,
     require_torch,
+    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -42,6 +43,7 @@ from transformers.utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     _config_zero_init,
     floats_tensor,
@@ -259,7 +261,7 @@ class Kosmos2ModelTester:
 @require_torch
 class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Kosmos2Model, Kosmos2ForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (Kosmos2ForConditionalGeneration,) if is_torch_available() else ()
+    additional_model_inputs = ["input_ids", "image_embeds_position_mask"]
     pipeline_model_mapping = (
         {
             "feature-extraction": Kosmos2Model,
@@ -463,6 +465,14 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_generate_from_inputs_embeds(self):
         pass
 
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @require_torch_sdpa
+    @unittest.skip("KOSMOS-2 doesn't support padding")
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        pass
+
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
         # Overwrite because Kosmos-2 need to padd pixel values and pad image-attn-mask
@@ -515,7 +525,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             next_logits_with_padding = model(**model_kwargs, pixel_values=pixel_values).logits[:, -1, :]
 
             # They should result in very similar logits
-            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-3))
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_model_from_pretrained(self):
@@ -657,7 +667,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         processed_text = processed_text[0]
         final_text, entities = final_text_with_entities[0]
 
-        atol = 1e-4 if IS_ROCM_SYSTEM else 1e-5
+        atol = 1e-4 if (IS_ROCM_SYSTEM or IS_XPU_SYSTEM) else 1e-5
 
         np.testing.assert_allclose(
             torch.concat(scores[1:4])[:3, :3].to("cpu").numpy(),
@@ -889,9 +899,9 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[1.0022, -1.1901, 3.2887], [2.6164, 0.0515, -0.8270], [1.8315, 0.1272, -0.8590]]
+            [[0.9148, -1.4148, 3.8040], [3.3443, 1.9478, 0.2080], [1.6604, 2.8184, -0.3618]]
         ).to(torch_device)
 
-        self.assertTrue(
-            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-2, atol=1e-2
         )

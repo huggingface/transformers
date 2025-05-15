@@ -28,7 +28,14 @@ from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
-from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, get_file_from_repo, logging
+from ...utils import (
+    FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
+    VIDEO_PROCESSOR_NAME,
+    cached_file,
+    logging,
+)
+from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -47,6 +54,8 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("align", "AlignProcessor"),
         ("altclip", "AltCLIPProcessor"),
+        ("aria", "AriaProcessor"),
+        ("aya_vision", "AyaVisionProcessor"),
         ("bark", "BarkProcessor"),
         ("blip", "BlipProcessor"),
         ("blip-2", "Blip2Processor"),
@@ -57,9 +66,14 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clip", "CLIPProcessor"),
         ("clipseg", "CLIPSegProcessor"),
         ("clvp", "ClvpProcessor"),
+        ("colpali", "ColPaliProcessor"),
+        ("emu3", "Emu3Processor"),
         ("flava", "FlavaProcessor"),
         ("fuyu", "FuyuProcessor"),
+        ("gemma3", "Gemma3Processor"),
         ("git", "GitProcessor"),
+        ("got_ocr2", "GotOcr2Processor"),
+        ("granite_speech", "GraniteSpeechProcessor"),
         ("grounding-dino", "GroundingDinoProcessor"),
         ("groupvit", "CLIPProcessor"),
         ("hubert", "Wav2Vec2Processor"),
@@ -68,9 +82,12 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("idefics3", "Idefics3Processor"),
         ("instructblip", "InstructBlipProcessor"),
         ("instructblipvideo", "InstructBlipVideoProcessor"),
+        ("internvl", "InternVLProcessor"),
+        ("janus", "JanusProcessor"),
         ("kosmos-2", "Kosmos2Processor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
+        ("llama4", "Llama4Processor"),
         ("llava", "LlavaProcessor"),
         ("llava_next", "LlavaNextProcessor"),
         ("llava_next_video", "LlavaNextVideoProcessor"),
@@ -78,21 +95,29 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("markuplm", "MarkupLMProcessor"),
         ("mctct", "MCTCTProcessor"),
         ("mgp-str", "MgpstrProcessor"),
+        ("mistral3", "PixtralProcessor"),
         ("mllama", "MllamaProcessor"),
+        ("moonshine", "Wav2Vec2Processor"),
         ("oneformer", "OneFormerProcessor"),
         ("owlv2", "Owlv2Processor"),
         ("owlvit", "OwlViTProcessor"),
         ("paligemma", "PaliGemmaProcessor"),
+        ("phi4_multimodal", "Phi4MultimodalProcessor"),
         ("pix2struct", "Pix2StructProcessor"),
         ("pixtral", "PixtralProcessor"),
         ("pop2piano", "Pop2PianoProcessor"),
+        ("qwen2_5_omni", "Qwen2_5OmniProcessor"),
+        ("qwen2_5_vl", "Qwen2_5_VLProcessor"),
         ("qwen2_audio", "Qwen2AudioProcessor"),
         ("qwen2_vl", "Qwen2VLProcessor"),
         ("sam", "SamProcessor"),
+        ("sam_hq", "SamHQProcessor"),
         ("seamless_m4t", "SeamlessM4TProcessor"),
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
+        ("shieldgemma2", "ShieldGemma2Processor"),
         ("siglip", "SiglipProcessor"),
+        ("siglip2", "Siglip2Processor"),
         ("speech_to_text", "Speech2TextProcessor"),
         ("speech_to_text_2", "Speech2Text2Processor"),
         ("speecht5", "SpeechT5Processor"),
@@ -245,15 +270,21 @@ class AutoProcessor:
         processor_auto_map = None
 
         # First, let's see if we have a processor or preprocessor config.
-        # Filter the kwargs for `get_file_from_repo`.
-        get_file_from_repo_kwargs = {
-            key: kwargs[key] for key in inspect.signature(get_file_from_repo).parameters.keys() if key in kwargs
+        # Filter the kwargs for `cached_file`.
+        cached_file_kwargs = {
+            key: kwargs[key] for key in inspect.signature(cached_file).parameters.keys() if key in kwargs
         }
+        # We don't want to raise
+        cached_file_kwargs.update(
+            {
+                "_raise_exceptions_for_gated_repo": False,
+                "_raise_exceptions_for_missing_entries": False,
+                "_raise_exceptions_for_connection_errors": False,
+            }
+        )
 
         # Let's start by checking whether the processor class is saved in a processor config
-        processor_config_file = get_file_from_repo(
-            pretrained_model_name_or_path, PROCESSOR_NAME, **get_file_from_repo_kwargs
-        )
+        processor_config_file = cached_file(pretrained_model_name_or_path, PROCESSOR_NAME, **cached_file_kwargs)
         if processor_config_file is not None:
             config_dict, _ = ProcessorMixin.get_processor_dict(pretrained_model_name_or_path, **kwargs)
             processor_class = config_dict.get("processor_class", None)
@@ -262,8 +293,8 @@ class AutoProcessor:
 
         if processor_class is None:
             # If not found, let's check whether the processor class is saved in an image processor config
-            preprocessor_config_file = get_file_from_repo(
-                pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **get_file_from_repo_kwargs
+            preprocessor_config_file = cached_file(
+                pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **cached_file_kwargs
             )
             if preprocessor_config_file is not None:
                 config_dict, _ = ImageProcessingMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
@@ -271,19 +302,36 @@ class AutoProcessor:
                 if "AutoProcessor" in config_dict.get("auto_map", {}):
                     processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
-            # If not found, let's check whether the processor class is saved in a feature extractor config
-            if preprocessor_config_file is not None and processor_class is None:
-                config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
-                    pretrained_model_name_or_path, **kwargs
+            # Saved as video processor
+            if preprocessor_config_file is None:
+                preprocessor_config_file = cached_file(
+                    pretrained_model_name_or_path, VIDEO_PROCESSOR_NAME, **cached_file_kwargs
                 )
-                processor_class = config_dict.get("processor_class", None)
-                if "AutoProcessor" in config_dict.get("auto_map", {}):
-                    processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
+                if preprocessor_config_file is not None:
+                    config_dict, _ = BaseVideoProcessor.get_video_processor_dict(
+                        pretrained_model_name_or_path, **kwargs
+                    )
+                    processor_class = config_dict.get("processor_class", None)
+                    if "AutoProcessor" in config_dict.get("auto_map", {}):
+                        processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
+
+            # Saved as feature extractor
+            if preprocessor_config_file is None:
+                preprocessor_config_file = cached_file(
+                    pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **cached_file_kwargs
+                )
+                if preprocessor_config_file is not None and processor_class is None:
+                    config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
+                        pretrained_model_name_or_path, **kwargs
+                    )
+                    processor_class = config_dict.get("processor_class", None)
+                    if "AutoProcessor" in config_dict.get("auto_map", {}):
+                        processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
         if processor_class is None:
             # Next, let's check whether the processor class is saved in a tokenizer
-            tokenizer_config_file = get_file_from_repo(
-                pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE, **get_file_from_repo_kwargs
+            tokenizer_config_file = cached_file(
+                pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE, **cached_file_kwargs
             )
             if tokenizer_config_file is not None:
                 with open(tokenizer_config_file, encoding="utf-8") as reader:
@@ -367,6 +415,9 @@ class AutoProcessor:
         Args:
             config_class ([`PretrainedConfig`]):
                 The configuration corresponding to the model to register.
-            processor_class ([`FeatureExtractorMixin`]): The processor to register.
+            processor_class ([`ProcessorMixin`]): The processor to register.
         """
         PROCESSOR_MAPPING.register(config_class, processor_class, exist_ok=exist_ok)
+
+
+__all__ = ["PROCESSOR_MAPPING", "AutoProcessor"]

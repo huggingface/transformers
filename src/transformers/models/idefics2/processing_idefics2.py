@@ -89,20 +89,24 @@ class Idefics2Processor(ProcessorMixin):
     image_processor_class = "Idefics2ImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: str = None, **kwargs):
+    def __init__(
+        self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: Optional[str] = None, **kwargs
+    ):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
 
         if not hasattr(tokenizer, "image_token"):
-            self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True)
-            self.image_token = AddedToken("<image>", normalized=False, special=True)
+            self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True).content
+            self.image_token = AddedToken("<image>", normalized=False, special=True).content
             tokens_to_add = {"additional_special_tokens": [self.fake_image_token, self.image_token]}
             tokenizer.add_special_tokens(tokens_to_add)
+            self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         else:
             self.fake_image_token = tokenizer.image_boundary_token
             self.image_token = tokenizer.image_token
+            self.image_token_id = tokenizer.image_token_id
 
         self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True)
         tokenizer.add_special_tokens({"additional_special_tokens": [self.end_of_utterance_token]})
@@ -188,9 +192,10 @@ class Idefics2Processor(ProcessorMixin):
         )
         image_seq_len = output_kwargs["images_kwargs"].pop("image_seq_len", None)
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
         n_images_in_text = []
-        inputs = BatchFeature()
+        inputs = {}
 
         if text is not None:
             if isinstance(text, str):
@@ -199,13 +204,14 @@ class Idefics2Processor(ProcessorMixin):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
-            fake_image_token = self.fake_image_token.content
-            image_token = self.image_token.content
+            fake_image_token = self.fake_image_token
+            image_token = self.image_token
             image_str = f"{fake_image_token}{image_token * image_seq_len}{fake_image_token}"
 
             if self.image_processor.do_image_splitting:
                 # A single image token is split into 4 patches + 1 original image
                 image_str = image_str * 5
+                image_seq_len *= 5
 
             prompt_strings = []
             for sample in text:
@@ -216,12 +222,13 @@ class Idefics2Processor(ProcessorMixin):
                 prompt_strings.append(sample)
 
             text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+            self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
             inputs.update(text_inputs)
 
         if images is not None:
             if is_image_or_image_url(images):
                 images = [[images]]
-            elif isinstance(images, list) and is_image_or_image_url(images[0]):
+            elif isinstance(images, (list, tuple)) and is_image_or_image_url(images[0]):
                 if text is not None:
                     if sum(n_images_in_text) != len(images):
                         raise ValueError(
@@ -238,8 +245,8 @@ class Idefics2Processor(ProcessorMixin):
                     images = [images]
 
             elif (
-                not isinstance(images, list)
-                and not isinstance(images[0], list)
+                not isinstance(images, (list, tuple))
+                and not isinstance(images[0], (list, tuple))
                 and not is_image_or_image_url(images[0][0])
             ):
                 raise ValueError(
@@ -257,7 +264,7 @@ class Idefics2Processor(ProcessorMixin):
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             inputs.update(image_inputs)
 
-        return inputs
+        return BatchFeature(inputs, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -278,3 +285,6 @@ class Idefics2Processor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["Idefics2Processor"]

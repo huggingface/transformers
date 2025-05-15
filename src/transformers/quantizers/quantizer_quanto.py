@@ -177,27 +177,20 @@ class QuantoHfQuantizer(HfQuantizer):
             )
 
     def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: List[str] = [], **kwargs
+        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[List[str]] = None, **kwargs
     ):
-        from ..integrations import get_keys_to_not_convert, replace_with_quanto_layers
+        from ..integrations import replace_with_quanto_layers
 
-        # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
-        if self.quantization_config.modules_to_not_convert is None:
-            self.modules_to_not_convert = get_keys_to_not_convert(model)
-        else:
-            self.modules_to_not_convert = self.quantization_config.modules_to_not_convert
-
-        if not isinstance(self.modules_to_not_convert, list):
-            self.modules_to_not_convert = [self.modules_to_not_convert]
-
-        self.modules_to_not_convert.extend(keep_in_fp32_modules)
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+        )
 
         model, _ = replace_with_quanto_layers(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
         model.config.quantization_config = self.quantization_config
 
-    def _process_model_after_weight_loading(self, model):
+    def _process_model_after_weight_loading(self, model, **kwargs):
         return model
 
     @property

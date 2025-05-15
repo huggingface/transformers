@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -146,6 +145,7 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = DepthAnythingModelTester(self)
@@ -180,14 +180,6 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Depth Anything with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Depth Anything with AutoBackbone does not have a base model")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(
         reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
@@ -213,7 +205,7 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
                 model.to(torch_device)
                 model.eval()
 
-                # Confirm out_indices propogated to backbone
+                # Confirm out_indices propagated to backbone
                 self.assertEqual(len(model.backbone.out_indices), 2)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -267,7 +259,7 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
             [[8.8223, 8.6483, 8.6216], [8.3332, 8.6047, 8.7545], [8.6547, 8.6885, 8.7472]],
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-6))
+        torch.testing.assert_close(predicted_depth[0, :3, :3], expected_slice, rtol=1e-6, atol=1e-6)
 
         # -- `metric` depth model --
         image_processor = DPTImageProcessor.from_pretrained("depth-anything/depth-anything-V2-metric-indoor-small-hf")
@@ -290,7 +282,7 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
             [[1.3349, 1.2947, 1.2802], [1.2794, 1.2338, 1.2901], [1.2630, 1.2219, 1.2478]],
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_export(self):
         for strict in [True, False]:

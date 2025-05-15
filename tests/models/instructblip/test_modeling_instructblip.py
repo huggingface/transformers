@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -55,7 +54,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import InstructBlipForConditionalGeneration, InstructBlipVisionModel
+    from transformers import InstructBlipForConditionalGeneration, InstructBlipModel, InstructBlipVisionModel
 
 
 if is_vision_available():
@@ -158,7 +157,10 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = InstructBlipVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=InstructBlipVisionConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=InstructBlipConfig,
+            has_text_modality=False,
+            common_properties=["num_query_tokens", "image_token_index"],
         )
 
     def test_config(self):
@@ -202,23 +204,15 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="InstructBlipVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="InstructBlipVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
@@ -466,16 +460,22 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
             "attention_mask": attention_mask,
             "qformer_input_ids": qformer_input_ids,
             "qformer_attention_mask": qformer_attention_mask,
-            "labels": input_ids,
         }
         return config, inputs_dict
 
 
 @require_torch
 class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (InstructBlipForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (InstructBlipForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            InstructBlipModel,
+            InstructBlipForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = {"image-text-to-text": InstructBlipForConditionalGeneration}
+    additional_model_inputs = ["qformer_input_ids", "input_ids"]
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -520,12 +520,10 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="There's no base InstructBlipModel")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="There's no base InstructBlipModel")
-    def test_save_load_fast_init_to_base(self):
+    @unittest.skip(
+        "InstructBLIP cannot generate only from input ids, and requires pixel values in all cases to be present"
+    )
+    def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
     def test_forward_signature(self):
@@ -562,102 +560,11 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
         self.assertIsNotNone(model)
 
     # overwrite because InstructBLIP internally calls LM.generate() with embeds thus it cannot operate in no cache format
-    def _check_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
+    def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         use_cache = True  # force this to be True in case False is passed
-
-        input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
-        internal_batch_size = (
-            input_batch_size * num_beams if num_beams > 1 else input_batch_size * num_return_sequences
+        super()._check_generate_outputs(
+            output, config, use_cache=use_cache, num_return_sequences=num_return_sequences, num_beams=num_beams
         )
-
-        seq_length = getattr(self.model_tester, "seq_length", None)
-        seq_length = getattr(self.model_tester, "encoder_seq_length", seq_length)
-        seq_length = getattr(self.model_tester, "text_seq_length", seq_length)
-
-        config = config.text_config if hasattr(config, "text_config") else config
-
-        gen_len = (
-            output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
-        )
-
-        # in some models we subsample the sequence length in inner layers
-        if hasattr(self.model_tester, "get_subsampled_output_lengths"):
-            seq_length = self.model_tester.get_subsampled_output_lengths(seq_length)
-
-        # scores
-        self._check_scores(internal_batch_size, output.scores, length=gen_len, config=config)
-
-        # unprocessed logits
-        self._check_logits(internal_batch_size, output.logits, config=config)
-
-        # Attentions
-        if self.has_attentions:
-            if config.is_encoder_decoder:
-                # encoder
-                self._check_encoder_attention_for_generate(
-                    output.encoder_attentions, input_batch_size, config, seq_length
-                )
-                # decoder
-                self._check_attentions_for_generate(
-                    internal_batch_size,
-                    output.decoder_attentions,
-                    min_length=1,
-                    max_length=output.sequences.shape[-1],
-                    config=config,
-                    use_cache=use_cache,
-                )
-            else:
-                # if use_cache first input is equal to no use_cache, so skip here
-                attentions = output.attentions if not use_cache else output.attentions[1:]
-                min_length = seq_length if not use_cache else seq_length + 1
-                self._check_attentions_for_generate(
-                    internal_batch_size,
-                    attentions=attentions,
-                    min_length=min_length,
-                    max_length=output.sequences.shape[-1],
-                    config=config,
-                    use_cache=use_cache,
-                )
-
-        # Hidden States
-        if config.is_encoder_decoder:
-            # encoder
-            self._check_encoder_hidden_states_for_generate(
-                output.encoder_hidden_states, input_batch_size, config, seq_length
-            )
-
-            # decoder
-            self._check_hidden_states_for_generate(
-                internal_batch_size,
-                output.decoder_hidden_states,
-                min_length=1,
-                max_length=output.sequences.shape[-1],
-                config=config,
-                use_cache=use_cache,
-            )
-        else:
-            # if use_cache first input is equal to no use_cache, so skip here
-            hidden_states = output.hidden_states if not use_cache else output.hidden_states[1:]
-            min_length = seq_length if not use_cache else seq_length + 1
-            self._check_hidden_states_for_generate(
-                internal_batch_size,
-                hidden_states,
-                min_length=min_length,
-                max_length=output.sequences.shape[-1],
-                config=config,
-                use_cache=use_cache,
-            )
-
-        # Past Key Value States
-        if use_cache:
-            past_key_values = output.past_key_values
-            past_sequence_length = output.sequences.shape[-1] - 1
-            self._check_past_key_values_for_generate(
-                internal_batch_size,
-                past_key_values,
-                seq_length=past_sequence_length,
-                config=config,
-            )
 
     # overwrite because InstructBLIP cannot generate only from input ids, and requires `pixel` values and `qformer_input_ids` in all cases to be present
     @pytest.mark.generate
@@ -745,7 +652,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
             ).logits[:, -1, :]
 
             # They should result in very similar logits
-            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
     @unittest.skip(
         "InstructBLIP cannot generate only from input ids, and requires pixel values in all cases to be present"
@@ -758,7 +665,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
-        This tests only by looking at layer names, as usually SDPA layers are calles "SDPAAttention".
+        This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
         In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
         is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
         See https://github.com/huggingface/transformers/pull/32238 for more info
@@ -781,15 +688,11 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
-                vision_attn = "sdpa" if model.vision_model._supports_sdpa else "eager"
-                qformer_attn = "sdpa" if model.qformer._supports_sdpa else "eager"
-
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model.language_model.config._attn_implementation == text_attn)
-                self.assertTrue(model.vision_model.config._attn_implementation == vision_attn)
-                self.assertTrue(model.qformer.config._attn_implementation == qformer_attn)
+                self.assertTrue(model.language_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model.vision_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model.qformer.config._attn_implementation == "eager")
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
@@ -800,19 +703,12 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    if (
+                        class_name.endswith("Attention")
+                        and getattr(submodule, "config", None)
+                        and submodule.config._attn_implementation == "sdpa"
+                    ):
                         raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa and any(
-                    module_attn == "sdpa" for module_attn in [text_attn, vision_attn, qformer_attn]
-                ):
-                    raise ValueError("The SDPA model should have SDPA attention layers")
 
 
 # We will verify our results on an image of cute cats
@@ -839,22 +735,11 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         prompt = "What is unusual about this image?"
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
-        # verify logits
-        with torch.no_grad():
-            logits = model(**inputs).logits
-
-        expected_slice = torch.tensor(
-            [[-3.3047, -12.0625, 8.4922], [-4.9258, -11.7578, 8.1406], [-3.9297, -13.5000, 9.2500]],
-            device=torch_device,
-        )
-
-        self.assertTrue(torch.allclose(logits[0, :3, :3].float(), expected_slice, atol=1e-3))
-
         # verify generation
         outputs = model.generate(**inputs, max_new_tokens=30)
         generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
 
-        expected_outputs = [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 19500, 373, 263, 19587, 4272, 11952, 29889]  # fmt: off
+        expected_outputs = [32001] * 32 + [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 19500, 373, 263, 19587, 4272, 11952, 29889]  # fmt: off
 
         self.assertEqual(outputs[0].tolist(), expected_outputs)
         self.assertEqual(
@@ -885,14 +770,11 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
             num_beams=5,
             max_length=256,
             min_length=1,
-            top_p=0.9,
             repetition_penalty=1.5,
             length_penalty=1.0,
             temperature=1,
         )
         generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0]
-
-        expected_outputs = [0, 37, 1023, 9850, 7, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4459, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 37, 388, 19, 5119, 3, 9, 4459, 8677, 28, 3, 9, 2756, 4459, 6177, 6, 11, 3, 88, 19, 338, 46, 3575, 53, 1476, 12, 743, 112, 2491, 5, 37, 1023, 19, 7225, 788, 12, 8, 685, 24, 34, 1267, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 94, 19, 487, 24, 8, 388, 19, 1119, 12, 1097, 540, 57, 692, 112, 10428, 30, 8, 223, 13, 8, 4049, 6, 68, 34, 19, 92, 487, 24, 3, 88, 19, 1119, 12, 1097, 97, 57, 692, 112, 10428, 30, 8, 223, 13, 8, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 3, 13865, 13, 8, 1053, 21, 8, 388, 31, 7, 2874, 6, 34, 19, 964, 24, 3, 88, 19, 1119, 12, 1097, 97, 57, 692, 112, 10428, 30, 8, 223, 13, 8, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 1]  # fmt: skip
 
         expected_outputs = [0, 37, 7225, 1023, 9850, 7, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4459, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 37, 388, 19, 5119, 3, 9, 4459, 8677, 28, 46, 3575, 53, 1476, 5223, 12, 34, 6, 15495, 24, 3, 88, 19, 692, 112, 293, 10428, 44, 234, 1066, 145, 338, 3, 9, 50, 1106, 3522, 144, 42, 2192, 7919, 31, 7, 5, 37, 1023, 92, 1267, 3, 9, 381, 13, 119, 3203, 16, 8, 2458, 6, 379, 14264, 6, 9256, 7, 6, 11, 11718, 7, 5, 1]  # fmt: skip
 

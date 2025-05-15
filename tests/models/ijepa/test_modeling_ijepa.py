@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -207,6 +206,7 @@ class IJepaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = IJepaModelTester(self)
@@ -250,7 +250,7 @@ class IJepaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "jmtzt/ijepa_vith14_1k"
+        model_name = "facebook/ijepa_vith14_1k"
         model = IJepaModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -266,11 +266,11 @@ def prepare_img():
 class IJepaModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("jmtzt/ijepa_vith14_1k") if is_vision_available() else None
+        return ViTImageProcessor.from_pretrained("facebook/ijepa_vith14_1k") if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):
-        model = IJepaModel.from_pretrained("jmtzt/ijepa_vith14_1k").to(torch_device)
+        model = IJepaModel.from_pretrained("facebook/ijepa_vith14_1k").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -288,7 +288,7 @@ class IJepaModelIntegrationTest(unittest.TestCase):
             [[-0.0621, -0.0054, -2.7513], [-0.1952, 0.0909, -3.9536], [0.0942, -0.0331, -1.2833]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     @require_accelerate
@@ -299,7 +299,7 @@ class IJepaModelIntegrationTest(unittest.TestCase):
         A small test to make sure that inference work in half precision without any problem.
         """
         model = IJepaModel.from_pretrained(
-            "jmtzt/ijepa_vith14_1k",
+            "facebook/ijepa_vith14_1k",
             torch_dtype=torch.float16,
             device_map="auto",
         )
@@ -319,7 +319,7 @@ class IJepaModelIntegrationTest(unittest.TestCase):
         # allowing to interpolate the pre-trained position embeddings in order to use
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
-        model = IJepaModel.from_pretrained("jmtzt/ijepa_vith14_1k").to(torch_device)
+        model = IJepaModel.from_pretrained("facebook/ijepa_vith14_1k").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -338,4 +338,4 @@ class IJepaModelIntegrationTest(unittest.TestCase):
             [[-0.0621, -0.0054, -2.7513], [-0.1952, 0.0909, -3.9536], [0.0942, -0.0331, -1.2833]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

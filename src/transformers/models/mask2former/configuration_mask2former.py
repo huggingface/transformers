@@ -160,7 +160,7 @@ class Mask2FormerConfig(PretrainedConfig):
         init_xavier_std: float = 1.0,
         use_auxiliary_loss: bool = True,
         feature_strides: List[int] = [4, 8, 16, 32],
-        output_auxiliary_logits: bool = None,
+        output_auxiliary_logits: Optional[bool] = None,
         backbone: Optional[str] = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
@@ -171,7 +171,7 @@ class Mask2FormerConfig(PretrainedConfig):
             logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
             backbone_config = CONFIG_MAPPING["swin"](
                 image_size=224,
-                in_channels=3,
+                num_channels=3,
                 patch_size=4,
                 embed_dim=96,
                 depths=[2, 2, 18, 2],
@@ -251,3 +251,6 @@ class Mask2FormerConfig(PretrainedConfig):
             backbone_config=backbone_config,
             **kwargs,
         )
+
+
+__all__ = ["Mask2FormerConfig"]

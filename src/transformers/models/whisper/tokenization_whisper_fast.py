@@ -22,7 +22,7 @@ from functools import lru_cache
 from typing import List, Optional, Tuple
 
 import numpy as np
-from tokenizers import AddedToken, pre_tokenizers, processors
+from tokenizers import AddedToken, processors
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -128,19 +128,12 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
         self.add_bos_token = kwargs.pop("add_bos_token", False)
 
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-
         if normalizer_file is not None:
             with open(normalizer_file, encoding="utf-8") as vocab_handle:
                 self.english_spelling_normalizer = json.load(vocab_handle)
         else:
             self.english_spelling_normalizer = None
 
-        self.add_prefix_space = add_prefix_space
         self.timestamp_pat = re.compile(r"<\|(\d+\.\d+)\|>")
 
         self.language = language
@@ -320,7 +313,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         self,
         token_ids,
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         output_offsets: bool = False,
         time_precision: float = 0.02,
         decode_with_timestamps: bool = False,
@@ -427,7 +420,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.normalize
     def normalize(self, text):
         """
-        Normalize a given string using the `EnglishTextNormalizer` class, which preforms commons transformation on
+        Normalize a given string using the `EnglishTextNormalizer` class, which performs commons transformation on
         english text.
         """
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
@@ -437,7 +430,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.basic_normalize
     def basic_normalize(text, remove_diacritics=False):
         """
-        Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
+        Normalize a given string using the `BasicTextNormalizer` class, which performs commons transformation on
         multilingual text.
         """
         normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
@@ -458,7 +451,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
         return tuple(files) + (normalizer_file,)
 
-    def set_prefix_tokens(self, language: str = None, task: str = None, predict_timestamps: bool = None):
+    def set_prefix_tokens(
+        self, language: Optional[str] = None, task: Optional[str] = None, predict_timestamps: Optional[bool] = None
+    ):
         """
         Override the prefix tokens appended to the start of the label sequence. This method can be used standalone to
         update the prefix tokens as required when fine-tuning. Example:
@@ -639,3 +634,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()
         return token_ids
+
+
+__all__ = ["WhisperTokenizerFast"]

@@ -172,7 +172,7 @@ class EsmConfig(PretrainedConfig):
 
 @dataclass
 class EsmFoldConfig:
-    esm_type: str = None
+    esm_type: Optional[str] = None
     fp16_esm: bool = True
     use_esm_attn_map: bool = False
     esm_ablate_pairwise: bool = False
@@ -360,3 +360,6 @@ def get_default_vocab_list():
         "<null_1>",
         "<mask>",
     )
+
+
+__all__ = ["EsmConfig"]

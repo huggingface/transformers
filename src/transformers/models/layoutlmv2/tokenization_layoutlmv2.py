@@ -406,7 +406,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        boxes: Union[List[List[int]], List[List[List[int]]]] = None,
+        boxes: Optional[Union[List[List[int]], List[List[List[int]]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
@@ -414,7 +414,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -561,7 +561,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             List[TextInputPair],
             List[PreTokenizedInput],
         ],
-        is_pair: bool = None,
+        is_pair: Optional[bool] = None,
         boxes: Optional[List[List[List[int]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
@@ -570,7 +570,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -621,7 +621,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             List[TextInputPair],
             List[PreTokenizedInput],
         ],
-        is_pair: bool = None,
+        is_pair: Optional[bool] = None,
         boxes: Optional[List[List[List[int]]]] = None,
         word_labels: Optional[List[List[int]]] = None,
         add_special_tokens: bool = True,
@@ -630,7 +630,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -675,7 +675,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     def _batch_prepare_for_model(
         self,
         batch_text_or_text_pairs,
-        is_pair: bool = None,
+        is_pair: Optional[bool] = None,
         boxes: Optional[List[List[int]]] = None,
         word_labels: Optional[List[List[int]]] = None,
         add_special_tokens: bool = True,
@@ -684,7 +684,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -758,7 +758,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -807,7 +807,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -875,7 +875,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -930,7 +930,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -1261,7 +1261,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
@@ -1521,7 +1521,7 @@ class WordpieceTokenizer:
         Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
         tokenization using the given vocabulary.
 
-        For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
+        For example, `input = "unaffable"` will return as output `["un", "##aff", "##able"]`.
 
         Args:
             text: A single token or whitespace separated tokens. This should have
@@ -1563,3 +1563,6 @@ class WordpieceTokenizer:
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
+
+
+__all__ = ["LayoutLMv2Tokenizer"]

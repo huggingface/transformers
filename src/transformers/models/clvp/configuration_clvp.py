@@ -144,7 +144,7 @@ class ClvpEncoderConfig(PretrainedConfig):
         # this is to make sure that we can load only text or speech configs from the nested ClvpConfig.
         if config_type not in cls.base_config_key:
             raise ValueError(
-                f"We can only load either 'text_config' or 'speech_config' but you are trying to load" f"{config_type}"
+                f"We can only load either 'text_config' or 'speech_config' but you are trying to load{config_type}"
             )
 
         # get the text config dict if we are loading from ClvpConfig
@@ -438,3 +438,6 @@ class ClvpConfig(PretrainedConfig):
             decoder_config=decoder_config.to_dict(),
             **kwargs,
         )
+
+
+__all__ = ["ClvpConfig", "ClvpDecoderConfig", "ClvpEncoderConfig"]

@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Dict, List, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from .base import HfQuantizer
 
@@ -81,16 +81,14 @@ class BitNetHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        device_map,
-        keep_in_fp32_modules: List[str] = [],
+        keep_in_fp32_modules: Optional[List[str]] = None,
         **kwargs,
     ):
-        from ..integrations import get_keys_to_not_convert, replace_with_bitnet_linear
+        from ..integrations import replace_with_bitnet_linear
 
-        self.modules_to_not_convert = get_keys_to_not_convert(model)
-
-        if self.quantization_config.modules_to_not_convert is not None:
-            self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+        )
 
         model = replace_with_bitnet_linear(
             model,
@@ -112,4 +110,15 @@ class BitNetHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self) -> bool:
-        return False
+        return (
+            self.quantization_config.linear_class == "autobitlinear"
+            and self.quantization_config.quantization_mode == "online"
+        )
+
+    @property
+    def is_qat_trainable(self) -> bool:
+        """Flag indicating whether the quantized model can carry out quantization aware training"""
+        return (
+            self.quantization_config.linear_class == "autobitlinear"
+            and self.quantization_config.quantization_mode == "online"
+        )

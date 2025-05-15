@@ -464,7 +464,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         batch_images = [[to_numpy_array(image) for image in images] for images in batch_images]
 
-        if is_scaled_image(batch_images[0][0]) and do_rescale:
+        if do_rescale and is_scaled_image(batch_images[0][0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -537,7 +537,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         }
         return FuyuBatchFeature(data=data, tensor_type=return_tensors)
 
-    def get_num_patches(self, image_height: int, image_width: int, patch_size: Dict[str, int] = None) -> int:
+    def get_num_patches(self, image_height: int, image_width: int, patch_size: Optional[Dict[str, int]] = None) -> int:
         """
         Calculate number of patches required to encode an image.
 
@@ -719,3 +719,6 @@ class FuyuImageProcessor(BaseImageProcessor):
                 "image_patch_indices_per_subsequence": image_patch_indices_per_subsequence,
             }
         )
+
+
+__all__ = ["FuyuImageProcessor"]

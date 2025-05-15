@@ -63,6 +63,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -731,7 +732,7 @@ def compute_segments(
     mask_threshold: float = 0.5,
     overlap_mask_area_threshold: float = 0.8,
     label_ids_to_fuse: Optional[Set[int]] = None,
-    target_size: Tuple[int, int] = None,
+    target_size: Optional[Tuple[int, int]] = None,
 ):
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
@@ -784,6 +785,7 @@ def compute_segments(
     return segmentation, segments
 
 
+@requires(backends=("vision",))
 class DetrImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Detr image processor.
@@ -843,13 +845,13 @@ class DetrImageProcessor(BaseImageProcessor):
         self,
         format: Union[str, AnnotationFormat] = AnnotationFormat.COCO_DETECTION,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Union[float, List[float]] = None,
-        image_std: Union[float, List[float]] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         do_convert_annotations: Optional[bool] = None,
         do_pad: bool = True,
         pad_size: Optional[Dict[str, int]] = None,
@@ -928,7 +930,7 @@ class DetrImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         target: Dict,
         format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
@@ -1237,7 +1239,7 @@ class DetrImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
-        return_segmentation_masks: bool = None,
+        return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
@@ -1337,7 +1339,6 @@ class DetrImageProcessor(BaseImageProcessor):
             )
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
-        max_size = None
         if "max_size" in kwargs:
             logger.warning_once(
                 "The `max_size` argument is deprecated and will be removed in a future version, use"
@@ -1347,7 +1348,7 @@ class DetrImageProcessor(BaseImageProcessor):
 
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
-        size = get_size_dict(size=size, max_size=max_size, default_to_square=False)
+        size = get_size_dict(size=size, default_to_square=False)
         resample = self.resample if resample is None else resample
         do_rescale = self.do_rescale if do_rescale is None else do_rescale
         rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
@@ -1407,7 +1408,7 @@ class DetrImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -1443,7 +1444,7 @@ class DetrImageProcessor(BaseImageProcessor):
                 for image, target in zip(images, annotations):
                     orig_size = get_image_size(image, input_data_format)
                     resized_image = self.resize(
-                        image, size=size, max_size=max_size, resample=resample, input_data_format=input_data_format
+                        image, size=size, resample=resample, input_data_format=input_data_format
                     )
                     resized_annotation = self.resize_annotation(
                         target, orig_size, get_image_size(resized_image, input_data_format)
@@ -1569,7 +1570,7 @@ class DetrImageProcessor(BaseImageProcessor):
         def to_tuple(tup):
             if isinstance(tup, tuple):
                 return tup
-            return tuple(tup.cpu().tolist())
+            return tuple(tup.tolist())
 
         for cur_logits, cur_masks, size in zip(out_logits, raw_masks, target_sizes):
             # we filter empty queries and detection below threshold
@@ -1678,7 +1679,7 @@ class DetrImageProcessor(BaseImageProcessor):
         def to_tuple(tup):
             if isinstance(tup, tuple):
                 return tup
-            return tuple(tup.cpu().tolist())
+            return tuple(tup.tolist())
 
         for cur_logits, cur_masks, cur_boxes, size, target_size in zip(
             out_logits, raw_masks, raw_boxes, processed_sizes, target_sizes
@@ -1823,7 +1824,7 @@ class DetrImageProcessor(BaseImageProcessor):
 
         return results
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple[int, int]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None):
         """
         Converts the output of [`DetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 

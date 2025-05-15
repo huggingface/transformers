@@ -56,7 +56,7 @@ class BlipProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = []
-    image_processor_class = "BlipImageProcessor"
+    image_processor_class = ("BlipImageProcessor", "BlipImageProcessorFast")
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
     def __init__(self, image_processor, tokenizer, **kwargs):
@@ -134,3 +134,6 @@ class BlipProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["BlipProcessor"]

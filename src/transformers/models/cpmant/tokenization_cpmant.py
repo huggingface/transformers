@@ -222,7 +222,9 @@ class CpmAntTokenizer(PreTrainedTokenizer):
                 index += 1
         return (vocab_file,)
 
-    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: List[int] = None) -> List[int]:
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A CPMAnt sequence has the following format:
@@ -265,3 +267,6 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         if token_ids_1 is not None:
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
         return [1] + ([0] * len(token_ids_0))
+
+
+__all__ = ["CpmAntTokenizer"]

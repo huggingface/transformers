@@ -13,7 +13,7 @@
 # limitations under the License.
 import warnings
 from io import BytesIO
-from typing import List, Union
+from typing import List, Optional, Union
 
 import requests
 
@@ -77,7 +77,7 @@ class VideoClassificationPipeline(Pipeline):
             postprocess_params["function_to_apply"] = "softmax"
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, inputs: Union[str, List[str]] = None, **kwargs):
+    def __call__(self, inputs: Optional[Union[str, List[str]]] = None, **kwargs):
         """
         Assign labels to the video(s) passed as inputs.
 
@@ -106,9 +106,9 @@ class VideoClassificationPipeline(Pipeline):
                 post-processing.
 
         Return:
-            A dictionary or a list of dictionaries containing result. If the input is a single video, will return a
-            dictionary, if the input is a list of several videos, will return a list of dictionaries corresponding to
-            the videos.
+            A list of dictionaries or a list of list of dictionaries containing result. If the input is a single video,
+            will return a list of `top_k` dictionaries, if the input is a list of several videos, will return a list of list of
+            `top_k` dictionaries corresponding to the videos.
 
             The dictionaries contain the following keys:
 

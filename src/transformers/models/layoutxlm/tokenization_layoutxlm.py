@@ -30,6 +30,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
+from ...utils.import_utils import requires
 from ..xlm_roberta.tokenization_xlm_roberta import (
     SPIECE_UNDERLINE,
     VOCAB_FILES_NAMES,
@@ -143,6 +144,7 @@ LAYOUTXLM_ENCODE_KWARGS_DOCSTRING = r"""
 """
 
 
+@requires(backends=("sentencepiece",))
 class LayoutXLMTokenizer(PreTrainedTokenizer):
     """
     Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
@@ -439,7 +441,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        boxes: Union[List[List[int]], List[List[List[int]]]] = None,
+        boxes: Optional[Union[List[List[int]], List[List[List[int]]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
@@ -447,7 +449,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -593,7 +595,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
             List[TextInputPair],
             List[PreTokenizedInput],
         ],
-        is_pair: bool = None,
+        is_pair: Optional[bool] = None,
         boxes: Optional[List[List[List[int]]]] = None,
         word_labels: Optional[List[List[int]]] = None,
         add_special_tokens: bool = True,
@@ -602,7 +604,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -647,7 +649,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
     def _batch_prepare_for_model(
         self,
         batch_text_or_text_pairs,
-        is_pair: bool = None,
+        is_pair: Optional[bool] = None,
         boxes: Optional[List[List[int]]] = None,
         word_labels: Optional[List[List[int]]] = None,
         add_special_tokens: bool = True,
@@ -656,7 +658,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -729,7 +731,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -784,7 +786,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -1102,7 +1104,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
@@ -1184,3 +1186,6 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
                 raise ValueError("Invalid padding strategy:" + str(padding_side))
 
         return encoded_inputs
+
+
+__all__ = ["LayoutXLMTokenizer"]

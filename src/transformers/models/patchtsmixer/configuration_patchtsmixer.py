@@ -185,10 +185,10 @@ class PatchTSMixerConfig(PretrainedConfig):
         distribution_output: str = "student_t",
         # Prediction head configuration
         prediction_length: int = 16,
-        prediction_channel_indices: list = None,
+        prediction_channel_indices: Optional[list] = None,
         # Classification/Regression configuration
         num_targets: int = 3,
-        output_range: list = None,
+        output_range: Optional[list] = None,
         head_aggregation: str = "max_pool",
         **kwargs,
     ):
@@ -230,3 +230,6 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.unmasked_channel_indices = unmasked_channel_indices
         self.norm_eps = norm_eps
         super().__init__(**kwargs)
+
+
+__all__ = ["PatchTSMixerConfig"]

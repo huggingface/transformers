@@ -177,7 +177,7 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
         elif model.config.is_encoder_decoder:
             self.skipTest(
                 """encoder_decoder models are trickier for this pipeline.
-                Do we want encoder + decoder inputs to get some featues?
+                Do we want encoder + decoder inputs to get some features?
                 Do we want encoder only features ?
                 For now ignore those.
                 """

@@ -337,6 +337,9 @@ class MllamaConfig(PretrainedConfig):
     ```"""
 
     model_type = "mllama"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
     sub_configs = {"text_config": MllamaTextConfig, "vision_config": MllamaVisionConfig}
 
     def __init__(
@@ -365,3 +368,6 @@ class MllamaConfig(PretrainedConfig):
             self.text_config = text_config
 
         super().__init__(**kwargs)
+
+
+__all__ = ["MllamaConfig"]

@@ -195,7 +195,7 @@ class MusicgenConfig(PretrainedConfig):
         "audio_encoder": AutoConfig,
         "decoder": MusicgenDecoderConfig,
     }
-    is_composition = True
+    has_no_defaults_at_init = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -242,3 +242,6 @@ class MusicgenConfig(PretrainedConfig):
     # This is a property because you might want to change the codec model on the fly
     def sampling_rate(self):
         return self.audio_encoder.sampling_rate
+
+
+__all__ = ["MusicgenConfig", "MusicgenDecoderConfig"]

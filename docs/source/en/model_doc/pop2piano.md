@@ -13,9 +13,7 @@ specific language governing permissions and limitations under the License.
 # Pop2Piano
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/spaces/sweetcocoa/pop2piano">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
 ## Overview

@@ -26,7 +26,7 @@ class DecisionTransformerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`DecisionTransformerModel`]. It is used to
     instantiate a Decision Transformer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the standard
-    DecisionTransformer architecture. Many of the config options are used to instatiate the GPT2 model that is used as
+    DecisionTransformer architecture. Many of the config options are used to instantiate the GPT2 model that is used as
     part of the architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -152,3 +152,6 @@ class DecisionTransformerConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+
+__all__ = ["DecisionTransformerConfig"]

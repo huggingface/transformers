@@ -16,6 +16,8 @@
 
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
+from ...utils.import_utils import requires
+
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
@@ -47,6 +49,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class GLPNImageProcessor(BaseImageProcessor):
     r"""
     Constructs a GLPN image processor.
@@ -202,7 +205,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(img) for img in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -268,3 +271,6 @@ class GLPNImageProcessor(BaseImageProcessor):
             results.append({"predicted_depth": depth})
 
         return results
+
+
+__all__ = ["GLPNImageProcessor"]

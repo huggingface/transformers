@@ -74,7 +74,7 @@ class OneFormerConfig(PretrainedConfig):
         importance_sample_ratio (`float`, *optional*, defaults to 0.75):
             Ratio of points that are sampled via importance sampling.
         init_std (`float`, *optional*, defaults to 0.02):
-            Standard deviation for normal intialization.
+            Standard deviation for normal initialization.
         init_xavier_std (`float`, *optional*, defaults to 1.0):
             Standard deviation for xavier uniform initialization.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -201,7 +201,7 @@ class OneFormerConfig(PretrainedConfig):
             logger.info("`backbone_config` is unset. Initializing the config with the default `Swin` backbone.")
             backbone_config = CONFIG_MAPPING["swin"](
                 image_size=224,
-                in_channels=3,
+                num_channels=3,
                 patch_size=4,
                 embed_dim=96,
                 depths=[2, 2, 6, 2],
@@ -272,3 +272,6 @@ class OneFormerConfig(PretrainedConfig):
         self.num_hidden_layers = decoder_layers
 
         super().__init__(**kwargs)
+
+
+__all__ = ["OneFormerConfig"]

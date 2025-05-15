@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -22,6 +21,7 @@ import numpy
 
 from .utils import (
     ExplicitEnum,
+    check_torch_load_is_safe,
     expand_dims,
     is_numpy_array,
     is_safetensors_available,
@@ -180,8 +180,6 @@ def load_pytorch_checkpoint_in_tf2_model(
         import tensorflow as tf  # noqa: F401
         import torch  # noqa: F401
         from safetensors.torch import load_file as safe_load_file  # noqa: F401
-
-        from .pytorch_utils import is_torch_greater_or_equal_than_1_13  # noqa: F401
     except ImportError:
         logger.error(
             "Loading a PyTorch model in TensorFlow, requires both PyTorch and TensorFlow to be installed. Please see "
@@ -201,8 +199,8 @@ def load_pytorch_checkpoint_in_tf2_model(
         if pt_path.endswith(".safetensors"):
             state_dict = safe_load_file(pt_path)
         else:
-            weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
-            state_dict = torch.load(pt_path, map_location="cpu", **weights_only_kwarg)
+            check_torch_load_is_safe()
+            state_dict = torch.load(pt_path, map_location="cpu", weights_only=True)
 
         pt_state_dict.update(state_dict)
 
@@ -587,8 +585,8 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
     loaded_pt_weights_data_ptr = {}
     missing_keys_pt = []
     for pt_weight_name, pt_weight in current_pt_params_dict.items():
-        # Handle PyTorch shared weight ()not duplicated in TF 2.0
-        if pt_weight.data_ptr() in loaded_pt_weights_data_ptr:
+        # Handle PyTorch shared weight not duplicated in TF 2.0
+        if pt_weight.data_ptr() in loaded_pt_weights_data_ptr and pt_weight.data_ptr() != 0:
             new_pt_params_dict[pt_weight_name] = loaded_pt_weights_data_ptr[pt_weight.data_ptr()]
             continue
 

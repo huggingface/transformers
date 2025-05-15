@@ -139,7 +139,9 @@ class LongformerConfig(PretrainedConfig):
 
 
 class LongformerOnnxConfig(OnnxConfig):
-    def __init__(self, config: "PretrainedConfig", task: str = "default", patching_specs: "List[PatchingSpec]" = None):
+    def __init__(
+        self, config: "PretrainedConfig", task: str = "default", patching_specs: "Optional[List[PatchingSpec]]" = None
+    ):
         super().__init__(config, task, patching_specs)
         config.onnx_export = True
 
@@ -199,3 +201,6 @@ class LongformerOnnxConfig(OnnxConfig):
         inputs["global_attention_mask"][:, ::2] = 1
 
         return inputs
+
+
+__all__ = ["LongformerConfig", "LongformerOnnxConfig"]

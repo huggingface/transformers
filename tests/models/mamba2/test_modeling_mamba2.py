@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +14,19 @@
 
 
 import unittest
-from typing import Dict, List, Tuple
 
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
-from transformers.testing_utils import require_read_token, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    require_read_token,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
+from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -36,9 +42,29 @@ if is_torch_available():
         Mamba2Model,
     )
     from transformers.models.mamba2.modeling_mamba2 import Mamba2Cache, Mamba2Mixer
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
-else:
-    is_torch_greater_or_equal_than_2_0 = False
+
+
+class Mamba2ConfigTester(ConfigTester):
+    def _create_config(self, hidden_size: int, num_heads: int, expand: int, head_dim: int):
+        _input_dict = self.inputs_dict.copy()
+        _input_dict["hidden_size"] = hidden_size
+        _input_dict["num_heads"] = num_heads
+        _input_dict["expand"] = expand
+        _input_dict["head_dim"] = head_dim
+        return self.config_class(**_input_dict)
+
+    def test_hidden_size_compatibility(self):
+        self._create_config(hidden_size=2, num_heads=2, expand=2, head_dim=2)
+        self._create_config(hidden_size=4, num_heads=4, expand=2, head_dim=2)
+        self._create_config(hidden_size=2, num_heads=4, expand=4, head_dim=2)
+        with self.parent.assertRaises(ValueError):
+            self._create_config(hidden_size=2, num_heads=4, expand=2, head_dim=4)
+        with self.parent.assertRaises(ValueError):
+            self._create_config(hidden_size=4, num_heads=2, expand=4, head_dim=2)
+
+    def run_common_tests(self):
+        self.test_hidden_size_compatibility()
+        return super().run_common_tests()
 
 
 class Mamba2ModelTester:
@@ -103,6 +129,10 @@ class Mamba2ModelTester:
     ):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
+        # Only left padding is valid
+        attention_mask = torch.ones(size=(self.batch_size, self.seq_length), device=input_ids.device, dtype=torch.long)
+        attention_mask[0, :1] = 0
+
         sequence_labels = None
         token_labels = None
         choice_labels = None
@@ -118,7 +148,7 @@ class Mamba2ModelTester:
         return (
             config,
             input_ids,
-            None,
+            attention_mask,
             sequence_labels,
             token_labels,
             choice_labels,
@@ -158,14 +188,60 @@ class Mamba2ModelTester:
         inputs_dict = {"input_ids": input_ids}
         return config, inputs_dict
 
+    def create_and_check_mamba2_caching(self, config, input_ids, attention_mask, *args):
+        model = Mamba2Model(config=config)
+        model.to(torch_device)
+        model.eval()
 
-@unittest.skipIf(
-    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
-)
+        output_whole = model(input_ids, attention_mask=attention_mask).last_hidden_state
+
+        outputs = model(
+            input_ids[:, :-1],
+            attention_mask=attention_mask[:, :-1],
+            use_cache=True,
+            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
+        )
+        output_one = outputs.last_hidden_state
+
+        # Using the state computed on the first inputs, we will get the same output
+        outputs = model(
+            input_ids[:, -1:],
+            attention_mask=attention_mask[:, -1:],
+            use_cache=True,
+            cache_params=outputs.cache_params,
+            cache_position=torch.arange(config.conv_kernel, config.conv_kernel + 1, device=input_ids.device),
+        )
+        output_two = outputs.last_hidden_state
+
+        self.parent.assertTrue(
+            torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-3, rtol=1e-3)
+        )
+
+    def create_and_check_mamba2_slow_vs_fast_forward(self, config, input_ids, *args, gradient_checkpointing=False):
+        model = Mamba2Model(config)
+        model.eval()
+
+        if not (is_mamba_2_ssm_available() and is_causal_conv1d_available()):
+            self.parent.skipTest(
+                "This test needs the Mamba2 fast path. Skipping as the necessary packages have not been found."
+            )
+        if torch_device != "cuda":
+            self.parent.skipTest("This test needs the Mamba2 fast path. Skipping as we need a cuda capable device.")
+
+        model.to(torch_device)
+        if gradient_checkpointing:
+            model.gradient_checkpointing_enable()
+
+        token_emb = model.embeddings(input_ids)
+        outputs_fast = model.layers[0].mixer.cuda_kernels_forward(token_emb)
+        outputs_slow = model.layers[0].mixer.torch_forward(token_emb)
+
+        self.parent.assertTrue(torch.allclose(outputs_fast, outputs_slow, atol=1e-3, rtol=1e-3))
+
+
 @require_torch
 class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Mamba2Model, Mamba2ForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (Mamba2ForCausalLM,) if is_torch_available() else ()
     has_attentions = False  # Mamba does not support attentions
     fx_compatible = False  # FIXME let's try to support this @molbap
     test_torchscript = False  # FIXME I think this should be doable @molbap @ArthurZucker
@@ -180,9 +256,25 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def setUp(self):
         self.model_tester = Mamba2ModelTester(self)
-        self.config_tester = ConfigTester(
+        self.config_tester = Mamba2ConfigTester(
             self, config_class=Mamba2Config, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
+
+    def test_mamba2_caching(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba2_caching(*config_and_inputs)
+
+    def test_mamba2_slow_vs_fast_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
+
+    # This test adjusts n_groups to half the original setting and effectively
+    # creates a grouped SSD configuration in the mamba2 layers
+    # See https://github.com/huggingface/transformers/pull/37533/
+    def test_mamba2_slow_vs_fast_forward_grouped(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs[0].n_groups //= 2
+        self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
 
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -193,27 +285,10 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 if "D" in name:
                     if param.requires_grad:
                         # check if it's a ones like
-                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
 
     @unittest.skip(reason="Mamba 2 weights are not tied")
     def test_tied_weights_keys(self):
-        pass
-
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
-    def test_generate_without_input_ids(self):
-        pass
-
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    def test_generate_from_inputs_embeds(self, _, num_beams):
-        pass
-
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing is interacting with beam search")
-    def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
     @unittest.skip(reason="A large mamba2 would be necessary (and costly) for that")
@@ -232,10 +307,10 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     if isinstance(tuple_object, Mamba2Cache):  # MODIFIED PART START
                         recursive_check(tuple_object.conv_states, dict_object.conv_states)
                         recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
-                    elif isinstance(tuple_object, (List, Tuple)):  # MODIFIED PART END
+                    elif isinstance(tuple_object, (list, tuple)):  # MODIFIED PART END
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -312,12 +387,18 @@ class Mamba2IntegrationTest(unittest.TestCase):
 
         out = model.generate(input_ids, do_sample=False, use_cache=True, max_new_tokens=30)
         output_sentence = tokenizer.decode(out[0])
-        ground_truth_sentence = """<s>[INST]Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program in C++:\n\n```cpp\n#include <iostream>\n\n"""
+        ground_truth_sentences = Expectations(
+            {
+                ("xpu", 3): """<s>[INST]Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program written in C++:\n\n```cpp\n#include <iostream>\n""",
+                ("cuda", 7): """<s>[INST]Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program in C++:\n\n```cpp\n#include <iostream>\n\n""",
+            }
+        )  # fmt: skip
+        ground_truth_sentence = ground_truth_sentences.get_expectation()
         self.assertEqual(output_sentence, ground_truth_sentence)
 
     @require_read_token
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_batched_equivalence_with_cache(self):
         """
         Verifies that batched generation matches individual generation.
@@ -348,7 +429,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
 
     @require_read_token
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_batched_equivalence_without_cache(self):
         """
         Verifies that batched generation matches individual generation without cache.
@@ -378,7 +459,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
             self.assertEqual(individual_output[:100], batched_output[index_gen][:100])
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_mamba2_mixer_train_vs_eval_equivalence(self):
         # Based on https://github.com/sustcsonglin/flash-linear-attention/issues/63
         # Credit to zhixuan-lin
@@ -388,10 +469,10 @@ class Mamba2IntegrationTest(unittest.TestCase):
         config = Mamba2Config(num_heads=24, head_dim=64, hidden_size=768, expand=2, n_groups=1)
 
         torch.manual_seed(42)
-        with torch.amp.autocast(device_type="cuda", dtype=dtype):
+        with torch.amp.autocast(device_type=torch_device, dtype=dtype):
             with torch.no_grad():
-                mixer = Mamba2Mixer(config, layer_idx=0).to("cuda")
-                hidden_states = torch.rand(size=(B, T, D), dtype=dtype, device="cuda")
+                mixer = Mamba2Mixer(config, layer_idx=0).to(torch_device)
+                hidden_states = torch.rand(size=(B, T, D), dtype=dtype, device=torch_device)
 
                 mixer.train()
                 out_train = mixer(hidden_states)
@@ -399,4 +480,4 @@ class Mamba2IntegrationTest(unittest.TestCase):
                 mixer.eval()
                 out_eval = mixer(hidden_states)
 
-                self.assertTrue(torch.allclose(out_train, out_eval, atol=1e-3))
+                torch.testing.assert_close(out_train, out_eval, rtol=1e-3, atol=1e-3)

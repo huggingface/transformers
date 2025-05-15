@@ -13,7 +13,7 @@
 # limitations under the License.
 import importlib
 import os
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 from packaging import version
 
@@ -31,7 +31,7 @@ def find_adapter_config_file(
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
     resume_download: Optional[bool] = None,
-    proxies: Optional[Dict[str, str]] = None,
+    proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,

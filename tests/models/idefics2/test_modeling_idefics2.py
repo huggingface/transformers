@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +18,7 @@ import tempfile
 import unittest
 from io import BytesIO
 
+import pytest
 import requests
 
 from transformers import (
@@ -48,8 +48,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -345,31 +343,20 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                vision_attn = None if model.vision_model._supports_sdpa else "eager"
-                perceiver_attn = None if model.connector.perceiver_resampler._supports_sdpa else "eager"
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == vision_attn)
-                self.assertTrue(model_sdpa.connector.perceiver_resampler.config._attn_implementation == perceiver_attn)
+                self.assertTrue(model_sdpa.vision_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model_sdpa.connector.perceiver_resampler.config._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
                 self.assertTrue(model_eager.vision_model.config._attn_implementation == "eager")
-                self.assertTrue(model_sdpa.connector.perceiver_resampler.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.connector.perceiver_resampler.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa and model_sdpa.config.model_type != "falcon":
-                    raise ValueError("The SDPA model should have SDPA attention layers")
 
 
 @require_torch
@@ -379,7 +366,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     """
 
     all_model_classes = (Idefics2ForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (Idefics2ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": Idefics2ForConditionalGeneration} if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -421,8 +407,13 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
-    @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
+    @pytest.mark.generate
+    @require_torch_sdpa
+    @slow
+    @unittest.skip(
+        reason="Idefics2 doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"
+    )
+    def test_eager_matches_sdpa_generate(self):
         pass
 
     # We need to override as we need to prepare such that the image token is the last token
@@ -563,7 +554,7 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             out_ids = model.generate(input_ids=input_ids, **inputs, max_new_tokens=2)
             out_embeds = model.generate(input_ids=input_ids, inputs_embeds=inputs_embeds, **inputs, max_new_tokens=2)
 
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
 
 @require_torch
@@ -625,7 +616,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Create pixel inputs
         text = ["<image>In this image, we see", "bla, bla <image><image>"]
         images = [[self.image1], [self.image2, self.image3]]
-        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
+        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt").to(torch_device)
 
         generated_ids = model.generate(**inputs, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
@@ -649,19 +640,19 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         text = [f"<image>{dataset[40]['query']['en']}", f"<image>{dataset[41]['query']['en']}"]
         images = [[dataset[40]["image"]], [dataset[41]["image"]]]
-        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
+        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt").to(torch_device)
         generated_ids = model.generate(**inputs, max_new_tokens=64)
         batched_generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         text = f"<image>{dataset[40]['query']['en']}"
         images = dataset[40]["image"]
-        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
+        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt").to(torch_device)
         generated_ids = model.generate(**inputs, max_new_tokens=64)
         generated_text_0 = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         text = f"<image>{dataset[41]['query']['en']}"
         images = dataset[41]["image"]
-        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
+        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt").to(torch_device)
         generated_ids = model.generate(**inputs, max_new_tokens=64)
         generated_text_1 = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 

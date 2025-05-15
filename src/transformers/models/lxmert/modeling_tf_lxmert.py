@@ -1036,8 +1036,8 @@ LXMERT_INPUTS_DOCSTRING = r"""
 
             These are currently not provided by the transformers library.
         visual_pos (`tf.Tensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
-            This input represents spacial features corresponding to their relative (via index) visual features. The
-            pre-trained LXMERT model expects these spacial features to be normalized bounding boxes on a scale of 0 to
+            This input represents spatial features corresponding to their relative (via index) visual features. The
+            pre-trained LXMERT model expects these spatial features to be normalized bounding boxes on a scale of 0 to
             1.
 
             These are currently not provided by the transformers library.
@@ -1650,3 +1650,12 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         if getattr(self, "answer_head", None) is not None:
             with tf.name_scope(self.answer_head.name):
                 self.answer_head.build(None)
+
+
+__all__ = [
+    "TFLxmertForPreTraining",
+    "TFLxmertMainLayer",
+    "TFLxmertModel",
+    "TFLxmertPreTrainedModel",
+    "TFLxmertVisualFeatureEncoder",
+]

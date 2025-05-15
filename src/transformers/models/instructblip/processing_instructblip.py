@@ -73,7 +73,7 @@ class InstructBlipProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer", "qformer_tokenizer"]
     valid_kwargs = ["num_query_tokens"]
-    image_processor_class = "BlipImageProcessor"
+    image_processor_class = ("BlipImageProcessor", "BlipImageProcessorFast")
     tokenizer_class = "AutoTokenizer"
     qformer_tokenizer_class = "AutoTokenizer"
 
@@ -218,3 +218,6 @@ class InstructBlipProcessor(ProcessorMixin):
         qformer_tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, subfolder="qformer_tokenizer")
         processor.qformer_tokenizer = qformer_tokenizer
         return processor
+
+
+__all__ = ["InstructBlipProcessor"]

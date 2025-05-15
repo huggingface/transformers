@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -74,6 +73,19 @@ class AutoImageProcessorTest(unittest.TestCase):
             config = AutoImageProcessor.from_pretrained(tmpdirname)
             self.assertIsInstance(config, CLIPImageProcessor)
 
+    def test_image_processor_from_new_filename(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            config_tmpfile = Path(tmpdirname) / "config.json"
+            json.dump(
+                {"image_processor_type": "CLIPImageProcessor", "processor_class": "CLIPProcessor"},
+                open(processor_tmpfile, "w"),
+            )
+            json.dump({"model_type": "clip"}, open(config_tmpfile, "w"))
+
+            config = AutoImageProcessor.from_pretrained(tmpdirname)
+            self.assertIsInstance(config, CLIPImageProcessor)
+
     def test_image_processor_from_local_directory_from_config(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model_config = CLIPConfig()
@@ -140,6 +152,7 @@ class AutoImageProcessorTest(unittest.TestCase):
     def test_use_fast_selection(self):
         checkpoint = "hf-internal-testing/tiny-random-vit"
 
+        # TODO: @yoni, change in v4.48 (when use_fast set to True by default)
         # Slow image processor is selected by default
         image_processor = AutoImageProcessor.from_pretrained(checkpoint)
         self.assertIsInstance(image_processor, ViTImageProcessor)

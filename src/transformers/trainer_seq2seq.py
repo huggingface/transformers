@@ -16,7 +16,7 @@ import contextlib
 import warnings
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import torch
 from torch import nn
@@ -59,14 +59,15 @@ class Seq2SeqTrainer(Trainer):
         args: "TrainingArguments" = None,
         data_collator: Optional["DataCollator"] = None,
         train_dataset: Optional[Union[Dataset, "IterableDataset", "datasets.Dataset"]] = None,
-        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
+        eval_dataset: Optional[Union[Dataset, dict[str, Dataset]]] = None,
         processing_class: Optional[
             Union["PreTrainedTokenizerBase", "BaseImageProcessor", "FeatureExtractionMixin", "ProcessorMixin"]
         ] = None,
         model_init: Optional[Callable[[], "PreTrainedModel"]] = None,
-        compute_metrics: Optional[Callable[["EvalPrediction"], Dict]] = None,
-        callbacks: Optional[List["TrainerCallback"]] = None,
-        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        compute_loss_func: Optional[Callable] = None,
+        compute_metrics: Optional[Callable[["EvalPrediction"], dict]] = None,
+        callbacks: Optional[list["TrainerCallback"]] = None,
+        optimizers: tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
     ):
         super().__init__(
@@ -77,6 +78,7 @@ class Seq2SeqTrainer(Trainer):
             eval_dataset=eval_dataset,
             processing_class=processing_class,
             model_init=model_init,
+            compute_loss_func=compute_loss_func,
             compute_metrics=compute_metrics,
             callbacks=callbacks,
             optimizers=optimizers,
@@ -141,10 +143,10 @@ class Seq2SeqTrainer(Trainer):
     def evaluate(
         self,
         eval_dataset: Optional[Dataset] = None,
-        ignore_keys: Optional[List[str]] = None,
+        ignore_keys: Optional[list[str]] = None,
         metric_key_prefix: str = "eval",
         **gen_kwargs,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Run evaluation and returns metrics.
 
@@ -197,7 +199,7 @@ class Seq2SeqTrainer(Trainer):
     def predict(
         self,
         test_dataset: Dataset,
-        ignore_keys: Optional[List[str]] = None,
+        ignore_keys: Optional[list[str]] = None,
         metric_key_prefix: str = "test",
         **gen_kwargs,
     ) -> "PredictionOutput":
@@ -261,11 +263,11 @@ class Seq2SeqTrainer(Trainer):
     def prediction_step(
         self,
         model: nn.Module,
-        inputs: Dict[str, Union[torch.Tensor, Any]],
+        inputs: dict[str, Union[torch.Tensor, Any]],
         prediction_loss_only: bool,
-        ignore_keys: Optional[List[str]] = None,
+        ignore_keys: Optional[list[str]] = None,
         **gen_kwargs,
-    ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
+    ) -> tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Perform an evaluation step on `model` using `inputs`.
 
@@ -349,9 +351,9 @@ class Seq2SeqTrainer(Trainer):
                 with self.compute_loss_context_manager():
                     outputs = model(**inputs)
                 if self.label_smoother is not None:
-                    loss = self.label_smoother(outputs, inputs["labels"]).mean().detach()
+                    loss = self.label_smoother(outputs, inputs["labels"]).detach().mean()
                 else:
-                    loss = (outputs["loss"] if isinstance(outputs, dict) else outputs[0]).mean().detach()
+                    loss = (outputs["loss"] if isinstance(outputs, dict) else outputs[0]).detach().mean()
             else:
                 loss = None
 
@@ -370,10 +372,12 @@ class Seq2SeqTrainer(Trainer):
         return loss, generated_tokens, labels
 
     def _pad_tensors_to_max_len(self, tensor, max_length):
-        if self.tokenizer is not None and hasattr(self.tokenizer, "pad_token_id"):
+        if self.processing_class is not None and hasattr(self.processing_class, "pad_token_id"):
             # If PAD token is not defined at least EOS token has to be defined
             pad_token_id = (
-                self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else self.tokenizer.eos_token_id
+                self.processing_class.pad_token_id
+                if self.processing_class.pad_token_id is not None
+                else self.processing_class.eos_token_id
             )
         else:
             if self.model.config.pad_token_id is not None:

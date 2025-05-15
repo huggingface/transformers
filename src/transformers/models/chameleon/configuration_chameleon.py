@@ -14,7 +14,7 @@
 # limitations under the License.
 """chameleon model configuration"""
 
-from typing import List
+from typing import List, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -75,7 +75,7 @@ class ChameleonVQVAEConfig(PretrainedConfig):
         base_channels: int = 128,
         channel_multiplier: List[int] = [1, 1, 2, 2, 4],
         num_res_blocks: int = 2,
-        attn_resolutions: List[int] = None,
+        attn_resolutions: Optional[List[int]] = None,
         dropout: float = 0.0,
         attn_type: str = "vanilla",
         initializer_range=0.02,
@@ -276,3 +276,6 @@ class ChameleonConfig(PretrainedConfig):
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
             raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
+
+
+__all__ = ["ChameleonConfig", "ChameleonVQVAEConfig"]

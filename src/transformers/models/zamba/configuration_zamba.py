@@ -203,9 +203,9 @@ class ZambaConfig(PretrainedConfig):
 
         self.layers_block_type = self._layers_block_type(num_hidden_layers, attn_layer_period, attn_layer_offset)
 
-        assert (
-            self.mamba_expand * self.hidden_size
-        ) % self.n_mamba_heads == 0, "`intermediate_size` should be divisible by `n_mamba_heads`."
+        assert (self.mamba_expand * self.hidden_size) % self.n_mamba_heads == 0, (
+            "`intermediate_size` should be divisible by `n_mamba_heads`."
+        )
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -222,3 +222,6 @@ class ZambaConfig(PretrainedConfig):
             "hybrid",
         ] + ["hybrid" if i % attn_layer_period == attn_layer_offset else "mamba" for i in range(num_hidden_layers - 3)]
         return layers
+
+
+__all__ = ["ZambaConfig"]

@@ -18,6 +18,8 @@ from .base import Pipeline
 
 
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING
     from ..models.speecht5.modeling_speecht5 import SpeechT5HifiGan
 
@@ -148,10 +150,9 @@ class TextToAudioPipeline(Pipeline):
         else:
             if len(generate_kwargs):
                 raise ValueError(
-                    f"""You're using the `TextToAudioPipeline` with a forward-only model, but `generate_kwargs` is non empty.
-                                 For forward-only TTA models, please use `forward_params` instead of of
-                                 `generate_kwargs`. For reference, here are the `generate_kwargs` used here:
-                                 {generate_kwargs.keys()}"""
+                    "You're using the `TextToAudioPipeline` with a forward-only model, but `generate_kwargs` is non "
+                    "empty. For forward-only TTA models, please use `forward_params` instead of `generate_kwargs`. "
+                    f"For reference, the `generate_kwargs` used here are: {generate_kwargs.keys()}"
                 )
             output = self.model(**model_inputs, **forward_params)[0]
 
@@ -191,6 +192,12 @@ class TextToAudioPipeline(Pipeline):
         forward_params=None,
         generate_kwargs=None,
     ):
+        if self.assistant_model is not None:
+            generate_kwargs["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            generate_kwargs["tokenizer"] = self.tokenizer
+            generate_kwargs["assistant_tokenizer"] = self.assistant_tokenizer
+
         params = {
             "forward_params": forward_params if forward_params else {},
             "generate_kwargs": generate_kwargs if generate_kwargs else {},
@@ -208,7 +215,7 @@ class TextToAudioPipeline(Pipeline):
             waveform = waveform["waveform"]
         elif isinstance(waveform, tuple):
             waveform = waveform[0]
-        output_dict["audio"] = waveform.cpu().float().numpy()
+        output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
         output_dict["sampling_rate"] = self.sampling_rate
 
         return output_dict

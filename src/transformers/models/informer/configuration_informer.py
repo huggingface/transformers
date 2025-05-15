@@ -141,7 +141,7 @@ class InformerConfig(PretrainedConfig):
         distribution_output: str = "student_t",
         loss: str = "nll",
         input_size: int = 1,
-        lags_sequence: List[int] = None,
+        lags_sequence: Optional[List[int]] = None,
         scaling: Optional[Union[str, bool]] = "mean",
         num_dynamic_real_features: int = 0,
         num_static_real_features: int = 0,
@@ -244,3 +244,6 @@ class InformerConfig(PretrainedConfig):
             + self.num_static_real_features
             + self.input_size * 2  # the log1p(abs(loc)) and log(scale) features
         )
+
+
+__all__ = ["InformerConfig"]
