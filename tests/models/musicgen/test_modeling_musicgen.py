@@ -1267,9 +1267,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_generation_tester_mixin_inheritance(self):
         pass
 
-    @unittest.skip(
-        reason=("MusicGen has a set of composite models which might not have SDPA themselves, e.g. T5.")
-    )
+    @unittest.skip(reason=("MusicGen has a set of composite models which might not have SDPA themselves, e.g. T5."))
     def test_sdpa_can_compile_dynamic(self):
         pass
 

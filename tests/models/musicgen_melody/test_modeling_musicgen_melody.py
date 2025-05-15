@@ -1052,7 +1052,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_conversion(self):
-        self.skipTest(reason="Musicgen doesn't use the MusicgenFlashAttention2 class method.")
+        self.skipTest(reason="MusicgenMelody doesn't use the MusicgenMelodyFlashAttention2 class method.")
 
     @require_torch_sdpa
     @require_torch_gpu
@@ -1257,9 +1257,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_generation_tester_mixin_inheritance(self):
         pass
 
-    @unittest.skip(
-        reason=("MusicGen has a set of composite models which might not have SDPA themselves, e.g. T5.")
-    )
+    @unittest.skip(reason=("MusicGen has a set of composite models which might not have SDPA themselves, e.g. T5."))
     def test_sdpa_can_compile_dynamic(self):
         pass
 
