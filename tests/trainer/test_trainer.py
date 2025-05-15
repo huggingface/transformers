@@ -97,7 +97,6 @@ from transformers.testing_utils import (
     require_torch_fp16,
     require_torch_gpu,
     require_torch_multi_accelerator,
-    require_torch_multi_gpu,
     require_torch_non_multi_accelerator,
     require_torch_non_multi_gpu,
     require_torch_tensorrt_fx,
@@ -3766,7 +3765,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, int(self.n_epochs))
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_num_batches_in_training_with_gradient_accumulation(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             for num_train_epochs in [1, 2]:
