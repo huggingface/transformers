@@ -172,7 +172,7 @@ class EsmEmbeddings(nn.Module):
         )
 
         self.padding_idx = config.pad_token_id
-        if self.position_embedding_type == 'absolute':
+        if self.position_embedding_type == "absolute":
             self.position_embeddings = nn.Embedding(
                 config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
             )
