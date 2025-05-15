@@ -4267,7 +4267,16 @@ class ModelTesterMixin:
             dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
             dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
 
-            _ = fa2_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
+            if config.is_encoder_decoder:
+                _ = fa2_model(
+                    input_ids=dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    decoder_input_ids=dummy_input.clone(),
+                    decoder_attention_mask=dummy_attention_mask.clone(),
+                )
+            else:
+                _ = fa2_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
+
             with tempfile.TemporaryDirectory() as tmpdirname:
                 fa2_model.save_pretrained(tmpdirname)
                 model_from_pretrained = model_class.from_pretrained(tmpdirname)
@@ -4502,7 +4511,14 @@ class ModelTesterMixin:
             self.assertTrue(model.config._attn_implementation == "flex_attention")
 
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
-            _ = model(inputs_dict["input_ids"].to(torch_device))
+            dummy_input = inputs_dict["input_ids"].to(torch_device)
+            if config.is_encoder_decoder:
+                _ = model(
+                    input_ids=dummy_input,
+                    decoder_input_ids=dummy_input.clone(),
+                )
+            else:
+                _ = model(input_ids=dummy_input)
 
     def test_generation_tester_mixin_inheritance(self):
         """
