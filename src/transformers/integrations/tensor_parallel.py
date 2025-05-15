@@ -17,10 +17,11 @@ import os
 import re
 from functools import lru_cache, partial
 from typing import List, Optional, Tuple, Union
-
+import operator
+from functools import reduce
 import torch
 from torch import nn
-
+from collections.abc import MutableMapping
 from ..utils import is_torch_greater_or_equal, logging
 
 
@@ -200,19 +201,37 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
 
 
 def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
-    # TODO: make this support multiple dimensions world_mesh or make `redistribute` support cross mesh comms
-    if dim == 0:
-        size_ = empty_param.shape[0]
-        param = param[rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()), ...]
-    elif dim == 1 or dim == -2:
-        size_ = empty_param.shape[-2]
-        param = param[..., rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()), :]
-    elif dim == 2 or dim == -1:
-        size_ = empty_param.shape[-1]
-        param = param[..., rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size())]
-    else:
-        raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
-    return param
+    """
+    Generalized tensor sharding across a multi-dimensional device mesh.
+
+    Args:
+        param (torch.Tensor): The tensor to shard.
+        empty_param (torch.Tensor): A tensor used for shape reference.
+        device_mesh (torch.Tensor): Shape [d_0, ..., d_n] representing the mesh.
+        rank (int): Global rank of the current process/device.
+        dim (int): Dimension along which to shard the tensor.
+    """
+    if dim < 0:
+        dim = param.dim() + dim
+    if dim >= param.dim():
+        raise ValueError(f"dim {dim} is out of bounds for tensor of dimension {param.dim()}")
+
+    # Flatten the mesh to get the total number of devices
+    mesh_shape = device_mesh.shape
+    world_size = reduce(operator.mul, mesh_shape)
+    
+    if rank >= world_size:
+        raise ValueError(f"Rank {rank} is out of bounds for mesh size {world_size}")
+
+    shard_size = empty_param.shape[dim] // world_size
+    start = rank * shard_size
+    end = start + shard_size
+
+    # Construct slicing index dynamically
+    slice_indices = [slice(None)] * param.dim()
+    slice_indices[dim] = slice(start, end)
+    
+    return param[tuple(slice_indices)]
 
 
 def distribute_module(
@@ -627,54 +646,61 @@ class SequenceParallel(TensorParallelLayer):
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
 
-SUPPORTED_TP_STYLES = {
-    "colwise",
-    "rowwise",
-    "colwise_rep",
-    "rowwise_rep",
-    "local_colwise",
-    "local_rowwise",
-    "local",
-    "gather",
-    "local_packed_rowwise",
-    "sequence_parallel",
-}
 
-
-@lru_cache
-def translate_to_torch_parallel_style(style: str):
+class ParallelInterface(MutableMapping):
     """
-    In model configurations, we use a neutral type (string) to specify parallel
-    styles, here we translate them into torch.distributed tensor-parallel
-    types.
+    Dict-like object keeping track of allowed attention functions. You can easily add a new attention function
+    with a call to `register()`. If a model needs to locally overwrite an existing attention function, say `sdpa`,
+    it needs to declare a new instance of this class inside the `modeling_<model>.py`, and declare it on that instance.
     """
-    if not isinstance(style, str):
-        raise ValueError(f"Unsupported parallel style type {type(style)}, expected str")
 
-    if style == "colwise":
-        return ColwiseParallel()
-    elif style == "rowwise":
-        return RowwiseParallel()
-    elif style == "colwise_rep":
-        return ColwiseParallel(output_layouts=Replicate())
-    elif style == "rowwise_rep":
-        return RowwiseParallel(input_layouts=Replicate())
-    elif style == "local_colwise":
-        return ColwiseParallel(use_dtensor=False)
-    elif style == "local_rowwise":
-        return RowwiseParallel(use_dtensor=False)
-    elif style == "local":
-        return IsolatedParallel()
-    elif style == "gather":
-        return GatherParallel()
-    elif style == "local_packed_rowwise":
-        return PackedRowwiseParallel(use_dtensor=False)
-    elif style == "sequence_parallel":
-        return SequenceParallel()
-    elif style == "replicate":
-        return ReplicateParallel()
-    else:
-        raise ValueError(f"Unsupported parallel style value: {style}")
+    # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
+    # a new instance is created (in order to locally override a given function)
+    _global_mapping = {
+        "colwise": ColwiseParallel(),
+        "rowwise": RowwiseParallel(),
+        "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
+        "rowwise_rep": RowwiseParallel(input_layouts=Replicate()),
+        "local_colwise": ColwiseParallel(use_dtensor=False),
+        "local_rowwise": RowwiseParallel(use_dtensor=False),
+        "local": IsolatedParallel(),
+        "gather": GatherParallel(),
+        "local_packed_rowwise": PackedRowwiseParallel(use_dtensor=False),
+        "sequence_parallel": SequenceParallel(),
+        "replicate": ReplicateParallel(),
+    }
+    def __init__(self):
+        self._local_mapping = {}
+
+    def __getitem__(self, key):
+        # First check if instance has a local override
+        if key in self._local_mapping:
+            return self._local_mapping[key]
+        return self._global_mapping[key]
+
+    def __setitem__(self, key, value):
+        # Allow local update of the default functions without impacting other instances
+        self._local_mapping.update({key: value})
+
+    def __delitem__(self, key):
+        del self._local_mapping[key]
+
+    def __iter__(self):
+        # Ensure we use all keys, with the overwritten ones on top
+        return iter({**self._global_mapping, **self._local_mapping})
+
+    def __len__(self):
+        return len(self._global_mapping.keys() | self._local_mapping.keys())
+
+    @classmethod
+    def register(cls, key: str, value: Callable):
+        cls._global_mapping.update({key: value})
+
+    def valid_keys(self) -> List[str]:
+        return list(self.keys())
+
+# Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
+ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
 def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, current_module_plan, device_mesh):
@@ -697,7 +723,7 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
 
     # 1. We add hooks to the layer being loaded:
     if current_module_plan is not None:
-        tp_layer = translate_to_torch_parallel_style(current_module_plan)
+        tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
         try:
             tp_layer.prepare_module_tp(module, device_mesh)
         except NotImplementedError as e:
@@ -713,7 +739,7 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
         generic_name = re.sub(r"\d+", "*", parent_layer_name)
         # The module itself needs hooks
         if module_plan := tp_plan.get(generic_name, False):
-            tp_layer = translate_to_torch_parallel_style(module_plan)
+            tp_layer = ALL_PARALLEL_STYLES[module_plan]
             module_to_tp_ = model.get_submodule(parent_layer_name)
             tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
             module_to_tp_._hf_tp_plan = current_module_plan
@@ -754,7 +780,7 @@ def shard_and_distribute_module(
         module_to_tp._is_hooked = True
 
     try:
-        tp_layer = translate_to_torch_parallel_style(current_module_plan)
+        tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
         param = tp_layer.partition_tensor(
             param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
         )
