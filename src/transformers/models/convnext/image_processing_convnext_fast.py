@@ -18,8 +18,6 @@ from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
@@ -36,7 +34,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -54,18 +52,16 @@ if is_torchvision_available():
 
 
 class ConvNextFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    crop_pct (`float`, *optional*):
+        Percentage of the image to crop. Only has an effect if size < 384. Can be
+        overridden by `crop_pct` in the`preprocess` method.
+    """
+
     crop_pct: Optional[float]
 
 
-@add_start_docstrings(
-    r"Constructs a fast ConvNeXT image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        crop_pct (`float`, *optional*):
-            Percentage of the image to crop. Only has an effect if size < 384. Can be
-            overridden by `crop_pct` in the`preprocess` method.
-    """,
-)
+@auto_docstring
 class ConvNextImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
@@ -81,14 +77,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[ConvNextFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-        crop_pct (`float`, *optional*):
-            Percentage of the image to crop. Only has an effect if size < 384. Can be
-            overridden by `crop_pct` in the`preprocess` method.
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[ConvNextFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
