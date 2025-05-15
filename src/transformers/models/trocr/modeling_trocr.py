@@ -57,6 +57,8 @@ class TrOCRLearnedPositionalEmbedding(nn.Embedding):
             position_ids = torch.arange(
                 past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
             ).expand(bsz, -1)
+        else:
+            position_ids = position_ids.unsqueeze(0)
 
         return super().forward(position_ids + self.offset)
 

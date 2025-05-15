@@ -31,6 +31,7 @@ from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask,
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_sew import SEWConfig
 
 
@@ -415,6 +416,10 @@ class SEWAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+    # Ignore copy
+    @deprecate_kwarg("key_value_states", version="4.55")
+    @deprecate_kwarg("past_key_value", version="4.55")
+    @deprecate_kwarg("cache_position", version="4.55")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -427,43 +432,14 @@ class SEWAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states).view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
         query_states = query_states * self.scaling
 
-        if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                curr_past_key_value = past_key_value.cross_attention_cache
-            else:
-                curr_past_key_value = past_key_value.self_attention_cache
-
-        current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
-        else:
-            key_states = self.k_proj(current_states)
-            value_states = self.v_proj(current_states)
-            key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+        key_states = self.k_proj(hidden_states).view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = query_states.reshape(*proj_shape)
@@ -524,7 +500,7 @@ class SEWAttention(nn.Module):
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped, past_key_value
+        return attn_output, attn_weights_reshaped, None
 
 
 # Copied from transformers.models.bart.modeling_bart.BartFlashAttention2 with Bart->SEW
@@ -543,6 +519,10 @@ class SEWFlashAttention2(SEWAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
+    # Ignore copy
+    @deprecate_kwarg("key_value_states", version="4.55")
+    @deprecate_kwarg("past_key_value", version="4.55")
+    @deprecate_kwarg("cache_position", version="4.55")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -560,47 +540,15 @@ class SEWFlashAttention2(SEWAttention):
                 "Use the argument `attn_implementation='eager'` when loading the model."
             )
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
         bsz, q_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states).view(bsz, -1, self.num_heads, self.head_dim)
 
-        if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                curr_past_key_value = past_key_value.cross_attention_cache
-            else:
-                curr_past_key_value = past_key_value.self_attention_cache
-
-        current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
-        else:
-            key_states = self.k_proj(current_states)
-            value_states = self.v_proj(current_states)
-            key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
-
-        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
-        # to be able to avoid many of these transpose/reshape/view.
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim)
+        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim)
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -641,11 +589,13 @@ class SEWFlashAttention2(SEWAttention):
         attn_output = attn_output.reshape(bsz, q_len, -1)
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, None, past_key_value
+        return attn_output, None, None
 
 
 class SEWSdpaAttention(SEWAttention):
-    # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention.forward with Bart->SEW
+    @deprecate_kwarg("key_value_states", version="4.55")
+    @deprecate_kwarg("past_key_value", version="4.55")
+    @deprecate_kwarg("cache_position", version="4.55")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -666,49 +616,19 @@ class SEWSdpaAttention(SEWAttention):
             return super().forward(
                 hidden_states,
                 key_value_states=key_value_states,
-                past_key_value=past_key_value,
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
-
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
 
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states).view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-        if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                curr_past_key_value = past_key_value.cross_attention_cache
-            else:
-                curr_past_key_value = past_key_value.self_attention_cache
-
-        current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
-        else:
-            key_states = self.k_proj(current_states)
-            value_states = self.v_proj(current_states)
-            key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
         causal_mask = None
         if attention_mask is not None:  # no matter the length, we just slice it
@@ -744,7 +664,7 @@ class SEWSdpaAttention(SEWAttention):
         attn_output = attn_output.view(bsz, tgt_len, self.embed_dim)
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, None, past_key_value
+        return attn_output, None, None
 
 
 SEW_ATTENTION_CLASSES = {

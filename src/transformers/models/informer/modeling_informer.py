@@ -1051,7 +1051,6 @@ class InformerEncoder(InformerPreTrainedModel):
         )
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerDecoder with TimeSeriesTransformer->Informer,TimeSeriesTransformerConfig->InformerConfig,time-series-transformer->informer,Transformer->Informer,TimeSeries->Informer
 class InformerDecoder(InformerPreTrainedModel):
     """
     Informer decoder consisting of *config.decoder_layers* layers. Each layer is a
@@ -1429,6 +1428,7 @@ class InformerModel(InformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Seq2SeqTSModelOutput, Tuple]:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
@@ -1598,6 +1598,7 @@ class InformerModel(InformerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -1681,6 +1682,7 @@ class InformerForPrediction(InformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Seq2SeqTSModelOutput, Tuple]:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
@@ -1852,6 +1854,7 @@ class InformerForPrediction(InformerPreTrainedModel):
             output_attentions=output_attentions,
             use_cache=use_cache,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         prediction_loss = None
