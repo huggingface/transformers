@@ -503,7 +503,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         )
         self.norm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Llama4TextRotaryEmbedding(config=config)
-        self.layer_attention_patterns = config.layer_attention_patterns
+        self.layer_types = config.layer_types
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -575,8 +575,8 @@ class Llama4TextModel(Llama4PreTrainedModel):
             }
             # Create the masks
             causal_masks = {
-                "full": create_causal_mask(**mask_kwargs),
-                "chunked": create_chunked_causal_mask(**mask_kwargs),
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "chunked_attention": create_chunked_causal_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds
@@ -596,7 +596,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     self.layers[i].__call__,
                     hidden_states,
-                    causal_masks[self.layer_attention_patterns[i]],
+                    causal_masks[self.layer_types[i]],
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -608,7 +608,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             else:
                 layer_outputs = self.layers[i](
                     hidden_states,
-                    attention_mask=causal_masks[self.layer_attention_patterns[i]],
+                    attention_mask=causal_masks[self.layer_types[i]],
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,

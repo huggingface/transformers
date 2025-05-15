@@ -106,7 +106,7 @@ class Gemma2Config(PretrainedConfig):
             scaling factor used on the attention scores
         sliding_window (`int`, *optional*, defaults to 4096):
             in Gemma2, every other layer uses sliding window attention. This is the size of the sliding window.
-        layer_attention_patterns (`list`, *optional*, defaults to None):
+        layer_types (`list`, *optional*, defaults to None):
             Attention pattern for each layer.
         final_logit_softcapping (`float`, *optional*, defaults to 30.0):
             scaling factor when applying tanh softcapping on the logits.
@@ -163,7 +163,7 @@ class Gemma2Config(PretrainedConfig):
         attention_dropout=0.0,
         query_pre_attn_scalar=256,
         sliding_window=4096,
-        layer_attention_patterns=None,
+        layer_types=None,
         final_logit_softcapping=30.0,
         attn_logit_softcapping=50.0,
         **kwargs,
@@ -194,11 +194,11 @@ class Gemma2Config(PretrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
-        self.layer_attention_patterns = layer_attention_patterns
+        self.layer_types = layer_types
 
-        if self.layer_attention_patterns is None:
-            self.layer_attention_patterns = [
-                "sliding" if bool((i + 1) % 2) else "full" for i in range(self.num_hidden_layers)
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
             ]
 
 
@@ -373,7 +373,7 @@ class Gemma2Model(GemmaModel):
         self.layers = nn.ModuleList(
             [Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.layer_attention_patterns = config.layer_attention_patterns
+        self.layer_types = config.layer_types
 
     def forward(
         self,
@@ -431,8 +431,8 @@ class Gemma2Model(GemmaModel):
             }
             # Create the masks
             causal_masks = {
-                "full": create_causal_mask(**mask_kwargs),
-                "sliding": create_sliding_window_causal_mask(**mask_kwargs),
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
         # embed positions
@@ -460,7 +460,7 @@ class Gemma2Model(GemmaModel):
                     partial(self.layers[i].__call__, **flash_attn_kwargs),
                     hidden_states,
                     position_embeddings,
-                    causal_masks[self.layer_attention_patterns[i]],
+                    causal_masks[self.layer_types[i]],
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -471,7 +471,7 @@ class Gemma2Model(GemmaModel):
                 layer_outputs = self.layers[i](
                     hidden_states,
                     position_embeddings=position_embeddings,
-                    attention_mask=causal_masks[self.layer_attention_patterns[i]],
+                    attention_mask=causal_masks[self.layer_types[i]],
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,

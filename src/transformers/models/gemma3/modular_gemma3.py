@@ -31,6 +31,7 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...utils.deprecation import deprecate_kwarg
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
@@ -56,7 +57,7 @@ from ..siglip import SiglipVisionConfig
 logger = logging.get_logger(__name__)
 
 
-class Gemma3TextConfig(Gemma2Config):
+class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3TextModel`]. It is used to instantiate an Gemma3Text
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -114,13 +115,14 @@ class Gemma3TextConfig(Gemma2Config):
             The dropout ratio for the attention probabilities.
         query_pre_attn_scalar (`float`, *optional*, defaults to 256):
             Scaling factor used on the attention scores
-        sliding_window (`int`, *optional*, defaults to 4096): in Gemma3Text, every other layer uses sliding window attention. This is the
-            size of the sliding window.
+        sliding_window (`int`, *optional*, defaults to 4096):
+            In Gemma3Text, every other layer uses sliding window attention. This is the size of the sliding window.
+        layer_types (`list`, *optional*, defaults to None):
+            Attention pattern for each layer.
         final_logit_softcapping (`float`, *optional*):
             Scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*):
             Scaling factor when applying tanh softcapping on the attention scores.
-        cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings used in global attention. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -160,8 +162,6 @@ class Gemma3TextConfig(Gemma2Config):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         rope_local_base_freq (float, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings for local attention.
-        sliding_window_pattern (`int`, *optional*, defaults to 6):
-            Pattern for the sliding window attention.
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -183,22 +183,71 @@ class Gemma3TextConfig(Gemma2Config):
     def __init__(
         self,
         vocab_size=262_208,
-        rope_theta=1_000_000.0,
-        rope_scaling=None,
-        rope_local_base_freq=10_000.0,
-        sliding_window_pattern=6,
+        hidden_size=2304,
+        intermediate_size=9216,
+        num_hidden_layers=26,
+        num_attention_heads=8,
+        num_key_value_heads=4,
+        head_dim=256,
+        hidden_activation="gelu_pytorch_tanh",
         max_position_embeddings=131_072,
+        initializer_range=0.02,
+        rms_norm_eps=1e-6,
+        use_cache=True,
+        pad_token_id=0,
+        eos_token_id=1,
+        bos_token_id=2,
+        tie_word_embeddings=True,
+        rope_theta=1_000_000.0,
+        attention_bias=False,
+        attention_dropout=0.0,
+        query_pre_attn_scalar=256,
+        sliding_window=4096,
+        layer_types=None,
         final_logit_softcapping=None,
         attn_logit_softcapping=None,
-        **super_kwargs,
+        rope_scaling=None,
+        rope_local_base_freq=10_000.0,
+        **kwargs,
     ):
-        super().__init__(self, **super_kwargs)
+        PretrainedConfig.__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.head_dim = head_dim
+        self.num_key_value_heads = num_key_value_heads
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.rope_theta = rope_theta
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.hidden_activation = hidden_activation
+        self.query_pre_attn_scalar = query_pre_attn_scalar
+        self.sliding_window = sliding_window
+        self.final_logit_softcapping = final_logit_softcapping
+        self.attn_logit_softcapping = attn_logit_softcapping
+        self.layer_types = layer_types
 
         self.rope_local_base_freq = rope_local_base_freq
-        # For configuring HybridCache to work with 5:1 attention pattern
-        self.sliding_window_pattern = sliding_window_pattern
         self.rope_scaling = rope_scaling
         rope_config_validation(self)
+
+        if self.layer_types is None:
+            # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
+            sliding_window_pattern = getattr(self, "sliding_window_pattern", 6)
+            self.layer_types = [
+                "sliding_attention" if bool((i + 1) % sliding_window_pattern) else "full_attention" for i in range(self.num_hidden_layers)
+            ]
 
 
 class Gemma3Config(PretrainedConfig):
@@ -336,7 +385,7 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
 # Weird way to inherit but otherwise the sliding window gets defined first and can't access `is_sliding`
 class Gemma3Attention(Gemma2Attention):
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
-        self.is_sliding = bool((layer_idx + 1) % config.sliding_window_pattern)
+        self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
 
         super().__init__()
         self.sliding_window = config.sliding_window if self.is_sliding else None
@@ -368,18 +417,8 @@ class Gemma3Attention(Gemma2Attention):
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
-                "cache_position": cache_position,
-                "sliding_window": self.sliding_window,
-            }
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-            # Here we need to slice as we use a static cache by default, but FA2 does not support it
-            if attention_mask is not None and self.config._attn_implementation == "flash_attention_2":
-                seq_len = attention_mask.shape[-1]
-                key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -423,8 +462,6 @@ class Gemma3DecoderLayer(nn.Module):
         self.post_attention_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.is_sliding = self.self_attn.is_sliding
-        self.sliding_window = config.sliding_window
 
     @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
@@ -440,33 +477,6 @@ class Gemma3DecoderLayer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
-            # In prefill, we may be larger than sliding window
-            effective_seq_len = max(cache_position.shape[0], self.sliding_window)
-            # For FA2, the mask is 2D and is of shape [bs, processed_tokens] (not [bs, max_cache_len]),
-            # thus we must slice from the right (at most `effective_seq_len` elements)
-            if self.config._attn_implementation == "flash_attention_2":
-                attention_mask = attention_mask[:, -effective_seq_len:]
-            # Otherwise, the mask is 4D of shape [bs, 1, query_len, max_cache_len] thus we must slice
-            # from the left, with an offset if we are beyond the sliding window
-            else:
-                min_dtype = torch.finfo(attention_mask.dtype).min
-                sliding_window_mask = torch.tril(
-                    torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
-                )
-                attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
-                # In case we are beyond the sliding window, we need to correctly offset the mask slicing
-                offset = cache_position[-1] - effective_seq_len + 1
-                # Should only be used when beyond the sliding window (i.e. offset > 0)
-                offset = torch.clamp(offset, min=0)
-                # equivalent to: `attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]`,
-                # but without data-dependent slicing (i.e. torch.compile friendly)
-                mask_indexes = torch.arange(
-                    min(effective_seq_len, attention_mask.shape[-1]), device=attention_mask.device
-                )
-                mask_indexes += offset
-                attention_mask = attention_mask[:, :, :, mask_indexes]
-
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -557,7 +567,7 @@ class Gemma3TextModel(Gemma2Model):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[HybridCache] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -584,13 +594,7 @@ class Gemma3TextModel(Gemma2Model):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None and not self.training:
-            batch_size, seq_len, _ = inputs_embeds.shape
-            past_key_values = HybridCache(
-                self.config,
-                max_batch_size=batch_size,
-                max_cache_len=seq_len,
-                dtype=inputs_embeds.dtype,
-            )
+            past_key_values = DynamicCache()
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -603,13 +607,22 @@ class Gemma3TextModel(Gemma2Model):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask,
-            inputs_embeds,
-            cache_position,
-            past_key_values,
-            output_attentions,
-        )
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_masks := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "input_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "output_attentions": output_attentions,
+            }
+            # Create the masks
+            causal_masks = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+            }
 
         # embed positions
         hidden_states = inputs_embeds
@@ -622,17 +635,17 @@ class Gemma3TextModel(Gemma2Model):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i in range(self.config.num_hidden_layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    partial(decoder_layer.__call__, **flash_attn_kwargs),
+                    partial(self.layers[i].__call__, **flash_attn_kwargs),
                     hidden_states,
                     position_embeddings_global,
                     position_embeddings_local,
-                    causal_mask,
+                    causal_masks[self.layer_types[i]],
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -640,11 +653,11 @@ class Gemma3TextModel(Gemma2Model):
                     cache_position,
                 )
             else:
-                layer_outputs = decoder_layer(
+                layer_outputs = self.layers[i](
                     hidden_states,
                     position_embeddings_global=position_embeddings_global,
                     position_embeddings_local=position_embeddings_local,
-                    attention_mask=causal_mask,
+                    attention_mask=causal_masks[self.layer_types[i]],
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,

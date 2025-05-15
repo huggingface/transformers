@@ -1796,11 +1796,7 @@ class HybridCache(Cache):
             else config.num_key_value_heads
         )
 
-        layer_patterns = getattr(config, "layer_attention_patterns", None)
-        if layer_patterns is not None:
-            self.is_sliding = [layer_type == "sliding" for layer_type in layer_patterns]
-        else:
-            self.is_sliding = [bool((i + 1) % config.sliding_window_pattern) for i in range(config.num_hidden_layers)]
+        self.is_sliding = [layer_type != "full_attention" for layer_type in config.layer_types]
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
@@ -1972,11 +1968,7 @@ class HybridChunkedCache(Cache):
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self._dtype = dtype
 
-        if hasattr(config.get_text_config(), "no_rope_layers"):
-            self.is_sliding = config.no_rope_layers
-        else:
-            layer_switch = getattr(config, "sliding_window_pattern", 2)
-            self.is_sliding = [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)]
+        self.is_sliding = [layer_type != "full_attention" for layer_type in config.layer_types]
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []

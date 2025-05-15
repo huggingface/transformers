@@ -380,7 +380,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
         self.norm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Gemma2RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.layer_attention_patterns = config.layer_attention_patterns
+        self.layer_types = config.layer_types
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -449,8 +449,8 @@ class Gemma2Model(Gemma2PreTrainedModel):
             }
             # Create the masks
             causal_masks = {
-                "full": create_causal_mask(**mask_kwargs),
-                "sliding": create_sliding_window_causal_mask(**mask_kwargs),
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
         # embed positions
@@ -478,7 +478,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
                     partial(self.layers[i].__call__, **flash_attn_kwargs),
                     hidden_states,
                     position_embeddings,
-                    causal_masks[self.layer_attention_patterns[i]],
+                    causal_masks[self.layer_types[i]],
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -489,7 +489,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
                 layer_outputs = self.layers[i](
                     hidden_states,
                     position_embeddings=position_embeddings,
-                    attention_mask=causal_masks[self.layer_attention_patterns[i]],
+                    attention_mask=causal_masks[self.layer_types[i]],
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,

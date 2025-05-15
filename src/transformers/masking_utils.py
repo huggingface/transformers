@@ -139,17 +139,17 @@ class LayerPattern(object):
 
     Args:
         pattern (`str`):
-            The attention pattern for the given layer. Must be one of `("full", "sliding", "chunked")`.
+            The attention pattern for the given layer. Must be one of `("full_attention", "sliding_attention", "chunked_attention")`.
         local_size (`int`, *optional*):
-            The size of the local attention, if `pattern` is one of `("sliding", "chunked")`. That is, the size
-            of the sliding window or the chunk size. If `pattern="full"`, this argument is ignored.
+            The size of the local attention, if `pattern` is one of `("sliding_attention", "chunked_attention")`. That is, the size
+            of the sliding window or the chunk size. If `pattern="full_attention"`, this argument is ignored.
     """
 
     pattern: str
     local_size: Optional[int] = None
 
     def __init__(self, pattern: str, local_size: Optional[int] = None):
-        allowed_patterns = ("full", "sliding", "chunked")
+        allowed_patterns = ("full_attention", "sliding_attention", "chunked_attention")
         if pattern not in allowed_patterns:
             raise ValueError(
                 f"Could not recognize attention pattern `{pattern}` It should be one of {allowed_patterns}"
@@ -157,7 +157,7 @@ class LayerPattern(object):
         self.pattern = pattern
         self.local_size = local_size
         # Ignore the potential `local_size` passed if the layer uses full attention pattern
-        if self.pattern == "full":
+        if self.pattern == "full_attention":
             self.local_size = None
 
     def get_mask_factory_function(self) -> Callable:
@@ -165,13 +165,13 @@ class LayerPattern(object):
         Return the mask function describing this LayerPattern.
         """
         # Standard causal attention
-        if self.pattern == "full":
+        if self.pattern == "full_attention":
             mask_function = causal_mask_function
         # Sliding window attention
-        elif self.pattern == "sliding":
+        elif self.pattern == "sliding_attention":
             mask_function = sliding_window_causal_mask_function(self.local_size)
         # Chunked attention
-        elif self.pattern == "chunked":
+        elif self.pattern == "chunked_attention":
             mask_function = chunked_causal_mask_function(self.local_size)
         return mask_function
 
@@ -203,7 +203,7 @@ def sdpa_mask(
     cache_position: torch.Tensor,
     kv_length: int,
     kv_offset: int = 0,
-    layer_pattern: LayerPattern = LayerPattern("full"),
+    layer_pattern: LayerPattern = LayerPattern("full_attention"),
     attention_mask: Optional[torch.Tensor] = None,
     allow_is_causal_skip: bool = True,
     allow_torch_fix: bool = True,
@@ -271,7 +271,7 @@ def sdpa_mask(
     You can do
 
     ```python
-    >>> create_4d_causal_mask(batch_size=1, cache_position=torch.arange(5), kv_length=5, layer_pattern=LayerPattern("sliding", 3))
+    >>> create_4d_causal_mask(batch_size=1, cache_position=torch.arange(5), kv_length=5, layer_pattern=LayerPattern("sliding_attention", 3))
     >>> tensor([[[[ True, False, False, False, False],
                   [ True,  True, False, False, False],
                   [ True,  True,  True, False, False],
@@ -292,7 +292,7 @@ def sdpa_mask(
     You can do
 
     ```python
-    >>> create_4d_causal_mask(batch_size=1, cache_position=torch.arange(5), kv_length=5, layer_pattern=LayerPattern("chunked", 3))
+    >>> create_4d_causal_mask(batch_size=1, cache_position=torch.arange(5), kv_length=5, layer_pattern=LayerPattern("chunked_attention", 3))
     >>> tensor([[[[ True, False, False, False, False],
                 [ True,  True, False, False, False],
                 [ True,  True,  True, False, False],
@@ -339,7 +339,7 @@ def eager_mask(
     cache_position: torch.Tensor,
     kv_length: int,
     kv_offset: int = 0,
-    layer_pattern: LayerPattern = LayerPattern("full"),
+    layer_pattern: LayerPattern = LayerPattern("full_attention"),
     attention_mask: Optional[torch.Tensor] = None,
     dtype: torch.dtype = torch.float32,
     **kwargs,
@@ -388,7 +388,7 @@ def flash_attention_mask(
     cache_position: torch.Tensor,
     kv_length: int,
     kv_offset: int = 0,
-    layer_pattern: LayerPattern = LayerPattern("full"),
+    layer_pattern: LayerPattern = LayerPattern("full_attention"),
     attention_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ):
@@ -412,7 +412,7 @@ def flash_attention_mask(
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
     """
     # Raise if using chunked attention on context too large
-    if layer_pattern.pattern == "chunked" and kv_length + kv_offset > layer_pattern.local_size:
+    if layer_pattern.pattern == "chunked_attention" and kv_length + kv_offset > layer_pattern.local_size:
         raise ValueError(
             "Flash attention 2 cannot handle attention chunked attention, and the key-value length is larger than the chunk size "
             "so the chunked pattern cannot be respected. You should use another `attn_implementation` when instantiating the model"
@@ -434,7 +434,7 @@ def flex_attention_mask(
     cache_position: torch.Tensor,
     kv_length: int,
     kv_offset: int = 0,
-    layer_pattern: LayerPattern = LayerPattern("full"),
+    layer_pattern: LayerPattern = LayerPattern("full_attention"),
     attention_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> "BlockMask":
@@ -580,7 +580,7 @@ def create_causal_mask(
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
     """
     Create a standard causal mask based on the attention implementation used (stored in the config). If `past_key_values`
-    has an HybridCache structure, this function will return the mask corresponding to one of the "full" layers (to align
+    has an HybridCache structure, this function will return the mask corresponding to one of the "full_attention" layers (to align
     to what is needed in the `modeling_xxx.py` files).
 
     Args:
@@ -599,7 +599,7 @@ def create_causal_mask(
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
     """
-    layer_pattern = LayerPattern("full")
+    layer_pattern = LayerPattern("full_attention")
     # If we have an HybridCache structure, here we want to create the mask for the full layers
     try:
         layer_idx = past_key_values.is_sliding.index(False)
@@ -628,7 +628,7 @@ def create_sliding_window_causal_mask(
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
     of attention pattern was mostly democratized by Mistral. If `past_key_values` has an HybridCache structure, this
-    function will return the mask corresponding to one of the "sliding" layers (to align to what is needed in the
+    function will return the mask corresponding to one of the "sliding_attention" layers (to align to what is needed in the
     `modeling_xxx.py` files).
 
     Args:
@@ -651,7 +651,7 @@ def create_sliding_window_causal_mask(
     if sliding_window is None:
         raise ValueError("Could not find a `sliding_window` argument in the config")
 
-    layer_pattern = LayerPattern("sliding", sliding_window)
+    layer_pattern = LayerPattern("sliding_attention", sliding_window)
     # If we have an HybridCache structure, here we want to create the mask for the sliding layers
     try:
         layer_idx = past_key_values.is_sliding.index(True)
@@ -680,7 +680,7 @@ def create_chunked_causal_mask(
     """
     Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
     of attention pattern was mostly democratized by Llama4. If `past_key_values` has an HybridCache structure, this
-    function will return the mask corresponding to one of the "sliding" layers (to align to what is needed in the
+    function will return the mask corresponding to one of the "chunked_attention" layers (to align to what is needed in the
     `modeling_xxx.py` files).
 
     Args:
@@ -703,7 +703,7 @@ def create_chunked_causal_mask(
     if chunk_size is None:
         raise ValueError("Could not find an `attention_chunk_size` argument in the config")
 
-    layer_pattern = LayerPattern("chunked", chunk_size)
+    layer_pattern = LayerPattern("chunked_attention", chunk_size)
     # If we have an HybridCache structure, here we want to create the mask for the sliding layers
     try:
         layer_idx = past_key_values.is_sliding.index(True)
@@ -766,9 +766,9 @@ def _ignore_causal_mask_sdpa(
 
 
 LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
-    "full": create_causal_mask,
-    "sliding": create_sliding_window_causal_mask,
-    "chunked": create_chunked_causal_mask,
+    "full_attention": create_causal_mask,
+    "sliding_attention": create_sliding_window_causal_mask,
+    "chunked_attention": create_chunked_causal_mask,
 }
 
 
@@ -811,9 +811,9 @@ def create_masks_for_generate(
     }
 
     # If the attribute exist, we need several masks
-    if hasattr(config, "layer_attention_patterns"):
+    if hasattr(config, "layer_types"):
         causal_masks = {}
-        for layer_pattern in set(config.layer_attention_patterns):
+        for layer_pattern in set(config.layer_types):
             causal_masks[layer_pattern] = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern](**mask_kwargs)
         return causal_masks
     # In this case, all layers are sliding

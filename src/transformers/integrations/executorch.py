@@ -57,11 +57,11 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         if not hasattr(model.config, "use_cache") or model.config.use_cache is False:
             raise ValueError("The model must have caching enabled to be performant.")
 
-        if not hasattr(model.config, "layer_attention_patterns"):
-            # If `layer_attention_patterns` is not specified explicitly in the config, there is only 1 type of layers, so
+        if not hasattr(model.config, "layer_types"):
+            # If `layer_types` is not specified explicitly in the config, there is only 1 type of layers, so
             # export will use `StaticCache` by default.
             logging.info(
-                "Using `StaticCache` for export as `layer_attention_patterns` is not specified in the config."
+                "Using `StaticCache` for export as `layer_types` is not specified in the config."
             )
             self.model = TorchExportableModuleWithStaticCache(model)
         else:
@@ -707,7 +707,7 @@ def sdpa_mask_without_vmap(
     cache_position: torch.Tensor,
     kv_length: int,
     kv_offset: int = 0,
-    layer_pattern: LayerPattern = LayerPattern("full"),
+    layer_pattern: LayerPattern = LayerPattern("full_attention"),
     attention_mask: Optional[torch.Tensor] = None,
     allow_is_causal_skip: bool = True,
     allow_torch_fix: bool = True,
@@ -760,11 +760,11 @@ def sdpa_mask_without_vmap(
     # Simplest and most efficient way to obtain a causal mask
     causal_mask = kv_arange <= reshaped_cache_position
     # If using sliding window, add the sliding mask
-    if layer_pattern.pattern == "sliding":
+    if layer_pattern.pattern == "sliding_attention":
         sliding_mask_overlay = kv_arange > reshaped_cache_position - layer_pattern.local_size
         causal_mask *= sliding_mask_overlay
     # If using chunk attention, add the chunked mask
-    elif layer_pattern.pattern == "chunked":
+    elif layer_pattern.pattern == "chunked_attention":
         chunked_mask_overlay = (
             kv_arange // layer_pattern.local_size == reshaped_cache_position // layer_pattern.local_size
         )
