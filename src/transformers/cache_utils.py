@@ -1096,8 +1096,6 @@ class SinkCache(Cache):
         ```
     """
 
-    is_sliding = True
-
     def __init__(self, window_length: int, num_sink_tokens: int) -> None:
         super().__init__()
         self.key_cache: List[torch.Tensor] = []
@@ -1468,7 +1466,6 @@ class SlidingWindowCache(StaticCache):
         ```
     """
 
-    is_sliding = True
     is_compileable = True
 
     def __init__(
