@@ -20,6 +20,7 @@ from collections.abc import MutableMapping
 from functools import partial, reduce
 from typing import Callable, List, Optional, Tuple, Union
 
+import torch.distributed as dist
 import torch
 from torch import nn
 
