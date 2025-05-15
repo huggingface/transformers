@@ -22,7 +22,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
@@ -40,18 +40,18 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    add_code_sample_docstrings,
-    add_end_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
+    auto_docstring,
+    is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
-    auto_docstring,
-    replace_return_docstrings,
 )
 from .configuration_m2m_100 import M2M100Config
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 if is_flash_attn_available():
@@ -365,6 +365,13 @@ class M2M100FlashAttention2(M2M100Attention):
         output_attentions: bool = False,
         cache_position: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        # M2M100FlashAttention2 attention does not support output_attentions
+        if output_attentions:
+            raise ValueError(
+                "M2M100SdpaAttention2 attention does not support `output_attentions`. "
+                "Use the argument `attn_implementation='eager'` when loading the model."
+            )
+
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
@@ -774,25 +781,29 @@ class M2M100PreTrainedModel(PreTrainedModel):
     # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
-        attention_mask: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_static_cache = isinstance(past_key_values, StaticCache)
+        using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -801,9 +812,9 @@ class M2M100PreTrainedModel(PreTrainedModel):
             ):
                 return None
 
-        dtype, device = input_tensor.dtype, input_tensor.device
+        dtype = input_tensor.dtype
         sequence_length = input_tensor.shape[1]
-        if using_static_cache:
+        if using_compilable_cache:
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
@@ -818,7 +829,6 @@ class M2M100PreTrainedModel(PreTrainedModel):
             sequence_length=sequence_length,
             target_length=target_length,
             dtype=dtype,
-            device=device,
             cache_position=cache_position,
             batch_size=input_tensor.shape[0],
         )
@@ -826,7 +836,7 @@ class M2M100PreTrainedModel(PreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -844,7 +854,6 @@ class M2M100PreTrainedModel(PreTrainedModel):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
         cache_position: torch.Tensor,
         batch_size: int,
         **kwargs,
@@ -864,8 +873,6 @@ class M2M100PreTrainedModel(PreTrainedModel):
                 to account for the 0 padding, the part of the cache that is not filled yet.
             dtype (`torch.dtype`):
                 The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to plcae the 4D attention mask on.
             cache_position (`torch.Tensor`):
                 Indices depicting the position of the input sequence tokens in the sequence.
             batch_size (`torch.Tensor`):
@@ -877,16 +884,18 @@ class M2M100PreTrainedModel(PreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype

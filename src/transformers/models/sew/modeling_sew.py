@@ -553,6 +553,13 @@ class SEWFlashAttention2(SEWAttention):
         output_attentions: bool = False,
         cache_position: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        # SEWFlashAttention2 attention does not support output_attentions
+        if output_attentions:
+            raise ValueError(
+                "SEWSdpaAttention2 attention does not support `output_attentions`. "
+                "Use the argument `attn_implementation='eager'` when loading the model."
+            )
+
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None

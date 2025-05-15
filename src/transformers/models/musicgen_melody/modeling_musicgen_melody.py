@@ -443,8 +443,6 @@ class MusicgenMelodyFlashAttention2(MusicgenMelodyAttention):
 
 # Copied from transformers.models.hubert.modeling_hubert.HubertSdpaAttention with Hubert->MusicgenMelody
 class MusicgenMelodySdpaAttention(MusicgenMelodyAttention):
-    # bring back after new cache format
-    # copied from transformers.models.bart.modeling_bart.BartSdpaAttention.forward with Bart->MusicgenMelody
     def forward(
         self,
         hidden_states: torch.Tensor,
