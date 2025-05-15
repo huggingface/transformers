@@ -69,6 +69,7 @@ class RequestState:
         """Get the number of tokens generated so far."""
         return len(self.static_outputs)
 
+    @traced
     def update_with_token(self, token_id: int) -> bool:
         """Update the request with a newly generated token and check for completion.
 
@@ -711,6 +712,39 @@ class ContinuousBatchProcessor:
             write_position += len(write_indices)
             cumq_ptr += 1
             cumk_ptr += 1
+        self._build_tensors(
+            input_ids,
+            token_position,
+            position_ids,
+            read_index,
+            read_position,
+            write_index,
+            write_position,
+            cumq_ptr,
+            cumk_ptr,
+            cumulative_seqlens_q,
+            cumulative_seqlens_k,
+            logits_indices,
+            logits_to_track,
+        )
+
+    @traced
+    def _build_tensors(
+        self,
+        input_ids,
+        token_position,
+        position_ids,
+        read_index,
+        read_position,
+        write_index,
+        write_position,
+        cumq_ptr,
+        cumk_ptr,
+        cumulative_seqlens_q,
+        cumulative_seqlens_k,
+        logits_indices,
+        logits_to_track,
+    ):
         # now if sdpa or eager, create the attention mask!
         self.input_ids[:, : len(input_ids)] = torch.tensor(input_ids, **self.tensor_metadata)
         self.position_ids[:, :token_position] = torch.tensor(position_ids, **self.tensor_metadata)
@@ -731,15 +765,15 @@ class ContinuousBatchProcessor:
                 diagonal = 1
             query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
             key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
-            self.attention_mask[..., query_range, key_range]= torch.triu(
-                    torch.full(
-                        self.attention_mask[..., query_range, key_range].shape,
-                        fill_value=torch.finfo(self.model_dtype).min,
-                        dtype=self.model_dtype,
-                        device=self.model_device,
-                    ),
-                    diagonal=diagonal,
-                )
+            self.attention_mask[..., query_range, key_range] = torch.triu(
+                torch.full(
+                    self.attention_mask[..., query_range, key_range].shape,
+                    fill_value=torch.finfo(self.model_dtype).min,
+                    dtype=self.model_dtype,
+                    device=self.model_device,
+                ),
+                diagonal=diagonal,
+            )
 
     @traced
     def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
@@ -757,7 +791,7 @@ class ContinuousBatchProcessor:
     @traced
     def update_batch(self):
         """Update request states based on generated tokens."""
-        out_tokens = self.output_ids.clone().detach().tolist()[0]  # should be the only synch we do
+        out_tokens = self._sync()
         finished_request_ids = []
         for i, state in enumerate(self.requests_in_batch):
             req_id = state.request_id
@@ -776,6 +810,10 @@ class ContinuousBatchProcessor:
             if req_id in self.active_requests:
                 self.cache.free_blocks(req_id)
                 del self.active_requests[req_id]
+
+    @traced
+    def _sync(self):
+        return self.output_ids.tolist()[0]  # should be the only synch we do
 
     @traced
     def _maybe_send_output(self, state: RequestState, token: int):
@@ -989,19 +1027,28 @@ class ContinuousBatchingManager:
         """Perform a single generation step. This is cuda graphed"""
         batch_data = batch_processor.get_model_kwargs()
         with torch.no_grad():
-            # with self.tracer.start_as_current_span("model_forward"):
-            logits = self.model(**batch_data).logits
+            logits = self._model_forward(batch_data)
             if self.log_prob_generation:
                 batch_processor.output_probs.copy_(logits)  # TODO
-        # with self.tracer.start_as_current_span("logit_processing"):
-            probs = self.logit_processor(batch_data["input_ids"], logits)
-        # with self.tracer.start_as_current_span("sampling"):
-            if self.do_sample:  # sample
-                probs = nn.functional.softmax(probs, dim=-1)
-                next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
-            else:
-                next_tokens = torch.argmax(probs, dim=-1)
-            batch_processor.output_ids.copy_(next_tokens)
+            probs = self._process_logit(batch_data, logits)
+            self._sample(batch_processor, probs)
+
+    @traced(span_name="model_forward")
+    def _model_forward(self, batch_data):
+        return self.model(**batch_data).logits
+
+    @traced(span_name="logit_processing")
+    def _process_logit(self, batch_data, logits):
+        return self.logit_processor(batch_data["input_ids"], logits)
+
+    @traced(span_name="sampling")
+    def _sample(self, batch_processor: ContinuousBatchProcessor, probs):
+        if self.do_sample:  # sample
+            probs = nn.functional.softmax(probs, dim=-1)
+            next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
+        else:
+            next_tokens = torch.argmax(probs, dim=-1)
+        batch_processor.output_ids.copy_(next_tokens)
 
     def _run_generation_loop(self):
         """Main processing loop running in the background thread."""
@@ -1027,30 +1074,36 @@ class ContinuousBatchingManager:
 
             first = True
             while not self.stop_event.is_set() or batch_processor.has_pending_requests():
-                with self.tracer.start_as_current_span(name="generation_loop"):
-                    batch_processor.prepare_next_batch()
-                    if torch.cuda.is_available() and False:
-                        if first:
-                            self.warmup(batch_processor)
-                            first = False
-                        try:
-                            with self.tracer.start_as_current_span("graph_replay"):
-                                self.graph.replay()
-                                torch.cuda.synchronize()
-                        except Exception as e:
-                            logger.error(f"Model forward pass failed: {e}", exc_info=True)
-                            batch_processor.handle_batch_error(e)
-                            continue
-                    else:
-                        self._generation_step(batch_processor)
-
-                    batch_processor.update_batch()
+                self._inner_generation_loop(batch_processor)
 
         except Exception as e:
             logger.error(f"Error in generation loop: {e}", exc_info=True)
             self._handle_critical_error(e, batch_processor)
         finally:
             logger.info("Generation loop finished.")
+
+    @traced(span_name="generation_loop")
+    def _inner_generation_loop(self, batch_processor: ContinuousBatchProcessor):
+        batch_processor.prepare_next_batch()
+        if torch.cuda.is_available() and False:
+            if first:
+                self.warmup(batch_processor)
+                first = False
+            try:
+                self._graph_replay()
+            except Exception as e:
+                logger.error(f"Model forward pass failed: {e}", exc_info=True)
+                batch_processor.handle_batch_error(e)
+                return
+        else:
+            self._generation_step(batch_processor)
+
+        batch_processor.update_batch()
+
+    @traced(span_name="graph_replay")
+    def _graph_replay(self):
+        self.graph.replay()
+        torch.cuda.synchronize()
 
     @traced
     def _handle_critical_error(self, error, batch_processor: Optional[ContinuousBatchProcessor]):
