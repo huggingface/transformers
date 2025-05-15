@@ -801,15 +801,18 @@ class Kosmos2_5TextAttention(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
         # use encoder_hidden_states if cross attention
         is_cross_attention = encoder_hidden_states is not None
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
 
-        input_shape = current_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
+        current_input_shape = current_states.shape[:-1]
+        current_hidden_shape = (*current_input_shape, -1, self.head_dim)
 
-        key_states = self.k_proj(current_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(current_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(current_states).view(current_hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(current_states).view(current_hidden_shape).transpose(1, 2)
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Apply `self.scaling`
