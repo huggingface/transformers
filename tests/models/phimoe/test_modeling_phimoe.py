@@ -16,7 +16,7 @@
 
 import unittest
 
-from causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 from transformers import PhimoeConfig, StaticCache, is_torch_available
 from transformers.testing_utils import (
