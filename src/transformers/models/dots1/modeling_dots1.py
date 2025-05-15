@@ -759,8 +759,8 @@ class Dots1ForCausalLM(Dots1PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, Dots1ForCausalLM
 
-        >>> model = Dots1ForCausalLM.from_pretrained("meta-dots1/Dots1-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-dots1/Dots1-2-7b-hf")
+        >>> model = Dots1ForCausalLM.from_pretrained("rednote-hilab/dots1.llm1.inst")
+        >>> tokenizer = AutoTokenizer.from_pretrained("rednote-hilab/dots1.llm1.inst")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
