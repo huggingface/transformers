@@ -40,6 +40,10 @@ from torch.nn.attention import sdpa_kernel, SDPBackend
 from typing import Iterable
 import math
 from contextlib import contextmanager, nullcontext
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import ShardingStrategy
+from torch.distributed.fsdp import fully_shard
+from torch.distributed._composable.replicate import replicate
 
 ignore_sanity_checks = int(os.environ.get("IGNORE_SANITY", 0)) == 1
 # torch.use_deterministic_algorithms(True)
@@ -59,8 +63,8 @@ logger = logging.getLogger(__name__)
 
 def main():
     tp_size = int(os.environ.get("TP_SIZE", 1))
-    dp_size = int(os.environ.get("DP_SIZE", 1))
-    cp_size = int(os.environ.get("CP_SIZE", 4))  # Add CP size configuration
+    dp_size = int(os.environ.get("DP_SIZE", 4))
+    cp_size = int(os.environ.get("CP_SIZE", 1))  # Add CP size configuration
     sdpa_backend = SDPBackend.FLASH_ATTENTION # For CP
     # sdpa_backend = SDPBackend.MATH # For CP
     global_batch_size = 8 # Desired global batch size
@@ -156,17 +160,16 @@ def main():
     logger.info(f"Using device: {device} for non-model tensors")
     use_ddp = False
     if dist.is_initialized() and dp_mesh.size() > 1:
-        # TODO: this only works with DDP patch
-        # model = torch.nn.parallel.DistributedDataParallel(
-        #     model,
-        #     device_mesh=dp_mesh
-        # )
-        # update_model_parameters(model)
-        # Warning this API is still experimental
-        # model = replicate(model, device_mesh=dp_mesh, bucket_cap_mb=100)
-        # logger.info("Applied DDP")
-        # use_ddp = True
-        pass
+        # FSDP1
+        model = FSDP(model, device_mesh=dp_mesh, sharding_strategy=ShardingStrategy.NO_SHARD) 
+        # FSDP2
+        # for transformer_block in model.model.layers:
+        #     fully_shard(transformer_block, mesh=dp_mesh, reshard_after_forward=False)
+        # fully_shard(model.model, mesh=dp_mesh, reshard_after_forward=False)
+        # DDP
+        # replicate(model, device_mesh=dp_mesh, bucket_cap_mb=100)
+        assert len(list(model.parameters()))>5, "No parameters found in model. Probably DDP/FSDP bug.."
+        use_ddp = True
 
     model.train()
     assert len(list(model.parameters()))>0, "No parameters found in model. Probably DDP bug.."
@@ -326,7 +329,7 @@ def main():
 
                     # Sanity checks for logits
                     if dist.is_initialized() and not ignore_sanity_checks:
-                        sanity_check_tensor_sync(logits, tp_mesh) # TODO: only true without sequence parallel
+                        # sanity_check_tensor_sync(logits, tp_mesh) # TODO: only true without sequence parallel
                         sanity_check_tensor_sync(logits, dp_mesh, not_sync=True)
                         sanity_check_tensor_sync(logits, cp_mesh, not_sync=True)
 
@@ -353,16 +356,20 @@ def main():
                         if param.grad is not None and cp_mesh.size() > 1:
                              sanity_check_tensor_sync(param.grad, cp_mesh)
 
+
                 # Calculate gradient norm and clip gradients
-                assert len(list(model.parameters()))>0, "No parameters found in model. Probably DDP bug.."
-                assert len([p for p in model.parameters() if p.requires_grad])>0, "No gradients found in model. Probably DDP bug.."
-                assert len([p for p in model.parameters() if p.grad is not None])>0, "No gradients found in model. Probably DDP bug.."
-                gradnorm = clip_grad_norm_(
-                    model.parameters(),
-                    max_norm=1.0,
-                    norm_type=2.0,
-                    foreach=True
-                )
+                if hasattr(model, "clip_grad_norm_"):
+                    gradnorm = model.clip_grad_norm_(max_norm=1.0, norm_type=2.0)
+                else:
+                    assert len(list(model.parameters()))>2, "No parameters found in model. Probably DDP bug.."
+                    assert len([p for p in model.parameters() if p.requires_grad])>2, "No gradients found in model. Probably DDP bug.."
+                    assert len([p for p in model.parameters() if p.grad is not None])>2, "No gradients found in model. Probably DDP bug.."
+                    # only works with FSDP's NO_SHARD otherwise we should use FSDP's clip_grad_norm_
+                    gradnorm = clip_grad_norm_(
+                        model.parameters(),
+                        max_norm=1.0,
+                        norm_type=2.0,
+                        foreach=True)
 
                 optimizer.step()
                 # Sanity checks for updated model parameters (only if distributed)
