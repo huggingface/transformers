@@ -811,6 +811,8 @@ class PytorchProfilerCallback(TrainerCallback):
         "cuda_time",
         "cpu_time_total",
         "cuda_time_total",
+        "self_cpu_time_total",
+        "self_cuda_time_total",
         "cpu_memory_usage",
         "cuda_memory_usage",
         "self_cpu_memory_usage",
