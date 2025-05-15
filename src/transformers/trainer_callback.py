@@ -911,6 +911,7 @@ class PytorchProfilerCallback(TrainerCallback):
 
     @staticmethod
     def default_activities() -> list["ProfilerActivity"]:
+        # TODO: choose activities based on the available device.
         activities = [
             torch.profiler.ProfilerActivity.CPU,
             torch.profiler.ProfilerActivity.CUDA,
