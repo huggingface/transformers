@@ -393,7 +393,7 @@ class SEWPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_flex_attn = True
+    _supports_flex_attn = False  # needs a proper look into the mask creation
 
     def _init_weights(self, module):
         """Initialize the weights"""
