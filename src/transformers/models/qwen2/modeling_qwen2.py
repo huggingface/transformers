@@ -404,14 +404,14 @@ class Qwen2Model(Qwen2PreTrainedModel):
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
-            mask_kwargs = dict(
-                config=self.config,
-                input_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                cache_position=cache_position,
-                past_key_values=past_key_values,
-                output_attentions=output_attentions,
-            )
+            mask_kwargs = {
+                "config": self.config,
+                "input_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "output_attentions": output_attentions,
+            }
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
