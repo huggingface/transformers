@@ -34,7 +34,7 @@ _torch_distributed_available = torch.distributed.is_available()
 
 if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
     from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
-
+    from torch.distributed.device_mesh import DeviceMesh
 
 def initialize_tensor_parallelism(tp_plan, tp_size=None):
     r"""
@@ -47,15 +47,19 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
     if not is_torch_greater_or_equal("2.5"):
         raise EnvironmentError("Tensor parallel is only supported for `torch>=2.5`.")
 
+    # Read parallelism sizes from environment variables
+    tp_size = int(os.environ.get("TP_SIZE", 1))
+    dp_size = int(os.environ.get("DP_SIZE", 1))
+    cp_size = int(os.environ.get("CP_SIZE", 1))
+    rank = int(os.environ["RANK"])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+
     # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
     device_type = torch._C._get_accelerator().type
     device_setters = {"cuda": torch.cuda, "xpu": torch.xpu, "hpu": torch.hpu, "cpu": None}
     if not torch.distributed.is_initialized():
         try:
-            rank = int(os.environ["RANK"])
-            local_rank = int(os.environ["LOCAL_RANK"])
-            world_size = int(os.environ["WORLD_SIZE"])
-
             backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "ccl", "hpu": "hccl"}
             backend = backend_map.get(device_type)
             if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", 0)):
@@ -71,20 +75,25 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
                 "We tried to initialize torch.distributed for you, but it failed. Make "
                 "sure you init torch distributed in your script to use `tp_plan='auto'`."
             ) from e
-    index = device_setters[device_type].current_device() if device_setters is not None else None
-    tp_device = torch.device(device_type, index)
 
-    # Silence output for non-primary ranks
-    if index is not None and index > 0:
-        import sys
+    torch.cuda.set_device(local_rank)
+    # Create and log the device mesh
+    mesh = torch.arange(world_size).reshape(dp_size, tp_size, cp_size)
+    world_mesh = DeviceMesh(device_type="cuda", mesh=mesh, mesh_dim_names=("dp", "tp", "cp"))
+    tp_mesh = world_mesh["tp"]
+    dp_mesh = world_mesh["dp"]
+    cp_mesh = world_mesh["cp"]
+    world_mesh["dp", "cp"]._flatten(mesh_dim_name="dp_cp")
 
-        sys.stdout = open(os.devnull, "w")
-        sys.stderr = open(os.devnull, "w")
+    if logger:
+        logger.info(f"Created DeviceMesh: {world_mesh}")
+        logger.info(
+            f"Distributed setup - Rank: {rank}, World size: {world_size}, Local rank: {local_rank}, "
+            f"DP: {dp_mesh.get_local_rank()}, TP: {tp_mesh.get_local_rank()}, CP: {cp_mesh.get_local_rank()}"
+        )
 
-    device_map = tp_device
-    tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
-    device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
-    return tp_device, device_map, device_mesh
+    # Return handles for further use
+    return torch.device(device_type, local_rank), tp_mesh, world_mesh
 
 
 def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> List[int]:
