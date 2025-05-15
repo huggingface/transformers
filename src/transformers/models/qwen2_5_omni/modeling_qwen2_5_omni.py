@@ -794,7 +794,7 @@ class SinusoidsPositionEmbedding(nn.Module):
         if channels % 2 != 0:
             raise ValueError("SinusoidsPositionEmbedding needs even channels input")
         log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
-        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2)).float()
+        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2).float())
         scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
         self.register_buffer(
             "positional_embedding",
