@@ -1027,8 +1027,9 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             # 1. user-defined config options in `**kwargs`
             # 2. model's generation config values
             # 3. pipeline's default generation config values
-            # (_prepare_generation_config creates a deep copy of the generation config before updating it)
-            prepared_generation_config, _ = self.model._prepare_generation_config(
+            # NOTE: _prepare_generation_config creates a deep copy of the generation config before updating it, and
+            # returns all kwargs that were not used to update the generation config)
+            prepared_generation_config, kwargs = self.model._prepare_generation_config(
                 generation_config=default_pipeline_generation_config, use_model_defaults=True, **kwargs
             )
             self.generation_config = prepared_generation_config
