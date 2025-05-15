@@ -15,9 +15,8 @@ from typing import Optional
 
 import torch
 
-from transformers.generation.configuration_utils import GenerationConfig
-
 from ..cache_utils import HybridCache, StaticCache
+from ..generation.configuration_utils import GenerationConfig
 from ..masking_utils import (
     ALL_MASK_CREATION_FUNCTIONS,
     LayerPattern,
