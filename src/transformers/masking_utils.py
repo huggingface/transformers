@@ -417,14 +417,13 @@ def flash_attention_mask(
             "so the chunked pattern cannot be respected. You should use another `attn_implementation` when instantiating the model"
         )
 
-    # Here we need to slice from the right (padding is always left)
-    if layer_pattern.pattern != "full":
-        if attention_mask is not None:
-            attention_mask = attention_mask[:, -kv_length:]
+    # Here we need to slice from the right if using sliding or chunked (for full attention, this is equivalent to doing nothing)
+    if attention_mask is not None:
+        attention_mask = attention_mask[:, -kv_length:]
 
-    # We only return an actual mask if there is at least 1 padding token, otherwise we return `None` and use `is_causal` in
-    # FA2
-    if attention_mask is not None and (attention_mask == 0.0).any():
+    # We only return an actual mask if there is at least 1 padding token, otherwise we return `None` and use `is_causal` in FA2
+    # (note that the attention_mask is a boolean dtype here)
+    if attention_mask is not None and (~attention_mask).any():
         return attention_mask
     return None
 
