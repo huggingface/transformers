@@ -801,14 +801,14 @@ def create_masks_for_generate(
             Whether we return the attention scores or not. By default `False`.
     """
     # Prepare the mask args
-    mask_kwargs = {
-        "config": config,
-        "input_embeds": input_embeds,
-        "attention_mask": attention_mask,
-        "cache_position": cache_position,
-        "past_key_values": past_key_values,
-        "output_attentions": output_attentions,
-    }
+    mask_kwargs = dict(
+        config=config,
+        input_embeds=input_embeds,
+        attention_mask=attention_mask,
+        cache_position=cache_position,
+        past_key_values=past_key_values,
+        output_attentions=output_attentions,
+    )
 
     # If the attribute exist, we need several masks
     if hasattr(config, "layer_types"):
