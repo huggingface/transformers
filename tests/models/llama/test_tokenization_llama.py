@@ -25,8 +25,6 @@ from transformers import (
     SPIECE_UNDERLINE,
     AddedToken,
     AutoTokenizer,
-    LlamaTokenizer,
-    LlamaTokenizerFast,
     PreTrainedTokenizerFast,
 )
 from transformers.convert_slow_tokenizer import convert_slow_tokenizer
@@ -332,7 +330,8 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_picklable(self):
         with tempfile.NamedTemporaryFile() as f:
             shutil.copyfile(SAMPLE_VOCAB, f.name)
-            tokenizer = LlamaTokenizerFast(f.name, keep_accents=True)
+            slow_tokenizer = SPMTokenizer(f.name, keep_accents=True)
+            tokenizer = PreTrainedTokenizerFast(tokenizer_object=convert_slow_tokenizer(slow_tokenizer))
             pickled_tokenizer = pickle.dumps(tokenizer)
         pickle.loads(pickled_tokenizer)
 
@@ -425,17 +424,12 @@ class LlamaIntegrationTest(unittest.TestCase):
         slow = slow_tokenizer.encode("A sample test", add_special_tokens=True)
         assert slow == [1, 319, 4559, 1243, 2]
 
-        fast_tokenizer = LlamaTokenizerFast.from_pretrained(
+        fast_tokenizer = AutoTokenizer.from_pretrained(
             "hf-internal-testing/llama-tokenizer", add_eos_token=True, add_bos_token=False
         )
+
         fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
         assert fast == [319, 4559, 1243, 2]
-
-        slow_tokenizer = LlamaTokenizerFast.from_pretrained(
-            "hf-internal-testing/llama-tokenizer", add_eos_token=True, add_bos_token=False
-        )
-        slow = slow_tokenizer.encode("A sample test", add_special_tokens=True)
-        assert slow == [319, 4559, 1243, 2]
 
         self.tokenizer.add_eos_token = False
         self.rust_tokenizer.add_eos_token = False
@@ -733,14 +727,10 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(tokens, ["▁▁"])
 
     def test_fast_post_processor(self):
-        tokenizer = LlamaTokenizerFast(
-            SAMPLE_VOCAB, eos_token=None, bos_token=None, add_bos_token=False, add_eos_token=False
-        )
-        # We have a SentencePiece fixture for testing
         slow_tokenizer = SPMTokenizer(SAMPLE_VOCAB)
-
         tokenizer = PreTrainedTokenizerFast(tokenizer_object=convert_slow_tokenizer(slow_tokenizer))
 
+        # We have a SentencePiece fixture for testing
         tokenizer.encode(" Hey ")
 
         with self.assertRaises(ValueError):
@@ -797,12 +787,11 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        tokenizer = LlamaTokenizerFast(
-            SAMPLE_VOCAB, extra_ids=0, add_bos_token=False, legacy=False, add_prefix_space=True
-        )
+        slow_tokenizer = SPMTokenizer(SAMPLE_VOCAB, legacy=False)
+        tokenizer = PreTrainedTokenizerFast(tokenizer_object=convert_slow_tokenizer(slow_tokenizer),
+                                            extra_ids=0, add_bos_token=False, legacy=False)
         tokenizer.add_special_tokens({"additional_special_tokens": [AddedToken("<s>", rstrip=False, lstrip=True)]})
         cls.tokenizer = tokenizer
-        cls.old_tokenizer = LlamaTokenizer(SAMPLE_VOCAB, extra_ids=0, add_bos_token=False, legacy=False)
         return cls
 
     def test_add_dummy_prefix(self):
