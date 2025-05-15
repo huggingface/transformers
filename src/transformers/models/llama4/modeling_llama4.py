@@ -383,6 +383,8 @@ class Llama4TextDecoderLayer(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
+        self.layer_idx = layer_idx
+        self.attention_type = config.layer_types[layer_idx]
         self.self_attn = Llama4TextAttention(config, layer_idx)
         self.is_moe_layer = layer_idx in config.moe_layers
         if self.is_moe_layer:  # the 128E model interleaves dense / sparse
@@ -392,8 +394,6 @@ class Llama4TextDecoderLayer(nn.Module):
 
         self.input_layernorm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        self.layer_idx = layer_idx
 
     def forward(
         self,
@@ -563,7 +563,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
-        if not isinstance(causal_masks := attention_mask, dict):
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
             mask_kwargs = dict(
                 config=self.config,
@@ -574,7 +574,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 output_attentions=output_attentions,
             )
             # Create the masks
-            causal_masks = {
+            causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "chunked_attention": create_chunked_causal_mask(**mask_kwargs),
             }
@@ -588,15 +588,15 @@ class Llama4TextModel(Llama4PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for i in range(self.config.num_hidden_layers):
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    self.layers[i].__call__,
+                    decoder_layer.__call__,
                     hidden_states,
-                    causal_masks[self.layer_types[i]],
+                    causal_mask_mapping[decoder_layer.attention_type],
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -606,9 +606,9 @@ class Llama4TextModel(Llama4PreTrainedModel):
                     freq_cis,
                 )
             else:
-                layer_outputs = self.layers[i](
+                layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=causal_masks[self.layer_types[i]],
+                    attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,

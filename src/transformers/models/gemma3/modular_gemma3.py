@@ -456,6 +456,7 @@ class Gemma3DecoderLayer(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
+        self.attention_type = config.layer_types[layer_idx]
         self.self_attn = Gemma3Attention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma3MLP(config)
         self.input_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -608,7 +609,7 @@ class Gemma3TextModel(Gemma2Model):
             position_ids = cache_position.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
-        if not isinstance(causal_masks := attention_mask, dict):
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
             mask_kwargs = dict(
                 config=self.config,
@@ -619,7 +620,7 @@ class Gemma3TextModel(Gemma2Model):
                 output_attentions=output_attentions,
             )
             # Create the masks
-            causal_masks = {
+            causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
@@ -635,17 +636,17 @@ class Gemma3TextModel(Gemma2Model):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for i in range(self.config.num_hidden_layers):
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    partial(self.layers[i].__call__, **flash_attn_kwargs),
+                    partial(decoder_layer.__call__, **flash_attn_kwargs),
                     hidden_states,
                     position_embeddings_global,
                     position_embeddings_local,
-                    causal_masks[self.layer_types[i]],
+                    causal_mask_mapping[decoder_layer.attention_type],
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -653,11 +654,11 @@ class Gemma3TextModel(Gemma2Model):
                     cache_position,
                 )
             else:
-                layer_outputs = self.layers[i](
+                layer_outputs = decoder_layer(
                     hidden_states,
                     position_embeddings_global=position_embeddings_global,
                     position_embeddings_local=position_embeddings_local,
-                    attention_mask=causal_masks[self.layer_types[i]],
+                    attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
