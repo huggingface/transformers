@@ -17,14 +17,16 @@ import torch
 
 from transformers.generation.configuration_utils import GenerationConfig
 
-from ..masking_utils import ALL_MASK_CREATION_FUNCTIONS, _ignore_causal_mask_sdpa, prepare_padding_mask
-from ..modeling_utils import ALL_ATTENTION_FUNCTIONS, LayerPattern
-from ..utils.import_utils import is_torch_available
-
-
-if is_torch_available():
-    from transformers import HybridCache, PreTrainedModel, StaticCache
-    from transformers.pytorch_utils import is_torch_greater_or_equal, is_torch_greater_or_equal_than_2_3
+from ..cache_utils import HybridCache, StaticCache
+from ..masking_utils import (
+    ALL_MASK_CREATION_FUNCTIONS,
+    LayerPattern,
+    _ignore_causal_mask_sdpa,
+    _is_torch_greater_or_equal_than_2_5,
+    prepare_padding_mask,
+)
+from ..modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ..pytorch_utils import is_torch_greater_or_equal, is_torch_greater_or_equal_than_2_3
 
 
 class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
@@ -713,6 +715,7 @@ def sdpa_mask_without_vmap(
     layer_pattern: LayerPattern = LayerPattern("full"),
     attention_mask: Optional[torch.Tensor] = None,
     allow_is_causal_skip: bool = True,
+    allow_torch_fix: bool = True,
     **kwargs,
 ) -> Optional[torch.Tensor]:
     """
@@ -739,6 +742,9 @@ def sdpa_mask_without_vmap(
         allow_is_causal_skip (`bool`, optional):
             Whether to allow to return `None` for the mask under conditions where we can use the `is_causal` argument in
             `torch.sdpa` instead. Default to `True`.
+        allow_torch_fix (`bool`, optional):
+            Whether to update the mask in case a query is not attending to any tokens, to solve a bug in torch's older
+            versions. We need an arg to skip it when using eager. By default `True`.
 
     """
 
@@ -772,4 +778,9 @@ def sdpa_mask_without_vmap(
     causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
     if padding_mask is not None:
         causal_mask = causal_mask * padding_mask[:, None, None, :]
+
+    # Due to a bug in some older torch version, we need to update the mask in case a query is not attending to any
+    # tokens (due to padding). See details in https://github.com/pytorch/pytorch/issues/110213
+    if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix:
+        causal_mask |= torch.all(~causal_mask, dim=-1, keepdim=True)
     return causal_mask
