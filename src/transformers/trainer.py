@@ -3653,7 +3653,7 @@ class Trainer:
         if self.args.include_num_input_tokens_seen:
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
             if start_time is not None:
-                speed_metrics("train", start_time, num_tokens=self.state.num_input_tokens_seen)
+                logs.update(speed_metrics("train", start_time, num_tokens=self.state.num_input_tokens_seen))
 
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
