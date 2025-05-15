@@ -2330,7 +2330,9 @@ class GenerationMixin:
         if generation_config.token_healing:
             input_ids = self.heal_tokens(input_ids, tokenizer)
 
-        if streamer is not None:
+        if streamer is not None and generation_config.output_scores:
+            streamer.put(input_ids.cpu(), score=0)
+        elif streamer is not None and generation_config.output_scores:
             streamer.put(input_ids.cpu())
 
         # 6. Prepare `max_length` depending on other stopping criteria.
@@ -2927,7 +2929,11 @@ class GenerationMixin:
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
-                streamer.put(next_tokens.cpu())
+                if output_scores:
+                    score = next_token_scores[range(batch_size), next_tokens].item()
+                    streamer.put(next_tokens.cpu(), score=score)
+                else:
+                    streamer.put(next_tokens.cpu())
 
             # stop when each sentence is finished
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
@@ -3312,7 +3318,11 @@ class GenerationMixin:
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
-                streamer.put(next_tokens.cpu())
+                if output_scores:
+                    score = processed_logit_for_next_step[range(batch_size), selected_idx].item()
+                    streamer.put(next_tokens.cpu(), score=score)
+                else:
+                    streamer.put(next_tokens.cpu())
 
             # stop when each sentence is finished
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
@@ -3512,7 +3522,11 @@ class GenerationMixin:
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
-                streamer.put(next_tokens.cpu())
+                if output_scores:
+                    score = next_token_scores[range(batch_size), next_tokens].item()
+                    streamer.put(next_tokens.cpu(), score=score)
+                else:
+                    streamer.put(next_tokens.cpu())
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
