@@ -196,10 +196,6 @@ class MBartAttention(nn.Module):
         bsz, tgt_len = hidden_states.shape[:-1]
         src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
 
-        # certain models do not have a sequence per se
-        src_len = max(src_len, 1)
-        tgt_len = max(tgt_len, 1)
-
         q_input_shape = (bsz, tgt_len, -1, self.head_dim)
         kv_input_shape = (bsz, src_len, -1, self.head_dim)
 
