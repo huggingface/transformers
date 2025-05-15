@@ -15,11 +15,9 @@ import os
 
 import torch
 import torch.distributed as dist
-
-from torch.distributed.tensor.experimental import context_parallel
 from torch.distributed.device_mesh import init_device_mesh
-
-from torch.nn.attention import sdpa_kernel, SDPBackend
+from torch.distributed.tensor.experimental import context_parallel
+from torch.nn.attention import SDPBackend, sdpa_kernel
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from transformers import AutoModelForCausalLM
@@ -45,7 +43,9 @@ ignore_index = -100
 shift_labels = torch.nn.functional.pad(input_ids, (0, 1), value=ignore_index)
 shift_labels = shift_labels[..., 1:].contiguous()
 
-position_ids = torch.cumsum(torch.ones(size=input_ids.size(), dtype=input_ids.dtype, device=input_ids.device), dim=1) - 1
+position_ids = (
+    torch.cumsum(torch.ones(size=input_ids.size(), dtype=input_ids.dtype, device=input_ids.device), dim=1) - 1
+)
 
 # sync input as they are created randomly
 dist.broadcast(input_ids, src=0)
@@ -77,7 +77,10 @@ no_restore_buffers = None
 # run with CP
 with sdpa_kernel(sdpa_backend):
     with context_parallel(
-        cp_mesh, buffers=buffers, buffer_seq_dims=buffer_seq_dims, no_restore_buffers=no_restore_buffers,
+        cp_mesh,
+        buffers=buffers,
+        buffer_seq_dims=buffer_seq_dims,
+        no_restore_buffers=no_restore_buffers,
     ):
         outputs = model(input_ids, shift_labels=shift_labels, position_ids=position_ids)
         print(outputs.logits.shape)

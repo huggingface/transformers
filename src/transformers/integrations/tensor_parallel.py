@@ -13,13 +13,14 @@
 # limitations under the License.
 from __future__ import annotations
 
+import os
 import re
 from functools import lru_cache, partial
 from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import nn
-import os
+
 from ..utils import is_torch_greater_or_equal, logging
 
 
@@ -34,6 +35,7 @@ _torch_distributed_available = torch.distributed.is_available()
 if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
     from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
 
+
 def initialize_tensor_parallelism(tp_plan, tp_size=None):
     r"""
     Sets up the device mesh and initilized the backend for tensor parallelism.
@@ -47,24 +49,14 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
 
     # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
     device_type = torch._C._get_accelerator().type
-    device_setters = {
-        "cuda": torch.cuda,
-        "xpu": torch.xpu,
-        "hpu": torch.hpu,
-        "cpu": None
-    }
+    device_setters = {"cuda": torch.cuda, "xpu": torch.xpu, "hpu": torch.hpu, "cpu": None}
     if not torch.distributed.is_initialized():
         try:
             rank = int(os.environ["RANK"])
             local_rank = int(os.environ["LOCAL_RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
 
-            backend_map = {
-                "cuda": "nccl",
-                "cpu": "gloo",
-                "xpu": "ccl",
-                "hpu": "hccl"
-            }
+            backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "ccl", "hpu": "hccl"}
             backend = backend_map.get(device_type)
             if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", 0)):
                 backend = "ccl"
@@ -79,12 +71,13 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
                 "We tried to initialize torch.distributed for you, but it failed. Make "
                 "sure you init torch distributed in your script to use `tp_plan='auto'`."
             ) from e
-    index =  device_setters[device_type].current_device() if index is not None else None
+    index = device_setters[device_type].current_device() if device_setters is not None else None
     tp_device = torch.device(device_type, index)
 
     # Silence output for non-primary ranks
     if index is not None and index > 0:
         import sys
+
         sys.stdout = open(os.devnull, "w")
         sys.stderr = open(os.devnull, "w")
 
@@ -92,6 +85,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
     tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
     device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
     return tp_device, device_map, device_mesh
+
 
 def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> List[int]:
     """
@@ -316,10 +310,12 @@ class IsolatedParallel(TensorParallelLayer):
             partial(self._prepare_output_fn, None, None),
         )
 
+
 class ReplicateParallel(TensorParallelLayer):
     """
     This class is used to replicate computation in a TP layer (used in SP regions when we don't use sequence parallelism for example)
     """
+
     def __init__(self, *, use_dtensor=True, use_local_output=True):
         super().__init__()
         self.input_layouts = (Replicate(),)
@@ -327,7 +323,6 @@ class ReplicateParallel(TensorParallelLayer):
         self.desired_input_layouts = (Replicate(),)
         self.use_local_output = use_local_output
         self.use_dtensor = use_dtensor
-
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
@@ -339,11 +334,9 @@ class ReplicateParallel(TensorParallelLayer):
 
         return input_tensor
 
-
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         return outputs.to_local() if use_local_output else outputs
-
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         param = param[...].to(param_casting_dtype)
@@ -351,6 +344,7 @@ class ReplicateParallel(TensorParallelLayer):
             param = param.contiguous()
         param = DTensor.from_local(param, device_mesh, [Replicate()], run_check=False)
         return param
+
 
 class ColwiseParallel(TensorParallelLayer):
     """
@@ -742,9 +736,7 @@ def shard_and_distribute_module(
 
     if current_module_plan is None:
         current_module_plan = "replicate"
-        logger.warning(
-            f"Tensor parallel plan for {param_name} not found, using default 'replicate' plan."
-        )
+        logger.warning(f"Tensor parallel plan for {param_name} not found, using default 'replicate' plan.")
 
     # Add hooks to the module if not done yet
     # add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
