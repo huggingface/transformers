@@ -48,7 +48,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
         raise EnvironmentError("Tensor parallel is only supported for `torch>=2.5`.")
 
     # Read parallelism sizes from environment variables
-    tp_size = int(os.environ.get("TP_SIZE", 1))
+    tp_size = int(os.environ.get("TP_SIZE", tp_size))
     dp_size = int(os.environ.get("DP_SIZE", 1))
     cp_size = int(os.environ.get("CP_SIZE", 1))
     rank = int(os.environ["RANK"])
