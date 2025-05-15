@@ -1033,10 +1033,13 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 # 3. pipeline's default generation config values
                 # NOTE: _prepare_generation_config creates a deep copy of the generation config before updating it, and
                 # returns all kwargs that were not used to update the generation config)
-                prepared_generation_config, kwargs = self.model._prepare_generation_config(
-                    generation_config=default_pipeline_generation_config, use_model_defaults=True, **kwargs
-                )
-                self.generation_config = prepared_generation_config
+                if hasattr(self.model, "_prepare_generation_config"):  # TF doesn't have this method
+                    prepared_generation_config, kwargs = self.model._prepare_generation_config(
+                        generation_config=default_pipeline_generation_config, use_model_defaults=True, **kwargs
+                    )
+                    self.generation_config = prepared_generation_config
+                else:
+                    self.generation_config = default_pipeline_generation_config
                 # Update the generation config with task specific params if they exist.
                 # NOTE: 1. `prefix` is pipeline-specific and doesn't exist in the generation config.
                 #       2. `task_specific_params` is a legacy feature and should be removed in a future version.

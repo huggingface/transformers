@@ -401,7 +401,7 @@ class TextGenerationPipeline(Pipeline):
 
         if isinstance(output, ModelOutput):
             generated_sequence = output.sequences
-            other_outputs = {k: v for k, v in output.items() if k != "sequences"}
+            other_outputs = {k: v for k, v in output.items() if k not in {"sequences", "past_key_values"}}
             out_b = generated_sequence.shape[0]
 
             if self.framework == "pt":
@@ -433,7 +433,7 @@ class TextGenerationPipeline(Pipeline):
             "input_ids": input_ids,
             "prompt_text": prompt_text,
         }
-        model_outputs.update(other_outputs)
+        model_outputs.update({"additional_outputs": other_outputs})
         return model_outputs
 
     def postprocess(
