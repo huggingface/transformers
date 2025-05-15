@@ -1231,9 +1231,7 @@ def is_in_notebook():
 
         return importlib.util.find_spec("IPython") is not None or is_in_marimo()
     except (AttributeError, ImportError, KeyError):
-        if is_in_marimo():
-            return True
-        return False
+        return is_in_marimo()
 
 
 def is_pytorch_quantization_available():
