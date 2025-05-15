@@ -138,9 +138,9 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
             Dimensionality of the encoder layers and the pooler layer.
         patch_embed_hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the input patch_embedding layer in the Transformer encoder.
-        d_ff (`int`, *optional*, defaults to 3968):
+        intermediate_size (`int`, *optional*, defaults to 3968):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        d_kv (`int`, *optional*, defaults to 64):
+        head_dim (`int`, *optional*, defaults to 64):
             Dimensionality of the key, query, value projections per attention head.
         num_hidden_layers (`int`, *optional*, defaults to 18):
             Number of hidden layers in the Transformer encoder.
@@ -179,8 +179,8 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         self,
         hidden_size=1536,
         patch_embed_hidden_size=768,
-        d_ff=3968,
-        d_kv=64,
+        intermediate_size=3968,
+        head_dim=64,
         num_hidden_layers=18,
         num_attention_heads=24,
         dense_act_fn="gelu_new",
@@ -196,7 +196,7 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
 
         self.hidden_size = hidden_size
         self.patch_embed_hidden_size = patch_embed_hidden_size
-        self.d_ff = d_ff
+        self.intermediate_size = intermediate_size
         self.dropout_rate = dropout_rate
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -204,7 +204,7 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.dense_act_fn = dense_act_fn
         self.max_num_patches = seq_len
-        self.d_kv = d_kv
+        self.head_dim = head_dim
         self.initializer_factor = initializer_factor
         self.initializer_range = initializer_range
 

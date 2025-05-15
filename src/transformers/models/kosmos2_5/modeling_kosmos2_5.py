@@ -428,9 +428,9 @@ class Kosmos2_5VisionEmbeddings(nn.Module):
 class Kosmos2_5VisionMlp(nn.Module):
     def __init__(self, config: Kosmos2_5VisionConfig):
         super().__init__()
-        self.wi_0 = nn.Linear(config.hidden_size, config.d_ff, bias=False)
-        self.wi_1 = nn.Linear(config.hidden_size, config.d_ff, bias=False)
-        self.wo = nn.Linear(config.d_ff, config.hidden_size, bias=False)
+        self.wi_0 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.wi_1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.wo = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
 
@@ -487,7 +487,7 @@ class Kosmos2_5VisionAttention(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.key_value_proj_dim = config.d_kv
+        self.key_value_proj_dim = config.head_dim
         self.n_heads = config.num_attention_heads
         self.dropout = config.attention_dropout
         self.inner_dim = self.n_heads * self.key_value_proj_dim
