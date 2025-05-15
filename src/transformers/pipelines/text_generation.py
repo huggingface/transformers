@@ -1,7 +1,7 @@
 import enum
 import itertools
 import types
-from typing import Dict
+from typing import Any, Dict, List, overload
 
 from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
@@ -17,6 +17,8 @@ if is_tf_available():
     import tensorflow as tf
 
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+
+ChatType = List[Dict[str, str]]
 
 
 class ReturnType(enum.Enum):
@@ -215,6 +217,18 @@ class TextGenerationPipeline(Pipeline):
             kwargs.update({"add_space_before_punct_symbol": True})
 
         return super()._parse_and_tokenize(*args, **kwargs)
+
+    @overload
+    def __call__(self, text_inputs: str, **kwargs: Any) -> List[Dict[str, str]]: ...
+
+    @overload
+    def __call__(self, text_inputs: List[str], **kwargs: Any) -> List[List[Dict[str, str]]]: ...
+
+    @overload
+    def __call__(self, text_inputs: ChatType, **kwargs: Any) -> List[Dict[str, ChatType]]: ...
+
+    @overload
+    def __call__(self, text_inputs: List[ChatType], **kwargs: Any) -> List[List[Dict[str, ChatType]]]: ...
 
     def __call__(self, text_inputs, **kwargs):
         """

@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, overload
 
 from ..image_utils import load_image
 from ..utils import (
@@ -15,6 +15,9 @@ if is_torch_available():
     import torch
 
     from ..models.auto.modeling_auto import MODEL_FOR_MASK_GENERATION_MAPPING_NAMES
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 logger = logging.get_logger(__name__)
 
@@ -125,12 +128,22 @@ class MaskGenerationPipeline(ChunkPipeline):
             postprocess_kwargs["output_bboxes_mask"] = kwargs["output_bboxes_mask"]
         return preprocess_kwargs, forward_params, postprocess_kwargs
 
-    def __call__(self, image, *args, num_workers=None, batch_size=None, **kwargs):
+    @overload
+    def __call__(self, image: Union[str, "Image.Image"], *args: Any, **kwargs: Any) -> Dict[str, Any]: ...
+
+    @overload
+    def __call__(
+        self, image: Union[List[str], List["Image.Image"]], *args: Any, **kwargs: Any
+    ) -> List[Dict[str, Any]]: ...
+
+    def __call__(
+        self, image: Union[str, "Image.Image", List[str], List["Image.Image"]], *args: Any, **kwargs: Any
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """
         Generates binary segmentation masks
 
         Args:
-            inputs (`np.ndarray` or `bytes` or `str` or `dict`):
+            image (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 Image or list of images.
             mask_threshold (`float`, *optional*, defaults to 0.0):
                 Threshold to use when turning the predicted masks into binary values.
@@ -163,6 +176,8 @@ class MaskGenerationPipeline(ChunkPipeline):
                   the "object" described by the label and the mask.
 
         """
+        num_workers = kwargs.pop("num_workers", None)
+        batch_size = kwargs.pop("batch_size", None)
         return super().__call__(image, *args, num_workers=num_workers, batch_size=batch_size, **kwargs)
 
     def preprocess(

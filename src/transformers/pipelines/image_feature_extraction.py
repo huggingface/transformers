@@ -1,10 +1,12 @@
-from typing import Dict
+from typing import Any, Dict, List, Union
 
 from ..utils import add_end_docstrings, is_vision_available
 from .base import GenericTensor, Pipeline, build_pipeline_init_args
 
 
 if is_vision_available():
+    from PIL import Image
+
     from ..image_utils import load_image
 
 
@@ -88,7 +90,7 @@ class ImageFeatureExtractionPipeline(Pipeline):
         elif self.framework == "tf":
             return outputs.numpy().tolist()
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Union[str, "Image.Image", List["Image.Image"], List[str]], **kwargs: Any) -> List[Any]:
         """
         Extract the features of the input(s).
 

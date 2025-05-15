@@ -1,5 +1,6 @@
 import enum
 import warnings
+from typing import Any, Dict, List, Union
 
 from ..tokenization_utils import TruncationStrategy
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
@@ -141,7 +142,7 @@ class Text2TextGenerationPipeline(Pipeline):
             del inputs["token_type_ids"]
         return inputs
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Union[str, List[str]], **kwargs: Any) -> List[Dict[str, str]]:
         r"""
         Generate the output text(s) using text(s) given as inputs.
 

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Union, overload
 
 import numpy as np
 
@@ -21,10 +21,6 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-Prediction = Dict[str, Any]
-Predictions = List[Prediction]
 
 
 @add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
@@ -94,7 +90,15 @@ class ImageSegmentationPipeline(Pipeline):
 
         return preprocess_kwargs, {}, postprocess_kwargs
 
-    def __call__(self, inputs=None, **kwargs) -> Union[Predictions, List[Prediction]]:
+    @overload
+    def __call__(self, inputs: Union[str, "Image.Image"], **kwargs: Any) -> List[Dict[str, Any]]: ...
+
+    @overload
+    def __call__(self, inputs: Union[List[str], List["Image.Image"]], **kwargs: Any) -> List[List[Dict[str, Any]]]: ...
+
+    def __call__(
+        self, inputs: Union[str, "Image.Image", List[str], List["Image.Image"]], **kwargs: Any
+    ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
         """
         Perform segmentation (detect masks & classes) in the image(s) passed as inputs.
 
@@ -123,9 +127,8 @@ class ImageSegmentationPipeline(Pipeline):
                 the call may block forever.
 
         Return:
-            A dictionary or a list of dictionaries containing the result. If the input is a single image, will return a
-            list of dictionaries, if the input is a list of several images, will return a list of list of dictionaries
-            corresponding to each image.
+            If the input is a single image, will return a list of dictionaries, if the input is a list of several images,
+            will return a list of list of dictionaries corresponding to each image.
 
             The dictionaries contain the mask, label and score (where applicable) of each detected object and contains
             the following keys:
