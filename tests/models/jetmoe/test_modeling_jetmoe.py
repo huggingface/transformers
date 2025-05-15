@@ -47,13 +47,6 @@ class JetMoeModelTester(CausalLMModelTester):
         base_model_class = JetMoeModel
         causal_lm_class = JetMoeForCausalLM
         sequence_class = JetMoeForSequenceClassification
-
-
-@require_torch
-class JetMoeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (JetMoeModel, JetMoeForCausalLM, JetMoeForSequenceClassification) if is_torch_available() else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": JetMoeModel,
@@ -62,6 +55,13 @@ class JetMoeModelTest(CausalLMModelTest, unittest.TestCase):
         }
         if is_torch_available()
         else {}
+    )
+
+
+@require_torch
+class JetMoeModelTest(CausalLMModelTest, unittest.TestCase):
+    all_model_classes = (
+        (JetMoeModel, JetMoeForCausalLM, JetMoeForSequenceClassification) if is_torch_available() else ()
     )
     test_headmasking = False
     test_pruning = False
