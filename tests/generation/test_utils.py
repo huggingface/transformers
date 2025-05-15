@@ -4954,6 +4954,68 @@ class GenerationIntegrationTests(unittest.TestCase):
         _ = model_cpu.generate(input_ids, **generate_kwargs)
         self.assertFalse(hasattr(model_cpu, "_compiled_call"))
 
+    def test_custom_generate_from_argument_in_generate(self):
+        """Tests that the `custom_generate` argument is used when passed to `generate`"""
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+        # Note: `transformers-community/custom_generate_example` has a custom decoding method with a `left_padding`
+        # argument (int), which prepends as many pad tokens.
+        gen_out = model.generate(
+            **model_inputs,
+            left_padding=5,
+            max_new_tokens=5,
+            custom_generate="transformers-community/custom_generate_example",
+            trust_remote_code=True,
+        )
+        text_output = tokenizer.decode(gen_out[0])
+        self.assertTrue(text_output.startswith("<unk><unk><unk><unk><unk>"))  # <unk> is the pad token
+
+    def test_custom_generate_from_model_repo_with_custom_generate_code(self):
+        """
+        Tests that models from model repos containing custom generation code override `generate` with the custom code
+        """
+        model = AutoModelForCausalLM.from_pretrained(
+            "transformers-community/custom_generate_example", device_map="auto", trust_remote_code=True
+        )
+        generate_signature = inspect.signature(model.generate)
+        # `left_padding` is a custom argument, doesn't exist in the base `generate` method
+        self.assertTrue(generate_signature.parameters.get("left_padding"))
+
+    def test_custom_generate_bad_requirements(self):
+        """Tests that we check the `requirements.txt` file from custom generation repos"""
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+        with self.assertRaises(ImportError):
+            # Note: `transformers-community/custom_generate_bad_requirements` has a `requirements.txt` with
+            # impossible requirements
+            model.generate(
+                **model_inputs,
+                custom_generate="transformers-community/custom_generate_bad_requirements",
+                trust_remote_code=True,
+            )
+
+    def test_custom_generate_requires_trust_remote_code(self):
+        """Tests that `trust_remote_code` is required when using `custom_generate`"""
+        # Case 1: A model from a repo containing custom generation code must be loaded with `trust_remote_code`
+        with self.assertRaises(ValueError):
+            AutoModelForCausalLM.from_pretrained("transformers-community/custom_generate_example", device_map="auto")
+
+        # Case 2: Using the `custom_generate` argument in `generate` requires `trust_remote_code` if the code is not
+        # local
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+        with self.assertRaises(ValueError):
+            model.generate(**model_inputs, custom_generate="transformers-community/custom_generate_example")
+
 
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):
