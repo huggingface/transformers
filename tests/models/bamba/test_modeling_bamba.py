@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,11 +17,13 @@ import inspect
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import AutoTokenizer, BambaConfig, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
+    require_deterministic_for_xpu,
     require_torch,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -46,6 +47,11 @@ if is_torch_available():
 
 
 class BambaModelTester:
+    config_class = BambaConfig
+    if is_torch_available():
+        model_class = BambaModel
+        for_causal_lm_class = BambaForCausalLM
+
     def __init__(
         self,
         parent,
@@ -117,6 +123,7 @@ class BambaModelTester:
         if self.use_labels:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
 
+        self._update_layer_configs()
         config = self.get_config()
 
         return config, input_ids, input_mask, token_labels
@@ -132,10 +139,12 @@ class BambaModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
-    def get_config(self):
+    def _update_layer_configs(self):
+        """Configures hidden layers and attn layer indices if they are not set."""
         # Fix for SDPA tests, force at least 4 layers
         if self.num_hidden_layers < 4:
             self.num_hidden_layers = 4
+
         if self.attn_layer_indices is None:
             d = [x for x in range(2, self.num_hidden_layers) if self.num_hidden_layers % x == 0]
             if len(d) == 0:
@@ -143,7 +152,8 @@ class BambaModelTester:
             d = d[-1]  # get the largest divisor
             self.attn_layer_indices = [x + 1 for x in range(0, self.num_hidden_layers, d)]
 
-        return BambaConfig(
+    def get_config(self, **kwargs):
+        return self.config_class(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -163,6 +173,7 @@ class BambaModelTester:
             mamba_d_conv=self.mamba_d_conv,
             mamba_expand=self.mamba_expand,
             mamba_chunk_size=self.mamba_chunk_size,
+            **kwargs,
         )
 
     def create_and_check_model(
@@ -172,7 +183,7 @@ class BambaModelTester:
         input_mask,
         token_labels,
     ):
-        model = BambaModel(config=config)
+        model = self.model_class(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -186,7 +197,7 @@ class BambaModelTester:
         input_mask,
         token_labels,
     ):
-        model = BambaForCausalLM(config=config)
+        model = self.for_causal_lm_class(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -204,7 +215,7 @@ class BambaModelTester:
     ):
         # config.is_decoder = True
         # config.add_cross_attention = True
-        model = BambaForCausalLM(config=config)
+        model = self.for_causal_lm_class(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -257,15 +268,8 @@ class BambaModelTester:
 
 @require_torch
 class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            BambaModel,
-            BambaForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
-    all_generative_model_classes = (BambaForCausalLM,) if is_torch_available() else ()
+    model_tester_class = BambaModelTester
+    all_model_classes = (BambaModel, BambaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BambaModel,
@@ -283,8 +287,8 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     model_split_percents = [0.5, 0.7, 0.8]
 
     def setUp(self):
-        self.model_tester = BambaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BambaConfig, hidden_size=64)
+        self.model_tester = self.model_tester_class(self)
+        self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class, hidden_size=64)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -313,11 +317,11 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     if "A_log" in name:
-                        A = torch.arange(1, config.mamba_n_heads + 1, dtype=torch.float32)[None, :]
-                        self.assertTrue(torch.allclose(param.data, torch.log(A), atol=1e-5, rtol=1e-5))
+                        A = torch.arange(1, config.mamba_n_heads + 1, dtype=torch.float32)
+                        torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
                     elif "D" in name:
                         D = torch.ones(config.mamba_n_heads, dtype=torch.float32)
-                        self.assertTrue(torch.allclose(param.data, D, atol=1e-5, rtol=1e-5))
+                        torch.testing.assert_close(param.data, D, rtol=1e-5, atol=1e-5)
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
@@ -394,11 +398,6 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
-
-    @unittest.skip(reason="Bamba has its own special cache type")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
 
     def test_batching_equivalence(self):
         # need to disable the tril input mask
@@ -488,11 +487,12 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
             # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, atol=1e-5, rtol=1e-1)
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
 
 @slow
 @require_torch
+@require_torch_accelerator
 class BambaModelIntegrationTest(unittest.TestCase):
     model = None
     tokenizer = None
@@ -515,15 +515,22 @@ class BambaModelIntegrationTest(unittest.TestCase):
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     def test_simple_generate(self):
-        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
-        #
-        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
-        # considering differences in hardware processing and potential deviations in generated text.
-        EXPECTED_TEXTS = {
-            # 7: "",
-            8: "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all having a good time.",
-            #  9: """,
-        }
+        expectations = Expectations(
+            {
+                (
+                    "cuda",
+                    8,
+                ): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all having a good time.",
+                (
+                    "rocm",
+                    9,
+                ): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
+                (
+                    "xpu",
+                    3,
+                ): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. Today I",
+            }
+        )
 
         self.model.to(torch_device)
 
@@ -532,12 +539,13 @@ class BambaModelIntegrationTest(unittest.TestCase):
         ].to(torch_device)
         out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(out[0, :])
-        self.assertEqual(output_sentence, EXPECTED_TEXTS[self.cuda_compute_capability_major_version])
+        expected = expectations.get_expectation()
+        self.assertEqual(output_sentence, expected)
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
         if self.cuda_compute_capability_major_version == 8:
             with torch.no_grad():
-                logits = self.model(input_ids=input_ids, num_logits_to_keep=40).logits
+                logits = self.model(input_ids=input_ids, logits_to_keep=40).logits
 
             EXPECTED_LOGITS_NO_GRAD = torch.tensor(
                 [
@@ -550,19 +558,30 @@ class BambaModelIntegrationTest(unittest.TestCase):
 
             torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1)
 
+    @require_deterministic_for_xpu
     def test_simple_batched_generate_with_padding(self):
         # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
         #
         # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
         # considering differences in hardware processing and potential deviations in generated text.
-        EXPECTED_TEXTS = {
-            7: [],
-            8: [
-                "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
-                "!!!<|begin_of_text|>I am late! I need to get to work! I have to get to the",
-            ],
-            9: [],
-        }
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", 7): [],
+                ("cuda", 8): [
+                    "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
+                    "!!!<|begin_of_text|>I am late! I need to get to work! I have to get to the",
+                ],
+                ("rocm", 9): [
+                    "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
+                    "!!!<|begin_of_text|>I am late! I need to be at the airport in 20 minutes! I",
+                ],
+                ("xpu", 3): [
+                    "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. Today I",
+                    "!!!<|begin_of_text|>I am late! I need to get to work! I have to get to the",
+                ],
+            }
+        )
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
         self.model.to(torch_device)
 
@@ -573,8 +592,8 @@ class BambaModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentences = self.tokenizer.batch_decode(out)
-        self.assertEqual(output_sentences[0], EXPECTED_TEXTS[self.cuda_compute_capability_major_version][0])
-        self.assertEqual(output_sentences[1], EXPECTED_TEXTS[self.cuda_compute_capability_major_version][1])
+        self.assertEqual(output_sentences[0], EXPECTED_TEXT[0])
+        self.assertEqual(output_sentences[1], EXPECTED_TEXT[1])
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
         if self.cuda_compute_capability_major_version == 8:

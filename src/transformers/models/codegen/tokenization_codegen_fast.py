@@ -127,7 +127,7 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         if kwargs.pop("add_bos_token", False):
             model_id = kwargs.pop("name_or_path", "")
             raise ValueError(
-                "Currenty GPT2's fast tokenizer does NOT support adding a BOS token. "
+                "Currently GPT2's fast tokenizer does NOT support adding a BOS token. "
                 "Instead you should use GPT2's slow tokenizer class `CodeGenTokenizer` as follows: \n"
                 f"`CodeGenTokenizer.from_pretrained('{model_id}')`\nor\n"
                 f"`AutoTokenizer.from_pretrained('{model_id}', use_fast=False)`\n"
@@ -192,7 +192,7 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         self,
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         truncate_before_pattern: Optional[List[str]] = None,
         **kwargs,
     ) -> str:

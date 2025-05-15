@@ -28,12 +28,31 @@ COMMON_ENV_VARIABLES = {
     "TRANSFORMERS_IS_CI": True,
     "PYTEST_TIMEOUT": 120,
     "RUN_PIPELINE_TESTS": False,
-    "RUN_PT_TF_CROSS_TESTS": False,
-    "RUN_PT_FLAX_CROSS_TESTS": False,
+    # will be adjust in `CircleCIJob.to_dict`.
+    "RUN_FLAKY": True,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
-COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "vvv": None, "rsfE":None}
+COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "vvv": None, "rsfE":None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
+
+# Strings that commonly appear in the output of flaky tests when they fail. These are used with `pytest-rerunfailures`
+# to rerun the tests that match these patterns.
+FLAKY_TEST_FAILURE_PATTERNS = [
+    "OSError",  # Machine/connection transient error
+    "Timeout",  # Machine/connection transient error
+    "ConnectionError",  # Connection transient error
+    "FileNotFoundError",  # Raised by `datasets` on Hub failures
+    "PIL.UnidentifiedImageError",  # Raised by `PIL.Image.open` on connection issues
+    "HTTPError",  # Also catches HfHubHTTPError
+    "AssertionError: Tensor-likes are not close!",  # `torch.testing.assert_close`, we might have unlucky random values
+    # TODO: error downloading tokenizer's `merged.txt` from hub can cause all the exceptions below. Throw and handle
+    # them under a single message.
+    "TypeError: expected str, bytes or os.PathLike object, not NoneType",
+    "TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType",
+    "Converting from Tiktoken failed",
+    "KeyError: <class ",
+    "TypeError: not a string",
+]
 
 
 class EmptyJob:
@@ -91,6 +110,7 @@ class CircleCIJob:
             print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
             self.install_steps = ["uv venv && uv pip install ."]
+        self.install_steps.append("uv venv && uv pip install git+https://github.com/ydshieh/pytest.git@8.3.5-ydshieh git+https://github.com/ydshieh/pluggy.git@1.5.0-ydshieh")
         if self.pytest_options is None:
             self.pytest_options = {}
         if isinstance(self.tests_to_run, str):
@@ -109,6 +129,8 @@ class CircleCIJob:
 
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
+        # Do not run tests decorated by @is_flaky on pull requests
+        env['RUN_FLAKY'] = os.environ.get("CIRCLE_PULL_REQUEST", "") == ""
         env.update(self.additional_env)
 
         job = {
@@ -126,7 +148,9 @@ class CircleCIJob:
                 # Examples special case: we need to download NLTK files in advance to avoid cuncurrency issues
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
-        additional_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+        junit_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+        joined_flaky_patterns = "|".join(FLAKY_TEST_FAILURE_PATTERNS)
+        repeat_on_failure_flags = f"--reruns 5 --reruns-delay 2 --only-rerun '({joined_flaky_patterns})'"
         parallel = f' << pipeline.parameters.{self.job_name}_parallelism >> '
         steps = [
             "checkout",
@@ -152,9 +176,10 @@ class CircleCIJob:
                     "command": f"TESTS=$(circleci tests split  --split-by=timings {self.job_name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"awk '{{printf \"%s \", $0}}' {self.job_name}_test_list.txt > splitted_tests.txt"
                     }
             },
+            {"run": {"name": "fetch hub objects before pytest", "command": "python3 utils/fetch_hub_objects_for_ci.py"}},
             {"run": {
                 "name": "Run tests",
-                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {additional_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}
+                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}
             },
             {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
             {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
@@ -177,23 +202,6 @@ class CircleCIJob:
 
 
 # JOBS
-torch_and_tf_job = CircleCIJob(
-    "torch_and_tf",
-    docker_image=[{"image":"huggingface/transformers-torch-tf-light"}],
-    additional_env={"RUN_PT_TF_CROSS_TESTS": True},
-    marker="is_pt_tf_cross_test",
-    pytest_options={"rA": None, "durations": 0},
-)
-
-
-torch_and_flax_job = CircleCIJob(
-    "torch_and_flax",
-    additional_env={"RUN_PT_FLAX_CROSS_TESTS": True},
-    docker_image=[{"image":"huggingface/transformers-torch-jax-light"}],
-    marker="is_pt_flax_cross_test",
-    pytest_options={"rA": None, "durations": 0},
-)
-
 torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
@@ -204,6 +212,9 @@ torch_job = CircleCIJob(
 generate_job = CircleCIJob(
     "generate",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    # networkx==3.3 (after #36957) cause some issues
+    # TODO: remove this once it works directly
+    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1"],
     marker="generate",
     parallelism=6,
 )
@@ -267,6 +278,7 @@ examples_torch_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-examples-torch"}],
     # TODO @ArthurZucker remove this once docker is easier to build
     install_steps=["uv venv && uv pip install . && uv pip install -r examples/pytorch/_tests_requirements.txt"],
+    pytest_num_workers=4,
 )
 
 
@@ -274,6 +286,7 @@ examples_tensorflow_job = CircleCIJob(
     "examples_tensorflow",
     additional_env={"OMP_NUM_THREADS": 8},
     docker_image=[{"image":"huggingface/transformers-examples-tf"}],
+    pytest_num_workers=2,
 )
 
 
@@ -324,6 +337,9 @@ repo_utils_job = CircleCIJob(
 non_model_job = CircleCIJob(
     "non_model",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    # networkx==3.3 (after #36957) cause some issues
+    # TODO: remove this once it works directly
+    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1"],
     marker="not generate",
     parallelism=6,
 )
@@ -353,9 +369,9 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [torch_and_tf_job, torch_and_flax_job, torch_job, tf_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
-EXAMPLES_TESTS = [examples_torch_job, examples_tensorflow_job]
-PIPELINE_TESTS = [pipelines_torch_job, pipelines_tf_job]
+REGULAR_TESTS = [torch_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
+EXAMPLES_TESTS = [examples_torch_job]
+PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
 ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job]  # fmt: skip
@@ -382,7 +398,12 @@ def create_circleci_config(folder=None):
         "parameters": {
             # Only used to accept the parameters from the trigger
             "nightly": {"type": "boolean", "default": False},
-            "tests_to_run": {"type": "string", "default": ''},
+            # Only used to accept the parameters from GitHub Actions trigger
+            "GHA_Actor": {"type": "string", "default": ""},
+            "GHA_Action": {"type": "string", "default": ""},
+            "GHA_Event": {"type": "string", "default": ""},
+            "GHA_Meta": {"type": "string", "default": ""},
+            "tests_to_run": {"type": "string", "default": ""},
             **{j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs},
             **{j.job_name + "_parallelism":{"type":"integer", "default":1} for j in jobs},
         },

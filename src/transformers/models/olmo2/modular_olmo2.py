@@ -1,19 +1,20 @@
 from typing import Callable, Optional, Tuple
 
 import torch
-from torch import nn
+import torch.nn as nn
 
 from ...cache_utils import Cache
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import logging
-from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
+from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm, eager_attention_forward
 from ..olmo.configuration_olmo import OlmoConfig
 from ..olmo.modeling_olmo import (
     OlmoAttention,
     OlmoDecoderLayer,
     OlmoForCausalLM,
     OlmoModel,
+    OlmoRotaryEmbedding,
     apply_rotary_pos_emb,
 )
 
@@ -100,6 +101,20 @@ class Olmo2Config(OlmoConfig):
     """
 
     model_type = "olmo2"
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.k_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.v_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.o_proj": "rowwise_rep",  # we need to replicate here due to the added norm on q and k
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,
@@ -271,6 +286,14 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
             outputs += (self_attn_weights,)
 
         return outputs
+
+
+class Olmo2RotaryEmbedding(OlmoRotaryEmbedding):
+    pass
+
+
+class Olmo2PreTrainedModel(LlamaPreTrainedModel):
+    pass
 
 
 # The OLMo2 model is identical to the OLMo model, except RMSNorm is used instead of

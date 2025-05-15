@@ -17,12 +17,8 @@ rendered properly in your Markdown viewer.
 # ConvBERT
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=convbert">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-convbert-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/conv-bert-base">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview

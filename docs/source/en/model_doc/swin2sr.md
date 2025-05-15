@@ -16,6 +16,10 @@ rendered properly in your Markdown viewer.
 
 # Swin2SR
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 The Swin2SR model was proposed in [Swin2SR: SwinV2 Transformer for Compressed Image Super-Resolution and Restoration](https://arxiv.org/abs/2209.11345) by Marcos V. Conde, Ui-Jin Choi, Maxime Burchi, Radu Timofte.
@@ -44,6 +48,11 @@ A demo Space for image super-resolution with SwinSR can be found [here](https://
 ## Swin2SRImageProcessor
 
 [[autodoc]] Swin2SRImageProcessor
+    - preprocess
+
+## Swin2SRImageProcessorFast
+
+[[autodoc]] Swin2SRImageProcessorFast
     - preprocess
 
 ## Swin2SRConfig

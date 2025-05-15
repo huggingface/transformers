@@ -1,0 +1,20 @@
+name: Trigger CircleCI
+
+
+on:
+  pull_request_target:
+    types: [ready_for_review]
+
+
+jobs:
+  trigger-circleci:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: trigger CircleCI pipeline via GitHub Actions
+        uses: CircleCI-Public/trigger-circleci-pipeline-action@v1.2.0
+        with:
+          GHA_Meta: "Trigger via GitHub Actions"
+          target-slug: "github/huggingface/transformers"
+          target-branch: "pull/${{ github.event.number }}/head"
+        env:
+          CCI_TOKEN: ${{ secrets.CIRCLECI_PAT }}

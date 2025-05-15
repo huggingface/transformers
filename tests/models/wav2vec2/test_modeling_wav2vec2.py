@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +29,7 @@ from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import (
     CaptureLogger,
     cleanup,
-    is_pt_flax_cross_test,
+    is_flaky,
     is_pyctcdecode_available,
     is_torchaudio_available,
     require_flash_attn,
@@ -43,7 +42,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_fx_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -91,8 +89,7 @@ if is_pyctcdecode_available():
     from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
 
 
-if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
+from transformers.utils.fx import symbolic_trace
 
 
 def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
@@ -568,16 +565,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_model_get_set_embeddings(self):
         pass
 
-    @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-rubst architecture does not exist in Flax")
-    def test_equivalence_flax_to_pt(self):
-        pass
-
-    @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-rubst architecture does not exist in Flax")
-    def test_equivalence_pt_to_flax(self):
-        pass
-
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -727,8 +714,8 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # TODO: fix it
         self.skipTest(reason="torch 2.1 breaks torch fx tests for wav2vec2/hubert.")
 
-        if not is_torch_fx_available() or not self.fx_compatible:
-            self.skipTest(reason="torch fx not available or not compatible with this model")
+        if not self.fx_compatible:
+            self.skipTest(reason="torch fx is not compatible with this model")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
@@ -862,6 +849,12 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @is_flaky(
+        description="The `codevector_idx` computed with `argmax()` in `Wav2Vec2GumbelVectorQuantizer.forward` is not stable."
+    )
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
     def test_model_with_adapter(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -1048,7 +1041,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         ).loss
 
         # loss_more_masked has to be bigger or equal loss since more masked inputs have to be predicted
-        self.assertTrue(loss.detach().item() <= loss_more_masked.detach().item())
+        self.assertTrue(loss.item() <= loss_more_masked.item())
 
     def test_mask_feature_prob_ctc(self):
         model = Wav2Vec2ForCTC.from_pretrained(
@@ -1159,7 +1152,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         logits_2 = get_logits(model_2, input_features)
 
-        self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
+        torch.testing.assert_close(logits, logits_2, rtol=1e-3, atol=1e-3)
 
     # test that loading adapter weights with mismatched vocab sizes can be loaded
     def test_load_target_lang_with_mismatched_size(self):
@@ -1196,7 +1189,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         logits_2 = get_logits(model_2, input_features)
 
-        self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
+        torch.testing.assert_close(logits, logits_2, rtol=1e-3, atol=1e-3)
 
     def test_load_attn_adapter(self):
         processor = Wav2Vec2Processor.from_pretrained(
@@ -1243,7 +1236,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
                 model.load_adapter("ita", use_safetensors=True)
             logits_2 = get_logits(model, input_features)
 
-            self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
+            torch.testing.assert_close(logits, logits_2, rtol=1e-3, atol=1e-3)
 
         with tempfile.TemporaryDirectory() as tempdir:
             model.save_pretrained(tempdir)
@@ -1264,7 +1257,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
             logits_2 = get_logits(model, input_features)
 
-            self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
+            torch.testing.assert_close(logits, logits_2, rtol=1e-3, atol=1e-3)
 
         model = Wav2Vec2ForCTC.from_pretrained("hf-internal-testing/tiny-random-wav2vec2-adapter")
         logits = get_logits(model, input_features)
@@ -1275,7 +1268,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         logits_2 = get_logits(model, input_features)
 
-        self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
+        torch.testing.assert_close(logits, logits_2, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_model_from_pretrained(self):
@@ -1396,7 +1389,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         sequence = torch.div(
             torch.arange(sequence_length * hidden_size, device=torch_device), hidden_size, rounding_mode="floor"
         )
-        features = sequence.view(sequence_length, hidden_size)  # each value in vector consits of same value
+        features = sequence.view(sequence_length, hidden_size)  # each value in vector consists of same value
         features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
 
         # sample negative indices
@@ -1426,7 +1419,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         sequence = torch.div(
             torch.arange(sequence_length * hidden_size, device=torch_device), hidden_size, rounding_mode="floor"
         )
-        features = sequence.view(sequence_length, hidden_size)  # each value in vector consits of same value
+        features = sequence.view(sequence_length, hidden_size)  # each value in vector consists of same value
         features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
 
         # replace masked feature vectors with -100 to test that those are not sampled
@@ -1588,7 +1581,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         ], device=torch_device)
         # fmt: on
 
-        self.assertTrue(torch.allclose(cosine_sim_masked, expected_cosine_sim_masked, atol=1e-3))
+        torch.testing.assert_close(cosine_sim_masked, expected_cosine_sim_masked, rtol=1e-3, atol=1e-3)
 
     def test_inference_pretrained(self):
         model = Wav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-base")
@@ -1727,7 +1720,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         expected_logits = torch.tensor([6.1186, 11.8961, 10.2931, 6.0898], device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
-        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
+        torch.testing.assert_close(predicted_logits, expected_logits, rtol=1e-2, atol=1e-2)
 
     def test_inference_intent_classification(self):
         model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-ic").to(torch_device)
@@ -1755,9 +1748,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_ids_object.tolist(), expected_labels_object)
         self.assertListEqual(predicted_ids_location.tolist(), expected_labels_location)
 
-        self.assertTrue(torch.allclose(predicted_logits_action, expected_logits_action, atol=1e-2))
-        self.assertTrue(torch.allclose(predicted_logits_object, expected_logits_object, atol=1e-2))
-        self.assertTrue(torch.allclose(predicted_logits_location, expected_logits_location, atol=1e-2))
+        torch.testing.assert_close(predicted_logits_action, expected_logits_action, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(predicted_logits_object, expected_logits_object, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(predicted_logits_location, expected_logits_location, rtol=1e-2, atol=1e-2)
 
     def test_inference_speaker_identification(self):
         model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-sid").to(torch_device)
@@ -1778,7 +1771,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         expected_logits = torch.tensor([37.5627, 71.6362, 64.2419, 31.7778], device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
-        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
+        torch.testing.assert_close(predicted_logits, expected_logits, rtol=1e-2, atol=1e-2)
 
     def test_inference_emotion_recognition(self):
         model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-er").to(torch_device)
@@ -1797,7 +1790,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         expected_logits = torch.tensor([2.1722, 3.0779, 8.0287, 6.6797], device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
-        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
+        torch.testing.assert_close(predicted_logits, expected_logits, rtol=1e-2, atol=1e-2)
 
     def test_phoneme_recognition(self):
         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft").to(torch_device)
@@ -1889,9 +1882,10 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
 
         # user-managed pool + num_processes should trigger a warning
-        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl, multiprocessing.get_context("fork").Pool(
-            2
-        ) as pool:
+        with (
+            CaptureLogger(processing_wav2vec2_with_lm.logger) as cl,
+            multiprocessing.get_context("fork").Pool(2) as pool,
+        ):
             transcription = processor.batch_decode(logits.cpu().numpy(), pool, num_processes=2).text
 
         self.assertIn("num_process", cl.out)
@@ -1929,7 +1923,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(labels[0, :, 0].sum(), 555)
         self.assertEqual(labels[0, :, 1].sum(), 299)
-        self.assertTrue(torch.allclose(outputs.logits[:, :4], expected_logits, atol=1e-2))
+        torch.testing.assert_close(outputs.logits[:, :4], expected_logits, rtol=1e-2, atol=1e-2)
 
     def test_inference_speaker_verification(self):
         model = Wav2Vec2ForXVector.from_pretrained("anton-l/wav2vec2-base-superb-sv").to(torch_device)

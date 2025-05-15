@@ -22,12 +22,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_start_docstrings_to_model_forward,
-    is_timm_available,
-    replace_return_docstrings,
-    requires_backends,
-)
+from ...utils import auto_docstring, is_timm_available, requires_backends
 from .configuration_timm_wrapper import TimmWrapperConfig
 
 
@@ -61,26 +56,12 @@ class TimmWrapperModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
-TIMM_WRAPPER_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`TimmWrapperImageProcessor.preprocess`]
-            for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. Not compatible with timm wrapped models.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        **kwargs:
-            Additional keyword arguments passed along to the `timm` model forward.
-"""
-
-
+@auto_docstring
 class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     config_class = TimmWrapperConfig
     _no_split_modules = []
+    model_tags = ["timm"]
 
     # used in Trainer to avoid passing `loss_kwargs` to model forward
     accepts_loss_kwargs = False
@@ -90,29 +71,29 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def _fix_state_dict_key_on_load(key):
+    def _fix_state_dict_key_on_load(key) -> Tuple[str, bool]:
         """
         Overrides original method that renames `gamma` and `beta` to `weight` and `bias`.
         We don't want this behavior for timm wrapped models. Instead, this method adds a
         "timm_model." prefix to enable loading official timm Hub checkpoints.
         """
         if "timm_model." not in key:
-            return f"timm_model.{key}"
-        return key
+            return f"timm_model.{key}", True
+        return key, False
 
     def _fix_state_dict_key_on_save(self, key):
         """
         Overrides original method to remove "timm_model." prefix from state_dict keys.
         Makes the saved checkpoint compatible with the `timm` library.
         """
-        return key.replace("timm_model.", "")
+        return key.replace("timm_model.", ""), True
 
     def load_state_dict(self, state_dict, *args, **kwargs):
         """
         Override original method to fix state_dict keys on load for cases when weights are loaded
         without using the `from_pretrained` method (e.g., in Trainer to resume from checkpoint).
         """
-        state_dict = self._fix_state_dict_keys_on_load(state_dict)
+        state_dict = {self._fix_state_dict_key_on_load(k)[0]: v for k, v in state_dict.items()}
         return super().load_state_dict(state_dict, *args, **kwargs)
 
     def _init_weights(self, module):
@@ -138,8 +119,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=0)
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TimmWrapperModelOutput, config_class=TimmWrapperConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -150,11 +130,15 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         **kwargs,
     ) -> Union[TimmWrapperModelOutput, Tuple[Tensor, ...]]:
         r"""
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. Not compatible with timm wrapped models.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         do_pooling (`bool`, *optional*):
             Whether to do pooling for the last_hidden_state in `TimmWrapperModel` or not. If `None` is passed, the
             `do_pooling` value from the config is used.
-
-        Returns:
 
         Examples:
         ```python
@@ -253,8 +237,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         self.num_labels = config.num_labels
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=TimmWrapperConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -269,8 +252,14 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. Not compatible with timm wrapped models.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            **kwargs:
+            Additional keyword arguments passed along to the `timm` model forward.
 
         Examples:
         ```python

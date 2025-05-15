@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ import copy
 import os
 import tempfile
 import unittest
-from typing import Dict, List, Tuple
 
 import numpy as np
 
@@ -27,6 +25,7 @@ from transformers.testing_utils import (
     is_flaky,
     is_torch_available,
     require_torch,
+    require_torch_fp16,
     require_torch_multi_gpu,
     slow,
     torch_device,
@@ -286,10 +285,10 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -433,4 +432,35 @@ class VitsModelIntegrationTests(unittest.TestCase):
             ]
         )
         # fmt: on
-        self.assertTrue(torch.allclose(outputs.waveform[0, 10000:10030].cpu(), EXPECTED_LOGITS, atol=1e-4))
+        torch.testing.assert_close(outputs.waveform[0, 10000:10030].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
+
+    @require_torch_fp16
+    def test_forward_fp16(self):
+        # GPU gives different results than CPU
+        torch_device = "cpu"
+
+        model = VitsModel.from_pretrained("facebook/mms-tts-eng", torch_dtype=torch.float16)
+        model.to(torch_device)
+
+        tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
+
+        set_seed(555)  # make deterministic
+
+        input_text = "Mister quilter is the apostle of the middle classes and we are glad to welcome his gospel!"
+        input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(input_ids)
+
+        self.assertEqual(outputs.waveform.shape, (1, 87040))
+        # fmt: off
+        EXPECTED_LOGITS = torch.tensor(
+            [
+                0.0101,  0.0318,  0.0489,  0.0627,  0.0728,  0.0865,  0.1053,  0.1279,
+                0.1514,  0.1703,  0.1827,  0.1829,  0.1694,  0.1509,  0.1332,  0.1188,
+                0.1066,  0.0978,  0.0936,  0.0867,  0.0724,  0.0493,  0.0197, -0.0141,
+                -0.0501, -0.0817, -0.1065, -0.1223, -0.1311, -0.1339
+            ]
+        ).to(torch.float16)
+        # fmt: on
+        torch.testing.assert_close(outputs.waveform[0, 10000:10030].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)

@@ -22,6 +22,8 @@ FILES_TO_PARSE = [
     os.path.join(MODEL_ROOT, "olmo", "modular_olmo.py"),
     os.path.join(MODEL_ROOT, "rt_detr", "modular_rt_detr.py"),
     os.path.join(MODEL_ROOT, "qwen2", "modular_qwen2.py"),
+    os.path.join(MODEL_ROOT, "qwen3", "modular_qwen3.py"),
+    os.path.join(MODEL_ROOT, "qwen3", "modular_qwen3_moe.py"),
     os.path.join(MODEL_ROOT, "llava_next_video", "modular_llava_next_video.py"),
     os.path.join(MODEL_ROOT, "cohere2", "modular_cohere2.py"),
     os.path.join(MODEL_ROOT, "modernbert", "modular_modernbert.py"),
@@ -48,7 +50,7 @@ def appear_after(model1: str, model2: str, priority_list: list[str]) -> bool:
 class ConversionOrderTest(unittest.TestCase):
     def test_conversion_order(self):
         # Find the order
-        priority_list = create_dependency_mapping.find_priority_list(FILES_TO_PARSE)
+        priority_list, _ = create_dependency_mapping.find_priority_list(FILES_TO_PARSE)
         # Extract just the model names
         model_priority_list = [file.rsplit("modular_")[-1].replace(".py", "") for file in priority_list]
 

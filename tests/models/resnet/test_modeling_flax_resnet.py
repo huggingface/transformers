@@ -35,7 +35,7 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class FlaxResNetModelTester(unittest.TestCase):
+class FlaxResNetModelTester:
     def __init__(
         self,
         parent,
@@ -64,7 +64,6 @@ class FlaxResNetModelTester(unittest.TestCase):
         self.num_labels = num_labels
         self.scope = scope
         self.num_stages = len(hidden_sizes)
-        super().__init__()
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])

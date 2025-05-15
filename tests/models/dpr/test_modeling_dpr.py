@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Huggingface
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -272,7 +271,7 @@ class DPRModelIntegrationTest(unittest.TestCase):
             dtype=torch.float,
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output[:, :10], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :10], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_reader_inference(self):
@@ -303,5 +302,5 @@ class DPRModelIntegrationTest(unittest.TestCase):
             dtype=torch.float,
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(outputs.start_logits[:, :10], expected_start_logits, atol=1e-4))
-        self.assertTrue(torch.allclose(outputs.end_logits[:, :10], expected_end_logits, atol=1e-4))
+        torch.testing.assert_close(outputs.start_logits[:, :10], expected_start_logits, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.end_logits[:, :10], expected_end_logits, rtol=1e-4, atol=1e-4)

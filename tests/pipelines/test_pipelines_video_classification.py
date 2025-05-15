@@ -38,6 +38,15 @@ from .test_pipelines_common import ANY
 @require_av
 class VideoClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
+    example_video_filepath = None
+
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls.example_video_filepath is None:
+            cls.example_video_filepath = hf_hub_download(
+                repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
+            )
 
     def get_test_pipeline(
         self,
@@ -48,9 +57,7 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         processor=None,
         torch_dtype="float32",
     ):
-        example_video_filepath = hf_hub_download(
-            repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
-        )
+        self._load_dataset()
         video_classifier = VideoClassificationPipeline(
             model=model,
             tokenizer=tokenizer,
@@ -61,8 +68,9 @@ class VideoClassificationPipelineTests(unittest.TestCase):
             top_k=2,
         )
         examples = [
-            example_video_filepath,
-            "https://huggingface.co/datasets/nateraw/video-demo/resolve/main/archery.mp4",
+            self.example_video_filepath,
+            # TODO: re-enable this once we have a stable hub solution for CI
+            # "https://huggingface.co/datasets/nateraw/video-demo/resolve/main/archery.mp4",
         ]
         return video_classifier, examples
 
@@ -91,14 +99,13 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         )
 
         video_file_path = hf_hub_download(repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset")
-        outputs = video_classifier(video_file_path, top_k=2)
+        output = video_classifier(video_file_path, top_k=2)
         self.assertEqual(
-            nested_simplify(outputs, decimals=4),
+            nested_simplify(output, decimals=4),
             [{"score": 0.5199, "label": "LABEL_0"}, {"score": 0.4801, "label": "LABEL_1"}],
         )
-        for output in outputs:
-            for element in output:
-                compare_pipeline_output_to_hub_spec(element, VideoClassificationOutputElement)
+        for element in output:
+            compare_pipeline_output_to_hub_spec(element, VideoClassificationOutputElement)
 
         outputs = video_classifier(
             [

@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import asyncio
 from queue import Queue
 from typing import TYPE_CHECKING, Optional
@@ -160,7 +162,7 @@ class TextStreamer(BaseStreamer):
 class TextIteratorStreamer(TextStreamer):
     """
     Streamer that stores print-ready text in a queue, to be used by a downstream application as an iterator. This is
-    useful for applications that benefit from acessing the generated text in a non-blocking way (e.g. in an interactive
+    useful for applications that benefit from accessing the generated text in a non-blocking way (e.g. in an interactive
     Gradio demo).
 
     <Tip warning={true}>
@@ -231,7 +233,7 @@ class TextIteratorStreamer(TextStreamer):
 class AsyncTextIteratorStreamer(TextStreamer):
     """
     Streamer that stores print-ready text in a queue, to be used by a downstream application as an async iterator.
-    This is useful for applications that benefit from acessing the generated text asynchronously (e.g. in an
+    This is useful for applications that benefit from accessing the generated text asynchronously (e.g. in an
     interactive Gradio demo).
 
     <Tip warning={true}>
@@ -282,7 +284,7 @@ class AsyncTextIteratorStreamer(TextStreamer):
     """
 
     def __init__(
-        self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, timeout: float | None = None, **decode_kwargs
+        self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, timeout: Optional[float] = None, **decode_kwargs
     ):
         super().__init__(tokenizer, skip_prompt, **decode_kwargs)
         self.text_queue = asyncio.Queue()

@@ -268,6 +268,9 @@ class InstructBlipConfig(PretrainedConfig):
     ```"""
 
     model_type = "instructblip"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
     sub_configs = {
         "text_config": AutoConfig,
         "qformer_config": InstructBlipQFormerConfig,
@@ -301,9 +304,6 @@ class InstructBlipConfig(PretrainedConfig):
         self.qformer_config = InstructBlipQFormerConfig(**qformer_config)
         text_model_type = text_config["model_type"] if "model_type" in text_config else "opt"
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
-
-        self.tie_word_embeddings = self.text_config.tie_word_embeddings
-        self.is_encoder_decoder = self.text_config.is_encoder_decoder
 
         self.num_query_tokens = num_query_tokens
         self.image_token_index = image_token_index

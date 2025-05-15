@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,7 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, GPTNeoXConfig, is_torch_available, set_seed
+from transformers import AutoTokenizer, DynamicCache, GPTNeoXConfig, is_torch_available, set_seed
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -222,9 +221,9 @@ class GPTNeoXModelTester:
         model.eval()
 
         # We want this for SDPA, eager works with a `None` attention mask
-        assert (
-            model.config._attn_implementation == "sdpa"
-        ), "This test assumes the model to have the SDPA implementation for its attention calculations."
+        assert model.config._attn_implementation == "sdpa", (
+            "This test assumes the model to have the SDPA implementation for its attention calculations."
+        )
 
         # Prepare cache and non_cache input, needs a full attention mask
         cached_len = input_ids.shape[-1] // 2
@@ -232,13 +231,22 @@ class GPTNeoXModelTester:
         cache_inputs = {"input_ids": input_ids[:, :cached_len], "attention_mask": input_mask[:, :cached_len]}
         non_cache_inputs = {"input_ids": input_ids[:, cached_len:], "attention_mask": input_mask}
 
+        def copy_cache(cache: DynamicCache):
+            """Deep copy a DynamicCache to reuse the same one multiple times."""
+            new_cache = cache
+            for i in range(len(cache)):
+                new_cache.key_cache[i] = cache.key_cache[i].clone()
+                new_cache.value_cache[i] = cache.value_cache[i].clone()
+
         # Cached forward once with the attention mask provided and the other time without it (which should assume full attention)
+        # We need to run both on a copy of the cache, otherwise it is modified in-place
         cache_outputs = model(**cache_inputs)
+        cache = cache_outputs.past_key_values
         full_outputs_with_attention_mask = model(
-            **non_cache_inputs, past_key_values=cache_outputs.past_key_values
+            **non_cache_inputs, past_key_values=copy_cache(cache)
         ).last_hidden_state
         full_outputs_without_attention_mask = model(
-            non_cache_inputs["input_ids"], past_key_values=cache_outputs.past_key_values
+            non_cache_inputs["input_ids"], past_key_values=copy_cache(cache)
         ).last_hidden_state
 
         self.parent.assertTrue(
@@ -265,7 +273,6 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (GPTNeoXForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GPTNeoXModel,
@@ -299,7 +306,6 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.model_tester.create_and_check_model_as_decoder(config, input_ids, input_mask)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs_for_decoder()
 
         input_mask = None
@@ -359,7 +365,7 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
         if scaling_type == "dynamic":
-            self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
         else:
             self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
 
@@ -373,7 +379,9 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exclusively to get the dtype and the device
         position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
@@ -472,4 +480,4 @@ class GPTNeoXLanguageGenerationTest(unittest.TestCase):
         # alternative: tokenizer('<|im_start|>system\nA chat between')
         input_ids = torch.as_tensor(input_ids)[None].to(torch_device)
         outputs = model(input_ids)["logits"][:, -1][0, :30]
-        self.assertTrue(torch.allclose(EXPECTED_LOGITS, outputs, atol=1e-5))
+        torch.testing.assert_close(EXPECTED_LOGITS, outputs, rtol=1e-5, atol=1e-5)

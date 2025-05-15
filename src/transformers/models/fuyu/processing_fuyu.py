@@ -25,6 +25,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging, requires_backends
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -243,7 +244,7 @@ def _tokenize_prompts_with_image_and_batch(
     - pad all the sequences to this length so we can convert them into a 3D tensor.
     """
 
-    # If not tool use, tranform the coordinates while tokenizing
+    # If not tool use, transform the coordinates while tokenizing
     if scale_factors is not None:
         transformed_prompt_tokens = []
         for prompt_seq, scale_factor_seq in zip(prompts, scale_factors):
@@ -326,6 +327,7 @@ def scale_bbox_to_transformed_image(
     return [top_scaled, left_scaled, bottom_scaled, right_scaled]
 
 
+@requires(backends=("vision",))
 class FuyuProcessor(ProcessorMixin):
     r"""
     Constructs a Fuyu processor which wraps a Fuyu image processor and a Llama tokenizer into a single processor.
@@ -481,7 +483,7 @@ class FuyuProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to
         encode the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        FuyuImageProcessor's [`~FuyuImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        FuyuImageProcessor's [`~FuyuImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
@@ -682,7 +684,7 @@ class FuyuProcessor(ProcessorMixin):
 
         return results
 
-    def post_process_image_text_to_text(self, generated_outputs):
+    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """
         Post-processes the output of `FuyuForConditionalGeneration` to only return the text output.
 
@@ -690,6 +692,10 @@ class FuyuProcessor(ProcessorMixin):
             generated_outputs (`torch.Tensor` or `np.ndarray`):
                 The output of the model. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
                 containing the token ids of the generated sequences.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
             `List[str]`: The decoded text output.
@@ -706,7 +712,7 @@ class FuyuProcessor(ProcessorMixin):
         for i, seq in enumerate(unpadded_output_sequences):
             padded_output_sequences[i, : len(seq)] = torch.tensor(seq)
 
-        return self.batch_decode(padded_output_sequences, skip_special_tokens=True)
+        return self.batch_decode(padded_output_sequences, skip_special_tokens=skip_special_tokens, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """

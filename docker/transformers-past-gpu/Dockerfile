@@ -48,8 +48,8 @@ RUN python3 -m pip uninstall -y torch-tensorrt apex
 # Pre-build **nightly** release of DeepSpeed, so it would be ready for testing (otherwise, the 1st deepspeed test will timeout)
 RUN python3 -m pip uninstall -y deepspeed
 # This has to be run inside the GPU VMs running the tests. (So far, it fails here due to GPU checks during compilation.)
-# Issue: https://github.com/microsoft/DeepSpeed/issues/2010
-# RUN git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build && \
+# Issue: https://github.com/deepspeedai/DeepSpeed/issues/2010
+# RUN git clone https://github.com/deepspeedai/DeepSpeed && cd DeepSpeed && rm -rf build && \
 #    DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_UTILS=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check 2>&1
 
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
