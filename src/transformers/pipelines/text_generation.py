@@ -102,6 +102,7 @@ class TextGenerationPipeline(Pipeline):
     begging for his blessing. <eod> </s> <eos>
     """
 
+    _pipeline_calls_generate = True
     # Make sure the docstring is updated when the default generation config is changed
     _default_generation_config = GenerationConfig(
         max_new_tokens=256,

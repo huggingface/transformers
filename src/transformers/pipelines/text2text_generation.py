@@ -66,6 +66,7 @@ class Text2TextGenerationPipeline(Pipeline):
     text2text_generator("question: What is 42 ? context: 42 is the answer to life, the universe and everything")
     ```"""
 
+    _pipeline_calls_generate = True
     # Make sure the docstring is updated when the default generation config is changed (in all pipelines in this file)
     _default_generation_config = GenerationConfig(
         max_new_tokens=256,
