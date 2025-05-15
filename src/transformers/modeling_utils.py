@@ -64,6 +64,7 @@ from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.tensor_parallel import (
     SUPPORTED_TP_STYLES,
     shard_and_distribute_module,
+    initialize_tensor_parallelism
 )
 from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
@@ -3495,11 +3496,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
             for name, tensor in state_dict.items():
-                if isinstance(tensor, torch.distributed.tensor.DTensor):
-                    tensor = tensor.to_local()
                 # Sometimes in the state_dict we have non-tensor objects.
                 # e.g. in bitsandbytes we have some `str` objects in the state_dict
-                elif isinstance(tensor, torch.Tensor):
+                if isinstance(tensor, torch.Tensor):
                     ptrs[id_tensor_storage(tensor)].append(name)
                 else:
                     # In the non-tensor case, fall back to the pointer of the object itself
@@ -3634,10 +3633,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 shard = shard_state_dict
                 del shard_state_dict
                 gc.collect()
-
-            for name, tensor in shard.items():
-                if isinstance(tensor, torch.distributed.tensor.DTensor):
-                    shard[name] = tensor.to_local()
 
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
@@ -4101,58 +4096,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
         # `device_map` pointing to the correct device
         if device_mesh is None:
-            if tp_plan is not None:
-                if not is_torch_greater_or_equal("2.5"):
-                    raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
-
-                # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
-                device_type = torch._C._get_accelerator().type
-
-                if not torch.distributed.is_initialized():
-                    try:
-                        rank = int(os.environ["RANK"])
-                        world_size = int(os.environ["WORLD_SIZE"])
-                        if device_type == "cuda":
-                            torch.distributed.init_process_group(
-                                "nccl", rank=rank, world_size=world_size, init_method="env://"
-                            )
-                            torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
-                        elif device_type == "cpu":
-                            cpu_backend = "ccl" if int(os.environ.get("CCL_WORKER_COUNT", 0)) else "gloo"
-                            torch.distributed.init_process_group(cpu_backend, rank=rank, world_size=world_size)
-                        elif device_type == "xpu":
-                            torch.distributed.init_process_group("ccl", rank=rank, world_size=world_size)
-                            torch.xpu.set_device(int(os.environ["LOCAL_RANK"]))
-                        elif device_type == "hpu":
-                            torch.distributed.init_process_group("hccl", rank=rank, world_size=world_size)
-                            torch.hpu.set_device(int(os.environ["LOCAL_RANK"]))
-
-                    except Exception as e:
-                        raise EnvironmentError(
-                            "We tried to initialize torch.distributed for you, but it failed, make"
-                            "sure you init torch distributed in your script to use `tp_plan='auto'`"
-                        ) from e
-
-                # Get device with index assuming equal number of devices per host
-                if device_type == "xpu":
-                    index = torch.xpu.current_device()
-                elif device_type == "hpu":
-                    index = torch.hpu.current_device()
-                else:
-                    index = None if device_type == "cpu" else torch.cuda.current_device()
-                tp_device = torch.device(device_type, index)
-
-                if index is not None and index > 0:
-                    import sys
-
-                    sys.stdout = open(os.devnull, "w")
-                    sys.stderr = open(os.devnull, "w")
-                # This is the easiest way to dispatch to the current process device
-                device_map = tp_device
-
-                # Assuming sharding the model onto the world when tp_size not provided
-                tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
-                device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
+            tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
         else:
             # TODO: make device_mesh support multiple dimensions
             assert device_mesh.ndim == 1, "device_mesh must be 1 dimensional and will be used for TP"

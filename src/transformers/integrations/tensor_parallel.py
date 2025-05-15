@@ -19,7 +19,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import nn
-
+import os
 from ..utils import is_torch_greater_or_equal, logging
 
 
@@ -34,6 +34,64 @@ _torch_distributed_available = torch.distributed.is_available()
 if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
     from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
 
+def initialize_tensor_parallelism(tp_plan, tp_size=None):
+    r"""
+    Sets up the device mesh and initilized the backend for tensor parallelism.
+    This function is called when the model is loaded and the TP plan is set to 'auto'.
+    """
+    if tp_plan is None:
+        return None, None, None
+
+    if not is_torch_greater_or_equal("2.5"):
+        raise EnvironmentError("Tensor parallel is only supported for `torch>=2.5`.")
+
+    # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
+    device_type = torch._C._get_accelerator().type
+    device_setters = {
+        "cuda": torch.cuda,
+        "xpu": torch.xpu,
+        "hpu": torch.hpu,
+        "cpu": None
+    }
+    if not torch.distributed.is_initialized():
+        try:
+            rank = int(os.environ["RANK"])
+            local_rank = int(os.environ["LOCAL_RANK"])
+            world_size = int(os.environ["WORLD_SIZE"])
+
+            backend_map = {
+                "cuda": "nccl",
+                "cpu": "gloo",
+                "xpu": "ccl",
+                "hpu": "hccl"
+            }
+            backend = backend_map.get(device_type)
+            if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", 0)):
+                backend = "ccl"
+
+            torch.distributed.init_process_group(backend=backend, rank=rank, world_size=world_size)
+
+            if device_type in device_setters:
+                device_setters[device_type].set_device(local_rank)
+
+        except Exception as e:
+            raise EnvironmentError(
+                "We tried to initialize torch.distributed for you, but it failed. Make "
+                "sure you init torch distributed in your script to use `tp_plan='auto'`."
+            ) from e
+    index =  device_setters[device_type].current_device() if index is not None else None
+    tp_device = torch.device(device_type, index)
+
+    # Silence output for non-primary ranks
+    if index is not None and index > 0:
+        import sys
+        sys.stdout = open(os.devnull, "w")
+        sys.stderr = open(os.devnull, "w")
+
+    device_map = tp_device
+    tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
+    device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
+    return tp_device, device_map, device_mesh
 
 def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> List[int]:
     """
@@ -643,6 +701,8 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
             print(
                 f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP plan: {e}"
             )
+        module._hf_tp_plan = current_module_plan
+        module.__repr__ = lambda: f"{module.__repr__()}\nTP Plan: {current_module_plan}"
 
     # 2. We add hooks to the parent module if needed
     if "." in layer_name:
@@ -653,6 +713,8 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
             tp_layer = translate_to_torch_parallel_style(module_plan)
             module_to_tp_ = model.get_submodule(parent_layer_name)
             tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
+            module_to_tp_._hf_tp_plan = current_module_plan
+            module_to_tp_.__repr__ = lambda: f"{module_to_tp_.__repr__()}\nTP Plan: {current_module_plan}"
 
 
 def shard_and_distribute_module(
@@ -679,9 +741,10 @@ def shard_and_distribute_module(
         current_module_plan = tp_plan[generic_param_name.rsplit(".", 1)[0]]
 
     if current_module_plan is None:
-        # TODO log no plan modules in set
-        # print("No plan for", parameter_name,end ="\n")
         current_module_plan = "replicate"
+        logger.warning(
+            f"Tensor parallel plan for {param_name} not found, using default 'replicate' plan."
+        )
 
     # Add hooks to the module if not done yet
     # add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
@@ -694,10 +757,6 @@ def shard_and_distribute_module(
         param = tp_layer.partition_tensor(
             param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
         )
-        # debug attribute
-        module_to_tp._hf_tp_plan = current_module_plan
-        # add it to extra_repr
-        module_to_tp.__repr__ = lambda: f"{module_to_tp.__repr__()}\nTP Plan: {current_module_plan}"
     except NotImplementedError as e:
         print(
             f"Trying to prepare {parameter_name}, but it's not supported. Corresponding module: {module_to_tp} Fix it's TP plan, current layer: {tp_layer} : {e}"
