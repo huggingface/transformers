@@ -918,6 +918,7 @@ def load_shard_file(args):
 
     return error_msgs, disk_offload_index, cpu_offload_index
 
+
 def load_shard_files_with_threadpool(args_list):
     num_workers = int(os.environ.get("HF_PARALLEL_LOADING_WORKERS", "8"))
 
@@ -944,6 +945,7 @@ def load_shard_files_with_threadpool(args_list):
                 pbar.update(1)
 
     return error_msgs, disk_offload_index, cpu_offload_index
+
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
     if variant is not None:
@@ -5046,7 +5048,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         error_msgs = []
 
-        if os.environ.get("HF_ENABLE_PARALLEL_LOADING", "").upper() in ENV_VARS_TRUE_VALUES and not is_deepspeed_zero3_enabled():
+        if (
+            os.environ.get("HF_ENABLE_PARALLEL_LOADING", "").upper() in ENV_VARS_TRUE_VALUES
+            and not is_deepspeed_zero3_enabled()
+        ):
             _error_msgs, disk_offload_index, cpu_offload_index = load_shard_files_with_threadpool(args_list)
             error_msgs += _error_msgs
         else:
