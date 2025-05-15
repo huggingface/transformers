@@ -174,7 +174,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             # drop `processor_class` in feature extractor
             with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME)) as f:
                 config_dict = json.load(f)
-                config_dict.pop("processor_class")
+                config_dict["feature_extractor_config"].pop("processor_class")
 
             with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w") as f:
                 f.write(json.dumps(config_dict))

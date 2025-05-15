@@ -641,7 +641,7 @@ class ProcessorMixin(PushToHubMixin):
             # `AutoProcessor` API.
             if hasattr(attribute, "_set_processor_class"):
                 attribute._set_processor_class(self.__class__.__name__)
-            if attribute_name == "tokenizer":
+            if "tokenizer" in attribute_name:  # we can have `qformer/chat_tokenizer`
                 # Propagate save_jinja_files to tokenizer to ensure we don't get conflicts
                 attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
             else:

@@ -48,7 +48,7 @@ class AutoVideoProcessorTest(unittest.TestCase):
 
     def test_video_processor_from_local_directory_from_key(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
-            processor_tmpfile = Path(tmpdirname) / "video_preprocessor_config.json"
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
             config_tmpfile = Path(tmpdirname) / "config.json"
             json.dump(
                 {
@@ -84,7 +84,7 @@ class AutoVideoProcessorTest(unittest.TestCase):
             model_config = LlavaOnevisionConfig()
 
             # Create a dummy config file with image_proceesor_type
-            processor_tmpfile = Path(tmpdirname) / "video_preprocessor_config.json"
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
             config_tmpfile = Path(tmpdirname) / "config.json"
             json.dump(
                 {
@@ -115,7 +115,7 @@ class AutoVideoProcessorTest(unittest.TestCase):
 
     def test_video_processor_from_local_file(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
-            processor_tmpfile = Path(tmpdirname) / "video_preprocessor_config.json"
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
             json.dump(
                 {
                     "video_processor_type": "LlavaOnevisionVideoProcessor",
@@ -194,7 +194,7 @@ class AutoVideoProcessorTest(unittest.TestCase):
                 AutoVideoProcessor.register(LlavaOnevisionConfig, LlavaOnevisionVideoProcessor)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                processor_tmpfile = Path(tmpdirname) / "video_preprocessor_config.json"
+                processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
                 config_tmpfile = Path(tmpdirname) / "config.json"
                 json.dump(
                     {
