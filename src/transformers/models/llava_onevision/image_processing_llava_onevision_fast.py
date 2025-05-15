@@ -234,7 +234,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
         do_pad: bool,
-        disable_grouping: bool,
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:

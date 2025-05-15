@@ -197,7 +197,7 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
-        encoded_slow = image_processor_slow(image_inputs, return_tensors="pt").pixel_values
-        encoded_fast = image_processor_fast(image_inputs, return_tensors="pt").pixel_values
+        encoded_slow = image_processor_slow(image_inputs, return_tensors="pt")
+        encoded_fast = image_processor_fast(image_inputs, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(encoded_slow, encoded_fast, atol=1e-1))
+        self._assert_slow_fast_tensors_equivalence(encoded_slow.pixel_values, encoded_fast.pixel_values)

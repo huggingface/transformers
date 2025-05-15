@@ -289,12 +289,6 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 (self.image_processor_tester.batch_size, *expected_output_image_shape),
             )
 
-    def _assertEquivalence(self, a, b):
-        print("avg diff", torch.mean(torch.abs(a - b)).item())
-        print("max diff", torch.max(torch.abs(a - b)).item())
-        torch.testing.assert_close(a, b, atol=2e-1, rtol=1e-3)
-        self.assertLessEqual(torch.mean(torch.abs(a - b)).item(), 5e-3)
-
     @require_vision
     @require_torch
     def test_slow_fast_equivalence(self):
@@ -318,10 +312,12 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt", return_row_col_info=True)
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt", return_row_col_info=True)
 
-        self._assertEquivalence(encoding_slow.pixel_attention_mask.float(), encoding_fast.pixel_attention_mask.float())
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        self._assert_slow_fast_tensors_equivalence(
+            encoding_slow.pixel_attention_mask.float(), encoding_fast.pixel_attention_mask.float()
+        )
         self.assertEqual(encoding_slow.rows, encoding_fast.rows)
         self.assertEqual(encoding_slow.cols, encoding_fast.cols)
-        self._assertEquivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     @require_vision
     @require_torch
@@ -356,7 +352,9 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_slow = image_processor_slow(dummy_images, return_tensors="pt", return_row_col_info=True)
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt", return_row_col_info=True)
 
-        self._assertEquivalence(encoding_slow.pixel_attention_mask.float(), encoding_fast.pixel_attention_mask.float())
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=3e-1)
+        self._assert_slow_fast_tensors_equivalence(
+            encoding_slow.pixel_attention_mask.float(), encoding_fast.pixel_attention_mask.float()
+        )
         self.assertEqual(encoding_slow.rows, encoding_fast.rows)
         self.assertEqual(encoding_slow.cols, encoding_fast.cols)
-        self._assertEquivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)

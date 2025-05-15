@@ -400,12 +400,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertTrue(
-            torch.allclose(
-                encoding_slow.pixel_attention_mask.float(), encoding_fast.pixel_attention_mask.float(), atol=1e-3
-            )
-        )
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 2e-3
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        self._assert_slow_fast_tensors_equivalence(
+            encoding_slow.pixel_attention_mask.float(), encoding_fast.pixel_attention_mask.float()
         )

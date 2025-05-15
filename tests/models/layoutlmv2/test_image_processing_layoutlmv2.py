@@ -23,7 +23,7 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 
 
 if is_torch_available():
-    import torch
+    pass
 
 if is_pytesseract_available():
     from PIL import Image
@@ -157,16 +157,8 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-        self.assertTrue(
-            torch.allclose(
-                encoding_slow.pixel_values.float() / 255, encoding_fast.pixel_values.float() / 255, atol=1e-1
-            )
-        )
-        self.assertLessEqual(
-            torch.mean(
-                torch.abs(encoding_slow.pixel_values.float() - encoding_fast.pixel_values.float()) / 255
-            ).item(),
-            1e-3,
+        self._assert_slow_fast_tensors_equivalence(
+            encoding_slow.pixel_values.float() / 255, encoding_fast.pixel_values.float() / 255
         )
 
     @require_vision
@@ -190,14 +182,6 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
-        self.assertTrue(
-            torch.allclose(
-                encoding_slow.pixel_values.float() / 255, encoding_fast.pixel_values.float() / 255, atol=1e-1
-            )
-        )
-        self.assertLessEqual(
-            torch.mean(
-                torch.abs(encoding_slow.pixel_values.float() - encoding_fast.pixel_values.float()) / 255
-            ).item(),
-            1e-3,
+        self._assert_slow_fast_tensors_equivalence(
+            encoding_slow.pixel_values.float() / 255, encoding_fast.pixel_values.float() / 255
         )
