@@ -99,8 +99,9 @@ class Qwen2VLVideoProcessingTester:
         }
 
     @require_vision
-    def expected_output_video_shape(self, videos):
-        grid_t = self.num_frames // self.temporal_patch_size
+    def expected_output_video_shape(self, videos, num_frames=None):
+        num_frames = num_frames if num_frames is not None else self.num_frames
+        grid_t = num_frames // self.temporal_patch_size
         hidden_dim = self.num_channels * self.temporal_patch_size * self.patch_size * self.patch_size
         seq_len = 0
         for video in videos:
@@ -289,3 +290,70 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             )[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
+
+    def test_call_sample_frames(self):
+        for video_processing_class in self.video_processor_list:
+            video_processing = video_processing_class(**self.video_processor_dict)
+
+            prev_num_frames = self.video_processor_tester.num_frames
+            self.video_processor_tester.num_frames = 8
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False,
+                return_tensors="torch",
+            )
+
+            # Force set sampling to False. No sampling is expected even when `num_frames` exists
+            video_processing.do_sample_frames = False
+
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=3)[self.input_name]
+            encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", num_frames=3)[self.input_name]
+            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
+            expected_output_video_shape_batched = self.video_processor_tester.expected_output_video_shape(video_inputs)
+            self.assertListEqual(list(encoded_videos.shape), expected_output_video_shape)
+            self.assertListEqual(list(encoded_videos_batched.shape), expected_output_video_shape_batched)
+
+            # Set sampling to True. Video frames should be sampled with `num_frames` in the output
+            video_processing.do_sample_frames = True
+
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=4)[self.input_name]
+            encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", num_frames=4)[self.input_name]
+            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(
+                [video_inputs[0]], num_frames=4
+            )
+            expected_output_video_shape_batched = self.video_processor_tester.expected_output_video_shape(
+                video_inputs, num_frames=4
+            )
+            self.assertListEqual(list(encoded_videos.shape), expected_output_video_shape)
+            self.assertListEqual(list(encoded_videos_batched.shape), expected_output_video_shape_batched)
+
+            # Sample with `fps` requires metadata to infer number of frames from total duration
+            with self.assertRaises(ValueError):
+                encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3)[self.input_name]
+                encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", fps=3)[self.input_name]
+
+            metadata = [[{"duration": 2.0, "total_num_frames": 8, "fps": 4}]]
+            batched_metadata = metadata * len(video_inputs)
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3, video_metadata=metadata)[
+                self.input_name
+            ]
+            encoded_videos_batched = video_processing(
+                video_inputs, return_tensors="pt", fps=3, video_metadata=batched_metadata
+            )[self.input_name]
+            expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(
+                [video_inputs[0]], num_frames=6
+            )
+            expected_output_video_shape_batched = self.video_processor_tester.expected_output_video_shape(
+                video_inputs, num_frames=6
+            )
+            self.assertListEqual(list(encoded_videos.shape), expected_output_video_shape)
+            self.assertListEqual(list(encoded_videos_batched.shape), expected_output_video_shape_batched)
+
+            # We should raise error when asked to sample more frames than there are in input video
+            with self.assertRaises(ValueError):
+                encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=10)[self.input_name]
+                encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", num_frames=10)[
+                    self.input_name
+                ]
+
+            # Assign back the actual num frames in tester
+            self.video_processor_tester.num_frames = prev_num_frames

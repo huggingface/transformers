@@ -35,7 +35,7 @@ from ...utils import (
 )
 from ...utils.import_utils import requires
 from ...video_processing_utils import BaseVideoProcessor
-from ...video_utils import group_videos_by_shape, reorder_videos
+from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
 if is_vision_available():
@@ -66,6 +66,7 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+    do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
     valid_kwargs = InstructBlipVideoVideoProcessorInitKwargs
     model_input_names = ["pixel_values"]
 
@@ -75,6 +76,7 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: List["torch.Tensor"],
+        video_metadata: Union[List[VideoMetadata], List[dict]],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -86,10 +88,18 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         do_pad: bool,
         rescale_factor: float,
         do_normalize: bool,
+        do_sample_frames: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
+        fps: Optional[int] = None,
+        num_frames: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
     ) -> BatchFeature:
+        if do_sample_frames:
+            videos = [
+                self.sample_frames(video, metadata, num_frames, fps) for video, metadata in zip(videos, video_metadata)
+            ]
+
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
