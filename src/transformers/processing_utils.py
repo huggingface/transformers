@@ -645,7 +645,9 @@ class ProcessorMixin(PushToHubMixin):
                 # Propagate save_jinja_files to tokenizer to ensure we don't get conflicts
                 attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
             else:
-                # Save all atrributes except for tokenizer in one dict
+                # Save all atrributes except for tokenizer in one dict, along with auto maps
+                if attribute._auto_class is not None:
+                    custom_object_save(attribute, save_directory, config=attribute)
                 preprocessors_dict.update(json.loads(attribute.to_json_string()))
 
         # Save all attributes  except tokenizer in `preprocessor_config.json` as a composite config
