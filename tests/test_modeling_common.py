@@ -4507,18 +4507,12 @@ class ModelTesterMixin:
                 self.skipTest(reason="This model does not support flex attention")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config._attn_implementation = "flex_attention"
-            model = model_class(config).to(device=torch_device, dtype=torch.float16)
+            model = model_class(config).to(device=torch_device)
             self.assertTrue(model.config._attn_implementation == "flex_attention")
 
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             dummy_input = inputs_dict[model_class.main_input_name].to(torch_device)
-            if config.is_encoder_decoder:
-                _ = model(
-                    input_ids=dummy_input,
-                    decoder_input_ids=dummy_input.clone(),
-                )
-            else:
-                _ = model(input_ids=dummy_input)
+            _ = model(dummy_input)
 
     def test_generation_tester_mixin_inheritance(self):
         """
