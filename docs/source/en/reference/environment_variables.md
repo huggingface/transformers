@@ -1,4 +1,4 @@
-<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -38,7 +38,7 @@ model = pipeline(task="text-generation", model="facebook/opt-30b", device_map="a
 
 ## HF_PARALLEL_LOADING_WORKERS
 
-Determines how many threads should be used when parallel loading is enabled. Default is `8`. 
+Determines how many threads should be used when parallel loading is enabled. Default is `8`.
 
 If the number of files that are being loaded is less than the number of threads specified, the number that is actually spawned will be equal to the number of files.
 
