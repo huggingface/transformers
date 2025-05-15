@@ -1553,7 +1553,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Args:
             conversation (Union[List[Dict[str, str]], List[List[Dict[str, str]]]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
-            tools (`List[Dict]`, *optional*):
+            tools (`List[Union[Dict, Callable]]`, *optional*):
                 A list of tools (callable functions) that will be accessible to the model. If the template does not
                 support function calling, this argument will have no effect. Each tool should be passed as a JSON Schema,
                 giving the name, description and argument types for the tool. See our

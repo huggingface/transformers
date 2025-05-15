@@ -108,7 +108,7 @@ class Qwen2DecoderLayer(LlamaDecoderLayer):
         super().__init__()
         self.self_attn = Qwen2Attention(config=config, layer_idx=layer_idx)
         self.mlp = Qwen2MLP(config)
-        if config.sliding_window and config._attn_implementation != "flash_attention_2":
+        if config.use_sliding_window and config._attn_implementation != "flash_attention_2":
             logger.warning_once(
                 f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
                 "unexpected results may be encountered."

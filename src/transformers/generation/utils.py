@@ -1711,6 +1711,8 @@ class GenerationMixin:
     def _get_initial_cache_position(self, seq_length, device, model_kwargs):
         """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
         # `torch.compile`-friendly `torch.arange` from a shape -- the lines below are equivalent to `torch.arange`
+        if "cache_position" in model_kwargs and model_kwargs["cache_position"]:
+            return model_kwargs
         if "inputs_embeds" in model_kwargs and not self.config.is_encoder_decoder:
             cache_position = torch.ones_like(model_kwargs["inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0) - 1
         elif "decoder_inputs_embeds" in model_kwargs and self.config.is_encoder_decoder:
@@ -4905,9 +4907,14 @@ class GenerationMixin:
         input_chunks = torch.split(input_ids[:, :-1], chunk_size, dim=-1)
 
         if "past_key_values" not in model_kwargs:
-            raise ValueError("Cannot use prefill chunkink without a cache")
+            raise ValueError("Cannot use prefill chunking without a cache")
 
-        model_forward = self.get_compiled_call(generation_config.compile_config)
+        model_forward = self.forward
+
+        compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
+        if compile_forward:
+            model_forward = self.get_compiled_call(generation_config.compile_config)
+
         attention_mask = model_kwargs.pop("attention_mask", None)
 
         past_length = 0
