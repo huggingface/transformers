@@ -399,7 +399,7 @@ class Kosmos2_5VisionEmbeddings(nn.Module):
         self.config = config
         self.patch_projection = nn.Linear(config.patch_embed_hidden_size, config.hidden_size)
 
-        self.row_embedder = nn.Embedding(config.seq_len, config.hidden_size)
+        self.row_embedder = nn.Embedding(config.max_num_patches, config.hidden_size)
         self.column_embedder = nn.Embedding(config.max_num_patches, config.hidden_size)
 
         self.dropout = nn.Dropout(config.dropout_rate, inplace=False)
