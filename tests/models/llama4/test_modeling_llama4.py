@@ -55,7 +55,7 @@ class Llama4IntegrationTest(unittest.TestCase):
         self.processor = Llama4Processor.from_pretrained("meta-llama/Llama-4-Scout-17B-16E", padding_side="left")
 
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
-        self.messages = [
+        self.messages_1 = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
             {
                 "role": "user",
@@ -66,24 +66,7 @@ class Llama4IntegrationTest(unittest.TestCase):
             },
         ]
 
-    def test_model_17b_16e_fp16(self):
-        EXPECTED_TEXT = [
-            "The capital of France is Paris, which is located in the north-central part of the country. Paris is known for its iconic landmarks such as the",
-            "Roses are red, violets are blue, and this poem is about you. Roses are red, violets are blue, and I love",
-        ]
-
-        inputs = self.processor.apply_chat_template(
-            self.messages, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
-        ).to(torch_device)
-
-        output = self.model.generate(**inputs, max_new_tokens=100)
-        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
-
-        print(output_text)
-        self.assertEqual(output_text, EXPECTED_TEXT)
-
-    def test_model_17b_16e_batch(self):
-        messages_2 = [
+        self.messages_2 = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
             {
                 "role": "user",
@@ -97,9 +80,24 @@ class Llama4IntegrationTest(unittest.TestCase):
                 ],
             },
         ]
+    def test_model_17b_16e_fp16(self):
+        EXPECTED_TEXT = [
+                'system\n\nYou are a helpful assistant.user\n\nWhat is shown in this image?assistant\n\nThe image shows a cow standing on a beach, with a blue sky and a body of water in the background. The cow is brown with a white'
+        ] # fmt: skip
 
         inputs = self.processor.apply_chat_template(
-            [self.messages, messages_2],
+            self.messages_1, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        ).to(device=torch_device, dtype=self.model.dtype)
+        output = self.model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+
+        print(output_text)
+        self.assertEqual(output_text, EXPECTED_TEXT)
+
+    def test_model_17b_16e_batch(self):
+
+        inputs = self.processor.apply_chat_template(
+            [self.messages_1, self.messages_2],
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
