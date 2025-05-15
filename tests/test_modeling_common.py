@@ -4510,9 +4510,17 @@ class ModelTesterMixin:
             model = model_class(config).to(device=torch_device)
             self.assertTrue(model.config._attn_implementation == "flex_attention")
 
+            # Elaborate workaround for encoder-decoder models as some do not specify their main input
+            dummy_input = {"input_ids": inputs_dict[model_class.main_input_name].to(torch_device)}
+            if "decoder_input_ids" in inspect.signature(model.forward).parameters:
+                dummy_input["decoder_input_ids"] = dummy_input["input_ids"].clone()
+
+            # Flex Attention can not use dropout
+            if hasattr(config, "attention_droput"):
+                config.attention_droput = 0
+
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
-            dummy_input = inputs_dict[model_class.main_input_name].to(torch_device)
-            _ = model(dummy_input)
+            _ = model(**dummy_input)
 
     def test_generation_tester_mixin_inheritance(self):
         """
