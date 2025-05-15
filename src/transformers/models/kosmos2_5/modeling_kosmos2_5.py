@@ -487,12 +487,12 @@ class Kosmos2_5VisionAttention(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.key_value_proj_dim = config.head_dim
+        self.head_dim = config.head_dim
         self.n_heads = config.num_attention_heads
         self.dropout = config.attention_dropout
-        self.inner_dim = self.n_heads * self.key_value_proj_dim
+        self.inner_dim = self.n_heads * self.head_dim
         self.is_causal = False
-        self.scaling = self.key_value_proj_dim**-0.5
+        self.scaling = self.head_dim**-0.5
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
         self.query = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
