@@ -487,12 +487,12 @@ class Kosmos2_5VisionAttention(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.head_dim = config.head_dim
+        self.key_value_proj_dim = config.head_dim
         self.n_heads = config.num_attention_heads
         self.dropout = config.attention_dropout
         self.inner_dim = self.n_heads * self.head_dim
         self.is_causal = False
-        self.scaling = self.head_dim**-0.5
+        self.scaling = self.key_value_proj_dim**-0.5
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
         self.query = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
@@ -801,12 +801,12 @@ class Kosmos2_5TextAttention(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
         # use encoder_hidden_states if cross attention
         is_cross_attention = encoder_hidden_states is not None
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
+
+        input_shape = current_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         key_states = self.k_proj(current_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(current_states).view(hidden_shape).transpose(1, 2)
