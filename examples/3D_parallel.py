@@ -47,7 +47,6 @@ from contextlib import contextmanager, nullcontext
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import ShardingStrategy
 
-ignore_sanity_checks = int(os.environ.get("IGNORE_SANITY", 0)) == 1
 # torch.use_deterministic_algorithms(True)
 torch.backends.cudnn.deterministic = True
 
@@ -61,7 +60,7 @@ logger = logging.getLogger(__name__)
 
 # from torch.distributed.tensor.experimental._attention import set_rotate_method
 
-# set_rotate_method("alltoall")  # rotate shards using all-to-all
+# set_rotate_method("alltoall")  # CP rotate shards using all-to-all
 
 
 def main():
@@ -120,7 +119,6 @@ def main():
                 if model_name == "unsloth/Llama-3.2-1B"
                 else f"tp{tp_size}_dp{dp_size}_cp{cp_size}",
             )
-            logger.info(f"ignore_sanity_checks is set to: {ignore_sanity_checks}")
             logger.info("Wandb initialized.")
             # Log the current file to wandb
             wandb.save("test_train.py")
@@ -292,7 +290,15 @@ def main():
                 # all reduce grads across dp_cp if applicable
                 all_reduce_grads(model, world_mesh, use_ddp=use_ddp)
 
-                gradnorm = clip_grad_norm_(model.parameters(), max_norm=1.0, norm_type=2.0, foreach=True)
+                if hasattr(model, "clip_grad_norm_"):
+                    gradnorm = model.clip_grad_norm_(max_norm=1.0, norm_type=2.0)
+                else:
+                    # only works with FSDP's NO_SHARD otherwise we should use FSDP's clip_grad_norm_
+                    gradnorm = clip_grad_norm_(
+                        model.parameters(),
+                        max_norm=1.0,
+                        norm_type=2.0,
+                        foreach=True)
 
                 optimizer.step()
                 # allreduce loss across cp_dp before logging
@@ -347,7 +353,7 @@ def all_reduce_grads(model, world_mesh, use_ddp):
     dp_mesh = world_mesh["dp"]
     cp_mesh = world_mesh["cp"]
     if use_ddp:
-        # DDP takes care of syncing grads
+        # DDP/FSDP takes care of syncing grads
         mesh = cp_mesh
     else:
         mesh = world_mesh["dp", "cp"]._flatten(mesh_dim_name="dp_cp")
