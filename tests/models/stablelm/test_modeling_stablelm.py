@@ -16,9 +16,8 @@
 import unittest
 
 import pytest
-from parameterized import parameterized
 
-from transformers import StableLmConfig, is_torch_available, set_seed
+from transformers import StableLmConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -26,11 +25,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():

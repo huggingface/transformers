@@ -27,16 +27,11 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
 
-    from transformers import RecurrentGemmaForCausalLM, RecurrentGemmaModel, RecurrentGemmaConfig
-
+    from transformers import RecurrentGemmaConfig, RecurrentGemmaForCausalLM, RecurrentGemmaModel
 
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -51,11 +46,7 @@ class RecurrentGemmaModelTester(CausalLMModelTester):
 
 @require_torch
 class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (RecurrentGemmaModel, RecurrentGemmaForCausalLM)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (RecurrentGemmaModel, RecurrentGemmaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": RecurrentGemmaModel,
