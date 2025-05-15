@@ -16,14 +16,14 @@
 
 import unittest
 
-from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-
 from transformers import PhimoeConfig, StaticCache, is_torch_available
 from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
 )
+
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
