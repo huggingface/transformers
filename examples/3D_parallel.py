@@ -130,14 +130,10 @@ def main():
     logger.info(f"Using device: {device} for non-model tensors")
     use_ddp = False
     if dist.is_initialized() and dp_mesh.size() > 1:
-        # TODO: this only works with DDP patch
-        # model = torch.nn.parallel.DistributedDataParallel(
+        # model = torch.nn.parallel.DistributedDataParallel( # TODO: use FSDP with NO_SHARD 
         #     model,
         #     device_mesh=dp_mesh
         # )
-        # update_model_parameters(model)
-        # Warning this API is still experimental
-        # model = replicate(model, device_mesh=dp_mesh, bucket_cap_mb=100)
         # logger.info("Applied DDP")
         # use_ddp = True
         pass
@@ -227,6 +223,7 @@ def main():
         sampler=sampler,
         shuffle=False,
         collate_fn=collate_fn,
+        pin_memory=True,
     )
     logger.info(f"DataLoader created. Distributed: {dist.is_initialized()}")
 
@@ -351,29 +348,6 @@ def all_reduce_grads(model, world_mesh, use_ddp):
                         group=mesh.get_group()
                     )
 
-class ContextParallelCollator:
-    """Collator for context parallel training that splits sequences into chunks."""
-    def __init__(self, cp_mesh: Optional[DeviceMesh] = None):
-        self.cp_mesh = cp_mesh
-        
-    def __call__(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        batch = default_collate(batch)
-        if self.cp_mesh is not None and self.cp_mesh.size() > 1:
-            # Get sequence length from the input batch
-            seq_len = batch["input_ids"].shape[1]
-            assert seq_len % self.cp_mesh.size() == 0, f"Sequence length {seq_len} must be divisible by CP size {self.cp_mesh.size()}"
-            chunk_size = seq_len // self.cp_mesh.size()
-            cp_rank = self.cp_mesh.get_local_rank()
-            start_idx = cp_rank * chunk_size
-            end_idx = start_idx + chunk_size
-            
-            # Keep only the local chunk of the sequence
-            batch["input_ids"] = batch["input_ids"][:, start_idx:end_idx]
-            batch["attention_mask"] = batch["attention_mask"][:, start_idx:end_idx]
-            batch["labels"] = batch["labels"][:, start_idx:end_idx]
-            
-        return batch
-
 class AppState(Stateful):
     """Wrapper for checkpointing the Application State including model and optimizer."""
     def __init__(self, model, optimizer=None):
@@ -430,32 +404,6 @@ def clip_grad_norm_(
             p.grad.detach().mul_(clip_coef)
 
     return total_norm
-
-
-def update_model_parameters(model: nn.Module) -> None:
-    """
-    Update model._parameters using named_modules() to ensure all parameters are properly tracked.
-    
-    Args:
-        model (nn.Module): The model to update parameters for
-    """
-    # Clear existing parameters
-    model._parameters = {}
-    
-    # Add parameters from named_modules
-    for name, module in model.named_modules():
-        # Skip the root module itself
-        if name == '':
-            continue
-            
-        # Get the parameter name by removing 'module.' prefix if it exists
-        param_name = name.replace('module.', '')
-        
-        # Add weight and bias parameters if they exist
-        if hasattr(module, 'weight') and module.weight is not None:
-            model._parameters[f'{param_name}.weight'] = module.weight
-        if hasattr(module, 'bias') and module.bias is not None:
-            model._parameters[f'{param_name}.bias'] = module.bias
 
 if __name__ == "__main__":
     main() 
