@@ -208,10 +208,11 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
         rank (int): Global rank of the current process/device.
         dim (int): Dimension along which to shard the tensor.
     """
+    param_dim = empty_param.dim()
     if dim < 0:
-        dim = param.dim() + dim
-    if dim >= param.dim():
-        raise ValueError(f"dim {dim} is out of bounds for tensor of dimension {param.dim()}")
+        dim = param_dim + dim
+    if dim >= param_dim:
+        raise ValueError(f"dim {dim} is out of bounds for tensor of dimension {param_dim}")
 
     # Flatten the mesh to get the total number of devices
     mesh_shape = device_mesh.shape
@@ -225,7 +226,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     end = start + shard_size
 
     # Construct slicing index dynamically
-    slice_indices = [slice(None)] * param.dim()
+    slice_indices = [slice(None)] * param_dim
     slice_indices[dim] = slice(start, end)
 
     return param[tuple(slice_indices)]
