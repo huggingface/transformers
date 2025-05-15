@@ -55,6 +55,7 @@ class Phi4MultimodalFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
 
     patch_size: Optional[int]
     dynamic_hd: Optional[int]
+    num_image_tokens: Optional[int]
 
 
 @auto_docstring
@@ -69,6 +70,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+    num_image_tokens = 256
     valid_kwargs = Phi4MultimodalFastImageProcessorKwargs
     model_input_names = ["image_pixel_values", "image_sizes", "image_attention_mask"]
 
@@ -232,7 +234,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
             )
 
             num_img_tokens = (
-                256
+                self.num_image_tokens
                 + 1
                 + int(downsample_attention_mask.sum().item())
                 + int(downsample_attention_mask[:, 0].sum().item())
