@@ -433,7 +433,8 @@ class TextGenerationPipeline(Pipeline):
             "input_ids": input_ids,
             "prompt_text": prompt_text,
         }
-        model_outputs.update({"additional_outputs": other_outputs})
+        if other_outputs:
+            model_outputs.update({"additional_outputs": other_outputs})
         return model_outputs
 
     def postprocess(
