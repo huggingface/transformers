@@ -50,6 +50,17 @@ class MixtralModelTester(CausalLMModelTester):
         sequence_class = MixtralForSequenceClassification
         token_class = MixtralForTokenClassification
         question_answering_class = MixtralForQuestionAnswering
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": MixtralModel,
+            "text-classification": MixtralForSequenceClassification,
+            "token-classification": MixtralForTokenClassification,
+            "text-generation": MixtralForCausalLM,
+            "question-answering": MixtralForQuestionAnswering,
+        }
+        if is_torch_available()
+        else {}
+    )
 
 
 @require_torch
@@ -65,17 +76,7 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": MixtralModel,
-            "text-classification": MixtralForSequenceClassification,
-            "token-classification": MixtralForTokenClassification,
-            "text-generation": MixtralForCausalLM,
-            "question-answering": MixtralForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
+
     test_headmasking = False
     test_pruning = False
     model_tester_class = MixtralModelTester

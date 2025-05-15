@@ -54,6 +54,17 @@ class Qwen2MoeModelTester(CausalLMModelTester):
         sequence_class = Qwen2MoeForSequenceClassification
         token_class = Qwen2MoeForTokenClassification
         question_answering_class = Qwen2MoeForQuestionAnswering
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": Qwen2MoeModel,
+            "text-classification": Qwen2MoeForSequenceClassification,
+            "token-classification": Qwen2MoeForTokenClassification,
+            "text-generation": Qwen2MoeForCausalLM,
+            "question-answering": Qwen2MoeForQuestionAnswering,
+        }
+        if is_torch_available()
+        else {}
+    )
 
 
 @require_torch
@@ -69,17 +80,7 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Qwen2MoeModel,
-            "text-classification": Qwen2MoeForSequenceClassification,
-            "token-classification": Qwen2MoeForTokenClassification,
-            "text-generation": Qwen2MoeForCausalLM,
-            "question-answering": Qwen2MoeForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
+
     test_headmasking = False
     test_pruning = False
     model_tester_class = Qwen2MoeModelTester

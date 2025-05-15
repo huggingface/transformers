@@ -57,6 +57,17 @@ class Qwen2ModelTester(CausalLMModelTester):
         sequence_class = Qwen2ForSequenceClassification
         token_class = Qwen2ForTokenClassification
         question_answering_class = Qwen2ForQuestionAnswering
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": Qwen2Model,
+            "text-classification": Qwen2ForSequenceClassification,
+            "token-classification": Qwen2ForTokenClassification,
+            "text-generation": Qwen2ForCausalLM,
+            "question-answering": Qwen2ForQuestionAnswering,
+        }
+        if is_torch_available()
+        else {}
+    )
 
 
 @require_torch
@@ -71,17 +82,6 @@ class Qwen2ModelTest(CausalLMModelTest, unittest.TestCase):
         )
         if is_torch_available()
         else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Qwen2Model,
-            "text-classification": Qwen2ForSequenceClassification,
-            "token-classification": Qwen2ForTokenClassification,
-            "text-generation": Qwen2ForCausalLM,
-            "question-answering": Qwen2ForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
     )
     test_headmasking = False
     test_pruning = False

@@ -109,16 +109,6 @@ class PhimoeModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (PhimoeModel, PhimoeForCausalLM, PhimoeForSequenceClassification) if is_torch_available() else ()
     )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": PhimoeModel,
-            "text-classification": PhimoeForSequenceClassification,
-            "text-generation": PhimoeForCausalLM,
-            "zero-shot": PhimoeForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     test_headmasking = False
     test_pruning = False
