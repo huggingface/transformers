@@ -187,7 +187,7 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         layer_norm_eps=1e-6,
         dropout_rate=0.0,
         attention_dropout=0.0,
-        seq_len=4096,
+        max_num_patches=4096,
         initializer_factor=1.0,
         initializer_range=0.02,
         **kwargs,
@@ -203,7 +203,7 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.dense_act_fn = dense_act_fn
-        self.max_num_patches = seq_len
+        self.max_num_patches = max_num_patches
         self.head_dim = head_dim
         self.initializer_factor = initializer_factor
         self.initializer_range = initializer_range
