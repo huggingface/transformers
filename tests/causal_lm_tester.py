@@ -35,7 +35,7 @@ import unittest
 # TODO Matt: Add this to a proper file later
 class CausalLMModelTester:
     _required_attributes = ("base_model_class", "config_class", "causal_lm_class")
-    forced_config_args = None  # Arguments that should be passed to the config class even if not in its signature
+    forced_config_args = []  # Arguments that should be passed to the config class even if not in its signature
     config_class = None
     base_model_class = None
     causal_lm_class = None
