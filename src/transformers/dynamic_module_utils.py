@@ -667,7 +667,9 @@ def _raise_timeout_error(signum, frame):
 TIME_OUT_REMOTE_CODE = 15
 
 
-def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has_remote_code, error_message=None, upstream_repo=None):
+def resolve_trust_remote_code(
+    trust_remote_code, model_name, has_local_code, has_remote_code, error_message=None, upstream_repo=None
+):
     """
     Resolves the `trust_remote_code` argument. If there is remote code to be loaded, the user must opt-in to loading
     it.
