@@ -551,19 +551,18 @@ class _BaseAutoModelClass:
 
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping.keys()
+        upstream_repo = None
         if has_remote_code:
             class_ref = config.auto_map[cls.__name__]
             if "--" in class_ref:
                 upstream_repo = class_ref.split("--")[0]
-            else:
-                upstream_repo = None
-            trust_remote_code = resolve_trust_remote_code(
-                trust_remote_code,
-                pretrained_model_name_or_path,
-                has_local_code,
-                has_remote_code,
-                upstream_repo=upstream_repo,
-            )
+        trust_remote_code = resolve_trust_remote_code(
+            trust_remote_code,
+            pretrained_model_name_or_path,
+            has_local_code,
+            has_remote_code,
+            upstream_repo=upstream_repo,
+        )
         kwargs["trust_remote_code"] = trust_remote_code
 
         # Set the adapter kwargs
