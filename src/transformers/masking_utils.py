@@ -157,10 +157,6 @@ class LayerPattern(object):
         if self.pattern == "full":
             self.local_size = None
 
-    def as_tuple(self) -> tuple[str, Optional[int]]:
-        """This is needed as torch dynamo tracing cannot handle hasing custom objects."""
-        return self.pattern, self.local_size
-
     def get_mask_factory_function(self) -> Callable:
         """
         Return the mask function describing this LayerPattern.
