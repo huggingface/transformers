@@ -1679,7 +1679,16 @@ class InformerModel(InformerPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        dec_input = transformer_inputs[:, self.config.context_length :, ...]
+        # Avoid empty tensors and instead create a zeroes tensor which
+        # will be treated the same in torch, i.e. matmul with empty == all 0s
+        if self.config.context_length >= transformer_inputs.shape[1]:
+            bsz, _, dim = transformer_inputs.shape
+            dec_input = torch.zeros(
+                size=(bsz, 1, dim), device=transformer_inputs.device, dtype=transformer_inputs.dtype
+            )
+        else:
+            dec_input = transformer_inputs[:, self.config.context_length :, ...]
+
         decoder_outputs = self.decoder(
             inputs_embeds=dec_input,
             attention_mask=decoder_attention_mask,
