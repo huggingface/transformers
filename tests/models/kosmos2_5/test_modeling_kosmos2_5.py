@@ -72,7 +72,7 @@ class Kosmos2_5VisionModelTester:
         num_channels=3,
         is_training=True,
         hidden_size=32,
-        d_ff=64,
+        intermediate_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         dropout=0,
@@ -86,7 +86,7 @@ class Kosmos2_5VisionModelTester:
         self.num_channels = num_channels
         self.is_training = is_training
         self.hidden_size = hidden_size
-        self.d_ff = d_ff
+        self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.patch_embed_hidden_size = patch_size * patch_size * num_channels
@@ -110,7 +110,7 @@ class Kosmos2_5VisionModelTester:
             patch_size=self.patch_size,
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,
-            d_ff=self.d_ff,
+            intermediate_size=self.intermediate_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             patch_embed_hidden_size=self.patch_embed_hidden_size,
