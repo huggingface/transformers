@@ -716,26 +716,37 @@ MASK_FUNCTION_MAPPING = {
 
 
 def create_masks_for_generate(
-    base_model,
+    config,
     input_embeds: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     output_attentions: bool = False,
 ):
-    causal_masks = {}
-    for layer_idx, layer_pattern in enumerate(base_model.layer_attention_patterns):
-        if layer_pattern not in causal_masks:
-            causal_masks[layer_pattern] = MASK_FUNCTION_MAPPING[layer_pattern](
-                base_model.config,
-                input_embeds,
-                attention_mask,
-                cache_position,
-                past_key_values,
-                layer_idx,
-                output_attentions,
-            )
-    return causal_masks
+    # Prepare the mask args
+    mask_kwargs = {
+        "config": config,
+        "input_embeds": input_embeds,
+        "attention_mask": attention_mask,
+        "cache_position": cache_position,
+        "past_key_values": past_key_values,
+        "output_attentions": output_attentions,
+    }
+
+    # If the attribute exist, we need several masks
+    if hasattr(config, "layer_attention_patterns"):
+        causal_masks = {}
+        for layer_pattern in set(config.layer_attention_patterns):
+            causal_masks[layer_pattern] = MASK_FUNCTION_MAPPING[layer_pattern](**mask_kwargs)
+        return causal_masks
+    # In this case, all layers are sliding
+    elif getattr(config, "sliding_window", None) is not None:
+        return create_sliding_window_causal_mask(**mask_kwargs)
+    # In this case, all layxers are chunked
+    elif getattr(config, "attention_chunk_size", None) is not None:
+        return create_chunked_causal_mask(**mask_kwargs)
+    # All layers use standard causal attention
+    return create_causal_mask(**mask_kwargs)
 
 
 # Below are utilities to pretty-print the different masks

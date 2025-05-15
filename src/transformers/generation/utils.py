@@ -658,7 +658,7 @@ class GenerationMixin:
             if causal_mask_creation_function is None:  # can't be found
                 output_attentions = kwargs.get("output_attentions", False)
                 attention_mask = create_masks_for_generate(
-                    base_model,
+                    base_model.config,
                     torch.empty(
                         (batch_size, sequence_length), dtype=self.dtype
                     ),  # we only need batch size, seq_length and dtype here - we don't care about the values
