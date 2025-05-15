@@ -214,8 +214,8 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
     - forward
 
 
-## SmolVLMImageProcessor
-[[autodoc]] SmolVLMImageProcessor
+## Idefics2ImageProcessor
+[[autodoc]] Idefics2ImageProcessor
     - preprocess
 
 ## Idefics2ImageProcessorFast
