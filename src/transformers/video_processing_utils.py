@@ -593,8 +593,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             with open(resolved_video_processor_file, "r", encoding="utf-8") as reader:
                 text = reader.read()
             video_processor_dict = json.loads(text)
-
-            # If it was saved as part of processor, then it will be saved under `video_processor_config`
             video_processor_dict = video_processor_dict.get("video_processor_config", video_processor_dict)
 
         except json.JSONDecodeError:

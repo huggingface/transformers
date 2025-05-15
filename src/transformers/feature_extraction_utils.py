@@ -538,8 +538,6 @@ class FeatureExtractionMixin(PushToHubMixin):
             with open(resolved_feature_extractor_file, encoding="utf-8") as reader:
                 text = reader.read()
             feature_extractor_dict = json.loads(text)
-
-            # If it was saved as part of processor, then it will be saved under `feature_extractor_config`
             feature_extractor_dict = feature_extractor_dict.get("feature_extractor_config", feature_extractor_dict)
 
         except json.JSONDecodeError:

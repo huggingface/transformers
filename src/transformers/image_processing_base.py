@@ -368,8 +368,6 @@ class ImageProcessingMixin(PushToHubMixin):
             with open(resolved_image_processor_file, encoding="utf-8") as reader:
                 text = reader.read()
             image_processor_dict = json.loads(text)
-
-            # If it was saved as part of processor, then it will be saved under `image_processor_config`
             image_processor_dict = image_processor_dict.get("image_processor_config", image_processor_dict)
 
         except json.JSONDecodeError:
