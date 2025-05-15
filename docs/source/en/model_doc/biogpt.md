@@ -36,6 +36,7 @@ This model was contributed by [kamalkraj](https://huggingface.co/kamalkraj). The
 - BioGPT is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than the left.
 - BioGPT was trained with a causal language modeling (CLM) objective and is therefore powerful at predicting the next token in a sequence. Leveraging this feature allows BioGPT to generate syntactically coherent text as it can be observed in the run_generation.py example script.
 - The model can take the `past_key_values` (for PyTorch) as input, which is the previously computed key/value attention pairs. Using this (past_key_values or past) value prevents the model from re-computing pre-computed values in the context of text generation. For PyTorch, see past_key_values argument of the BioGptForCausalLM.forward() method for more information on its usage.
+- The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`  
 
 ### Using Scaled Dot Product Attention (SDPA)
 
