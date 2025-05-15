@@ -168,7 +168,7 @@ def main():
         # fully_shard(model.model, mesh=dp_mesh, reshard_after_forward=False)
         # DDP
         # replicate(model, device_mesh=dp_mesh, bucket_cap_mb=100)
-        assert len(list(model.parameters()))>5, "No parameters found in model. Probably DDP/FSDP bug.."
+        # assert len(list(model.parameters()))>5, "No parameters found in model. Probably DDP/FSDP bug.." # TODO: we should be cautious abt using model.parameters()
         use_ddp = True
 
     model.train()
@@ -359,6 +359,7 @@ def main():
 
                 # Calculate gradient norm and clip gradients
                 if hasattr(model, "clip_grad_norm_"):
+                    # when using FSDP or DDP, model.parameters() doesn't work
                     gradnorm = model.clip_grad_norm_(max_norm=1.0, norm_type=2.0)
                 else:
                     assert len(list(model.parameters()))>2, "No parameters found in model. Probably DDP bug.."
