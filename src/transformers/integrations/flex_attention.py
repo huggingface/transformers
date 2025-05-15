@@ -76,7 +76,6 @@ class WrappedFlexAttention:
         return self._compiled_flex_attention
 
 
-@torch.compiler.disable(recursive=False)
 def compile_friendly_flex_attention(
     query: torch.Tensor,
     key: torch.Tensor,
