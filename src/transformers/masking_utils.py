@@ -377,8 +377,8 @@ def eager_mask(
         **kwargs,
     )
     min_dtype = torch.finfo(dtype).min
-    # we need 0s where the tokens should be taken into account, and -inf otherwise
-    mask = torch.where(mask == 1, torch.tensor(0.0, device=mask.device, dtype=dtype), min_dtype)
+    # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
+    mask = torch.where(mask, torch.tensor(0.0, device=mask.device, dtype=dtype), min_dtype)
     return mask
 
 
