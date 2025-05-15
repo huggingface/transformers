@@ -85,7 +85,6 @@ class Gemma2Config(PretrainedConfig):
             Attention pattern for each layer.
         final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh softcapping on the attention scores.
-        cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
 
     ```python
     >>> from transformers import Gemma2Model, Gemma2Config
@@ -140,7 +139,6 @@ class Gemma2Config(PretrainedConfig):
         layer_attention_patterns=None,
         final_logit_softcapping=30.0,
         attn_logit_softcapping=50.0,
-        cache_implementation="hybrid",
         **kwargs,
     ):
         super().__init__(
@@ -169,7 +167,6 @@ class Gemma2Config(PretrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
-        self.cache_implementation = cache_implementation
 
         self.layer_attention_patterns = layer_attention_patterns
         if layer_attention_patterns is None:

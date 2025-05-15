@@ -240,7 +240,6 @@ class Llama4TextConfig(PretrainedConfig):
             Recommended for long sequences (e.g., >32k tokens) to maintain stable output results.
         floor_scale (`int`, *optional*, defaults to 8192): TODO
         attn_scale (`int`, *optional*, defaults to 0.1): TODO
-        cache_implementation (`<fill_type>`, *optional*, defaults to `"hybrid"`): <fill_docstring>
 
     Example:
     """
@@ -304,7 +303,6 @@ class Llama4TextConfig(PretrainedConfig):
         attn_temperature_tuning=True,
         floor_scale=8192,
         attn_scale=0.1,
-        cache_implementation="hybrid",
         **kwargs,
     ):
         super().__init__(
@@ -326,7 +324,6 @@ class Llama4TextConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.rope_scaling = rope_scaling
         self.attention_bias = False
-        self.cache_implementation = cache_implementation
         # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
