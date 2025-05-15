@@ -318,7 +318,7 @@ class TextGenerationPipeline(Pipeline):
             "add_special_tokens": add_special_tokens,
             "truncation": truncation,
             "padding": padding,
-            "max_length": max_length,
+            "max_length": max_length,  # TODO: name clash -- this is broken, `max_length` is also a `generate` arg
         }
         tokenizer_kwargs = {key: value for key, value in tokenizer_kwargs.items() if value is not None}
 
