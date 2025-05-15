@@ -22,7 +22,8 @@ from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 from .cache_utils import Cache
 from .configuration_utils import PretrainedConfig
 from .modeling_utils import GeneralInterface
-from .utils.import_utils import is_torchdynamo_compiling, is_torch_greater_or_equal
+from .utils.import_utils import is_torch_greater_or_equal, is_torchdynamo_compiling
+
 
 _is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
 
@@ -529,11 +530,9 @@ def _create_mask(
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
     """
-    # For BC -> if the mask is passed in 4D directly, simply replicate it on all layers
-    if (
-        isinstance(attention_mask, torch.Tensor)
-        and attention_mask.ndim == 4
-        and config._attn_implementation != "flash_attention_2"
+    # If the mask is already 4D or BlockMask, simply return as-is (it was already prepared, or it is custom)
+    if (isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 4) or isinstance(
+        attention_mask, BlockMask
     ):
         return attention_mask
 
