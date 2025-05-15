@@ -170,8 +170,14 @@ class BlenderbotSmallAttention(nn.Module):
 
         # determine input shapes
         bsz, tgt_len = hidden_states.shape[:-1]
+        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
+
+        # certain models do not have a sequence per se
+        src_len = max(src_len, 1)
+        tgt_len = max(tgt_len, 1)
+
         q_input_shape = (bsz, tgt_len, -1, self.head_dim)
-        kv_input_shape = (*key_value_states.shape[:-1], -1, self.head_dim) if is_cross_attention else q_input_shape
+        kv_input_shape = (bsz, src_len, -1, self.head_dim)
 
         # get query proj
         query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
@@ -975,6 +981,7 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
 
         return attention_mask
 
+    # Copied from transformers.models.bart.modeling_bart.BartDecoder._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, None],
@@ -1019,6 +1026,7 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
 
         return attention_mask
 
+    # Copied from transformers.models.bart.modeling_bart.BartDecoder._update_cross_attn_mask
     def _update_cross_attn_mask(
         self,
         encoder_hidden_states: Union[torch.Tensor, None],

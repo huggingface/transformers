@@ -4511,7 +4511,7 @@ class ModelTesterMixin:
             self.assertTrue(model.config._attn_implementation == "flex_attention")
 
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
-            dummy_input = inputs_dict["input_ids"].to(torch_device)
+            dummy_input = inputs_dict[model_class.main_input_name].to(torch_device)
             if config.is_encoder_decoder:
                 _ = model(
                     input_ids=dummy_input,
