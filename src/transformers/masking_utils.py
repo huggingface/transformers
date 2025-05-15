@@ -582,7 +582,9 @@ def create_causal_mask(
     output_attentions: bool = False,
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
     """
-    Create a standard causal mask based on the attention implementation used (stored in the config).
+    Create a standard causal mask based on the attention implementation used (stored in the config). If `past_key_values`
+    has an HybridCache structure, this function will return the mask corresponding to one of the "full" layers (to align
+    to what is needed in the `modeling_xxx.py` files).
 
     Args:
         config (`PretrainedConfig`):
@@ -628,7 +630,9 @@ def create_sliding_window_causal_mask(
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
-    of attention pattern was mostly democratized by Mistral.
+    of attention pattern was mostly democratized by Mistral. If `past_key_values` has an HybridCache structure, this
+    function will return the mask corresponding to one of the "sliding" layers (to align to what is needed in the
+    `modeling_xxx.py` files).
 
     Args:
         config (`PretrainedConfig`):
@@ -678,7 +682,9 @@ def create_chunked_causal_mask(
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
     """
     Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
-    of attention pattern was mostly democratized by Llama4.
+    of attention pattern was mostly democratized by Llama4. If `past_key_values` has an HybridCache structure, this
+    function will return the mask corresponding to one of the "sliding" layers (to align to what is needed in the
+    `modeling_xxx.py` files).
 
     Args:
         config (`PretrainedConfig`):
@@ -762,7 +768,7 @@ def _ignore_causal_mask_sdpa(
     return False
 
 
-MASK_FUNCTION_MAPPING = {
+LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "full": create_causal_mask,
     "sliding": create_sliding_window_causal_mask,
     "chunked": create_chunked_causal_mask,
@@ -770,13 +776,33 @@ MASK_FUNCTION_MAPPING = {
 
 
 def create_masks_for_generate(
-    config,
+    config: PretrainedConfig,
     input_embeds: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     output_attentions: bool = False,
 ):
+    """
+    This function mimics how we create the masks in the `modeling_xxx.py` files, and is used in `generate` in order
+    to easily create the masks in advance, when we compile the forwards with Static caches.
+
+    Args:
+        config (`PretrainedConfig`):
+            The model config.
+        input_embeds (`torch.Tensor`):
+            The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
+            batch size, query length and dtype.
+        attention_mask (`torch.Tensor`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
+            It can also be an already prepared 4D mask, in which case it is returned as-is.
+        cache_position (`torch.Tensor`):
+            A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
+        past_key_values (`Cache`, optional):
+            The past key values, if we use a cache.
+        output_attentions (`bool`, optional):
+            Whether we return the attention scores or not. By default `False`.
+    """
     # Prepare the mask args
     mask_kwargs = {
         "config": config,
@@ -791,7 +817,7 @@ def create_masks_for_generate(
     if hasattr(config, "layer_attention_patterns"):
         causal_masks = {}
         for layer_pattern in set(config.layer_attention_patterns):
-            causal_masks[layer_pattern] = MASK_FUNCTION_MAPPING[layer_pattern](**mask_kwargs)
+            causal_masks[layer_pattern] = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern](**mask_kwargs)
         return causal_masks
     # In this case, all layers are sliding
     elif getattr(config, "sliding_window", None) is not None:
