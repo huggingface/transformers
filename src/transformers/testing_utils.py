@@ -2039,7 +2039,7 @@ class TestCasePlus(unittest.TestCase):
 
         """
         env = os.environ.copy()
-        paths = [self.src_dir_str]
+        paths = [self.repo_root_dir_str, self.src_dir_str]
         if "/examples" in self.test_file_dir_str:
             paths.append(self.examples_dir_str)
         else:
