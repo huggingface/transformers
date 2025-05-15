@@ -82,7 +82,7 @@ class Gemma2Config(PretrainedConfig):
             scaling factor used on the attention scores
         sliding_window (`int`, *optional*, defaults to 4096):
             in Gemma2, every other layer uses sliding window attention. This is the size of the sliding window.
-        layer_types (`list`, *optional*, defaults to None):
+        layer_types (`list`, *optional*):
             Attention pattern for each layer.
         final_logit_softcapping (`float`, *optional*, defaults to 30.0):
             scaling factor when applying tanh softcapping on the logits.

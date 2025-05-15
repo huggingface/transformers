@@ -141,7 +141,7 @@ class Cohere2Config(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         sliding_window (`int`, *optional*, defaults to 4096):
             Size of the sliding window attention context.
-        layer_types (`list`, *optional*, defaults to None):
+        layer_types (`list`, *optional*):
             Attention pattern for each layer.
 
     ```python

@@ -233,7 +233,7 @@ class Llama4TextConfig(PretrainedConfig):
             `no_rope_layer_interval` layers.
         attention_chunk_size (`int`, *optional*, defaults to 8192):
             <TODO>
-        layer_types (`list`, *optional*, defaults to None):
+        layer_types (`list`, *optional*):
             Attention pattern for each layer.
         attn_temperature_tuning (`bool`, *optional*, defaults to `True`):
             Whether to dynamically scale the attention temperature for each query token based on sequence length.

@@ -110,7 +110,7 @@ class Qwen2Config(PretrainedConfig):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         max_window_layers (`int`, *optional*, defaults to 28):
             The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
-        layer_types (`list`, *optional*, defaults to None):
+        layer_types (`list`, *optional*):
             Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
