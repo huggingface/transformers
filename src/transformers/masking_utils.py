@@ -530,10 +530,8 @@ def _create_mask(
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
     """
-    # If the mask is already 4D or BlockMask, simply return as-is (it was already prepared, or it is custom)
-    if (isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 4) or isinstance(
-        attention_mask, BlockMask
-    ):
+    # If the mask is already 4D, simply return as-is (it was already prepared, or it is custom)
+    if isinstance(attention_mask, (torch.Tensor, BlockMask)) and len(attention_mask.shape) == 4:
         return attention_mask
 
     # For TGI/vLLM backends, or other custom attention without equivalent mask creation: we don't need a mask!
