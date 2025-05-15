@@ -1728,8 +1728,17 @@ class GenerationMixin:
             past_length = 0
             if not isinstance(cache, Cache):
                 past_length = cache[0][0].shape[2]
+                if "ChatGLM" in self.__class__.__name__:
+                    past_length = cache[0][0].shape[0]
             elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
                 past_length = cache.get_seq_length()
+
+            cache_position = cache_position[past_length:]
+        elif model_kwargs.get("cache_params") is not None:
+            cache = model_kwargs["cache_params"]
+            past_length = 0
+            if hasattr(cache, "seqlen_offset"):
+                past_length = cache.seqlen_offset
 
             cache_position = cache_position[past_length:]
 
