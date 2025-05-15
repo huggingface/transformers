@@ -33,6 +33,7 @@ if is_torch_available():
 
     from transformers import (
         MixtralForCausalLM,
+        MixtralForQuestionAnswering,
         MixtralForSequenceClassification,
         MixtralForTokenClassification,
         MixtralModel,
@@ -48,6 +49,7 @@ class MixtralModelTester(CausalLMModelTester):
         causal_lm_class = MixtralForCausalLM
         sequence_class = MixtralForSequenceClassification
         token_class = MixtralForTokenClassification
+        question_answering_class = MixtralForQuestionAnswering
 
 
 @require_torch
@@ -63,6 +65,7 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
             "text-classification": MixtralForSequenceClassification,
             "token-classification": MixtralForTokenClassification,
             "text-generation": MixtralForCausalLM,
+            "question-answering": MixtralForQuestionAnswering,
         }
         if is_torch_available()
         else {}

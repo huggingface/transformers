@@ -39,6 +39,7 @@ if is_torch_available():
 
     from transformers import (
         Qwen2ForCausalLM,
+        Qwen2ForQuestionAnswering,
         Qwen2ForSequenceClassification,
         Qwen2ForTokenClassification,
         Qwen2Model,
@@ -55,6 +56,7 @@ class Qwen2ModelTester(CausalLMModelTester):
         causal_lm_class = Qwen2ForCausalLM
         sequence_class = Qwen2ForSequenceClassification
         token_class = Qwen2ForTokenClassification
+        question_answering_class = Qwen2ForQuestionAnswering
 
 
 @require_torch
@@ -70,6 +72,7 @@ class Qwen2ModelTest(CausalLMModelTest, unittest.TestCase):
             "text-classification": Qwen2ForSequenceClassification,
             "token-classification": Qwen2ForTokenClassification,
             "text-generation": Qwen2ForCausalLM,
+            "question-answering": Qwen2ForQuestionAnswering,
         }
         if is_torch_available()
         else {}

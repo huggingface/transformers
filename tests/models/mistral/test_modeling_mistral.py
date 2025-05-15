@@ -40,6 +40,7 @@ if is_torch_available():
 
     from transformers import (
         MistralForCausalLM,
+        MistralForQuestionAnswering,
         MistralForSequenceClassification,
         MistralForTokenClassification,
         MistralModel,
@@ -55,6 +56,7 @@ class MistralModelTester(CausalLMModelTester):
         causal_lm_class = MistralForCausalLM
         sequence_class = MistralForSequenceClassification
         token_class = MistralForTokenClassification
+        question_answering_class = MistralForQuestionAnswering
 
 
 @require_torch
@@ -70,6 +72,7 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
             "text-classification": MistralForSequenceClassification,
             "token-classification": MistralForTokenClassification,
             "text-generation": MistralForCausalLM,
+            "question-answering": MistralForQuestionAnswering,
         }
         if is_torch_available()
         else {}

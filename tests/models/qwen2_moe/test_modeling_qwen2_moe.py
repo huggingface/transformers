@@ -36,6 +36,7 @@ if is_torch_available():
 
     from transformers import (
         Qwen2MoeForCausalLM,
+        Qwen2MoeForQuestionAnswering,
         Qwen2MoeForSequenceClassification,
         Qwen2MoeForTokenClassification,
         Qwen2MoeModel,
@@ -52,6 +53,7 @@ class Qwen2MoeModelTester(CausalLMModelTester):
         causal_lm_class = Qwen2MoeForCausalLM
         sequence_class = Qwen2MoeForSequenceClassification
         token_class = Qwen2MoeForTokenClassification
+        question_answering_class = Qwen2MoeForQuestionAnswering
 
 
 @require_torch
@@ -67,6 +69,7 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
             "text-classification": Qwen2MoeForSequenceClassification,
             "token-classification": Qwen2MoeForTokenClassification,
             "text-generation": Qwen2MoeForCausalLM,
+            "question-answering": Qwen2MoeForQuestionAnswering,
         }
         if is_torch_available()
         else {}

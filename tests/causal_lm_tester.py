@@ -39,6 +39,7 @@ class CausalLMModelTester:
     causal_lm_class = None
     sequence_classification_class = None
     token_classification_class = None
+    question_answering_class = None
     pipeline_model_mapping = None
 
     def _verify_model_attributes(self):
