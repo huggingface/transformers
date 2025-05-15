@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     CaptureLogger,
     is_pipeline_test,
     require_accelerate,
-    require_tf,
     require_torch,
     require_torch_accelerator,
     require_torch_or_tf,
@@ -269,91 +268,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         outputs = text_generator(data(), do_sample=False, max_new_tokens=10)
         assert isinstance(outputs, PipelineIterator)
         outputs = list(outputs)
-        self.assertEqual(
-            outputs,
-            [
-                [{"generated_text": expected_chat1}],
-                [{"generated_text": expected_chat2}],
-            ],
-        )
-
-    @require_tf
-    def test_small_model_tf(self):
-        text_generator = pipeline(task="text-generation", model="sshleifer/tiny-ctrl", framework="tf")
-
-        # Using `do_sample=False` to force deterministic output
-        outputs = text_generator("This is a test", do_sample=False)
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "generated_text": (
-                        "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵"
-                        " please,"
-                    )
-                }
-            ],
-        )
-
-        outputs = text_generator(["This is a test", "This is a second test"], do_sample=False)
-        self.assertEqual(
-            outputs,
-            [
-                [
-                    {
-                        "generated_text": (
-                            "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵"
-                            " please,"
-                        )
-                    }
-                ],
-                [
-                    {
-                        "generated_text": (
-                            "This is a second test Chieftain Chieftain prefecture prefecture prefecture Cannes Cannes"
-                            " Cannes 閲閲Cannes Cannes Cannes 攵 please,"
-                        )
-                    }
-                ],
-            ],
-        )
-
-    @require_tf
-    def test_small_chat_model_tf(self):
-        text_generator = pipeline(
-            task="text-generation", model="hf-internal-testing/tiny-gpt2-with-chatml-template", framework="tf"
-        )
-        # Using `do_sample=False` to force deterministic output
-        chat1 = [
-            {"role": "system", "content": "This is a system message."},
-            {"role": "user", "content": "This is a test"},
-        ]
-        chat2 = [
-            {"role": "system", "content": "This is a system message."},
-            {"role": "user", "content": "This is a second test"},
-        ]
-        outputs = text_generator(chat1, do_sample=False, max_new_tokens=10)
-        expected_chat1 = chat1 + [
-            {
-                "role": "assistant",
-                "content": " factors factors factors factors factors factors factors factors factors factors",
-            }
-        ]
-        self.assertEqual(
-            outputs,
-            [
-                {"generated_text": expected_chat1},
-            ],
-        )
-
-        outputs = text_generator([chat1, chat2], do_sample=False, max_new_tokens=10)
-        expected_chat2 = chat2 + [
-            {
-                "role": "assistant",
-                "content": " stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs",
-            }
-        ]
-
         self.assertEqual(
             outputs,
             [
