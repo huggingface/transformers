@@ -135,7 +135,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     Unless the model you're using explicitly sets these generation parameters in its configuration files
     (`generation_config.json`), the following default values will be used:
     - max_new_tokens: 256
-    - num_beams: 4
+    - num_beams: 5
 
     Example:
 
@@ -201,7 +201,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     # Make sure the docstring is updated when the default generation config is changed
     _default_generation_config = GenerationConfig(
         max_new_tokens=256,
-        num_beams=4,
+        num_beams=5,  # follows openai's whisper implementation
     )
 
     def __init__(

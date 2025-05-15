@@ -436,6 +436,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
             image_processor=image_processor,
             processor=processor,
             torch_dtype=torch_dtype,
+            max_new_tokens=20,
         )
         return text_generator, ["This is a test", "Another test"]
 

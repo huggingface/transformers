@@ -51,6 +51,7 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
             image_processor=image_processor,
             processor=processor,
             torch_dtype=torch_dtype,
+            max_new_tokens=20,
         )
         return generator, ["Something to write", "Something else"]
 

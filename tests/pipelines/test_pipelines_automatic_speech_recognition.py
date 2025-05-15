@@ -88,6 +88,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             image_processor=image_processor,
             processor=processor,
             torch_dtype=torch_dtype,
+            max_new_tokens=20,
         )
 
         # test with a raw waveform
@@ -1106,7 +1107,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("facebook/s2t-small-mustc-en-it-st")
         feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/s2t-small-mustc-en-it-st")
 
-        asr = AutomaticSpeechRecognitionPipeline(model=model, tokenizer=tokenizer, feature_extractor=feature_extractor)
+        asr = AutomaticSpeechRecognitionPipeline(
+            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor, max_new_tokens=20
+        )
 
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
 
@@ -1210,7 +1213,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-large")
 
         speech_recognizer_2 = AutomaticSpeechRecognitionPipeline(
-            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor, max_new_tokens=20
         )
         output_2 = speech_recognizer_2(ds[40]["audio"])
         self.assertEqual(output, output_2)
@@ -1223,6 +1226,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             tokenizer=tokenizer,
             feature_extractor=feature_extractor,
             generate_kwargs={"task": "transcribe", "language": "<|it|>"},
+            max_new_tokens=20,
         )
         output_3 = speech_translator(ds[40]["audio"])
         self.assertEqual(output_3, {"text": " Un uomo ha detto all'universo, Sir, esiste."})
@@ -1294,6 +1298,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             tokenizer=processor.tokenizer,
             feature_extractor=processor.feature_extractor,
             generate_kwargs={"language": "en"},
+            max_new_tokens=20,
         )
 
         start_time = time.time()
@@ -1340,6 +1345,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             tokenizer=processor.tokenizer,
             feature_extractor=processor.feature_extractor,
             generate_kwargs={"language": "en"},
+            max_new_tokens=20,
         )
 
         start_time = time.time()

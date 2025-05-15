@@ -66,7 +66,7 @@ class Text2TextGenerationPipeline(Pipeline):
     text2text_generator("question: What is 42 ? context: 42 is the answer to life, the universe and everything")
     ```"""
 
-    # Make sure the docstring is updated when the default generation config is changed
+    # Make sure the docstring is updated when the default generation config is changed (in all pipelines in this file)
     _default_generation_config = GenerationConfig(
         max_new_tokens=256,
         num_beams=4,
@@ -250,6 +250,11 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     of available parameters, see the [following
     documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation.GenerationMixin.generate)
 
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 4
+
     Usage:
 
     ```python
@@ -318,6 +323,11 @@ class TranslationPipeline(Text2TextGenerationPipeline):
     up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=translation).
     For a list of available parameters, see the [following
     documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation.GenerationMixin.generate)
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 4
 
     Usage:
 
