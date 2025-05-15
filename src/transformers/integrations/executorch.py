@@ -57,19 +57,13 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         if not hasattr(model.config, "use_cache") or model.config.use_cache is False:
             raise ValueError("The model must have caching enabled to be performant.")
 
-        if not hasattr(model.config, "cache_implementation"):
-            # If `cache_implementation` is not specified explicitly in the config, `DynamicCache` will
-            # be used by default, so export will use `StaticCache` by default.
-            logging.info("Using `StaticCache` for export as `cache_implementation` is not specified in the config.")
+        if not hasattr(model.config, "layer_attention_pattern"):
+            # If `layer_attention_pattern` is not specified explicitly in the config, there is only 1 type of layers, so 
+            # export will use `StaticCache` by default.
+            logging.info("Using `StaticCache` for export as `layer_attention_pattern` is not specified in the config.")
             self.model = TorchExportableModuleWithStaticCache(model)
         else:
-            if model.config.cache_implementation == "hybrid":
-                self.model = TorchExportableModuleWithHybridCache(model, max_batch_size, max_cache_len)
-            else:
-                raise ValueError(
-                    f"Unsupported cache implementation: {model.config.cache_implementation}. "
-                    "Please use `hybrid` or `static`."
-                )
+            self.model = TorchExportableModuleWithHybridCache(model, max_batch_size, max_cache_len)
 
     def forward(
         self,
