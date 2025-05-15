@@ -13,10 +13,22 @@
 # limitations under the License.
 """Testing suite for the PyTorch ESM model."""
 
+import tempfile
 import unittest
 
+import pytest
+
 from transformers import EsmConfig, is_torch_available
-from transformers.testing_utils import TestCasePlus, require_bitsandbytes, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    TestCasePlus,
+    is_flaky,
+    require_bitsandbytes,
+    require_flash_attn,
+    require_torch,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -298,6 +310,39 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Esm does not support embedding resizing")
     def test_resize_tokens_embeddings(self):
         pass
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @is_flaky()
+    @slow
+    def test_flash_attn_2_equivalence(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(reason="Model does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model_class.main_input_name]
+                dummy_input = dummy_input.to(torch_device)
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_fa = model_fa(dummy_input, output_hidden_states=True)
+
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
+
+                torch.testing.assert_close(logits_fa, logits, atol=1e-2, rtol=1e-3)
 
 
 @slow
