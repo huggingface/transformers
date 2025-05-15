@@ -766,6 +766,9 @@ class PegasusXPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
     # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
@@ -1248,7 +1251,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
             elif not isinstance(past_key_values, EncoderDecoderCache):
                 return_legacy_cache = True
                 logger.warning_once(
-                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.51.0. "
+                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                     "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
                     "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
                 )
