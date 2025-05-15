@@ -369,6 +369,9 @@ class ImageProcessingMixin(PushToHubMixin):
                 text = reader.read()
             image_processor_dict = json.loads(text)
 
+            # If it was saved as part of processor, then it will be saved under `image_processor_config`
+            image_processor_dict = image_processor_dict.get("image_processor_config", image_processor_dict)
+
         except json.JSONDecodeError:
             raise OSError(
                 f"It looks like the config file at '{resolved_image_processor_file}' is not a valid JSON file."
@@ -465,6 +468,7 @@ class ImageProcessingMixin(PushToHubMixin):
         with open(json_file, encoding="utf-8") as reader:
             text = reader.read()
         image_processor_dict = json.loads(text)
+        image_processor_dict = image_processor_dict.get("image_processor_config", image_processor_dict)
         return cls(**image_processor_dict)
 
     def to_json_string(self) -> str:
@@ -486,6 +490,7 @@ class ImageProcessingMixin(PushToHubMixin):
         if _processor_class is not None:
             dictionary["processor_class"] = _processor_class
 
+        dictionary = {"image_processor_config": dictionary}
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
     def to_json_file(self, json_file_path: Union[str, os.PathLike]):

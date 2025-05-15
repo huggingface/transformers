@@ -25,7 +25,7 @@ class FeatureExtractionSavingTestMixin:
 
     def test_feat_extract_to_json_string(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
-        obj = json.loads(feat_extract.to_json_string())
+        obj = json.loads(feat_extract.to_json_string())["feature_extractor_config"]
         for key, value in self.feat_extract_dict.items():
             self.assertEqual(obj[key], value)
 

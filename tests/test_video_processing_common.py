@@ -111,7 +111,7 @@ class VideoProcessingTestMixin:
     def test_video_processor_to_json_string(self):
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class(**self.video_processor_dict)
-            obj = json.loads(video_processor.to_json_string())
+            obj = json.loads(video_processor.to_json_string())["video_processor_config"]
             for key, value in self.video_processor_dict.items():
                 self.assertEqual(obj[key], value)
 

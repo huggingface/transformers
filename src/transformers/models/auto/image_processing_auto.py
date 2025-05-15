@@ -471,6 +471,7 @@ class AutoImageProcessor:
             if not is_timm_config_dict(config_dict):
                 raise initial_exception
 
+        config_dict = config_dict.get("image_processor_config", config_dict)
         image_processor_type = config_dict.get("image_processor_type", None)
         image_processor_auto_map = None
         if "AutoImageProcessor" in config_dict.get("auto_map", {}):

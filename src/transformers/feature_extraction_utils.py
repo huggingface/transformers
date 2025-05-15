@@ -539,6 +539,9 @@ class FeatureExtractionMixin(PushToHubMixin):
                 text = reader.read()
             feature_extractor_dict = json.loads(text)
 
+            # If it was saved as part of processor, then it will be saved under `feature_extractor_config`
+            feature_extractor_dict = feature_extractor_dict.get("feature_extractor_config", feature_extractor_dict)
+
         except json.JSONDecodeError:
             raise OSError(
                 f"It looks like the config file at '{resolved_feature_extractor_file}' is not a valid JSON file."
@@ -630,6 +633,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         with open(json_file, encoding="utf-8") as reader:
             text = reader.read()
         feature_extractor_dict = json.loads(text)
+        feature_extractor_dict = feature_extractor_dict.get("feature_extractor_config", feature_extractor_dict)
         return cls(**feature_extractor_dict)
 
     def to_json_string(self) -> str:
@@ -651,6 +655,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         if _processor_class is not None:
             dictionary["processor_class"] = _processor_class
 
+        dictionary = {"feature_extractor_config": dictionary}
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
     def to_json_file(self, json_file_path: Union[str, os.PathLike]):

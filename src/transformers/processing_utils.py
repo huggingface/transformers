@@ -50,6 +50,7 @@ from .tokenization_utils_base import (
 from .utils import (
     CHAT_TEMPLATE_DIR,
     CHAT_TEMPLATE_FILE,
+    GENERAL_PREPROCESSOR_NAME,
     LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
     PROCESSOR_NAME,
     PushToHubMixin,
@@ -632,6 +633,7 @@ class ProcessorMixin(PushToHubMixin):
             custom_object_save(self, save_directory, config=configs)
 
         save_jinja_files = kwargs.get("save_jinja_files", True)
+        preprocessors_dict = {}
 
         for attribute_name in self.attributes:
             attribute = getattr(self, attribute_name)
@@ -643,7 +645,13 @@ class ProcessorMixin(PushToHubMixin):
                 # Propagate save_jinja_files to tokenizer to ensure we don't get conflicts
                 attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
             else:
-                attribute.save_pretrained(save_directory)
+                # Save all atrributes except for tokenizer in one dict
+                preprocessors_dict.update(json.loads(attribute.to_json_string()))
+
+        # Save all attributes  except tokenizer in `preprocessor_config.json` as a composite config
+        output_preprocessor_file = os.path.join(save_directory, GENERAL_PREPROCESSOR_NAME)
+        with open(output_preprocessor_file, "w", encoding="utf-8") as writer:
+            writer.write(json.dumps(preprocessors_dict, indent=2, sort_keys=True) + "\n")
 
         if self._auto_class is not None:
             # We added an attribute to the init_kwargs of the tokenizers, which needs to be cleaned up.

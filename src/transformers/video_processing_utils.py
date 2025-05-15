@@ -561,9 +561,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             resolved_video_processor_file = download_url(pretrained_model_name_or_path)
         else:
             try:
-                # Try to load with a new config name first and if not successfull try with
-                # the old file name. In case we can load with old name only, raise a deprecation warning
-                # Deprecated until v5.0
                 video_processor_file = VIDEO_PROCESSOR_NAME
                 resolved_video_processor_file = cached_file(
                     pretrained_model_name_or_path,
@@ -577,27 +574,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
-                )
-            except EnvironmentError:
-                video_processor_file = "preprocessor_config.json"
-                resolved_video_processor_file = cached_file(
-                    pretrained_model_name_or_path,
-                    video_processor_file,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
-                )
-                logger.warning_once(
-                    "You have video processor config saved in `preprocessor.json` file which is deprecated. "
-                    "Video processor configs should be saved in their own `video_preprocessor.json` file. You can rename "
-                    "the file or load and save the processor back which renames it automatically. "
-                    "Loading from `preprocessor.json` will be removed in v5.0."
                 )
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
@@ -617,6 +593,9 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             with open(resolved_video_processor_file, "r", encoding="utf-8") as reader:
                 text = reader.read()
             video_processor_dict = json.loads(text)
+
+            # If it was saved as part of processor, then it will be saved under `video_processor_config`
+            video_processor_dict = video_processor_dict.get("video_processor_config", video_processor_dict)
 
         except json.JSONDecodeError:
             raise EnvironmentError(
@@ -717,6 +696,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         if _processor_class is not None:
             dictionary["processor_class"] = _processor_class
 
+        dictionary = {"video_processor_config": dictionary}
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
     def to_json_file(self, json_file_path: Union[str, os.PathLike]):
@@ -750,6 +730,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         with open(json_file, "r", encoding="utf-8") as reader:
             text = reader.read()
         video_processor_dict = json.loads(text)
+        video_processor_dict = video_processor_dict.get("video_processor_config", video_processor_dict)
         return cls(**video_processor_dict)
 
     @classmethod
