@@ -31,7 +31,6 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
