@@ -847,11 +847,6 @@ class PytorchProfilerCallback(TrainerCallback):
         self.profiler_kwargs = profiler_kwargs
         self.table_kwargs = table_kwargs if table_kwargs is not None else {}
 
-        if self.sort_by_key not in self.AVAILABLE_SORT_KEYS:
-            raise Exception(
-                f"Found sort_by_keyword: {self.sort_by_key}. Should be within {self.AVAILABLE_SORT_KEYS}. "
-            )
-
         for key in self.table_kwargs:
             if key in {"sort_by", "row_limit"}:
                 raise KeyError(
@@ -895,6 +890,11 @@ class PytorchProfilerCallback(TrainerCallback):
         self.profiler_kwargs["profile_memory"] = profile_memory or self.profile_memory
 
         self.sort_by_key = self.sort_by_key or default_sort_by_key(self.profiler_kwargs)
+
+        if self.sort_by_key not in self.AVAILABLE_SORT_KEYS:
+            raise Exception(
+                f"Found sort_by_keyword: {self.sort_by_key}. Should be within {self.AVAILABLE_SORT_KEYS}. "
+            )
 
         def on_trace_ready(profiler: torch.profiler.profile) -> None:
             if self.export_chrome_trace:
