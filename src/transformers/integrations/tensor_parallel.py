@@ -13,15 +13,16 @@
 # limitations under the License.
 from __future__ import annotations
 
+import operator
 import os
 import re
-from functools import lru_cache, partial
-from typing import List, Optional, Tuple, Union
-import operator
-from functools import reduce
+from collections.abc import MutableMapping
+from functools import partial, reduce
+from typing import Callable, List, Optional, Tuple, Union
+
 import torch
 from torch import nn
-from collections.abc import MutableMapping
+
 from ..utils import is_torch_greater_or_equal, logging
 
 
@@ -34,8 +35,9 @@ _torch_distributed_available = torch.distributed.is_available()
 
 
 if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-    from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
     from torch.distributed.device_mesh import DeviceMesh
+    from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
+
 
 def initialize_tensor_parallelism(tp_plan, tp_size=None):
     r"""
@@ -80,21 +82,16 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
     torch.cuda.set_device(local_rank)
     # Create and log the device mesh
     mesh = torch.arange(world_size).reshape(dp_size, tp_size, cp_size)
-    world_mesh = DeviceMesh(device_type="cuda", mesh=mesh, mesh_dim_names=("dp", "tp", "cp"))
-    tp_mesh = world_mesh["tp"]
-    dp_mesh = world_mesh["dp"]
-    cp_mesh = world_mesh["cp"]
-    world_mesh["dp", "cp"]._flatten(mesh_dim_name="dp_cp")
-
+    world_mesh = DeviceMesh(device_type="cuda", mesh=mesh)
     if logger:
         logger.info(f"Created DeviceMesh: {world_mesh}")
-        logger.info(
-            f"Distributed setup - Rank: {rank}, World size: {world_size}, Local rank: {local_rank}, "
-            f"DP: {dp_mesh.get_local_rank()}, TP: {tp_mesh.get_local_rank()}, CP: {cp_mesh.get_local_rank()}"
-        )
-
+        logger.info(f"Distributed setup - Rank: {rank}, World size: {world_size}, Local rank: {local_rank}, ")
     # Return handles for further use
-    return torch.device(device_type, local_rank), tp_mesh, world_mesh
+    return (
+        torch.device(device_type, local_rank),
+        torch.device(world_mesh.device_type, int(os.environ["LOCAL_RANK"])),
+        world_mesh,
+    )
 
 
 def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> List[int]:
@@ -219,7 +216,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     # Flatten the mesh to get the total number of devices
     mesh_shape = device_mesh.shape
     world_size = reduce(operator.mul, mesh_shape)
-    
+
     if rank >= world_size:
         raise ValueError(f"Rank {rank} is out of bounds for mesh size {world_size}")
 
@@ -230,7 +227,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     # Construct slicing index dynamically
     slice_indices = [slice(None)] * param.dim()
     slice_indices[dim] = slice(start, end)
-    
+
     return param[tuple(slice_indices)]
 
 
@@ -646,7 +643,6 @@ class SequenceParallel(TensorParallelLayer):
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
 
-
 class ParallelInterface(MutableMapping):
     """
     Dict-like object keeping track of allowed attention functions. You can easily add a new attention function
@@ -669,6 +665,7 @@ class ParallelInterface(MutableMapping):
         "sequence_parallel": SequenceParallel(),
         "replicate": ReplicateParallel(),
     }
+
     def __init__(self):
         self._local_mapping = {}
 
@@ -698,6 +695,7 @@ class ParallelInterface(MutableMapping):
 
     def valid_keys(self) -> List[str]:
         return list(self.keys())
+
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
