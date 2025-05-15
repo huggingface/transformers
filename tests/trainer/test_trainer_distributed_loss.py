@@ -1,7 +1,6 @@
 import json
 
 import datasets
-import torch
 
 from tests.trainer.test_trainer import StoreLossCallback
 from transformers import (
@@ -19,7 +18,6 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_torch_dist_unique_port,
     require_torch_multi_accelerator,
-    require_torch_multi_gpu,
     torch_device,
 )
 
