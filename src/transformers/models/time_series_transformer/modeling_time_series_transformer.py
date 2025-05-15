@@ -1457,9 +1457,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         if self.config.context_length >= transformer_inputs.shape[1]:
             bsz, _, dim = transformer_inputs.shape
             dec_input = torch.zeros(
-                size=(bsz, 1, dim),
-                device=transformer_inputs.device,
-                dtype=transformer_inputs.dtype
+                size=(bsz, 1, dim), device=transformer_inputs.device, dtype=transformer_inputs.dtype
             )
         else:
             dec_input = transformer_inputs[:, self.config.context_length :, ...]
