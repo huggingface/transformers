@@ -22,7 +22,9 @@ from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 from .cache_utils import Cache
 from .configuration_utils import PretrainedConfig
 from .modeling_utils import GeneralInterface
-from .utils.import_utils import is_torchdynamo_compiling
+from .utils.import_utils import is_torchdynamo_compiling, is_torch_greater_or_equal
+
+_is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
 
 
 def and_masks(*mask_functions: list[Callable]) -> Callable:
@@ -203,11 +205,15 @@ def sdpa_mask(
     layer_pattern: LayerPattern = LayerPattern("full"),
     attention_mask: Optional[torch.Tensor] = None,
     allow_is_causal_skip: bool = True,
+    allow_torch_fix: bool = True,
     **kwargs,
 ) -> Optional[torch.Tensor]:
     """
     Create a 4D boolean mask of shape `(batch_size, 1, query_length, kv_length)` where a value of True indicates that
     the element should take part in the attention computation, and False that it should not.
+    For older torch versions, if `allow_torch_fix=True` (the default), rows corresponding to query tokens that do not attend
+    to any other tokens (due to padding) will be fully attended to instead, in order to avoid `nan` propagation (this does
+    not change the final result).
 
     Args:
         batch_size (`int`):
@@ -225,6 +231,9 @@ def sdpa_mask(
         allow_is_causal_skip (`bool`, optional):
             Whether to allow to return `None` for the mask under conditions where we can use the `is_causal` argument in
             `torch.sdpa` instead. Default to `True`.
+        allow_torch_fix (`bool`, optional):
+            Whether to update the mask in case a query is not attending to any tokens, to solve a bug in torch's older
+            versions. We need an arg to skip it when using eager. By default `True`.
 
 
     ## Creating a simple causal mask:
@@ -316,6 +325,11 @@ def sdpa_mask(
     causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
     if padding_mask is not None:
         causal_mask = causal_mask * padding_mask[:, None, None, :]
+
+    # Due to a bug in some older torch version, we need to update the mask in case a query is not attending to any
+    # tokens (due to padding). See details in https://github.com/pytorch/pytorch/issues/110213
+    if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix:
+        causal_mask |= torch.all(~causal_mask, dim=-1, keepdim=True)
     return causal_mask
 
 
@@ -359,6 +373,7 @@ def eager_mask(
         layer_pattern=layer_pattern,
         attention_mask=attention_mask,
         allow_is_causal_skip=False,
+        allow_torch_fix=False,
         **kwargs,
     )
     min_dtype = torch.finfo(dtype).min
