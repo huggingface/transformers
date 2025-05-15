@@ -3300,8 +3300,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 --learning_rate 2e-5
                 --num_train_epochs 1
                 --output_dir {tmpdir}
-                --auto_find_batch_size 0
                 --report_to none
+                --auto_find_batch_size 0
                 """.split()
             with self.assertRaises(RuntimeError):
                 with patch.object(sys, "argv", testargs):

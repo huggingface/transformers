@@ -451,10 +451,6 @@ class UniSpeechSatFlashAttention2(UniSpeechSatAttention):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # UniSpeechSatFlashAttention2 attention does not support output_attentions
-        if output_attentions:
-            raise ValueError("UniSpeechSatFlashAttention2 attention does not support output_attentions")
-
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
@@ -561,10 +557,10 @@ class UniSpeechSatSdpaAttention(UniSpeechSatAttention):
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-        if output_attentions or layer_head_mask is not None:
+        if output_attentions:
             # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "UniSpeechSatModel is using UniSpeechSatSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention"
+                "UniSpeechSatModel is using UniSpeechSatSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` . Falling back to the manual attention"
                 ' implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -572,7 +568,6 @@ class UniSpeechSatSdpaAttention(UniSpeechSatAttention):
                 key_value_states=key_value_states,
                 past_key_value=past_key_value,
                 attention_mask=attention_mask,
-                layer_head_mask=layer_head_mask,
                 output_attentions=output_attentions,
             )
 

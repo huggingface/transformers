@@ -360,10 +360,6 @@ class M2M100FlashAttention2(M2M100Attention):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # M2M100FlashAttention2 attention does not support output_attentions
-        if output_attentions:
-            raise ValueError("M2M100FlashAttention2 attention does not support output_attentions")
-
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
@@ -471,10 +467,10 @@ class M2M100SdpaAttention(M2M100Attention):
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-        if output_attentions or layer_head_mask is not None:
+        if output_attentions:
             # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "M2M100Model is using M2M100SdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention"
+                "M2M100Model is using M2M100SdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` . Falling back to the manual attention"
                 ' implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -482,7 +478,6 @@ class M2M100SdpaAttention(M2M100Attention):
                 key_value_states=key_value_states,
                 past_key_value=past_key_value,
                 attention_mask=attention_mask,
-                layer_head_mask=layer_head_mask,
                 output_attentions=output_attentions,
             )
 
@@ -1269,11 +1264,6 @@ class M2M100Model(M2M100PreTrainedModel):
 
         self.encoder = M2M100Encoder(config, self.shared)
         self.decoder = M2M100Decoder(config, self.shared)
-
-        if config._attn_implementation == "flash_attention_2":
-            logger.warning_once(
-                "Attention with Flash Attention 2 does not support `layer_head_mask`. If you need this feature, please use standard attention."
-            )
 
         # Initialize weights and apply final processing
         self.post_init()
