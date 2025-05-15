@@ -489,6 +489,7 @@ class Llama4PreTrainedModel(PreTrainedModel):
 @auto_docstring
 class Llama4TextModel(Llama4PreTrainedModel):
     _no_split_modules = ["Llama4TextDecoderLayer"]
+    base_model_prefix = "model"
     config_class = Llama4TextConfig
 
     def __init__(self, config: Llama4TextConfig):
@@ -565,9 +566,9 @@ class Llama4TextModel(Llama4PreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
-        if not isinstance(causal_masks, dict):
+        if not isinstance(causal_masks := attention_mask, dict):
             # Prepare mask arguments
-            mask_kargs = {
+            mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
@@ -577,8 +578,8 @@ class Llama4TextModel(Llama4PreTrainedModel):
             }
             # Create the masks
             causal_masks = {
-                "full": create_causal_mask(**mask_args),
-                "chunked": create_chunked_causal_mask(**mask_args),
+                "full": create_causal_mask(**mask_kwargs),
+                "chunked": create_chunked_causal_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds
@@ -644,7 +645,7 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer"]
-    base_model_prefix = "model"
+    base_model_prefix = "language_model"
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     config_class = Llama4TextConfig
@@ -1136,7 +1137,7 @@ class Llama4VisionRotaryEmbedding(nn.Module):
 
 
 class Llama4VisionModel(Llama4PreTrainedModel):
-    base_model_prefix = "model"
+    base_model_prefix = "vision_model"
     _no_split_modules = ["Llama4VisionEncoderLayer"]
     config_class = Llama4VisionConfig
 

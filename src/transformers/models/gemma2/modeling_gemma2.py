@@ -450,9 +450,9 @@ class Gemma2Model(Gemma2PreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
-        if not isinstance(causal_masks, dict):
+        if not isinstance(causal_masks := attention_mask, dict):
             # Prepare mask arguments
-            mask_kargs = {
+            mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
@@ -462,8 +462,8 @@ class Gemma2Model(Gemma2PreTrainedModel):
             }
             # Create the masks
             causal_masks = {
-                "full": create_causal_mask(**mask_args),
-                "sliding": create_sliding_causal_mask(**mask_args),
+                "full": create_causal_mask(**mask_kwargs),
+                "sliding": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
         # embed positions
