@@ -155,7 +155,7 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        seq_len (`int`, *optional*, defaults to 4096):
+        max_num_patches (`int`, *optional*, defaults to 4096):
             Maximum sequence length (here number of patches) supported by the model.
     Example:
 
@@ -203,7 +203,7 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.dense_act_fn = dense_act_fn
-        self.seq_len = seq_len
+        self.max_num_patches = seq_len
         self.d_kv = d_kv
         self.initializer_factor = initializer_factor
         self.initializer_range = initializer_range
