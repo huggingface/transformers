@@ -799,7 +799,7 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
             config.context_length + config.prediction_length, config.d_model
         )
         self.layers = nn.ModuleList(
-            [TimeSeriesTransformerDecoderLayer(config, layer_idx=1) for i in range(config.decoder_layers)]
+            [TimeSeriesTransformerDecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)]
         )
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
@@ -954,8 +954,6 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
-
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
@@ -979,7 +977,7 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
                     cross_attn_layer_head_mask=(
                         cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
                     ),
-                    past_key_value=past_key_value,
+                    past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
