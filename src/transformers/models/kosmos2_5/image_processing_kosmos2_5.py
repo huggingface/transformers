@@ -198,6 +198,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
 
         return result, resized_width, resized_height, rows, columns
 
+    # Copied from transformers.models.pix2struct.image_processing_pix2struct.normalize
     def normalize(
         self,
         image: np.ndarray,
