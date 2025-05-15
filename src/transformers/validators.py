@@ -35,7 +35,7 @@ def interval(
 ) -> Callable:
     """
     Parameterized validator that ensures that `value` is within the defined interval. Optionally, the interval can be
-    open on either side. Expected usage: `validated_field(interval(min=0), default=8)`
+    open on either side. Expected usage: `interval(min=0)(default=8)`
 
     Args:
         min (`int` or `float`, *optional*):
