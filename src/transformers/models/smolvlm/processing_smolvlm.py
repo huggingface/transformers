@@ -180,13 +180,15 @@ class SmolVLMProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
 
-    def process_vision(self, text, images, output_kwargs, do_image_splitting=False, image_processor_size=None):
+    def process_vision(
+        self, text, images, output_kwargs, do_image_splitting=False, image_processor_size=None, processor=None
+    ):
         if text is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
 
         n_images_in_images = [len(sublist) for sublist in images]
-        image_inputs = self.image_processor(
-            images, do_image_splitting=do_image_splitting, size=image_processor_size, **output_kwargs["images_kwargs"]
+        image_inputs = processor(
+            images, do_image_splitting=do_image_splitting, size=image_processor_size, **output_kwargs
         )
 
         if text is None:
@@ -309,9 +311,10 @@ class SmolVLMProcessor(ProcessorMixin):
             text, vision_inputs = self.process_vision(
                 text,
                 images,
-                output_kwargs,
+                output_kwargs["images_kwargs"],
                 do_image_splitting=self.do_image_splitting,
                 image_processor_size=self.image_size,
+                processor=self.image_processor,
             )
             inputs.update(vision_inputs)
         elif videos is not None:
@@ -319,9 +322,10 @@ class SmolVLMProcessor(ProcessorMixin):
             text, vision_inputs = self.process_vision(
                 text,
                 videos,
-                output_kwargs,
+                output_kwargs["videos_kwargs"],
                 do_image_splitting=self.do_image_splitting,
                 image_processor_size=self.video_size,
+                processor=self.video_processor,
             )
             inputs.update(vision_inputs)
 

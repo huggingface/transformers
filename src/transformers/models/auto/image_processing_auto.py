@@ -162,7 +162,7 @@ else:
             ("upernet", ("SegformerImageProcessor",)),
             ("van", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("videomae", ("VideoMAEImageProcessor",)),
-            ("vilt", ("ViltImageProcessor",)),
+            ("vilt", ("ViltImageProcessor", "ViltImageProcessorFast")),
             ("vipllava", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("vit", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("vit_hybrid", ("ViTHybridImageProcessor",)),
