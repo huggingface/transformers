@@ -916,10 +916,6 @@ def load_shard_file(args):
             device_mesh=device_mesh,
         )
 
-    # force memory release to avoid having multiple state dicts in memory as shards are processed
-    del state_dict
-    gc.collect()
-
     return error_msgs, disk_offload_index, cpu_offload_index
 
 def load_shard_files_with_threadpool(args_list):
