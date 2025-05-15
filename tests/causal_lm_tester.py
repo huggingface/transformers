@@ -1,4 +1,5 @@
 import tempfile
+from inspect import signature
 
 import pytest
 from parameterized import parameterized
@@ -34,6 +35,7 @@ import unittest
 # TODO Matt: Add this to a proper file later
 class CausalLMModelTester:
     _required_attributes = ("base_model_class", "config_class", "causal_lm_class")
+    forced_config_args = None  # Arguments that should be passed to the config class even if not in its signature
     config_class = None
     base_model_class = None
     causal_lm_class = None
@@ -93,6 +95,7 @@ class CausalLMModelTester:
         num_labels=3,
         num_choices=4,
         pad_token_id=0,
+        is_decoder=False,
         scope=None,
     ):
         self._verify_model_attributes()
@@ -121,6 +124,7 @@ class CausalLMModelTester:
         self.pad_token_id = pad_token_id
         self.scope = scope
         self.head_dim = self.hidden_size // self.num_attention_heads
+        self.is_decoder = is_decoder
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -146,23 +150,11 @@ class CausalLMModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return self.config_class(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-            pad_token_id=self.pad_token_id,
-            head_dim=self.head_dim,
-        )
+        kwarg_names = list(signature(self.config_class.__init__).parameters.keys())
+        kwargs = {
+            k: getattr(self, k) for k in kwarg_names + self.forced_config_args if hasattr(self, k) and k != "self"
+        }
+        return self.config_class(**kwargs)
 
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels

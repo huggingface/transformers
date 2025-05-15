@@ -43,6 +43,7 @@ if is_torch_available():
 
 class JetMoeModelTester(CausalLMModelTester):
     config_class = JetMoeConfig
+    forced_config_args = ["pad_token_id"]
     if is_torch_available():
         base_model_class = JetMoeModel
         causal_lm_class = JetMoeForCausalLM
@@ -56,6 +57,10 @@ class JetMoeModelTester(CausalLMModelTester):
         if is_torch_available()
         else {}
     )
+
+    def __init__(self, parent, hidden_act="silu", kv_channels=8, **kwargs):
+        super().__init__(parent, hidden_act=hidden_act, **kwargs)
+        self.kv_channels = kv_channels
 
 
 @require_torch
