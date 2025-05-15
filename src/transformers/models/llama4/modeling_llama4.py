@@ -24,7 +24,7 @@ import torch.nn.functional as F
 from transformers.models.llama4.configuration_llama4 import Llama4VisionConfig
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, HybridChunkedCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_chunked_causal_mask
@@ -551,10 +551,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids.to(self.embed_tokens.weight.device))
 
         if use_cache and past_key_values is None:
-            if self.config.get_text_config().attention_chunk_size is not None:
-                past_key_values = HybridChunkedCache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
-            else:
-                past_key_values = DynamicCache()
+            past_key_values = DynamicCache()
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
