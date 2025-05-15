@@ -37,7 +37,7 @@ if is_torch_available():
 @require_torch_large_gpu
 @require_read_token
 class Llama4IntegrationTest(unittest.TestCase):
-    model_id = "ll-re/Llama-4-17B-Omni-Instruct"
+    model_id = "meta-llama/Llama-4-Scout-17B-16E"
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
     cuda_compute_capability_major_version = None
@@ -48,11 +48,11 @@ class Llama4IntegrationTest(unittest.TestCase):
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
         cls.model = Llama4ForConditionalGeneration.from_pretrained(
-            "ll-re/Llama-4-17B-Omni-Instruct", device_map="auto", torch_dtype=torch.float32
+            "meta-llama/Llama-4-Scout-17B-16E", device_map="auto", torch_dtype=torch.float32, attn_implementation="eager",
         )
 
     def setUp(self):
-        self.processor = Llama4Processor.from_pretrained("ll-re/Llama-4-17B-Omni-Instruct", padding_side="left")
+        self.processor = Llama4Processor.from_pretrained("meta-llama/Llama-4-Scout-17B-16E", padding_side="left")
 
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         self.messages = [
@@ -72,11 +72,8 @@ class Llama4IntegrationTest(unittest.TestCase):
             "Roses are red, violets are blue, and this poem is about you. Roses are red, violets are blue, and I love",
         ]
 
-        messages = [
-            {"role": "user", "content": "Who are you?"},
-        ]
         inputs = self.processor.apply_chat_template(
-            messages, add_generation_prompt=True, return_tensors="pt", return_dict=True
+            self.messages, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
         ).to(torch_device)
 
         output = self.model.generate(**inputs, max_new_tokens=100)
@@ -108,13 +105,13 @@ class Llama4IntegrationTest(unittest.TestCase):
             return_tensors="pt",
             padding=True,
             add_generation_prompt=True,
-        ).to(torch_device)
+        ).to(device=torch_device, dtype=torch.float32)
 
         output = self.model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = [
-            'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear turquoise water and a blue sky in the background. It looks like',
-            "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. \n\nHere's a breakdown of the differences:\n\n*   **Image 1:** Shows a cow"
+            'system\n\nYou are a helpful assistant.user\n\nWhat is shown in this image?assistant\n\nThe image shows a cow standing on a beach, with a blue sky and a body of water in the background. The cow is brown with a white',
+            'system\n\nYou are a helpful assistant.user\n\nAre these images identical?assistant\n\nNo, these images are not identical. The first image shows a cow standing on a beach with a blue sky and a white cloud in the background.'
         ]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
