@@ -78,13 +78,16 @@ class Gemma2Config(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        query_pre_attn_scalar (`float`, *optional*, defaults to 256): scaling factor used on the attention scores
-        sliding_window (`int`, *optional*, defaults to 4096): in Gemma2, every other layer uses sliding window attention. This is the
-            size of the sliding window.
+        query_pre_attn_scalar (`float`, *optional*, defaults to 256):
+            scaling factor used on the attention scores
+        sliding_window (`int`, *optional*, defaults to 4096):
+            in Gemma2, every other layer uses sliding window attention. This is the size of the sliding window.
         layer_attention_patterns (`list`, *optional*, defaults to None):
             Attention pattern for each layer.
-        final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
-        attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh softcapping on the attention scores.
+        final_logit_softcapping (`float`, *optional*, defaults to 30.0):
+            scaling factor when applying tanh softcapping on the logits.
+        attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
+            scaling factor when applying tanh softcapping on the attention scores.
 
     ```python
     >>> from transformers import Gemma2Model, Gemma2Config
@@ -167,9 +170,9 @@ class Gemma2Config(PretrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
-
         self.layer_attention_patterns = layer_attention_patterns
-        if layer_attention_patterns is None:
+
+        if self.layer_attention_patterns is None:
             self.layer_attention_patterns = [
                 "sliding" if bool((i + 1) % 2) else "full" for i in range(self.num_hidden_layers)
             ]

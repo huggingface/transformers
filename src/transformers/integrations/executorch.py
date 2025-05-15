@@ -58,9 +58,11 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             raise ValueError("The model must have caching enabled to be performant.")
 
         if not hasattr(model.config, "layer_attention_patterns"):
-            # If `layer_attention_patterns` is not specified explicitly in the config, there is only 1 type of layers, so 
+            # If `layer_attention_patterns` is not specified explicitly in the config, there is only 1 type of layers, so
             # export will use `StaticCache` by default.
-            logging.info("Using `StaticCache` for export as `layer_attention_patterns` is not specified in the config.")
+            logging.info(
+                "Using `StaticCache` for export as `layer_attention_patterns` is not specified in the config."
+            )
             self.model = TorchExportableModuleWithStaticCache(model)
         else:
             self.model = TorchExportableModuleWithHybridCache(model, max_batch_size, max_cache_len)

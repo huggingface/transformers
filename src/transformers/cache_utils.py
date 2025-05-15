@@ -2059,11 +2059,7 @@ class HybridChunkedCache(Cache):
         key_states = key_states.to(k_out.dtype)
         value_states = value_states.to(v_out.dtype)
 
-        if self.is_sliding[layer_idx]:
-            update_fn = self._sliding_update
-        else:
-            update_fn = self._static_update
-
+        update_fn = self._sliding_update if self.is_sliding[layer_idx] else self._static_update
         return update_fn(
             cache_position,
             layer_idx,
