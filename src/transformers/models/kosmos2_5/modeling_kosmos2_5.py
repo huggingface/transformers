@@ -511,15 +511,12 @@ class Kosmos2_5VisionAttention(nn.Module):
         """
         Self-attention block
         """
-        batch_size, seq_length, _ = hidden_states.size()
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.query(hidden_states)
-        key_states = self.key(hidden_states)
-        value_states = self.value(hidden_states)
-
-        query_states = query_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+        query_states = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -542,7 +539,7 @@ class Kosmos2_5VisionAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, -1)
+        attn_output = attn_output.reshape(*input_shape, -1)
         attn_output = self.output(attn_output)
 
         return attn_output, attn_weights
@@ -793,13 +790,6 @@ class Kosmos2_5TextAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.is_causal = is_causal
 
-    # Copied from transformers.models.kosmos2.modeling_kosmos2.KosmosTextAttention._shape
-    def _shape(self, projection: torch.Tensor) -> torch.Tensor:
-        new_projection_shape = projection.size()[:-1] + (self.num_heads, self.head_dim)
-        # move heads to 2nd position (B, T, H * D) -> (B, T, H, D) -> (B, H, T, D)
-        new_projection = projection.view(new_projection_shape).permute(0, 2, 1, 3)
-        return new_projection
-
     def forward(
         self,
         hidden_states: torch.Tensor,  # text part
@@ -811,15 +801,16 @@ class Kosmos2_5TextAttention(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        batch_size, seq_length, _ = hidden_states.size()
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         # use encoder_hidden_states if cross attention
         is_cross_attention = encoder_hidden_states is not None
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
 
-        key_states = self._shape(self.k_proj(current_states))
-        value_states = self._shape(self.v_proj(current_states))
-        query_states = self._shape(self.q_proj(hidden_states))
+        key_states = self.k_proj(current_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(current_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Apply `self.scaling`
         query_states = self.scaling * query_states
@@ -850,7 +841,7 @@ class Kosmos2_5TextAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, -1)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
         return attn_output, attn_weights
 
