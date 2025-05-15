@@ -542,7 +542,6 @@ def create_causal_mask(
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
-    layer_idx: int,
     output_attentions: bool = False,
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
     """
@@ -565,6 +564,8 @@ def create_causal_mask(
             Whether we return the attention scores or not. By default `False`.
     """
     layer_pattern = LayerPattern("full")
+    # If we have an HybridCache structure, here we want to create the mask for the full layers
+    layer_idx = past_key_values.is_sliding.find(False) if hasattr(past_key_values, "is_sliding") else 0
     return _create_mask(
         layer_pattern=layer_pattern,
         config=config,
@@ -583,7 +584,6 @@ def create_sliding_window_causal_mask(
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
-    layer_idx: int,
     output_attentions: bool = False,
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
     """
@@ -607,6 +607,8 @@ def create_sliding_window_causal_mask(
             Whether we return the attention scores or not. By default `False`.
     """
     layer_pattern = LayerPattern("sliding", config.sliding_window)
+    # If we have an HybridCache structure, here we want to create the mask for the sliding layers
+    layer_idx = past_key_values.is_sliding.find(True) if hasattr(past_key_values, "is_sliding") else 0
     return _create_mask(
         layer_pattern=layer_pattern,
         config=config,
@@ -625,7 +627,6 @@ def create_chunked_causal_mask(
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
-    layer_idx: int,
     output_attentions: bool = False,
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
     """
@@ -649,6 +650,8 @@ def create_chunked_causal_mask(
             Whether we return the attention scores or not. By default `False`.
     """
     layer_pattern = LayerPattern("chunked", config.attention_chunk_size)
+    # If we have an HybridCache structure, here we want to create the mask for the sliding layers
+    layer_idx = past_key_values.is_sliding.find(True) if hasattr(past_key_values, "is_sliding") else 0
     return _create_mask(
         layer_pattern=layer_pattern,
         config=config,

@@ -486,12 +486,6 @@ class Llama4PreTrainedModel(PreTrainedModel):
             module.positional_embedding_vlm.data.normal_(std=module.scale)
 
 
-LLAMA4_MASK_FUNCTIONS = {
-    "full": create_causal_mask,
-    "chunked": create_chunked_causal_mask,
-}
-
-
 @auto_docstring
 class Llama4TextModel(Llama4PreTrainedModel):
     _no_split_modules = ["Llama4TextDecoderLayer"]
@@ -570,18 +564,22 @@ class Llama4TextModel(Llama4PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_masks = {} if not isinstance(attention_mask, dict) else attention_mask
-        for layer_idx, layer_pattern in enumerate(self.layer_attention_patterns):
-            if layer_pattern not in causal_masks:
-                causal_masks[layer_pattern] = LLAMA4_MASK_FUNCTIONS[layer_pattern](
-                    self.config,
-                    inputs_embeds,
-                    attention_mask,
-                    cache_position,
-                    past_key_values,
-                    layer_idx,
-                    output_attentions,
-                )
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_masks, dict):
+            # Prepare mask arguments
+            mask_kargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "output_attentions": output_attentions,
+            }
+            # Create the masks
+            causal_masks = {
+                "full": create_causal_mask(**mask_args),
+                "chunked": create_chunked_causal_mask(**mask_args),
+            }
 
         hidden_states = inputs_embeds
 

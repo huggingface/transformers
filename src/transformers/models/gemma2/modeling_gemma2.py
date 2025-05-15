@@ -371,12 +371,6 @@ class Gemma2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-GEMMA2_MASK_FUNCTIONS = {
-    "full": create_causal_mask,
-    "sliding": create_sliding_window_causal_mask,
-}
-
-
 @auto_docstring
 class Gemma2Model(Gemma2PreTrainedModel):
     def __init__(self, config: Gemma2Config):
@@ -455,18 +449,22 @@ class Gemma2Model(Gemma2PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_masks = {} if not isinstance(attention_mask, dict) else attention_mask
-        for layer_idx, layer_pattern in enumerate(self.layer_attention_patterns):
-            if layer_pattern not in causal_masks:
-                causal_masks[layer_pattern] = GEMMA2_MASK_FUNCTIONS[layer_pattern](
-                    self.config,
-                    inputs_embeds,
-                    attention_mask,
-                    cache_position,
-                    past_key_values,
-                    layer_idx,
-                    output_attentions,
-                )
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_masks, dict):
+            # Prepare mask arguments
+            mask_kargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "output_attentions": output_attentions,
+            }
+            # Create the masks
+            causal_masks = {
+                "full": create_causal_mask(**mask_args),
+                "sliding": create_sliding_causal_mask(**mask_args),
+            }
 
         # embed positions
         hidden_states = inputs_embeds

@@ -353,11 +353,6 @@ class LlamaPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-LLAMA_MASK_FUNCTIONS = {
-    "full": create_causal_mask,
-}
-
-
 @auto_docstring
 class LlamaModel(LlamaPreTrainedModel):
     def __init__(self, config: LlamaConfig):
@@ -371,7 +366,6 @@ class LlamaModel(LlamaPreTrainedModel):
         )
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = LlamaRotaryEmbedding(config=config)
-        self.layer_attention_patterns = ["full" for _ in range(config.num_hidden_layers)]
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -432,18 +426,14 @@ class LlamaModel(LlamaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_masks = {} if not isinstance(attention_mask, dict) else attention_mask
-        for layer_idx, layer_pattern in enumerate(self.layer_attention_patterns):
-            if layer_pattern not in causal_masks:
-                causal_masks[layer_pattern] = LLAMA_MASK_FUNCTIONS[layer_pattern](
-                    self.config,
-                    inputs_embeds,
-                    attention_mask,
-                    cache_position,
-                    past_key_values,
-                    layer_idx,
-                    output_attentions,
-                )
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            output_attentions=output_attentions,
+        )
 
         hidden_states = inputs_embeds
 
@@ -454,13 +444,13 @@ class LlamaModel(LlamaPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for i in range(self.config.num_hidden_layers):
+        for decoder_layer in self.layers[:self.config.num_hidden_layers]:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            layer_outputs = self.layers[i](
+            layer_outputs = decoder_layer(
                 hidden_states,
-                attention_mask=causal_masks[self.layer_attention_patterns[i]],
+                attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,
