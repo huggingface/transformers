@@ -5,14 +5,15 @@ Usage:
 export CUDA_VISIBLE_DEVICES=0,1,2,3
 export CUDA_VISIBLE_DEVICES=4,5,6,7
 export CUDA_VISIBLE_DEVICES=5,6,7
-TP_SIZE=2 DP_SIZE=2 torchrun --nproc_per_node=4 --rdzv_endpoint=localhost:29503 test_train.py
-CP_SIZE=2 DP_SIZE=2 torchrun --nproc_per_node=4 test_train.py
-CP_SIZE=2 TP_SIZE=2 torchrun --nproc_per_node=4 test_train.py
+TP_SIZE=2 DP_SIZE=2 torchrun --nproc_per_node=4 --rdzv_endpoint=localhost:29503 examples/3D_parallel.py
+CP_SIZE=2 DP_SIZE=2 torchrun --nproc_per_node=4 examples/3D_parallel.py
+CP_SIZE=2 TP_SIZE=2 torchrun --nproc_per_node=4 examples/3D_parallel.py
+DP_SIZE=2 CP_SIZE=2 TP_SIZE=2 torchrun --nproc_per_node=8 examples/3D_parallel.py
 
-TP_SIZE=1 CP_SIZE=4 torchrun --nproc_per_node=4 test_train.py
-TP_SIZE=1 DP_SIZE=4 torchrun --nproc_per_node=4 test_train.py
-TP_SIZE=4 DP_SIZE=1 torchrun --nproc_per_node=4 --rdzv_endpoint=localhost:29503 test_train.py
-IGNORE_SANITY=1 CP_SIZE=1 TP_SIZE=1 DP_SIZE=1 torchrun --nproc_per_node=1 --rdzv_endpoint=l
+TP_SIZE=1 CP_SIZE=4 torchrun --nproc_per_node=4 examples/3D_parallel.py
+TP_SIZE=1 DP_SIZE=4 torchrun --nproc_per_node=4 examples/3D_parallel.py
+TP_SIZE=4 DP_SIZE=1 torchrun --nproc_per_node=4 --rdzv_endpoint=localhost:29503 examples/3D_parallel.py
+IGNORE_SANITY=1 CP_SIZE=1 TP_SIZE=1 DP_SIZE=1 torchrun --nproc_per_node=1 --rdzv_endpoint=localhost:29504 examples/3D_parallel.py
 ocalhost:29504 test_train.py
 """
 
@@ -38,8 +39,14 @@ from torch.utils.data.distributed import DistributedSampler
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from torch.utils.data import default_collate
+from torch.nn.attention import sdpa_kernel, SDPBackend
+from typing import Iterable
+import math
+from contextlib import contextmanager, nullcontext
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import ShardingStrategy
 
-ignore_sanity_checks = int(os.environ.get("IGNORE_SANITY", 0)) == 1
 # torch.use_deterministic_algorithms(True)
 torch.backends.cudnn.deterministic = True
 
@@ -53,14 +60,14 @@ logger = logging.getLogger(__name__)
 
 # from torch.distributed.tensor.experimental._attention import set_rotate_method
 
-# set_rotate_method("alltoall")  # rotate shards using all-to-all
+# set_rotate_method("alltoall")  # CP rotate shards using all-to-all
 
 
 def main():
     tp_size = int(os.environ.get("TP_SIZE", 1))
     dp_size = int(os.environ.get("DP_SIZE", 1))
-    cp_size = int(os.environ.get("CP_SIZE", 4))  # Add CP size configuration
-    sdpa_backend = SDPBackend.FLASH_ATTENTION  # For CP
+    cp_size = int(os.environ.get("CP_SIZE", 1))  # Add CP size configuration
+    sdpa_backend = SDPBackend.FLASH_ATTENTION # For CP
     # sdpa_backend = SDPBackend.MATH # For CP
     global_batch_size = 8  # Desired global batch size
     seq_len = 1024  # Sequence length
@@ -112,7 +119,6 @@ def main():
                 if model_name == "unsloth/Llama-3.2-1B"
                 else f"tp{tp_size}_dp{dp_size}_cp{cp_size}",
             )
-            logger.info(f"ignore_sanity_checks is set to: {ignore_sanity_checks}")
             logger.info("Wandb initialized.")
             # Log the current file to wandb
             wandb.save("test_train.py")
@@ -135,12 +141,8 @@ def main():
     logger.info(f"Using device: {device} for non-model tensors")
     use_ddp = False
     if dist.is_initialized() and dp_mesh.size() > 1:
-        # model = torch.nn.parallel.DistributedDataParallel( # TODO: use FSDP with NO_SHARD
-        #     model,
-        #     device_mesh=dp_mesh
-        # )
-        # logger.info("Applied DDP")
-        # use_ddp = True
+        model = FSDP(model, device_mesh=dp_mesh, sharding_strategy=ShardingStrategy.NO_SHARD)
+        use_ddp = True
         pass
 
     model.train()
@@ -288,7 +290,15 @@ def main():
                 # all reduce grads across dp_cp if applicable
                 all_reduce_grads(model, world_mesh, use_ddp=use_ddp)
 
-                gradnorm = clip_grad_norm_(model.parameters(), max_norm=1.0, norm_type=2.0, foreach=True)
+                if hasattr(model, "clip_grad_norm_"):
+                    gradnorm = model.clip_grad_norm_(max_norm=1.0, norm_type=2.0)
+                else:
+                    # only works with FSDP's NO_SHARD otherwise we should use FSDP's clip_grad_norm_
+                    gradnorm = clip_grad_norm_(
+                        model.parameters(),
+                        max_norm=1.0,
+                        norm_type=2.0,
+                        foreach=True)
 
                 optimizer.step()
                 # allreduce loss across cp_dp before logging
@@ -343,7 +353,7 @@ def all_reduce_grads(model, world_mesh, use_ddp):
     dp_mesh = world_mesh["dp"]
     cp_mesh = world_mesh["cp"]
     if use_ddp:
-        # DDP takes care of syncing grads
+        # DDP/FSDP takes care of syncing grads
         mesh = cp_mesh
     else:
         mesh = world_mesh["dp", "cp"]._flatten(mesh_dim_name="dp_cp")
