@@ -593,7 +593,13 @@ class Gemma3TextModel(Gemma2Model):
             )
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            if past_key_values is not None:
+                past_seen_tokens = past_key_values.get_seq_length()
+                if past_seen_tokens == past_key_values.config.sliding_window - 1:
+                    raise ValueError("You must provide cache_position when using KV cache with more than sliding_window tokens.")
+            else:
+                past_seen_tokens = 0
+            
             cache_position = torch.arange(
                 past_seen_tokens,
                 past_seen_tokens + inputs_embeds.shape[1],
