@@ -119,9 +119,8 @@ class Cohere2Config(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         sliding_window (`int`, *optional*, defaults to 4096):
             Size of the sliding window attention context.
-        sliding_window_pattern (`int`, *optional*, defaults to 4):
-            Pattern for the sliding window attention.
-        cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
+        layer_types (`list`, *optional*, defaults to None):
+            Attention pattern for each layer.
 
     ```python
     >>> from transformers import Cohere2Model, Cohere2Config
@@ -177,8 +176,7 @@ class Cohere2Config(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         sliding_window=4096,
-        sliding_window_pattern=4,
-        cache_implementation="hybrid",
+        layer_types=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -203,10 +201,9 @@ class Cohere2Config(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.sliding_window = sliding_window
-        self.sliding_window_pattern = sliding_window_pattern
+        self.layer_types = layer_types
         # Need to specify head_dim in the config so it can be used in the attention forward functions
         self.head_dim = hidden_size // num_attention_heads
-        self.cache_implementation = cache_implementation
 
         # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)
@@ -218,6 +215,14 @@ class Cohere2Config(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+        if self.layer_types is None:
+            # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
+            sliding_window_pattern = getattr(self, "sliding_window_pattern", 4)
+            self.layer_types = [
+                "sliding_attention" if bool((i + 1) % sliding_window_pattern) else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
 
 
 __all__ = ["Cohere2Config"]

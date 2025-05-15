@@ -254,7 +254,7 @@ class Gemma2Attention(GemmaAttention):
         self.attention_dropout = self.config.attention_dropout
         self.is_causal = True
         self.scaling = config.query_pre_attn_scalar**-0.5
-        self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
     def forward(
         self,
