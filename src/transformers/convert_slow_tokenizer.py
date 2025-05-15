@@ -552,9 +552,6 @@ class SpmConverter(Converter):
 
         super().__init__(*args)
 
-        # store extractor to convert tokens to ids from sp directly
-        self.extractor = self.SpmExtractor(self.original_tokenizer.vocab_file)
-
         # from .utils import sentencepiece_model_pb2 as model_pb2
         model_pb2 = import_protobuf()
 
@@ -1328,6 +1325,7 @@ class GemmaConverter(SpmConverter):
             ]
         )
 
+
 class GeneralSPMConverter(SpmConverter):
     handle_byte_fallback = True
 
@@ -1370,17 +1368,24 @@ class GeneralSPMConverter(SpmConverter):
         return None
 
     def post_processor(self):
-       # return None
+        # return None
         single = f"{(self.original_tokenizer.bos_token + ':0 ') if self.original_tokenizer.add_bos_token else ''}$A:0{(' ' + self.original_tokenizer.eos_token + ':0') if self.original_tokenizer.add_eos_token else ''}"
         pair = f"{single}{(' ' + self.original_tokenizer.bos_token + ':1') if self.original_tokenizer.add_bos_token else ''} $B:1{(' ' + self.original_tokenizer.eos_token + ':1') if self.original_tokenizer.add_eos_token else ''}"
         return processors.TemplateProcessing(
             single=single,
             pair=pair,
             special_tokens=[
-                ("<bos>", self.original_tokenizer.convert_tokens_to_ids("<bos>")),
-                ("</eos>", self.original_tokenizer.convert_tokens_to_ids("</eos>")),
+                (
+                    self.original_tokenizer.bos_token,
+                    self.original_tokenizer.convert_tokens_to_ids(self.original_tokenizer.bos_token),
+                ),
+                (
+                    self.original_tokenizer.eos_token,
+                    self.original_tokenizer.convert_tokens_to_ids(self.original_tokenizer.eos_token),
+                ),
             ],
         )
+
 
 class LlamaConverter(SpmConverter):
     handle_byte_fallback = True
@@ -1424,17 +1429,7 @@ class LlamaConverter(SpmConverter):
         return None
 
     def post_processor(self):
-       # return None
-        single = f"{(self.original_tokenizer.bos_token + ':0 ') if self.original_tokenizer.add_bos_token else ''}$A:0{(' ' + self.original_tokenizer.eos_token + ':0') if self.original_tokenizer.add_eos_token else ''}"
-        pair = f"{single}{(' ' + self.original_tokenizer.bos_token + ':1') if self.original_tokenizer.add_bos_token else ''} $B:1{(' ' + self.original_tokenizer.eos_token + ':1') if self.original_tokenizer.add_eos_token else ''}"
-        return processors.TemplateProcessing(
-            single=single,
-            pair=pair,
-            special_tokens=[
-                ("<bos>", self.original_tokenizer.convert_tokens_to_ids("<bos>")),
-                ("</eos>", self.original_tokenizer.convert_tokens_to_ids("</eos>")),
-            ],
-        )
+        return None
 
 
 class MarkupLMConverter(Converter):
@@ -1756,6 +1751,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "RoFormerTokenizer": RoFormerConverter,
     "SeamlessM4TTokenizer": SeamlessM4TConverter,
     "SPMTokenizer": GeneralSPMConverter,
+    "PreTrainedTokenizerFast": GeneralSPMConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
     "UdopTokenizer": UdopConverter,
@@ -1788,7 +1784,13 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
     """
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__
-    if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not from_tiktoken:
+    if (
+        hasattr(transformer_tokenizer, "config_class")
+        and transformer_tokenizer.config_class in SLOW_TO_FAST_CONVERTERS
+    ):
+        converter_class = SLOW_TO_FAST_CONVERTERS[transformer_tokenizer.config_class]
+        return converter_class(transformer_tokenizer).converted()
+    elif tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not from_tiktoken:
         converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
         return converter_class(transformer_tokenizer).converted()
 

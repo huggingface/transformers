@@ -140,8 +140,8 @@ class SPMTokenizer(PreTrainedTokenizer):
         clean_up_tokenization_spaces=False,
         use_default_system_prompt=False,
         spaces_between_special_tokens=False,
-        legacy=False,
-        add_prefix_space=False,
+        legacy=None,
+        add_prefix_space=True,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs

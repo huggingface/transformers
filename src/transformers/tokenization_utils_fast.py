@@ -23,12 +23,14 @@ from collections import defaultdict
 from collections.abc import Iterable
 from typing import Any, Optional, Union
 
-from tokenizers import processors
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
+from tokenizers import processors
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
+
+from transformers.models.llama.tokenization_spm import SPMTokenizer
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
 from .integrations.ggml import convert_gguf_tokenizer
@@ -104,8 +106,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         from_slow = kwargs.pop("from_slow", False)
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
         self.add_prefix_space = kwargs.get("add_prefix_space", False)
-
-        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
+        self.config_class = kwargs.pop("config_class", None)
+        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None and self.config_class is None:
             raise ValueError(
                 "Cannot instantiate this tokenizer from a slow version. If it's based on sentencepiece, make sure you "
                 "have sentencepiece installed."
@@ -132,6 +134,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         elif self.slow_tokenizer_class is not None and slow_tokenizer is not False:
             # We need to create and convert a slow tokenizer to build the backend
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
+            fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
+        elif self.config_class:
+            self.vocab_file = kwargs.get("vocab_file", None)
+            slow_tokenizer = SPMTokenizer(*args, **kwargs)
+            slow_tokenizer.vocab_file = kwargs.get("vocab_file", None)
+            slow_tokenizer.config_class = self.config_class
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
         elif not slow_tokenizer:
             # We tried loading a slow_tokenizer with spm and failed, try to load with tiktoken
@@ -917,7 +925,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         return self.__class__(tokenizer_object=tokenizer, **kwargs)
 
-
     @property
     def add_eos_token(self):
         return self._add_eos_token
@@ -962,4 +969,3 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=single, pair=pair, special_tokens=special_tokens
         )
-
