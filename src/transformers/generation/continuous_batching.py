@@ -1194,7 +1194,6 @@ class ContinuousBatchingManager:
             else:
                 next_tokens = torch.argmax(probs, dim=-1)
             batch_processor.output_ids.copy_(next_tokens)
-            # self.pbar.update((batch_data["logits_indices"] != -1).sum())
 
 
     @traced(span_name="generation_loop")
@@ -1329,7 +1328,6 @@ class ContinuousMixin:
             with tqdm(
                 total=num_requests, disable=(not progress_bar), desc=f"Generating {num_requests} tokens", unit="token"
             ) as pbar:
-                manager.pbar = pbar
                 manager.add_requests(inputs, **kwargs)
                 manager.start()  # we don't want to start before adding all requests
                 finished_count = 0
