@@ -31,6 +31,7 @@ def get_daily_ci_runs(token, num_runs=7):
 
 def get_last_daily_ci_runs(token):
     """Get the last completed workflow run id of the scheduled (daily) CI."""
+    return "14277576462"
     workflow_runs = get_daily_ci_runs(token)
     workflow_run_id = None
     for workflow_run in workflow_runs:

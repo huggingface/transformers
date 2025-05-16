@@ -68,16 +68,22 @@ if __name__ == "__main__":
         new_data_full[author] = {k: v for k, v in _data.items() if len(v) > 0}
 
     # Upload to Hub and get the url
+    report_repo_subfolder = os.getenv("REPORT_REPO_SUBFOLDER", "")
+
+    report_repo_folder = f"{datetime.datetime.today().strftime('%Y-%m-%d')}"
+    if report_repo_subfolder:
+        report_repo_folder = f"{report_repo_folder}/{report_repo_subfolder}"
+
     with open("new_model_failures_with_bad_commit_grouped_by_authors.json", "w") as fp:
         json.dump(new_data_full, fp, ensure_ascii=False, indent=4)
     commit_info = api.upload_file(
         path_or_fileobj="new_model_failures_with_bad_commit_grouped_by_authors.json",
-        path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_run_models_gpu/new_model_failures_with_bad_commit_grouped_by_authors.json",
+        path_in_repo=f"{report_repo_folder}/ci_results_run_models_gpu/new_model_failures_with_bad_commit_grouped_by_authors.json",
         repo_id="hf-internal-testing/transformers_daily_ci",
         repo_type="dataset",
         token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
     )
-    url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_run_models_gpu/new_model_failures_with_bad_commit_grouped_by_authors.json"
+    url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{report_repo_folder}/ci_results_run_models_gpu/new_model_failures_with_bad_commit_grouped_by_authors.json"
 
     # Add `GH_` prefix as keyword mention
     output = {}

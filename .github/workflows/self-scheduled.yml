@@ -28,6 +28,10 @@ on:
         default: ''
         required: false
         type: string
+      report_repo_subfolder:
+        default: ''
+        required: false
+        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -559,6 +563,7 @@ jobs:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
       ci_event: ${{ inputs.ci_event }}
+      report_repo_subfolder: ${{ inputs.report_repo_subfolder }}
 
     secrets: inherit
 
@@ -570,4 +575,5 @@ jobs:
     with:
       docker: ${{ inputs.docker }}
       start_sha: ${{ github.sha }}
+      report_repo_subfolder: ${{ inputs.report_repo_subfolder }}
     secrets: inherit
