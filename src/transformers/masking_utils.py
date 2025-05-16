@@ -750,31 +750,21 @@ def _ignore_causal_mask_sdpa(
     passed).
     """
     is_tracing = torch.jit.is_tracing() or isinstance(padding_mask, torch.fx.Proxy) or is_torchdynamo_compiling()
-    # local_attention_size = sliding_window or chunk_size
 
-    if padding_mask is None:
-        # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
-        # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
-        # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
-        # `ignore_causal_mask = True` if we are not tracing
-        if (
-            not is_tracing
-            and (query_length == 1 or kv_length == query_length)
-            and (local_attention_size is None or kv_length < local_attention_size)
-        ):
-            return True
-    elif local_attention_size is None or kv_length < local_attention_size:
-        if len(padding_mask.shape) == 4:
-            return False
-        elif not is_tracing and torch.all(padding_mask == 1):
-            if query_length == 1 or kv_length == query_length:
-                # For query_length == 1, causal attention and bi-directional attention are the same.
-                return True
-
-            # Unfortunately, for query_length > 1 and kv_length != query_length, we cannot generally ignore
-            # the attention mask, as SDPA causal mask is the upper triangular part instead of lower part. We will set
-            # `is_causal=False` in SDPA and rely on Transformers causal_mask instead, hence not setting it to None here.
-            # Reference: https://github.com/pytorch/pytorch/issues/108108
+    # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
+    # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
+    # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
+    # `ignore_causal_mask = True` if we are not tracing
+    if (
+        not is_tracing
+        # only cases when lower and upper diags are the same, see https://github.com/pytorch/pytorch/issues/108108
+        and (query_length == 1 or kv_length == query_length)
+        # in this case we need to add special patterns to the mask so cannot be skipped
+        and (local_attention_size is None or kv_length < local_attention_size)
+        # In this case, we need to add padding to the mask, so cannot be skipped
+        and (padding_mask is None or padding_mask.all())
+    ):
+        return True
 
     return False
 
