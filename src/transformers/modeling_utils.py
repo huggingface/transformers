@@ -4369,7 +4369,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
             model_kwargs = kwargs
 
-        transformers_explicit_filename = getattr(config, "transformers_file", None)
+        transformers_explicit_filename = getattr(config, "transformers_weights", None)
 
         if transformers_explicit_filename is not None:
             if not transformers_explicit_filename.endswith(

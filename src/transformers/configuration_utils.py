@@ -409,8 +409,8 @@ class PretrainedConfig(PushToHubMixin):
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # This attribute is important to know on load, but should not be serialized on save.
-        if "transformers_file" in self:
-            delattr(self, "transformers_file")
+        if "transformers_weights" in self:
+            delattr(self, "transformers_weights")
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
