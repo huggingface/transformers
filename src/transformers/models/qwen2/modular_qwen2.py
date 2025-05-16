@@ -111,7 +111,6 @@ class Qwen2PreTrainedModel(LlamaPreTrainedModel):
 
 
 class Qwen2Model(MistralModel):
-
     def __init__(self, config: Qwen2Config):
         super().__init__(config)
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
