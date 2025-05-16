@@ -860,9 +860,12 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["NllbMoeEncoderLayer", "NllbMoeDecoderLayer"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
+    # TODO: If anyone is up to it to make sure tests pass etc
+    # Flash attention has problems due to not preparing masks the same way as eager/sdpa
+    # SDPA has more flaky logits which requires more time to look into tests
+    _supports_flash_attn_2 = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
 
     def _init_weights(self, module):
         """Initialize the weights"""
