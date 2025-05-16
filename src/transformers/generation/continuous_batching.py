@@ -34,6 +34,7 @@ from ..utils import (
     logging,
 )
 from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
+from torch.profiler import profile, schedule, tensorboard_trace_handler
 
 
 logger = logging.get_logger(__name__)
@@ -199,7 +200,7 @@ class PagedAttentionCache(Cache):
         return self._block_tables.get(request_id, [])
 
     @traced
-    def _get_physical_indices(self, request_id: str, logical_indices: List[int]) -> torch.Tensor:
+    def _get_physical_indices(self, request_id: str, logical_indices: List[int]) -> List[int]:
         """
         Maps logical sequence indices to physical cache indices using the block table, using PyTorch.
 
@@ -218,20 +219,21 @@ class PagedAttentionCache(Cache):
         if not block_table:
             raise ValueError(f"No block table found for request {request_id}")
 
-        # Convert to PyTorch tensor for vectorized operations
-        logical_indices_tensor = torch.tensor(logical_indices, dtype=torch.long, device=self.device)
         block_size = self.block_size
+        physical_indices = []
 
-        # Vectorized calculations
-        block_indices = logical_indices_tensor // block_size
-        block_offsets = logical_indices_tensor % block_size
+        for idx in logical_indices:
+            block_idx = idx // block_size
+            block_offset = idx % block_size
 
-        if torch.any(block_indices > len(block_table)):
-            raise IndexError(f"Logical indices map to block indices out of bounds for request {request_id}")
+            if block_idx >= len(block_table):
+                raise IndexError(f"Logical index {idx} maps to block index {block_idx} which is out of bounds "
+                                f"for request {request_id}")
 
-        block_table_tensor = torch.tensor(block_table, dtype=torch.long, device=self.device)
-        physical_block_nums = block_table_tensor[block_indices]
-        physical_indices = physical_block_nums * block_size + block_offsets
+            physical_block_num = block_table[block_idx]
+            physical_index = physical_block_num * block_size + block_offset
+            physical_indices.append(physical_index)
+
         return physical_indices
 
     @traced
@@ -396,6 +398,7 @@ class ContinuousBatchProcessor:
     def __init__(
         self,
         cache: PagedAttentionCache,
+        config: PretrainedConfig,
         generation_config: GenerationConfig,
         input_queue: queue.Queue,
         output_queue: queue.Queue,
@@ -417,6 +420,7 @@ class ContinuousBatchProcessor:
             streaming: Whether to stream tokens as they're generated
         """
         self.cache = cache
+        self.config = config
         self.generation_config = generation_config
         self.input_queue = input_queue
         self.output_queue = output_queue
@@ -690,9 +694,9 @@ class ContinuousBatchProcessor:
             if not self._allocate_blocks_if_needed(state, state.current_len()):
                 continue
 
-            write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
-            read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))
             seq_len_q = len(next_input_ids)
+            read_indices: list[int]  = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))
+            write_indices: list[int] = read_indices[-seq_len_q:]
             seq_len_k = state.current_len()  # Key length includes previously split context #TODO not sure about +1
 
             position_ids.extend(positions_to_add)
@@ -753,27 +757,28 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_q[:cumq_ptr] = torch.tensor(cumulative_seqlens_q, **self.tensor_metadata)
         self.cumulative_seqlens_k[:cumk_ptr] = torch.tensor(cumulative_seqlens_k, **self.tensor_metadata)
         self.logits_indices[:logits_to_track] = torch.tensor(logits_indices, **self.tensor_metadata)
-        for i in range(len(cumulative_seqlens_q) - 1):
-            if (
-                cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
-                < cumulative_seqlens_k[i + 1] - cumulative_seqlens_k[i]
-                and cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] >= 1
-            ):
-                diagonal = cumulative_seqlens_k[i + 1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
-                diagonal = diagonal - cumulative_seqlens_k[i]
-            else:
-                diagonal = 1
-            query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
-            key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
-            self.attention_mask[..., query_range, key_range] = torch.triu(
-                torch.full(
-                    self.attention_mask[..., query_range, key_range].shape,
-                    fill_value=torch.finfo(self.model_dtype).min,
-                    dtype=self.model_dtype,
-                    device=self.model_device,
-                ),
-                diagonal=diagonal,
-            )
+        if self.config._attn_implementation != "paged_attention":
+            for i in range(len(cumulative_seqlens_q) - 1):
+                if (
+                    cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
+                    < cumulative_seqlens_k[i + 1] - cumulative_seqlens_k[i]
+                    and cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] >= 1
+                ):
+                    diagonal = cumulative_seqlens_k[i + 1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
+                    diagonal = diagonal - cumulative_seqlens_k[i]
+                else:
+                    diagonal = 1
+                query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
+                key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
+                self.attention_mask[..., query_range, key_range] = torch.triu(
+                    torch.full(
+                        self.attention_mask[..., query_range, key_range].shape,
+                        fill_value=torch.finfo(self.model_dtype).min,
+                        dtype=self.model_dtype,
+                        device=self.model_device,
+                    ),
+                    diagonal=diagonal,
+                )
 
     @traced
     def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
@@ -890,6 +895,7 @@ class ContinuousBatchingManager:
         self.model.generation_config.top_p = None
         self.logit_processor = self.model._get_logits_processor(self.model.generation_config)
         self.do_sample = getattr(generation_config, "do_sample", True)
+        self.use_cuda_graph = getattr(generation_config, "use_cuda_graph", True)
 
     @traced
     def start(self):
@@ -1063,6 +1069,7 @@ class ContinuousBatchingManager:
 
             batch_processor = ContinuousBatchProcessor(
                 paged_attention_cache,
+                self.model.config,
                 self.generation_config,
                 self.input_queue,
                 self.output_queue,
@@ -1072,9 +1079,27 @@ class ContinuousBatchingManager:
                 self.streaming,
             )
 
-            first = True
-            while not self.stop_event.is_set() or batch_processor.has_pending_requests():
-                self._inner_generation_loop(batch_processor)
+
+            tracing_schedule = schedule(skip_first=2, warmup=3, active=200, repeat=100, wait=1)
+            trace_handler = tensorboard_trace_handler(dir_name="/fsx/arthur/transformers", use_gzip=True, worker_name="paged_compile")
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ]
+            is_first = True
+            with profile(
+                activities = activities,
+                schedule = tracing_schedule,
+                on_trace_ready = trace_handler,
+                # profile_memory = True,
+                record_shapes = False,
+                with_stack = True
+            ) as prof:                    
+                while not self.stop_event.is_set() or batch_processor.has_pending_requests():
+                    self._inner_generation_loop(batch_processor, is_first)
+                    if is_first:
+                        is_first = False
+                    prof.step()
 
         except Exception as e:
             logger.error(f"Error in generation loop: {e}", exc_info=True)
@@ -1083,27 +1108,30 @@ class ContinuousBatchingManager:
             logger.info("Generation loop finished.")
 
     @traced(span_name="generation_loop")
-    def _inner_generation_loop(self, batch_processor: ContinuousBatchProcessor):
+    def _inner_generation_loop(self, batch_processor: ContinuousBatchProcessor, is_first: bool = False):
+        torch.cuda.synchronize()
         batch_processor.prepare_next_batch()
-        if torch.cuda.is_available():
-            if first:
+        if torch.cuda.is_available() and self.use_cuda_graph:
+            if is_first:
                 self.warmup(batch_processor)
-                first = False
-            try:
-                self._graph_replay()
-            except Exception as e:
-                logger.error(f"Model forward pass failed: {e}", exc_info=True)
-                batch_processor.handle_batch_error(e)
-                return
+            elif hasattr(self, "graph"):
+                try:
+                    self._graph_replay()
+                except Exception as e:
+                    logger.error(f"Model forward pass failed: {e}", exc_info=True)
+                    batch_processor.handle_batch_error(e)
+                    return
+            else:
+                self._generation_step(batch_processor)
         else:
             self._generation_step(batch_processor)
 
+        torch.cuda.synchronize()
         batch_processor.update_batch()
 
     @traced(span_name="graph_replay")
     def _graph_replay(self):
-        self.graph.replay()
-        torch.cuda.synchronize()
+        self.graph.replay()        
 
     @traced
     def _handle_critical_error(self, error, batch_processor: Optional[ContinuousBatchProcessor]):
