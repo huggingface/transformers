@@ -22,6 +22,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache, EncoderDecoderCache
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -32,10 +33,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
-from ...utils import (
-    auto_docstring,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_time_series_transformer import TimeSeriesTransformerConfig
 
 
@@ -246,13 +244,16 @@ class TimeSeriesSinusoidalPositionalEmbedding(nn.Embedding):
         self.weight = nn.Parameter(out, requires_grad=False)
 
     @torch.no_grad()
-    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0) -> torch.Tensor:
+    def forward(
+        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        bsz, seq_len = input_ids_shape[:2]
-        positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-        )
-        return super().forward(positions)
+        if position_ids is None:
+            bsz, seq_len = input_ids_shape[:2]
+            position_ids = torch.arange(
+                past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+            )
+        return super().forward(position_ids)
 
 
 class TimeSeriesValueEmbedding(nn.Module):
@@ -277,6 +278,7 @@ class TimeSeriesTransformerAttention(nn.Module):
         bias: bool = True,
         is_causal: bool = False,
         config: Optional[TimeSeriesTransformerConfig] = None,
+        layer_idx: Optional[int] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -293,73 +295,74 @@ class TimeSeriesTransformerAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
         self.is_causal = is_causal
+        self.layer_idx = layer_idx
+        if layer_idx is None and self.is_decoder:
+            logger.warning_once(
+                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
+                "will lead to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
-        # get key, value proj
-        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
-        # is checking that the `sequence_length` of the `past_key_value` is the same as
-        # the provided `key_value_states` to support prefix tuning
-        if (
-            is_cross_attention
-            and past_key_value is not None
-            and past_key_value[0].shape[2] == key_value_states.shape[1]
-        ):
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        elif is_cross_attention:
-            # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-        elif past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-        else:
-            # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        query_states = self.q_proj(hidden_states).view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states * self.scaling
 
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
+        if past_key_value is not None:
+            if isinstance(past_key_value, EncoderDecoderCache):
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    # after the first generated id, we can subsequently re-use all key/value_states from cache
+                    curr_past_key_value = past_key_value.cross_attention_cache
+                else:
+                    curr_past_key_value = past_key_value.self_attention_cache
+            else:
+                curr_past_key_value = past_key_value
+
+        current_states = key_value_states if is_cross_attention else hidden_states
+        if is_cross_attention and past_key_value is not None and is_updated:
+            # reuse k,v, cross_attentions
+            key_states = curr_past_key_value.key_cache[self.layer_idx]
+            value_states = curr_past_key_value.value_cache[self.layer_idx]
+        else:
+            key_states = self.k_proj(current_states)
+            value_states = self.v_proj(current_states)
+            key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+            value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+
+            if past_key_value is not None:
+                # save all key/value_states to cache to be re-used for fast auto-regressive generation
+                cache_position = cache_position if not is_cross_attention else None
+                key_states, value_states = curr_past_key_value.update(
+                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                if is_cross_attention:
+                    past_key_value.is_updated[self.layer_idx] = True
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
+        query_states = query_states.reshape(*proj_shape)
         key_states = key_states.reshape(*proj_shape)
         value_states = value_states.reshape(*proj_shape)
 
@@ -373,10 +376,7 @@ class TimeSeriesTransformerAttention(nn.Module):
             )
 
         if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
+            attention_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
@@ -425,7 +425,7 @@ class TimeSeriesTransformerAttention(nn.Module):
 
 # Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->TimeSeriesTransformer, BART->TIME_SERIES_TRANSFORMER
 class TimeSeriesTransformerEncoderLayer(nn.Module):
-    def __init__(self, config: TimeSeriesTransformerConfig):
+    def __init__(self, config: TimeSeriesTransformerConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.d_model
 
@@ -434,6 +434,7 @@ class TimeSeriesTransformerEncoderLayer(nn.Module):
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
             config=config,
+            layer_idx=layer_idx,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -502,7 +503,7 @@ TIME_SERIES_TRANSFORMER_ATTENTION_CLASSES = {
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->TimeSeriesTransformer, with BART->TIME_SERIES_TRANSFORMER
 class TimeSeriesTransformerDecoderLayer(nn.Module):
-    def __init__(self, config: TimeSeriesTransformerConfig):
+    def __init__(self, config: TimeSeriesTransformerConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.d_model
 
@@ -513,6 +514,7 @@ class TimeSeriesTransformerDecoderLayer(nn.Module):
             is_decoder=True,
             is_causal=True,
             config=config,
+            layer_idx=layer_idx,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -525,6 +527,7 @@ class TimeSeriesTransformerDecoderLayer(nn.Module):
             dropout=config.attention_dropout,
             is_decoder=True,
             config=config,
+            layer_idx=layer_idx,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
@@ -539,9 +542,10 @@ class TimeSeriesTransformerDecoderLayer(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -560,46 +564,41 @@ class TimeSeriesTransformerDecoderLayer(nn.Module):
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
+                cache in the correct position and to infer the complete sequence length.
         """
         residual = hidden_states
 
         # Self Attention
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
-        # add present self-attn cache to positions 1,2 of present_key_value tuple
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights, past_key_value = self.self_attn(
             hidden_states=hidden_states,
-            past_key_value=self_attn_past_key_value,
+            past_key_value=past_key_value,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
+            cache_position=cache_position,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
-        cross_attn_present_key_value = None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
 
-            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
+            hidden_states, cross_attn_weights, past_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=cross_attn_past_key_value,
+                past_key_value=past_key_value,
                 output_attentions=output_attentions,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
-
-            # add cross-attn to positions 3,4 of present_key_value tuple
-            present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
@@ -616,7 +615,7 @@ class TimeSeriesTransformerDecoderLayer(nn.Module):
             outputs += (self_attn_weights, cross_attn_weights)
 
         if use_cache:
-            outputs += (present_key_value,)
+            outputs += (past_key_value,)
 
         return outputs
 
@@ -799,7 +798,9 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         self.embed_positions = TimeSeriesSinusoidalPositionalEmbedding(
             config.context_length + config.prediction_length, config.d_model
         )
-        self.layers = nn.ModuleList([TimeSeriesTransformerDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList(
+            [TimeSeriesTransformerDecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)]
+        )
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
@@ -819,6 +820,7 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Args:
@@ -876,6 +878,9 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
                 for more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
+                cache in the correct position and to infer the complete sequence length.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -885,9 +890,22 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         input_shape = inputs_embeds.size()[:-1]
+        # initialize `past_key_values`
+        return_legacy_cache = False
+        if use_cache and not isinstance(past_key_values, Cache):
+            return_legacy_cache = True
+            logger.warning_once(
+                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
+                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
+            )
+            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
-        # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        if cache_position is None:
+            cache_position = torch.arange(
+                past_key_values_length, past_key_values_length + input_shape[1], device=inputs_embeds.device
+            )
 
         attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -916,7 +934,7 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-        next_decoder_cache = () if use_cache else None
+        next_decoder_cache = None
 
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
@@ -935,8 +953,6 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue
-
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
@@ -961,14 +977,15 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
                     cross_attn_layer_head_mask=(
                         cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
                     ),
-                    past_key_value=past_key_value,
+                    past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
+                    cache_position=cache_position,
                 )
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
+                next_decoder_cache = layer_outputs[3 if output_attentions else 1]
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -981,6 +998,9 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
+        if return_legacy_cache:
+            next_cache = past_key_values.to_legacy_cache()
+
         if not return_dict:
             return tuple(
                 v
@@ -1155,6 +1175,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Seq2SeqTSModelOutput, Tuple]:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
@@ -1324,6 +1345,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -1406,6 +1428,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Seq2SeqTSModelOutput, Tuple]:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
@@ -1577,6 +1600,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             output_attentions=output_attentions,
             use_cache=use_cache,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         prediction_loss = None
