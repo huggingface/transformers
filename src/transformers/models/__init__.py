@@ -234,6 +234,7 @@ if TYPE_CHECKING:
     from .pix2struct import *
     from .pixtral import *
     from .plbart import *
+    from .plm import *
     from .poolformer import *
     from .pop2piano import *
     from .prophetnet import *
