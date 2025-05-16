@@ -29,8 +29,6 @@ from .test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-import unittest
-
 
 # TODO Matt: Add this to a proper file later
 class CausalLMModelTester:
@@ -269,9 +267,10 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skipIf(rotary_embedding_layer is None, "Rotary embedding layer not set")
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
+        if self.rotary_embedding_layer is None:
+            self.skipTest("Rotary embedding layer not set")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
@@ -301,8 +300,9 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
-    @unittest.skipIf(rotary_embedding_layer is None, "Rotary embedding layer not set")
     def test_model_rope_scaling(self):
+        if self.rotary_embedding_layer is None:
+            self.skipTest("Rotary embedding layer not set")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         scaling_factor = 10
         short_input_length = 10
