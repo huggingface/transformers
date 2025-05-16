@@ -4511,9 +4511,12 @@ class ModelTesterMixin:
             self.assertTrue(model.config._attn_implementation == "flex_attention")
 
             # Elaborate workaround for encoder-decoder models as some do not specify their main input
-            dummy_input = {"input_ids": inputs_dict[model_class.main_input_name].to(torch_device)}
-            if "decoder_input_ids" in inspect.signature(model.forward).parameters:
-                dummy_input["decoder_input_ids"] = dummy_input["input_ids"].clone()
+            if "input_ids" in inspect.signature(model.forward).parameters:
+                dummy_input = {"input_ids": inputs_dict[model_class.main_input_name].to(torch_device)}
+                if "decoder_input_ids" in inspect.signature(model.forward).parameters:
+                    dummy_input["decoder_input_ids"] = dummy_input["input_ids"].clone()
+            else:
+                dummy_input = {model_class.main_input_name: inputs_dict[model_class.main_input_name].to(torch_device)}
 
             # Flex Attention can not use dropout
             if hasattr(config, "attention_droput"):
