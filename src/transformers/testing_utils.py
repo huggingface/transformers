@@ -48,9 +48,9 @@ import requests
 import urllib3
 from huggingface_hub import delete_repo
 from packaging import version
+from typing import TYPE_CHECKING
 
-from transformers import Trainer
-from transformers import logging as transformers_logging
+from .utils import logging as transformers_logging
 
 from .integrations import (
     is_clearml_available,
@@ -184,6 +184,10 @@ if is_pytest_available():
 else:
     Module = object
     DoctestItem = object
+
+
+if TYPE_CHECKING:
+    from .trainer import Trainer
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"

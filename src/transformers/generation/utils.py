@@ -27,8 +27,6 @@ from packaging import version
 from torch import nn
 from torch.nn import functional as F
 
-from transformers.generation.candidate_generator import AssistantVocabTranslatorCache
-
 from ..cache_utils import (
     Cache,
     DynamicCache,
@@ -57,6 +55,7 @@ from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScor
 from .candidate_generator import (
     AssistedCandidateGenerator,
     AssistedCandidateGeneratorDifferentTokenizers,
+    AssistantVocabTranslatorCache,
     CandidateGenerator,
     EarlyExitCandidateGenerator,
     PromptLookupCandidateGenerator,
