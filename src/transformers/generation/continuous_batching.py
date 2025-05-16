@@ -853,27 +853,27 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_q[:cumq_ptr] = torch.tensor(cumulative_seqlens_q, **self.tensor_metadata)
         self.cumulative_seqlens_k[:cumk_ptr] = torch.tensor(cumulative_seqlens_k, **self.tensor_metadata)
         self.logits_indices[:logits_to_track] = torch.tensor(logits_indices, **self.tensor_metadata)
-        for i in range(len(cumulative_seqlens_q) - 1):
-            if (
-                cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
-                < cumulative_seqlens_k[i + 1] - cumulative_seqlens_k[i]
-                and cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] >= 1
-            ):
-                diagonal = cumulative_seqlens_k[i + 1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
-                diagonal = diagonal - cumulative_seqlens_k[i]
-            else:
-                diagonal = 1
-            query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
-            key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
-            self.attention_mask[..., query_range, key_range]= torch.triu(
-                    torch.full(
-                        self.attention_mask[..., query_range, key_range].shape,
-                        fill_value=torch.finfo(self.model_dtype).min,
-                        dtype=self.model_dtype,
-                        device=self.model_device,
-                    ),
-                    diagonal=diagonal,
-                )
+        # for i in range(len(cumulative_seqlens_q) - 1):
+        #     if (
+        #         cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
+        #         < cumulative_seqlens_k[i + 1] - cumulative_seqlens_k[i]
+        #         and cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] >= 1
+        #     ):
+        #         diagonal = cumulative_seqlens_k[i + 1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
+        #         diagonal = diagonal - cumulative_seqlens_k[i]
+        #     else:
+        #         diagonal = 1
+        #     query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
+        #     key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
+        #     self.attention_mask[..., query_range, key_range]= torch.triu(
+        #             torch.full(
+        #                 self.attention_mask[..., query_range, key_range].shape,
+        #                 fill_value=torch.finfo(self.model_dtype).min,
+        #                 dtype=self.model_dtype,
+        #                 device=self.model_device,
+        #             ),
+        #             diagonal=diagonal,
+        #         )
 
     @traced
     def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
@@ -891,7 +891,7 @@ class ContinuousBatchProcessor:
     @traced
     def update_batch(self):
         """Update request states based on generated tokens."""
-        out_tokens = self.output_ids.clone().detach().tolist()[0]  # should be the only synch we do
+        out_tokens = self.output_ids.tolist()[0]  # should be the only synch we do
         finished_request_ids = []
         for i, state in enumerate(self.requests_in_batch):
             req_id = state.request_id
@@ -966,7 +966,7 @@ class ContinuousBatchProcessor:
     @traced
     def _maybe_send_output(self, state: RequestState, token: int):
         """Send output to the queue based on streaming mode and request state."""
-        if self.streaming:
+        if self.streaming or True:
             state.next_token = token
             self.output_queue.put(state)
         elif state.status == "finished":
@@ -1176,7 +1176,7 @@ class ContinuousBatchingManager:
             self._generation_step(batch_processor)
 
     @traced
-    @torch.compile
+    # @torch.compile
     def _generation_step(self, batch_processor: ContinuousBatchProcessor):
         """Perform a single generation step. This is cuda graphed"""
         batch_data = batch_processor.get_model_kwargs()
@@ -1194,6 +1194,7 @@ class ContinuousBatchingManager:
             else:
                 next_tokens = torch.argmax(probs, dim=-1)
             batch_processor.output_ids.copy_(next_tokens)
+            # self.pbar.update((batch_data["logits_indices"] != -1).sum())
 
 
     @traced(span_name="generation_loop")
@@ -1222,7 +1223,7 @@ class ContinuousBatchingManager:
             first = True
             while not self.stop_event.is_set() or batch_processor.has_pending_requests():
                 batch_processor.prepare_next_batch()
-                if torch.cuda.is_available() and False:
+                if torch.cuda.is_available():
                     if first:
                         self.warmup(batch_processor)
                         first = False
@@ -1323,16 +1324,17 @@ class ContinuousMixin:
         # Initialize manager with the batch inputs
         manager = self.init_continuous_batching(generation_config=generation_config)
         results = {}
-        num_requests = len(inputs)
+        num_requests = len(inputs) * generation_config.max_new_tokens
         try:
             with tqdm(
-                total=num_requests, disable=(not progress_bar), desc=f"Generating {num_requests} requests"
+                total=num_requests, disable=(not progress_bar), desc=f"Generating {num_requests} tokens", unit="token"
             ) as pbar:
+                manager.pbar = pbar
                 manager.add_requests(inputs, **kwargs)
                 manager.start()  # we don't want to start before adding all requests
                 finished_count = 0
                 while finished_count < num_requests:
-                    result = manager.get_result(timeout=1.0)
+                    result = manager.get_result(timeout=0.1)
                     if result:
                         req_id = result.request_id
                         results[req_id] = result

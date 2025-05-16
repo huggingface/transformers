@@ -11,13 +11,12 @@ model = AutoModelForCausalLM.from_pretrained(
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", padding_side="left")
 # Configure generation parameters
 generation_config = GenerationConfig(
-    max_new_tokens=2048,
-    eos_token_id=model.eos_token_id,
-    pad_token_id=tokenizer.pad_token_id,
+    max_new_tokens=512,
+    eos_token_id=tokenizer.convert_tokens_to_ids(["<|eot_id|>"])[0],
     use_cache=False,
-    num_blocks=2048,
-    block_size=128,
-    max_batch_tokens=512,  # Maximum number of tokens to process in a single batch
+    num_blocks=1024,
+    block_size=64,
+    max_batch_tokens=2048,  # Maximum number of tokens to process in a single batch
 )
 
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
@@ -31,7 +30,7 @@ tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
 simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
 
 start_time_simple = time.time()
-model.forward = torch.compile(model.forward, mode="max-autotune", dynamic=False, fullgraph=True)
+model.forward = torch.compile(model.forward, mode="max-autotune", dynamic=True, fullgraph=True)
 batch_outputs = model.generate_batch(
     inputs=simple_batch_inputs,
     generation_config=generation_config,
