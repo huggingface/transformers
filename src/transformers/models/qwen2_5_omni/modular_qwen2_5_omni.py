@@ -399,7 +399,6 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         use_sliding_window=False,
         sliding_window=32768,
         max_window_layers=28,
-        layer_types=None,
         attention_dropout=0.0,
         **kwargs,
     ):
