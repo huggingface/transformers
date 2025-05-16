@@ -327,6 +327,7 @@ def eager_mask(
             The dtype to use for the mask. By default, `torch.float32`.
     """
     # The masks for eager attention are simply boolean mask from sdpa, casted to 0 and -inf
+    _ = kwargs.pop("allow_is_causal_skip", None)
     mask = sdpa_mask(
         batch_size=batch_size,
         cache_position=cache_position,
