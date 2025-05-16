@@ -395,6 +395,8 @@
         title: Blenderbot Small
       - local: model_doc/bloom
         title: BLOOM
+      - local: model_doc/blt
+        title: BLT
       - local: model_doc/bort
         title: BORT
       - local: model_doc/byt5
