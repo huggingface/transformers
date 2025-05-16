@@ -12,8 +12,10 @@ model = AutoModelForCausalLM.from_pretrained(
 tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 # Configure generation parameters
 generation_config = GenerationConfig(
-    max_new_tokens=10,
-    eos_token_id=tokenizer.convert_tokens_to_ids(["<|eot_id|>"])[0],
+    max_new_tokens=2048,
+    eos_token_id=model.eos_token_id,
+    eos_token_id=model.config.eos_token_id,
+    pad_token_id=tokenizer.pad_token_id,
     use_cache=False,
     num_blocks=1024,
     block_size=64,
@@ -40,12 +42,12 @@ end_time_simple = time.time()
 
 print(f"CB generation took: a{end_time_simple - start_time_simple:.2f} seconds")
 for request in batch_outputs:
-    input_text = tokenizer.decode(batch_outputs[request].full_prompt_ids, skip_special_tokens=False)
+    input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=False)
     try:
-        output_text = tokenizer.decode(batch_outputs[request].static_outputs, skip_special_tokens=False)
+        output_text = tokenizer.decode(batch_outputs[request].generated_tokens, skip_special_tokens=False)
     except Exception as e:
         print(f"Decoding failed for request {request}: {e}")
-        output_text = tokenizer.decode(batch_outputs[request].static_outputs[1:], skip_special_tokens=False)
+        output_text = tokenizer.decode(batch_outputs[request].generated_tokens[1:], skip_special_tokens=False)
     if len(output_text) > 0:
         print("-" * 20)
         print(f"{request} Input:  {input_text}")

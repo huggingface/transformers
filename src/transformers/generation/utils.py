@@ -18,6 +18,7 @@ import inspect
 import os
 import warnings
 from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -5280,3 +5281,14 @@ def _dola_select_contrast(
     final_logits, base_logits = _relative_top_filter(final_logits, base_logits)
     logits = final_logits - base_logits
     return logits
+
+
+class RequestStatus(Enum):
+    """Status of a generation request through its lifecycle."""
+    PENDING = "pending"
+    PREFILLING = "prefilling"
+    PREFILLING_SPLIT = "prefilling_split"
+    SPLIT_PENDING_REMAINDER = "split_pending_remainder"
+    DECODING = "decoding"
+    FINISHED = "finished"
+    FAILED = "failed"

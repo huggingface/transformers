@@ -3,6 +3,7 @@ import logging
 import time
 from typing import Any, Callable, List, Optional, Tuple, Union
 
+from ..generation.utils import RequestStatus
 
 try:
     from opentelemetry import metrics, trace
@@ -262,9 +263,9 @@ class ContinuousBatchProcessorMetrics:
         prefill_tokens = 0
 
         for state in requests_in_batch:
-            if state.status == "decoding":
+            if state.status == RequestStatus.DECODING:
                 decode_tokens += 1
-            elif state.status.startswith("prefilling"):
+            elif state.status in [RequestStatus.PREFILLING, RequestStatus.PREFILLING_SPLIT]:
                 prefill_tokens += len(state.prompt_ids)
 
         total_batch_tokens = decode_tokens + prefill_tokens

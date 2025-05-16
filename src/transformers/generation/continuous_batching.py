@@ -29,7 +29,7 @@ from tqdm import tqdm
 from ..cache_utils import Cache
 from ..configuration_utils import PretrainedConfig
 from ..generation.configuration_utils import GenerationConfig
-from ..generation.utils import GenerationMixin
+from ..generation.utils import GenerationMixin, RequestStatus
 from ..utils import (
     logging,
 )
@@ -41,11 +41,32 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+class GenerationOutput:
+    """Tracks the output of a generation request.
+
+    Attributes:
+        request_id (str): The ID of the generation request.
+        prompt_ids (List[int]): The IDs of the prompt tokens.
+        generated_tokens (List[int]): The generated tokens.
+        logprobs (List[float]): The log probabilities of the generated tokens.
+        error (Optional[str]): Any error message associated with the request. When None, the request was successful.
+    """
+
+    request_id: str
+    prompt_ids: List[int] = field(default_factory=list)
+    generated_tokens: List[int] = field(default_factory=list)
+    logprobs: List[float] = field(default_factory=list)
+    error: Optional[str] = None
+    created_time: float = field(default_factory=time.time)
+
+
+@dataclass
 class RequestState:
     """Tracks the state of a generation request through its lifecycle.
 
     Attributes:
-        status (str): can be one of 'pending', 'prefilling', 'prefilling_split', 'split_pending_remainder', 'decoding', 'finished', 'failed'
+        status (RequestStatus): can be one of PENDING, PREFILLING, PREFILLING_SPLIT, 
+                                SPLIT_PENDING_REMAINDER, DECODING, FINISHED, FAILED
     """
 
     # Required fields
@@ -56,7 +77,7 @@ class RequestState:
     static_outputs: List[int] = field(default_factory=list)
     allocated_blocks: List[int] = field(default_factory=list)
     position_offset: int = 0  # Current position in the sequence for position_ids
-    status: str = "pending"
+    status: RequestStatus = RequestStatus.PENDING
     max_new_tokens: int = 20
     eos_token_id: int = -1
     created_time: float = field(default_factory=time.time)
@@ -81,14 +102,14 @@ class RequestState:
             bool: True if the request is now complete, False otherwise
         """
         # Only update if we're in decoding state
-        if self.status != "decoding":
+        if self.status != RequestStatus.DECODING:
             return False
 
         is_eos = token_id == self.eos_token_id and self.eos_token_id != -1
         is_max_len = self.generated_len() >= self.max_new_tokens
 
         if is_eos or is_max_len:
-            self.status = "finished"
+            self.status = RequestStatus.FINISHED
             return True
 
         return False
@@ -96,6 +117,15 @@ class RequestState:
     def __repr__(self):
         return f"RequestState(\nrequest_id={self.request_id},\nstatus={self.status}, \nout_tokens={self.generated_len()}, \ncurrent_prompt={len(self.prompt_ids)}, \nprefilled_tokens={self.current_len()}, \nremaining_length={len(self.remaining_prompt_ids)}, \nfull_lenght={len(self.full_prompt_ids)},\nallocated_blocks={self.allocated_blocks}\n)"
 
+    def to_generation_output(self):
+        """Convert the request state to a GenerationOutput object."""
+        return GenerationOutput(
+            request_id=self.request_id,
+            prompt_ids=self.full_prompt_ids,
+            generated_tokens=self.static_outputs,
+            logprobs=[],
+            error=self.error,
+        )
 
 @attach_tracer()
 class PagedAttentionCache(Cache):
@@ -541,7 +571,7 @@ class ContinuousBatchProcessor:
     @traced
     def _handle_request_error(self, error, state: RequestState):
         """Handle general request processing error."""
-        state.status = "failed"
+        state.status = RequestStatus.FAILED
         state.error = str(error)
 
         # Include any generated tokens if this is an active request
@@ -550,7 +580,7 @@ class ContinuousBatchProcessor:
         else:
             state.static_outputs = []
 
-        self.output_queue.put(state)
+        self.output_queue.put(state.to_generation_output())
 
     @traced
     def _schedule_batch(self) -> List[str]:
@@ -560,7 +590,7 @@ class ContinuousBatchProcessor:
         batch_token_count = 0
 
         # First prioritize running decoding requests (need just 1 token each)
-        decoding_requests = [req_id for req_id, state in self.active_requests.items() if state.status == "decoding"]
+        decoding_requests = [req_id for req_id, state in self.active_requests.items() if state.status == RequestStatus.DECODING]
 
         if decoding_requests:
             # Start with the max batch tokens
@@ -572,7 +602,7 @@ class ContinuousBatchProcessor:
 
         # priortise requests for which we already started prefilling
         candidates: List[RequestState] = [
-            state for state in self.active_requests.values() if state.status == "split_pending_remainder"
+            state for state in self.active_requests.values() if state.status == RequestStatus.SPLIT_PENDING_REMAINDER
         ]
         candidates.extend(list(self.waiting_requests))
 
@@ -584,7 +614,7 @@ class ContinuousBatchProcessor:
 
             # Get tokens to process
             token_budget = (
-                len(state.remaining_prompt_ids) if state.status == "split_pending_remainder" else len(state.prompt_ids)
+                len(state.remaining_prompt_ids) if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else len(state.prompt_ids)
             )
             if token_budget == 0:
                 if i < len(self.waiting_requests):
@@ -627,25 +657,25 @@ class ContinuousBatchProcessor:
     @traced(span_name="prepare_request")
     def _prepare_request_for_processing(self, state: RequestState, token_budget, request_ids_to_remove_from_waiting):
         """Prepare a request for processing in the current batch."""
-        request_tokens = state.remaining_prompt_ids if state.status == "split_pending_remainder" else state.prompt_ids
+        request_tokens = state.remaining_prompt_ids if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else state.prompt_ids
         if len(request_tokens) < token_budget:
             # Can process the entire prompt/remainder
-            if state.status == "pending":
+            if state.status == RequestStatus.PENDING:
                 self.active_requests[state.request_id] = state
-                state.status = "prefilling"
+                state.status = RequestStatus.PREFILLING
                 request_ids_to_remove_from_waiting.add(state.request_id)
-            elif state.status == "split_pending_remainder":
-                state.status = "prefilling"
+            elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
+                state.status = RequestStatus.PREFILLING
                 state.prompt_ids = state.remaining_prompt_ids
                 state.remaining_prompt_ids = []
         else:
             # Need to split the request
-            if state.status == "pending":
+            if state.status == RequestStatus.PENDING:
                 self.active_requests[state.request_id] = state
-                state.status = "prefilling_split"
+                state.status = RequestStatus.PREFILLING_SPLIT
                 request_ids_to_remove_from_waiting.add(state.request_id)
-            elif state.status == "split_pending_remainder":
-                state.status = "prefilling_split"
+            elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
+                state.status = RequestStatus.PREFILLING_SPLIT
             state.remaining_prompt_ids = request_tokens[token_budget:]
             state.prompt_ids = request_tokens[:token_budget]
 
@@ -802,15 +832,15 @@ class ContinuousBatchProcessor:
             req_id = state.request_id
             if len(state.remaining_prompt_ids) == 0:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
-                state.status = "decoding"
+                state.status = RequestStatus.DECODING
                 token = out_tokens[self.logits_indices[i]]
                 state.static_outputs.extend([token])
                 state.prompt_ids = [token]
                 if state.update_with_token(token):
                     finished_request_ids.append(req_id)
                 self._maybe_send_output(state, token)
-            elif state.status == "prefilling_split":
-                state.status = "split_pending_remainder"
+            elif state.status == RequestStatus.PREFILLING_SPLIT:
+                state.status = RequestStatus.SPLIT_PENDING_REMAINDER
         for req_id in finished_request_ids:
             if req_id in self.active_requests:
                 self.cache.free_blocks(req_id)
@@ -825,9 +855,9 @@ class ContinuousBatchProcessor:
         """Send output to the queue based on streaming mode and request state."""
         if self.streaming or True:
             state.next_token = token
-            self.output_queue.put(state)
-        elif state.status == "finished":
-            self.output_queue.put(state)
+            self.output_queue.put(state.to_generation_output())
+        elif state.status == RequestStatus.FINISHED:
+            self.output_queue.put(state.to_generation_output())
 
     @traced
     def has_pending_requests(self) -> bool:
@@ -946,7 +976,6 @@ class ContinuousBatchingManager:
                 logger.info("Continuous Batching Manager stopped.")
                 self._generation_thread = None
 
-    @traced
     def add_request(
         self, input_ids: List[int], request_id: Optional[str] = None, max_new_tokens: Optional[int] = None
     ) -> str:
@@ -980,15 +1009,13 @@ class ContinuousBatchingManager:
         logger.debug(f"Added request {request_id} to queue.")
         return request_id
 
-    @traced
     def add_requests(self, inputs: List[List[int]], **kwargs):
         for i, input_ids in enumerate(inputs):
             # Assign a predictable request ID for ordering results later
             req_id = f"batch_req_{i}"
             self.add_request(input_ids, request_id=req_id, **kwargs)
 
-    @traced
-    def get_result(self, timeout=None) -> Optional[RequestState]:
+    def get_result(self, timeout=None) -> Optional[GenerationOutput]:
         """Retrieve one result from the output queue.
 
         Args:
@@ -1219,6 +1246,7 @@ class ContinuousMixin:
 
         # Initialize manager with the batch inputs
         manager = self.init_continuous_batching(generation_config=generation_config)
+        manager.start()
         results = {}
         num_requests = len(inputs) * generation_config.max_new_tokens
         try:
@@ -1226,7 +1254,6 @@ class ContinuousMixin:
                 total=num_requests, disable=(not progress_bar), desc=f"Generating {num_requests} tokens", unit="token"
             ) as pbar:
                 manager.add_requests(inputs, **kwargs)
-                manager.start()  # we don't want to start before adding all requests
                 finished_count = 0
                 while finished_count < num_requests:
                     result = manager.get_result(timeout=0.1)
