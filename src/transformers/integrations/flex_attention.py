@@ -36,6 +36,7 @@ from ..utils.import_utils import _torch_version
 
 
 if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import _DEFAULT_SPARSE_BLOCK_SIZE as flex_default_block_size  # noqa: N811
     from torch.nn.attention.flex_attention import BlockMask, flex_attention
     from torch.nn.attention.flex_attention import (
         create_block_mask as create_block_causal_mask_flex,
@@ -72,7 +73,7 @@ class WrappedFlexAttention:
                     flex_attention, dynamic=False, mode="max-autotune-no-cudagraphs"
                 )
             else:
-                self._compiled_flex_attention = torch.compile(flex_attention)
+                self._compiled_flex_attention = torch.compile(flex_attention, dynamic=False)
             self._is_flex_compiled = True
 
     def __call__(self):
@@ -116,7 +117,9 @@ def make_flex_block_causal_mask(
         key_length = total_seq_len
     if not query_length:
         query_length = total_seq_len
-    attention_mask_2d = torch.nn.functional.pad(attention_mask_2d, value=0, pad=(0, key_length))
+    attention_mask_2d = torch.nn.functional.pad(
+        attention_mask_2d, value=0, pad=(0, abs(total_seq_len - max(key_length, flex_default_block_size)))
+    )
     device = attention_mask_2d.device
     document_ids = attention_mask_2d.clone()
 
@@ -170,7 +173,7 @@ def make_flex_block_causal_mask(
         Q_LEN=query_length,
         KV_LEN=key_length,
         device=device,
-        _compile=True,
+        _compile=False,
     )
 
 
