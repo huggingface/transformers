@@ -28,11 +28,7 @@ from ...image_processing_utils_fast import (
     get_max_height_width,
     safe_squeeze,
 )
-from ...image_transforms import (
-    center_to_corners_format,
-    corners_to_center_format,
-    id_to_rgb,
-)
+from ...image_transforms import center_to_corners_format, corners_to_center_format, id_to_rgb
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -645,6 +641,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         pad_size: Optional[Dict[str, int]],
         format: Optional[Union[str, AnnotationFormat]],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.

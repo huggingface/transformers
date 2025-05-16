@@ -841,37 +841,134 @@ def _cast_tensor_to_float(x):
     return x.float()
 
 
+def _flatten_nested_images(nested_images):
+    """Helper function to flatten a single level of nested image structures and group by shape."""
+    grouped_images = {}
+    grouped_images_index = {}
+
+    for i, sublist in enumerate(nested_images):
+        for j, image in enumerate(sublist):
+            shape = image.shape[1:]
+            if shape not in grouped_images:
+                grouped_images[shape] = []
+            grouped_images[shape].append(image)
+            grouped_images_index[(i, j)] = (shape, len(grouped_images[shape]) - 1)
+
+    return grouped_images, grouped_images_index
+
+
+def _reconstruct_nested_structure(indices, processed_images):
+    """Helper function to reconstruct a single level nested structure."""
+    # Find the maximum outer index
+    max_outer_idx = max(idx[0] for idx in indices.keys())
+
+    # Create the outer list
+    result = [None] * (max_outer_idx + 1)
+
+    # Group indices by outer index
+    nested_indices = {}
+    for i, j in indices.keys():
+        if i not in nested_indices:
+            nested_indices[i] = []
+        nested_indices[i].append(j)
+
+    for i in range(max_outer_idx + 1):
+        if i in nested_indices:
+            inner_max_idx = max(nested_indices[i])
+            inner_list = [None] * (inner_max_idx + 1)
+            for j in range(inner_max_idx + 1):
+                if (i, j) in indices:
+                    shape, idx = indices[(i, j)]
+                    inner_list[j] = processed_images[shape][idx]
+            result[i] = inner_list
+
+    return result
+
+
 def group_images_by_shape(
-    images: list["torch.Tensor"],
-) -> tuple[dict[tuple[int, int], list["torch.Tensor"]], dict[int, tuple[tuple[int, int], int]]]:
+    images: Union[list["torch.Tensor"], "torch.Tensor"],
+    is_nested: bool = False,
+    disable_grouping: Optional[bool] = None,
+) -> tuple[
+    dict[tuple[int, int], list["torch.Tensor"]], dict[Union[int, tuple[int, int]], tuple[tuple[int, int], int]]
+]:
     """
     Groups images by shape.
     Returns a dictionary with the shape as key and a list of images with that shape as value,
     and a dictionary with the index of the image in the original list as key and the shape and index in the grouped list as value.
+
+    The function supports both flat lists of tensors and nested structures.
+    The input must be either all flat or all nested, not a mix of both.
+
+    Args:
+        images (Union[list["torch.Tensor"], "torch.Tensor"]):
+            A list of images or a single tensor
+
+    Returns:
+        tuple[dict[tuple[int, int], list["torch.Tensor"]], dict[Union[int, tuple[int, int]], tuple[tuple[int, int], int]]]:
+            - A dictionary with shape as key and list of images with that shape as value
+            - A dictionary mapping original indices to (shape, index) tuples
     """
-    grouped_images = {}
-    grouped_images_index = {}
-    for i, image in enumerate(images):
-        shape = image.shape[1:]
-        if shape not in grouped_images:
-            grouped_images[shape] = []
-        grouped_images[shape].append(image)
-        grouped_images_index[i] = (shape, len(grouped_images[shape]) - 1)
-    # stack images with the same shape
-    grouped_images = {shape: torch.stack(images, dim=0) for shape, images in grouped_images.items()}
+    if not is_nested:
+        disable_grouping = images[0].device == "cpu" if disable_grouping is None else disable_grouping
+        if disable_grouping:
+            return {i: images[i].unsqueeze(0) for i in range(len(images))}, {i: (i, 0) for i in range(len(images))}
+
+        grouped_images = {}
+        grouped_images_index = {}
+        for i, image in enumerate(images):
+            shape = image.shape[1:]
+            if shape not in grouped_images:
+                grouped_images[shape] = []
+            grouped_images[shape].append(image)
+            grouped_images_index[i] = (shape, len(grouped_images[shape]) - 1)
+
+        # Stack images with the same shape
+        grouped_images = {shape: torch.stack(imgs, dim=0) for shape, imgs in grouped_images.items()}
+        return grouped_images, grouped_images_index
+
+    disable_grouping = images[0][0].device == "cpu" if disable_grouping is None else disable_grouping
+
+    if disable_grouping:
+        return {(i, j): images[i][j].unsqueeze(0) for i in range(len(images)) for j in range(len(images[i]))}, {
+            (i, j): ((i, j), 0) for i in range(len(images)) for j in range(len(images[i]))
+        }
+
+    # Handle single level nested structure
+    grouped_images, grouped_images_index = _flatten_nested_images(images)
+
+    # Stack images with the same shape
+    grouped_images = {shape: torch.stack(imgs, dim=0) for shape, imgs in grouped_images.items()}
+
     return grouped_images, grouped_images_index
 
 
 def reorder_images(
-    processed_images: dict[tuple[int, int], "torch.Tensor"], grouped_images_index: dict[int, tuple[int, int]]
-) -> list["torch.Tensor"]:
+    processed_images: dict[tuple[int, int], "torch.Tensor"],
+    grouped_images_index: dict[Union[int, tuple[int, int]], tuple[tuple[int, int], int]],
+    is_nested: bool = False,
+) -> Union[list["torch.Tensor"], "torch.Tensor"]:
     """
-    Reconstructs a list of images in the original order.
+    Reconstructs images in the original order, preserving the original structure (nested or not).
+    The input structure is either all flat or all nested.
+
+    Args:
+        processed_images (dict[tuple[int, int], "torch.Tensor"]):
+            Dictionary mapping shapes to batched processed images.
+        grouped_images_index (dict[Union[int, tuple[int, int]], tuple[tuple[int, int], int]]):
+            Dictionary mapping original indices to (shape, index) tuples.
+
+    Returns:
+        Union[list["torch.Tensor"], "torch.Tensor"]:
+            Images in the original structure.
     """
-    return [
-        processed_images[grouped_images_index[i][0]][grouped_images_index[i][1]]
-        for i in range(len(grouped_images_index))
-    ]
+    if not is_nested:
+        return [
+            processed_images[grouped_images_index[i][0]][grouped_images_index[i][1]]
+            for i in range(len(grouped_images_index))
+        ]
+
+    return _reconstruct_nested_structure(grouped_images_index, processed_images)
 
 
 class NumpyToTensor:

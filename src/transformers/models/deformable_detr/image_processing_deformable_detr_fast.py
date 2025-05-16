@@ -620,6 +620,7 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         pad_size: Optional[Dict[str, int]],
         format: Optional[Union[str, AnnotationFormat]],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.
