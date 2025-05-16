@@ -808,7 +808,7 @@ class TrainingArguments:
         "lr_scheduler_kwargs",
     ]
 
-    framework = "pt"
+    framework: str = "pt"
     output_dir: Optional[str] = field(
         default=None,
         metadata={
@@ -1234,7 +1234,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The value is either a "
+                "Config to be used with FSDP (Pytorch Fully Sharded Data Parallel). The value is either a "
                 "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`."
             )
         },
@@ -1667,7 +1667,7 @@ class TrainingArguments:
         ) and self.metric_for_best_model is None:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:
-            self.greater_is_better = not (self.metric_for_best_model.endswith("loss"))
+            self.greater_is_better = not self.metric_for_best_model.endswith("loss")
         if self.run_name is None:
             self.run_name = self.output_dir
         if self.framework == "pt" and is_torch_available():
