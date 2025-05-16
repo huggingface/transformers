@@ -1,66 +1,71 @@
 # Transformers
 
-🤗 Transformers: State-of-the-art Machine Learning for PyTorch, TensorFlow, and JAX.
+A flexible and modular library for building, training, and deploying transformer-based models.
 
 ## Overview
 
-This repository is a fork of the [Hugging Face Transformers](https://github.com/huggingface/transformers) library, which provides state-of-the-art Natural Language Processing (NLP) tools and models. It supports multiple frameworks including PyTorch, TensorFlow, and JAX.
+This repository provides components and utilities for working with transformer architectures—state-of-the-art models for natural language processing (NLP), computer vision, and more. Use this library to experiment with attention mechanisms, build custom models, or extend existing transformer implementations.
 
-Visit the official [Transformers documentation](https://huggingface.co/transformers) for detailed guides and examples.
+## Features
+
+- **Modular Design:** Easily swap and configure transformer layers, attention mechanisms, and feedforward blocks.
+- **Training Utilities:** Tools for dataset preparation, batching, and evaluation.
+- **Deployment Scripts:** Export and run models in production environments.
+- **Custom Extensions:** Add new transformer blocks or integrate with your ML pipelines.
 
 ## Installation
 
-To install the library, use:
+Clone the repository and install dependencies:
 
 ```bash
-pip install transformers
+git clone https://github.com/nodoubtz/transformers.git
+cd transformers
+pip install -r requirements.txt
 ```
-
-For more installation options, refer to the [installation guide](https://huggingface.co/transformers/installation.html).
 
 ## Usage
 
-Here’s a quick example of using the library:
+### Example: Training a Transformer Model
 
 ```python
-from transformers import pipeline
+from transformers import TransformerModel, Trainer
 
-# Create a sentiment-analysis pipeline
-classifier = pipeline("sentiment-analysis")
+# Initialize your model
+model = TransformerModel(config)
 
-result = classifier("I love using Transformers!")
-print(result)
+# Prepare your data
+train_data, val_data = load_data(...)
+
+# Train
+trainer = Trainer(model, train_data, val_data, ...)
+trainer.train()
 ```
 
-For more examples, check out the [usage documentation](https://huggingface.co/transformers/usage.html).
+### Customizing Components
+
+You can easily swap attention mechanisms or feedforward layers by editing the configuration or subclassing the provided modules.
+
+## Directory Structure
+
+```
+transformers/
+├── models/         # Transformer model implementations
+├── layers/         # Core building blocks (attention, feedforward, etc.)
+├── utils/          # Utility functions and helpers
+├── data/           # Data processing scripts
+├── scripts/        # Training and evaluation scripts
+├── tests/          # Unit tests
+└── requirements.txt
+```
 
 ## Contributing
 
-Contributions are welcome! Please check the [Hugging Face Transformers contribution guidelines](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md) for details.
+Contributions are welcome! Please open issues or pull requests for improvements, bug fixes, or new features.
 
 ## License
 
-This repository is licensed under the [MIT License](LICENSE).
-
-## Citations
-
-If you use this library in your work, please cite it as follows:
-
-```bibtex
-@inproceedings{wolf-etal-2020-transformers,
-    title = "Transformers: State-of-the-Art Natural Language Processing",
-    author = "Thomas Wolf and Lysandre Debut and Victor Sanh and Julien Chaumond and Clement Delangue and Anthony Moi and Pierric Cistac and Tim Rault and R\u{a}zvan Teodor Marc and Louis Plu and others",
-    booktitle = "Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing: System Demonstrations",
-    month = oct,
-    year = "2020",
-    address = "Online",
-    publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
-    pages = "38--45",
-}
-```
-
-For additional references, see the [Hugging Face Transformers citations](https://github.com/huggingface/transformers#citations).
+This project is licensed under the MIT License.
 
 ---
-This README is adapted for the fork by [nodoubtz](https://github.com/nodoubtz).
+
+**Note:** This repository is under active development. APIs may change.
