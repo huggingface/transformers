@@ -90,6 +90,12 @@ class CausalLMModelTester:
         pad_token_id=0,
         is_decoder=False,
         scope=None,
+        expert_interval=1,
+        moe_intermediate_size=12,
+        shared_expert_intermediate_size=36,
+        shared_expert_gate=True,
+        num_experts_per_tok=2,
+        num_experts=8,
     ):
         self._verify_model_attributes()
         self.parent = parent
@@ -118,6 +124,12 @@ class CausalLMModelTester:
         self.scope = scope
         self.head_dim = self.hidden_size // self.num_attention_heads
         self.is_decoder = is_decoder
+        self.expert_interval = expert_interval
+        self.moe_intermediate_size = moe_intermediate_size
+        self.shared_expert_intermediate_size = shared_expert_intermediate_size
+        self.shared_expert_gate = shared_expert_gate
+        self.num_experts_per_tok = num_experts_per_tok
+        self.num_experts = num_experts
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
