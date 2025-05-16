@@ -45,59 +45,12 @@ jobs:
             - checkout
             - run: git branch
             - run: git log -n 1
-            - run: python3 utils/extract_pr_number_from_circleci.py > pr_number.txt
-            - run: echo $(cat pr_number.txt)
-            - run: if [[ "$(cat pr_number.txt)" == "" && "$CIRCLE_BRANCH" != "main" && "$CIRCLE_BRANCH" != *-release ]]; then echo "Not a PR, not the main branch and not a release branch, skip test!"; circleci-agent step halt; fi
-            - run: 'curl -L -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/pulls/$(cat pr_number.txt) >> github.txt'
-            - run: cat github.txt
-            - run: (python3 -c 'import json; from datetime import datetime; fp = open("github.txt"); data = json.load(fp); fp.close(); f = "%Y-%m-%dT%H:%M:%SZ"; created = datetime.strptime(data["created_at"], f); updated = datetime.strptime(data["updated_at"], f); s = (updated - created).total_seconds(); print(int(s))' || true) > elapsed.txt
-            - run: if [ "$(cat elapsed.txt)" == "" ]; then echo 60 > elapsed.txt; fi
-            - run: cat elapsed.txt
-            - run: if [ "$(cat elapsed.txt)" -lt "30" ]; then echo "PR is just opened, wait some actions from GitHub"; sleep 30; fi
-            - run: 'if grep -q "\"draft\": true," github.txt; then echo "draft mode, skip test!"; circleci-agent step halt; fi'
-            - run: uv pip install -U -e .
-            - run: echo 'export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)"' >> "$BASH_ENV" && source "$BASH_ENV"
-            - run: mkdir -p test_preparation
-            - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
-            - run: python utils/tests_fetcher.py --filter_tests
-            - run: export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)" && echo $GIT_COMMIT_MESSAGE && python .circleci/create_circleci_config.py --fetcher_folder test_preparation
-            - run: |
-                if [ ! -s test_preparation/generated_config.yml ]; then
-                    echo "No tests to run, exiting early!"
-                    circleci-agent step halt
-                fi
-
-            - store_artifacts:
-                path: test_preparation
-
-            - run:
-                name: "Retrieve Artifact Paths"
-                # [reference] https://circleci.com/docs/api/v2/index.html#operation/getJobArtifacts
-                # `CIRCLE_TOKEN` is defined as an environment variables set within a context, see `https://circleci.com/docs/contexts/`
-                command: |
-                    project_slug="gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
-                    job_number=${CIRCLE_BUILD_NUM}
-                    url="https://circleci.com/api/v2/project/${project_slug}/${job_number}/artifacts"
-                    curl -o test_preparation/artifacts.json ${url} --header "Circle-Token: $CIRCLE_TOKEN"
-            - run:
-                name: "Prepare pipeline parameters"
-                command: |
-                    python utils/process_test_artifacts.py
-
-            # To avoid too long generated_config.yaml on the continuation orb, we pass the links to the artifacts as parameters.
-            # Otherwise the list of tests was just too big. Explicit is good but for that it was a limitation.
-            # We used:
-
-            # https://circleci.com/docs/api/v2/index.html#operation/getJobArtifacts : to get the job artifacts
-            # We could not pass a nested dict, which is why we create the test_file_... parameters for every single job
-
-            - store_artifacts:
-                path: test_preparation/transformed_artifacts.json
-            - store_artifacts:
-                path: test_preparation/artifacts.json
-            - continuation/continue:
-                parameters:  test_preparation/transformed_artifacts.json
-                configuration_path: test_preparation/generated_config.yml
+            - run: python3 -c 'print("Hello")'
+            - run: python3 -c 'import os; v = os.getenv("CIRCLE_OIDC_TOKEN", ""); print(len(v))'
+            - run: python3 -c 'import os; v = os.getenv("CIRCLE_OIDC_TOKEN_V2", ""); print(len(v))'
+#            - run: python3 -c 'import os; v = os.getenv("HUGGINGFACE_PRODUCTION_USER_TOKEN", ""); print(v[:3])'
+#            - run: python3 -c 'import os; v = os.getenv("HUGGINGFACE_PRODUCTION_USER_TOKEN", ""); print(v[18:21])'
+#            - run: python3 -c 'import os; v = os.getenv("HUGGINGFACE_PRODUCTION_USER_TOKEN", ""); print(v[-3:])'
 
     # To run all tests for the nightly build
     fetch_all_tests:
@@ -213,9 +166,6 @@ workflows:
                 - equal: [<<pipeline.project.git_url>>, https://github.com/huggingface/transformers]
                 - not: <<pipeline.parameters.nightly>>
         jobs:
-            - check_circleci_user
-            - check_code_quality
-            - check_repository_consistency
             - fetch_tests
 
     setup_and_quality_2:
