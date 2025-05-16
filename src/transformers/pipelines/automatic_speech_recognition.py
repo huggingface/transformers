@@ -502,6 +502,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # custom processing for Whisper timestamps and word-level timestamps
             if return_timestamps and self.type == "seq2seq_whisper":
                 generate_kwargs["return_timestamps"] = return_timestamps
+                generate_kwargs["return_segments"] = True  # Use segments to return timestamps
                 if return_timestamps == "word":
                     generate_kwargs["return_token_timestamps"] = True
                     generate_kwargs["return_segments"] = True
@@ -524,7 +525,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 **generate_kwargs,
             )
             # whisper longform generation stores timestamps in "segments"
-            if return_timestamps == "word" and self.type == "seq2seq_whisper":
+            if self.type == "seq2seq_whisper" and return_timestamps == "word":
                 if "segments" not in tokens:
                     out = {"tokens": tokens["sequences"], "token_timestamps": tokens["token_timestamps"]}
                 else:
@@ -533,11 +534,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         for segment_list in tokens["segments"]
                     ]
                     out = {"tokens": tokens["sequences"], "token_timestamps": token_timestamps}
-            else:
+            elif self.type == "seq2seq_whisper" and return_timestamps:
+                out = {"tokens": tokens["sequences"], "segments": tokens["segments"]}
+            else:  # seq2seq or whisper without return_timestamps
                 out = {"tokens": tokens}
-            if self.type == "seq2seq_whisper":
-                if stride is not None:
-                    out["stride"] = stride
+
+            if self.type == "seq2seq_whisper" and stride is not None:
+                out["stride"] = stride
 
         else:
             inputs = {
