@@ -1,3 +1,5 @@
+[![Self-hosted runner (push-caller)](https://github.com/nodoubtz/transformers/actions/workflows/self-push-caller.yml/badge.svg)](https://github.com/nodoubtz/transformers/actions/workflows/self-push-caller.yml)
+
 # transformers
 
 This repository contains code and resources related to transformers, a popular deep learning architecture widely used for natural language processing (NLP), computer vision, and other machine learning tasks.
