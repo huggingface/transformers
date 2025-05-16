@@ -144,7 +144,6 @@ class AyaVisionVisionText2TextModelTester:
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-        print("attention_mask", attention_mask.shape)
         # input_ids[:, -1] = self.pad_token_id
         input_ids[input_ids == self.image_token_index] = self.pad_token_id
         input_ids[:, : self.image_seq_length] = self.image_token_index
@@ -366,7 +365,6 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
-        print("actual_logits", actual_logits)
         expected_logits = torch.tensor([0.4109, 0.1532, 0.8018, 2.1328, 0.5483], dtype=torch.float16)
         self.assertTrue(
             torch.allclose(actual_logits, expected_logits, atol=0.1),
@@ -400,7 +398,6 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        print("decoded_output", decoded_output)
 
         expected_outputs = Expectations(
             {
@@ -437,7 +434,6 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        print("decoded_output", decoded_output)
         expected_output = "The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,"  # fmt: skip
         self.assertEqual(decoded_output, expected_output)
 
@@ -477,7 +473,6 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         # Check first output
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        print("decoded_output", decoded_output)
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
@@ -494,7 +489,6 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        print("decoded_output", decoded_output)
         expected_output = 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a'  # fmt: skip
 
         self.assertEqual(
@@ -558,7 +552,6 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        print("decoded_output", decoded_output)
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -567,7 +560,6 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        print("decoded_output", decoded_output)
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ",
