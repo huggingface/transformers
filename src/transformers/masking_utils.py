@@ -571,6 +571,10 @@ def create_causal_mask(
     mask_factory_function = causal_mask_function
     mask_interface = _get_mask_interface(config, output_attentions)
 
+    # Do not allow skip if we are compiling (this is to match BC)
+    # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
+    allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+
     # We now create the mask
     return mask_interface(
         batch_size=batch_size,
@@ -579,6 +583,7 @@ def create_causal_mask(
         kv_offset=kv_offset,
         mask_function=mask_factory_function,
         attention_mask=attention_mask,
+        allow_is_causal_skip=allow_is_causal_skip,  # additional kwarg for sdpa
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
     )
@@ -634,6 +639,10 @@ def create_sliding_window_causal_mask(
     mask_factory_function = sliding_window_causal_mask_function(sliding_window)
     mask_interface = _get_mask_interface(config, output_attentions)
 
+    # Do not allow skip if we are compiling (this is to match BC)
+    # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
+    allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+
     # We now create the mask
     return mask_interface(
         batch_size=batch_size,
@@ -642,6 +651,7 @@ def create_sliding_window_causal_mask(
         kv_offset=kv_offset,
         mask_function=mask_factory_function,
         attention_mask=attention_mask,
+        allow_is_causal_skip=allow_is_causal_skip,  # additional kwarg for sdpa
         local_size=sliding_window,  # Additional kwarg for sdpa
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
@@ -705,6 +715,10 @@ def create_chunked_causal_mask(
     mask_factory_function = chunked_causal_mask_function(chunk_size)
     mask_interface = _get_mask_interface(config, output_attentions)
 
+    # Do not allow skip if we are compiling (this is to match BC)
+    # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
+    allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+
     # We now create the mask
     return mask_interface(
         batch_size=batch_size,
@@ -713,6 +727,7 @@ def create_chunked_causal_mask(
         kv_offset=kv_offset,
         mask_function=mask_factory_function,
         attention_mask=attention_mask,
+        allow_is_causal_skip=allow_is_causal_skip,  # additional kwarg for sdpa
         local_size=chunk_size,  # Additional kwarg for sdpa
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
