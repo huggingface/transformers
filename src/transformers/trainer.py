@@ -1686,7 +1686,6 @@ class Trainer:
                 from torchao.optim import AdamW4bit, AdamW8bit
             else :
                 from torchao.prototype.low_bit_optim import AdamW4bit, AdamW8bit
-                
             if args.optim == OptimizerNames.ADAMW_TORCH_4BIT:
                 optimizer_cls = AdamW4bit
             elif args.optim == OptimizerNames.ADAMW_TORCH_8BIT:
