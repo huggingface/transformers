@@ -297,6 +297,12 @@ else:
                 ),
             ),
             (
+                "blt",
+                (
+                    "BLTTokenizer" if is_sentencepiece_available() else None,
+                    "BLTTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            (
                 "llama4",
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
