@@ -53,9 +53,9 @@ from ..utils import (
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
+    AssistantVocabTranslatorCache,
     AssistedCandidateGenerator,
     AssistedCandidateGeneratorDifferentTokenizers,
-    AssistantVocabTranslatorCache,
     CandidateGenerator,
     EarlyExitCandidateGenerator,
     PromptLookupCandidateGenerator,

@@ -36,7 +36,6 @@ from ..utils import (
     logging,
 )
 from ..utils.deprecation import deprecate_kwarg
-from ..testing_utils import CaptureLogger
 
 
 if TYPE_CHECKING:
@@ -595,13 +594,16 @@ class GenerationConfig(PushToHubMixin):
         return generation_mode
 
     @deprecate_kwarg("is_init", version="4.54.0")
-    def validate(self):
+    def validate(self, strict=False):
         """
         Validates the values of the attributes of the [`GenerationConfig`] instance. Raises exceptions in the presence
         of parameterization that can be detected as incorrect from the configuration instance alone.
 
         Note that some parameters not validated here are best validated at generate runtime, as they may depend on
         other inputs and/or the model, such as parameters related to the generation length.
+
+        Args:
+            strict (bool): If True, raise an exception for any issues found. If False, only log issues.
         """
         minor_issues = {}  # format: {attribute_name: issue_description}
 
@@ -722,15 +724,17 @@ class GenerationConfig(PushToHubMixin):
                 constrained_wrong_parameter_msg = (
                     "one of `constraints`, `force_words_ids` is not `None`, triggering constrained beam search. "
                     "However, `{flag_name}` is set to `{flag_value}`, which is incompatible with this generation "
-                    "mode. Set `constraints` and `force_words_ids` to `None` or unset `{flag_name}`."
+                    "mode. Set `constraints` and `force_words_ids` to `None` or unset `{flag_name}` to continue."
                 )
                 if self.do_sample is True:
-                    minor_issues["do_sample"] = constrained_wrong_parameter_msg.format(
-                        flag_name="do_sample", flag_value=self.do_sample
+                    raise ValueError(
+                        constrained_wrong_parameter_msg.format(flag_name="do_sample", flag_value=self.do_sample)
                     )
                 if self.num_beam_groups is not None and self.num_beam_groups != 1:
-                    minor_issues["num_beam_groups"] = constrained_wrong_parameter_msg.format(
-                        flag_name="num_beam_groups", flag_value=self.num_beam_groups
+                    raise ValueError(
+                        constrained_wrong_parameter_msg.format(
+                            flag_name="num_beam_groups", flag_value=self.num_beam_groups
+                        )
                     )
             # group beam search
             elif self.diversity_penalty != 0.0 or self.num_beam_groups != 1:
@@ -812,22 +816,30 @@ class GenerationConfig(PushToHubMixin):
                     "`generate()` (or a pipeline) directly."
                 )
 
-        # Finally, emit warnings / logs. By default, throw a minimal warning.
+        # Finally, handle caught minor issues. With default parameterization, we will throw a minimal warning.
         if len(minor_issues) > 0:
-            attributes_with_issues = list(minor_issues.keys())
-            warning_message = (
-                f"There are minor issues with the following generation config attributes: {attributes_with_issues}."
-            )
-            if os.environ.get("TRANSFORMERS_VERBOSITY", "warning") not in ("info", "debug"):
-                warning_message += " Set `TRANSFORMERS_VERBOSITY=info` for more details."
-            logger.warning(warning_message)
-
+            # Full list of issues with potential fixes
+            info_message = []
             for attribute_name, issue_description in minor_issues.items():
-                logger.info(f"- `{attribute_name}`: {issue_description}")
-            logger.info(
-                "If you're using a pretrained model, note that some of these attributes may be set through the "
+                info_message.append(f"- `{attribute_name}`: {issue_description}")
+            info_message = "\n".join(info_message)
+            info_message += (
+                "\n\nIf you're using a pretrained model, note that some of these attributes may be set through the "
                 "model's `generation_config.json` file."
             )
+
+            if strict:
+                raise ValueError("GenerationConfig is invalid: \n" + info_message)
+            else:
+                attributes_with_issues = list(minor_issues.keys())
+                warning_message = (
+                    "There are minor issues with the following generation config attributes: "
+                    f"{attributes_with_issues}."
+                )
+                if logger.getEffectiveLevel() >= logging.WARNING:
+                    warning_message += " Set `TRANSFORMERS_VERBOSITY=info` for more details."
+                logger.warning(warning_message)
+                logger.info(info_message)
 
     def save_pretrained(
         self,
@@ -853,19 +865,13 @@ class GenerationConfig(PushToHubMixin):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
 
-        # At save time, validate the instance -- if any warning/exception is thrown, we refuse to save the instance.
+        # At save time, validate the instance enforcing strictness -- if any warning/exception would be thrown, we
+        # refuse to save the instance.
         # This strictness is enforced to prevent bad configurations from being saved and re-used.
         try:
-            with CaptureLogger(logger) as caught_logs:
-                self.validate()
-            if len(caught_logs) > 0:
-                raise ValueError(str([w.out for w in caught_logs]))
+            self.validate(strict=True)
         except ValueError as exc:
-            breakpoint()
-            raise ValueError(
-                "The generation config instance is invalid -- `.validate()` throws warnings and/or exceptions. "
-                "Fix these issues to save the configuration.\n\nThrown during validation:\n" + str(exc)
-            )
+            raise ValueError(str(exc) + "\n\nFix these issues to save the configuration.")
 
         use_auth_token = kwargs.pop("use_auth_token", None)
 
