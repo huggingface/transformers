@@ -149,7 +149,7 @@ class Qwen3MoeAttention(nn.Module):
         )
         self.q_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.sliding_window = getattr(config, "sliding_window", None)
 
     def forward(
         self,
