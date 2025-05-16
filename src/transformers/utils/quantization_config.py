@@ -1554,7 +1554,7 @@ class TorchAoConfig(QuantizationConfigMixin):
     quant_type: Union[str, "AOBaseConfig"]  # noqa: F821
     modules_to_not_convert: Optional[List]
     quant_type_kwargs: Dict[str, Any]
-    include_embedding: bool
+    include_input_output_embeddings: bool
     untie_embedding_weights: bool
 
     """This is a config class for torchao quantization/sparsity techniques.
@@ -1617,7 +1617,7 @@ class TorchAoConfig(QuantizationConfigMixin):
         self,
         quant_type: Union[str, "AOBaseConfig"],  # noqa: F821
         modules_to_not_convert: Optional[List] = None,
-        include_embedding: bool = False,
+        include_input_output_embeddings: bool = False,
         untie_embedding_weights: bool = False,
         **kwargs,
     ):
@@ -1625,7 +1625,7 @@ class TorchAoConfig(QuantizationConfigMixin):
         self.quant_type = quant_type
         self.modules_to_not_convert = modules_to_not_convert
         self.quant_type_kwargs = kwargs.get("quant_type_kwargs", kwargs)
-        self.include_embedding = include_embedding
+        self.include_input_output_embeddings = include_input_output_embeddings
         self.untie_embedding_weights = untie_embedding_weights
         self.post_init()
 
