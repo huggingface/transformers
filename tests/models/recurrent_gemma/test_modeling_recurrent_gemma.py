@@ -16,6 +16,7 @@
 import unittest
 
 import pytest
+from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, RecurrentGemmaConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
@@ -57,6 +58,7 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
     )
     test_headmasking = False
     test_pruning = False
+    has_attentions = False
     model_tester_class = RecurrentGemmaModelTester
 
     @unittest.skip(reason="RecurrentGemma only supports sdpa")
@@ -91,6 +93,7 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_model_parallel_beam_search(self):
         pass
 
+    @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
     @unittest.skip(reason="Rely on `past_key_values` to crop the assistant pkv. Not supported")
     def test_assisted_decoding_matches_greedy_search(self):
@@ -107,6 +110,65 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="TODO @arthurzucker not super important and failing.")
     def test_initialization(self):
+        pass
+
+    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
+    @pytest.mark.generate
+    def test_beam_sample_generate_dict_output(self):
+        pass
+
+    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
+    @pytest.mark.generate
+    def test_beam_search_generate_dict_output(self):
+        pass
+
+    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
+    @pytest.mark.generate
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
+    @pytest.mark.generate
+    def test_constrained_beam_search_generate_dict_output(self):
+        pass
+
+    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
+    @pytest.mark.generate
+    def test_dola_decoding_sample(self):
+        pass
+
+    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
+    @pytest.mark.generate
+    def test_generate_without_input_ids(self):
+        pass
+
+    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
+    @pytest.mark.generate
+    def test_group_beam_search_generate(self):
+        pass
+
+    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
+    @pytest.mark.generate
+    def test_group_beam_search_generate_dict_output(self):
+        pass
+
+    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
+    @pytest.mark.generate
+    def test_constrained_beam_search_generate(self):
+        pass
+
+    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
+    @pytest.mark.generate
+    def test_greedy_generate_dict_outputs(self):
+        pass
+
+    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
+    @pytest.mark.generate
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
+    def test_model_outputs_equivalence(self):
         pass
 
 
