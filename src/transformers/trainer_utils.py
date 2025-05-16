@@ -49,11 +49,12 @@ if is_torch_available():
     import torch
 
 
-def seed_worker(_):
+def seed_worker(worker_id: int, num_workers: int, rank: int):
     """
     Helper function to set worker seed during Dataloader initialization.
     """
-    worker_seed = torch.initial_seed() % 2**32
+    init_seed = torch.initial_seed() % 2**32
+    worker_seed = num_workers * rank + init_seed
     set_seed(worker_seed)
 
 

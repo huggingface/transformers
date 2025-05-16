@@ -18,7 +18,14 @@ import unittest
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
-from transformers.testing_utils import require_read_token, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    require_read_token,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -35,6 +42,29 @@ if is_torch_available():
         Mamba2Model,
     )
     from transformers.models.mamba2.modeling_mamba2 import Mamba2Cache, Mamba2Mixer
+
+
+class Mamba2ConfigTester(ConfigTester):
+    def _create_config(self, hidden_size: int, num_heads: int, expand: int, head_dim: int):
+        _input_dict = self.inputs_dict.copy()
+        _input_dict["hidden_size"] = hidden_size
+        _input_dict["num_heads"] = num_heads
+        _input_dict["expand"] = expand
+        _input_dict["head_dim"] = head_dim
+        return self.config_class(**_input_dict)
+
+    def test_hidden_size_compatibility(self):
+        self._create_config(hidden_size=2, num_heads=2, expand=2, head_dim=2)
+        self._create_config(hidden_size=4, num_heads=4, expand=2, head_dim=2)
+        self._create_config(hidden_size=2, num_heads=4, expand=4, head_dim=2)
+        with self.parent.assertRaises(ValueError):
+            self._create_config(hidden_size=2, num_heads=4, expand=2, head_dim=4)
+        with self.parent.assertRaises(ValueError):
+            self._create_config(hidden_size=4, num_heads=2, expand=4, head_dim=2)
+
+    def run_common_tests(self):
+        self.test_hidden_size_compatibility()
+        return super().run_common_tests()
 
 
 class Mamba2ModelTester:
@@ -226,7 +256,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def setUp(self):
         self.model_tester = Mamba2ModelTester(self)
-        self.config_tester = ConfigTester(
+        self.config_tester = Mamba2ConfigTester(
             self, config_class=Mamba2Config, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
@@ -357,12 +387,18 @@ class Mamba2IntegrationTest(unittest.TestCase):
 
         out = model.generate(input_ids, do_sample=False, use_cache=True, max_new_tokens=30)
         output_sentence = tokenizer.decode(out[0])
-        ground_truth_sentence = """<s>[INST]Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program in C++:\n\n```cpp\n#include <iostream>\n\n"""
+        ground_truth_sentences = Expectations(
+            {
+                ("xpu", 3): """<s>[INST]Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program written in C++:\n\n```cpp\n#include <iostream>\n""",
+                ("cuda", 7): """<s>[INST]Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program in C++:\n\n```cpp\n#include <iostream>\n\n""",
+            }
+        )  # fmt: skip
+        ground_truth_sentence = ground_truth_sentences.get_expectation()
         self.assertEqual(output_sentence, ground_truth_sentence)
 
     @require_read_token
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_batched_equivalence_with_cache(self):
         """
         Verifies that batched generation matches individual generation.
@@ -393,7 +429,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
 
     @require_read_token
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_batched_equivalence_without_cache(self):
         """
         Verifies that batched generation matches individual generation without cache.
@@ -423,7 +459,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
             self.assertEqual(individual_output[:100], batched_output[index_gen][:100])
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_mamba2_mixer_train_vs_eval_equivalence(self):
         # Based on https://github.com/sustcsonglin/flash-linear-attention/issues/63
         # Credit to zhixuan-lin
@@ -433,10 +469,10 @@ class Mamba2IntegrationTest(unittest.TestCase):
         config = Mamba2Config(num_heads=24, head_dim=64, hidden_size=768, expand=2, n_groups=1)
 
         torch.manual_seed(42)
-        with torch.amp.autocast(device_type="cuda", dtype=dtype):
+        with torch.amp.autocast(device_type=torch_device, dtype=dtype):
             with torch.no_grad():
-                mixer = Mamba2Mixer(config, layer_idx=0).to("cuda")
-                hidden_states = torch.rand(size=(B, T, D), dtype=dtype, device="cuda")
+                mixer = Mamba2Mixer(config, layer_idx=0).to(torch_device)
+                hidden_states = torch.rand(size=(B, T, D), dtype=dtype, device=torch_device)
 
                 mixer.train()
                 out_train = mixer(hidden_states)
