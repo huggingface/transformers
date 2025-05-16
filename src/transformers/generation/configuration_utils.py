@@ -824,7 +824,7 @@ class GenerationConfig(PushToHubMixin):
                 info_message.append(f"- `{attribute_name}`: {issue_description}")
             info_message = "\n".join(info_message)
             info_message += (
-                "\n\nIf you're using a pretrained model, note that some of these attributes may be set through the "
+                "\nIf you're using a pretrained model, note that some of these attributes may be set through the "
                 "model's `generation_config.json` file."
             )
 
