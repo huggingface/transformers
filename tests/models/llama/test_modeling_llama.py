@@ -54,17 +54,6 @@ class LlamaModelTester(CausalLMModelTester):
         causal_lm_class = LlamaForCausalLM
         sequence_class = LlamaForSequenceClassification
         token_class = LlamaForTokenClassification
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": LlamaModel,
-            "text-classification": LlamaForSequenceClassification,
-            "token-classification": LlamaForTokenClassification,
-            "text-generation": LlamaForCausalLM,
-            "zero-shot": LlamaForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
 
 @require_torch

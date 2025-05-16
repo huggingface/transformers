@@ -50,17 +50,6 @@ class NemotronModelTester(CausalLMModelTester):
         causal_lm_class = NemotronForCausalLM
         sequence_class = NemotronForSequenceClassification
         token_class = NemotronForTokenClassification
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": NemotronModel,
-            "text-classification": NemotronForSequenceClassification,
-            "token-classification": NemotronForTokenClassification,
-            "text-generation": NemotronForCausalLM,
-            "zero-shot": NemotronForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
 
 @require_torch

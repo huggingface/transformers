@@ -49,17 +49,6 @@ class PersimmonModelTester(CausalLMModelTester):
         causal_lm_class = PersimmonForCausalLM
         sequence_class = PersimmonForSequenceClassification
         token_class = PersimmonForTokenClassification
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": PersimmonModel,
-            "text-classification": PersimmonForSequenceClassification,
-            "token-classification": PersimmonForTokenClassification,
-            "text-generation": PersimmonForCausalLM,
-            "zero-shot": PersimmonForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
 
 @require_torch

@@ -57,17 +57,6 @@ class Qwen2ModelTester(CausalLMModelTester):
         sequence_class = Qwen2ForSequenceClassification
         token_class = Qwen2ForTokenClassification
         question_answering_class = Qwen2ForQuestionAnswering
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Qwen2Model,
-            "text-classification": Qwen2ForSequenceClassification,
-            "token-classification": Qwen2ForTokenClassification,
-            "text-generation": Qwen2ForCausalLM,
-            "question-answering": Qwen2ForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
 
 
 @require_torch
@@ -86,6 +75,17 @@ class Qwen2ModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     model_tester_class = Qwen2ModelTester
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": Qwen2Model,
+            "text-classification": Qwen2ForSequenceClassification,
+            "token-classification": Qwen2ForTokenClassification,
+            "text-generation": Qwen2ForCausalLM,
+            "question-answering": Qwen2ForQuestionAnswering,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(

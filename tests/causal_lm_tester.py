@@ -44,7 +44,6 @@ class CausalLMModelTester:
     sequence_classification_class = None
     token_classification_class = None
     question_answering_class = None
-    pipeline_model_mapping = None
 
     def _verify_model_attributes(self):
         for required_attribute in self._required_attributes:
@@ -52,12 +51,6 @@ class CausalLMModelTester:
                 raise ValueError(
                     f"You have inherited from CausalLMModelTester but did not set the {required_attribute} attribute."
                 )
-        if not isinstance(self.pipeline_model_mapping, dict):
-            raise ValueError(
-                "You have inherited from CausalLMModelTester but did not set the pipeline_model_mapping attribute. "
-                "This should be a dictionary mapping pipeline tasks to model classes, like "
-                "{'feature-extraction': MyModel, 'text-classification': MyModelForSequenceClassification}"
-            )
 
     @property
     def all_model_classes(self):
@@ -190,6 +183,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     model_tester_class = None
     all_model_classes = None
     rotary_embedding_layer = None  # Enables RoPE tests if set
+    pipeline_model_mapping = None
 
     def setUp(self):
         if self.model_tester_class is None:
@@ -201,7 +195,9 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         if self.all_model_classes is None:
             self.all_model_classes = self.model_tester.all_model_classes
         if self.pipeline_model_mapping is None:
-            self.pipeline_model_mapping = self.model_tester.pipeline_model_mapping
+            raise ValueError(
+                "You have inherited from CausalLMModelTest but did not set the pipeline_model_mapping attribute."
+            )
 
     def test_config(self):
         self.config_tester.run_common_tests()

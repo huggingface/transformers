@@ -46,6 +46,15 @@ class PhiModelTester(CausalLMModelTester):
         causal_lm_class = PhiForCausalLM
         sequence_class = PhiForSequenceClassification
         token_class = PhiForTokenClassification
+
+
+@require_torch
+class PhiModelTest(CausalLMModelTest, unittest.TestCase):
+    all_model_classes = (
+        (PhiModel, PhiForCausalLM, PhiForSequenceClassification, PhiForTokenClassification)
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {
             "feature-extraction": PhiModel,
@@ -55,15 +64,6 @@ class PhiModelTester(CausalLMModelTester):
         }
         if is_torch_available()
         else {}
-    )
-
-
-@require_torch
-class PhiModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (PhiModel, PhiForCausalLM, PhiForSequenceClassification, PhiForTokenClassification)
-        if is_torch_available()
-        else ()
     )
 
     test_headmasking = False

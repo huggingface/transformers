@@ -51,17 +51,6 @@ class FalconModelTester(CausalLMModelTester):
         causal_lm_class = FalconForCausalLM
         sequence_class = FalconForSequenceClassification
         token_class = FalconForTokenClassification
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": FalconModel,
-            "text-classification": FalconForSequenceClassification,
-            "token-classification": FalconForTokenClassification,
-            "text-generation": FalconForCausalLM,
-            "zero-shot": FalconForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     def get_config(self):
         return self.config_class(
@@ -95,6 +84,17 @@ class FalconModelTest(CausalLMModelTest, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": FalconModel,
+            "text-classification": FalconForSequenceClassification,
+            "token-classification": FalconForTokenClassification,
+            "text-generation": FalconForCausalLM,
+            "zero-shot": FalconForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
     test_headmasking = False
     test_pruning = False

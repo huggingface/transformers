@@ -57,17 +57,6 @@ class MistralModelTester(CausalLMModelTester):
         sequence_class = MistralForSequenceClassification
         token_class = MistralForTokenClassification
         question_answering_class = MistralForQuestionAnswering
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": MistralModel,
-            "text-classification": MistralForSequenceClassification,
-            "token-classification": MistralForTokenClassification,
-            "text-generation": MistralForCausalLM,
-            "question-answering": MistralForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
 
 
 @require_torch
@@ -82,6 +71,17 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": MistralModel,
+            "text-classification": MistralForSequenceClassification,
+            "token-classification": MistralForTokenClassification,
+            "text-generation": MistralForCausalLM,
+            "question-answering": MistralForQuestionAnswering,
+        }
+        if is_torch_available()
+        else {}
     )
     test_headmasking = False
     test_pruning = False

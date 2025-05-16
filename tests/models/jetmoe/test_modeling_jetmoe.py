@@ -48,15 +48,6 @@ class JetMoeModelTester(CausalLMModelTester):
         base_model_class = JetMoeModel
         causal_lm_class = JetMoeForCausalLM
         sequence_class = JetMoeForSequenceClassification
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": JetMoeModel,
-            "text-classification": JetMoeForSequenceClassification,
-            "text-generation": JetMoeForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     def __init__(self, parent, hidden_act="silu", kv_channels=8, **kwargs):
         super().__init__(parent, hidden_act=hidden_act, **kwargs)
@@ -71,6 +62,15 @@ class JetMoeModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
     model_tester_class = JetMoeModelTester
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": JetMoeModel,
+            "text-classification": JetMoeForSequenceClassification,
+            "text-generation": JetMoeForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     @require_flash_attn
     @require_torch_gpu

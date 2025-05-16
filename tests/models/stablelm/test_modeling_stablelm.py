@@ -49,17 +49,6 @@ class StableLmModelTester(CausalLMModelTester):
         causal_lm_class = StableLmForCausalLM
         sequence_class = StableLmForSequenceClassification
         token_class = StableLmForTokenClassification
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": StableLmModel,
-            "text-classification": StableLmForSequenceClassification,
-            "token-classification": StableLmForTokenClassification,
-            "text-generation": StableLmForCausalLM,
-            "zero-shot": StableLmForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
 
 @require_torch
