@@ -11,7 +11,7 @@
 # specific language governing permissions and limitations under the License.
 
 import logging
-from typing import Optional
+from typing import Callable, Optional
 
 import torch
 
@@ -19,7 +19,6 @@ from ..cache_utils import HybridCache, StaticCache
 from ..generation.configuration_utils import GenerationConfig
 from ..masking_utils import (
     ALL_MASK_CREATION_FUNCTIONS,
-    LayerPattern,
     _ignore_causal_mask_sdpa,
     _is_torch_greater_or_equal_than_2_5,
     prepare_padding_mask,
@@ -705,8 +704,9 @@ def sdpa_mask_without_vmap(
     cache_position: torch.Tensor,
     kv_length: int,
     kv_offset: int = 0,
-    layer_pattern: LayerPattern = LayerPattern("full_attention"),
+    mask_function: Optional[Callable] = None,
     attention_mask: Optional[torch.Tensor] = None,
+    local_size: Optional[int] = None,
     allow_is_causal_skip: bool = True,
     allow_torch_fix: bool = True,
     **kwargs,
@@ -726,12 +726,13 @@ def sdpa_mask_without_vmap(
             The size that the key and value states will have during the attention computation.
         kv_offset (`int`, optional):
             An optional offset to indicate at which first position the key and values states will refer to.
+        mask_function (`Callable`):
+            The mask factory function describing the mask pattern.
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
-        sliding_window (`int`, optional):
-            An optional sliding window length, if we are using sliding window attention. Mutually exclusive with `chunk_size`.
-        chunk_size (`int`, optional):
-            An optional chunk size, if we are using chunked attention. Mutually exclusive with `sliding_window`.
+        local_size (`int`, optional):
+            The size of the local attention, if we do not use full attention. This is used only if `allow_is_causal_skip=True`
+            to try to skip mask creation if possible.
         allow_is_causal_skip (`bool`, optional):
             Whether to allow to return `None` for the mask under conditions where we can use the `is_causal` argument in
             `torch.sdpa` instead. Default to `True`.
@@ -746,7 +747,7 @@ def sdpa_mask_without_vmap(
     padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
 
     #  Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
-    if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, layer_pattern.local_size):
+    if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, local_size):
         return None
 
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
@@ -755,17 +756,25 @@ def sdpa_mask_without_vmap(
     kv_arange += kv_offset
     reshaped_cache_position = cache_position.view(-1, 1)
 
+    # This is a bit hacky to know what pattern we are using, but all mask creation function actually forward
+    # the config through kwargs anyway, so it allows to rely on it
+    # Usually, the `mask_function` is the only entry-point to define the pattern - we could do for loops over it,
+    # but this is more efficient
+    sliding_window = getattr(kwargs["config"], "sliding_window", None)
+    chunk_size = getattr(kwargs["config"], "attention_chunk_size", None)
+
+    if sliding_window is not None and chunk_size is not None:
+        raise ValueError("Cannot use both `sliding_window` and `attention_chunk_size`")
+
     # Simplest and most efficient way to obtain a causal mask
     causal_mask = kv_arange <= reshaped_cache_position
     # If using sliding window, add the sliding mask
-    if layer_pattern.pattern == "sliding_attention":
-        sliding_mask_overlay = kv_arange > reshaped_cache_position - layer_pattern.local_size
+    if sliding_window is not None:
+        sliding_mask_overlay = kv_arange > reshaped_cache_position - sliding_window
         causal_mask *= sliding_mask_overlay
     # If using chunk attention, add the chunked mask
-    elif layer_pattern.pattern == "chunked_attention":
-        chunked_mask_overlay = (
-            kv_arange // layer_pattern.local_size == reshaped_cache_position // layer_pattern.local_size
-        )
+    elif chunk_size is not None:
+        chunked_mask_overlay = kv_arange // chunk_size == reshaped_cache_position // chunk_size
         causal_mask *= chunked_mask_overlay
 
     causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
