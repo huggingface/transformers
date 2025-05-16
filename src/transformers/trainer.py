@@ -3784,7 +3784,7 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            # Finally we need to normalize the loss for reporting
+            # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
             if not self.model_accepts_loss_kwargs and self.compute_loss_func is None:
                 loss = loss / self.args.gradient_accumulation_steps
 
