@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma model."""
 
-import tempfile
 import unittest
 
 import pytest
@@ -23,7 +22,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_to
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     cleanup,
-    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -305,69 +303,43 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     @require_torch_sdpa
     @require_torch_accelerator
-    @slow
     def test_sdpa_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_sdpa:
                 self.skipTest(reason="Model does not support SDPA")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
+            model = model_class(config).to(torch_device)
+            dummy_input = inputs_dict[model_class.main_input_name].to(torch_device)
 
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa"
-                )
-                model_sdpa.to(torch_device)
+            model.config._attn_implementation = "sdpa"
+            states_sdpa = model(dummy_input, output_hidden_states=True).hidden_states[-1]
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
-                model.to(torch_device)
+            model.config._attn_implementation = "eager"
+            states_eager = model(dummy_input, output_hidden_states=True).hidden_states[-1]
 
-                dummy_input = inputs_dict[model_class.main_input_name]
-                dummy_input = dummy_input.to(torch_device)
-                outputs = model(dummy_input, output_hidden_states=True)
-                outputs_sdpa = model_sdpa(dummy_input, output_hidden_states=True)
-
-                logits = outputs.hidden_states[-1]
-                logits_sdpa = outputs_sdpa.hidden_states[-1]
-
-                # gemma sdpa needs a high tolerance
-                assert torch.allclose(logits_sdpa, logits, atol=3e-3)
+            torch.testing.assert_close(states_sdpa, states_eager, atol=1e-5, rtol=1e-5)
 
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
-    @is_flaky()
-    @slow
     def test_flash_attn_2_equivalence(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(reason="Model does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
+            model = model_class(config).to(device=torch_device, dtype=torch.float16)
+            dummy_input = inputs_dict[model_class.main_input_name].to(torch_device)
 
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
+            model.config._attn_implementation = "flash_attention_2"
+            states_sdpa = model(dummy_input, output_hidden_states=True).hidden_states[1]
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
-                model.to(torch_device)
+            model.config._attn_implementation = "eager"
+            states_eager = model(dummy_input, output_hidden_states=True).hidden_states[1]
 
-                dummy_input = inputs_dict[model_class.main_input_name]
-                dummy_input = dummy_input.to(torch_device)
-                outputs = model(dummy_input, output_hidden_states=True)
-                outputs_fa = model_fa(dummy_input, output_hidden_states=True)
-
-                logits = outputs.hidden_states[-1]
-                logits_fa = outputs_fa.hidden_states[-1]
-
-                # gemma flash attention 2 needs a high tolerance
-                assert torch.allclose(logits_fa, logits, atol=3e-3)
+            # Here we use higher tolerance and the output of the 2nd layer because otherwise small diffs add-up
+            torch.testing.assert_close(states_sdpa, states_eager, atol=1e-3, rtol=1e-3)
 
 
 @slow
