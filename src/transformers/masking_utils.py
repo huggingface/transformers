@@ -136,49 +136,6 @@ def _vmap_for_q_idx_kv_idx(mask_function: Callable) -> Callable:
     return mask_function
 
 
-class LayerPattern(object):
-    """
-    This is a structure to describe the attention pattern used in a DecoderLayer.
-
-    Args:
-        pattern (`str`):
-            The attention pattern for the given layer. Must be one of `("full_attention", "sliding_attention", "chunked_attention")`.
-        local_size (`int`, *optional*):
-            The size of the local attention, if `pattern` is one of `("sliding_attention", "chunked_attention")`. That is, the size
-            of the sliding window or the chunk size. If `pattern="full_attention"`, this argument is ignored.
-    """
-
-    pattern: str
-    local_size: Optional[int] = None
-
-    def __init__(self, pattern: str, local_size: Optional[int] = None):
-        allowed_patterns = ("full_attention", "sliding_attention", "chunked_attention")
-        if pattern not in allowed_patterns:
-            raise ValueError(
-                f"Could not recognize attention pattern `{pattern}` It should be one of {allowed_patterns}"
-            )
-        self.pattern = pattern
-        self.local_size = local_size
-        # Ignore the potential `local_size` passed if the layer uses full attention pattern
-        if self.pattern == "full_attention":
-            self.local_size = None
-
-    def get_mask_factory_function(self) -> Callable:
-        """
-        Return the mask function describing this LayerPattern.
-        """
-        # Standard causal attention
-        if self.pattern == "full_attention":
-            mask_function = causal_mask_function
-        # Sliding window attention
-        elif self.pattern == "sliding_attention":
-            mask_function = sliding_window_causal_mask_function(self.local_size)
-        # Chunked attention
-        elif self.pattern == "chunked_attention":
-            mask_function = chunked_causal_mask_function(self.local_size)
-        return mask_function
-
-
 def prepare_padding_mask(
     attention_mask: Optional[torch.Tensor], kv_length: int, kv_offset: int, _slice: bool = True
 ) -> Optional[torch.Tensor]:
@@ -206,8 +163,9 @@ def sdpa_mask(
     cache_position: torch.Tensor,
     kv_length: int,
     kv_offset: int = 0,
-    layer_pattern: LayerPattern = LayerPattern("full_attention"),
+    mask_function: Callable = causal_mask_function,
     attention_mask: Optional[torch.Tensor] = None,
+    local_size: Optional[int] = None,
     allow_is_causal_skip: bool = True,
     allow_torch_fix: bool = True,
     **kwargs,
@@ -228,10 +186,13 @@ def sdpa_mask(
             The size that the key and value states will have during the attention computation.
         kv_offset (`int`, optional):
             An optional offset to indicate at which first position the key and values states will refer to.
-        layer_pattern (`LayerPattern`):
-            The structure describing the attention pattern used by a DecoderLayer.
+        mask_function (`Callable`):
+            The mask factory function describing the mask pattern.
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
+        local_size (`int`, optional):
+            The size of the local attention, if we do not use full attention. This is used only if `allow_is_causal_skip=True`
+            to try to skip mask creation if possible.
         allow_is_causal_skip (`bool`, optional):
             Whether to allow to return `None` for the mask under conditions where we can use the `is_causal` argument in
             `torch.sdpa` instead. Default to `True`.
@@ -274,7 +235,7 @@ def sdpa_mask(
     You can do
 
     ```python
-    >>> create_4d_causal_mask(batch_size=1, cache_position=torch.arange(5), kv_length=5, layer_pattern=LayerPattern("sliding_attention", 3))
+    >>> create_4d_causal_mask(batch_size=1, cache_position=torch.arange(5), kv_length=5, mask_function=sliding_window_causal_mask_function(3))
     >>> tensor([[[[ True, False, False, False, False],
                   [ True,  True, False, False, False],
                   [ True,  True,  True, False, False],
@@ -295,7 +256,7 @@ def sdpa_mask(
     You can do
 
     ```python
-    >>> create_4d_causal_mask(batch_size=1, cache_position=torch.arange(5), kv_length=5, layer_pattern=LayerPattern("chunked_attention", 3))
+    >>> create_4d_causal_mask(batch_size=1, cache_position=torch.arange(5), kv_length=5, mask_function=chunked_causal_mask_function(3))
     >>> tensor([[[[ True, False, False, False, False],
                 [ True,  True, False, False, False],
                 [ True,  True,  True, False, False],
@@ -309,16 +270,13 @@ def sdpa_mask(
     padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
 
     # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
-    if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, layer_pattern.local_size):
+    if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, local_size):
         return None
 
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
     # but without data-dependent slicing (i.e. torch.compile friendly)
     kv_arange = torch.arange(kv_length, device=cache_position.device)
     kv_arange += kv_offset
-
-    # Return the mask function based on the layer type
-    mask_function = layer_pattern.get_mask_factory_function()
 
     # This creates the 4D mask easily. Note that we do not include vmap over the batch_idx dimension as well,
     # as vmap cannot handle slicing a tensor from scalar tensor (it internally calls `.item()` which vmap does not allow
@@ -342,7 +300,7 @@ def eager_mask(
     cache_position: torch.Tensor,
     kv_length: int,
     kv_offset: int = 0,
-    layer_pattern: LayerPattern = LayerPattern("full_attention"),
+    mask_function: Callable = causal_mask_function,
     attention_mask: Optional[torch.Tensor] = None,
     dtype: torch.dtype = torch.float32,
     **kwargs,
@@ -361,8 +319,8 @@ def eager_mask(
             The size that the key and value states will have during the attention computation.
         kv_offset (`int`, optional):
             An optional offset to indicate at which first position the key and values states will refer to.
-        layer_pattern (`LayerPattern`):
-            The structure describing the attention pattern used by a DecoderLayer.
+        mask_function (`Callable`):
+            The mask factory function describing the mask pattern.
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
         dtype (`torch.dtype`, optional):
@@ -374,7 +332,7 @@ def eager_mask(
         cache_position=cache_position,
         kv_length=kv_length,
         kv_offset=kv_offset,
-        layer_pattern=layer_pattern,
+        mask_function=mask_function,
         attention_mask=attention_mask,
         allow_is_causal_skip=False,
         allow_torch_fix=False,
@@ -391,7 +349,7 @@ def flash_attention_mask(
     cache_position: torch.Tensor,
     kv_length: int,
     kv_offset: int = 0,
-    layer_pattern: LayerPattern = LayerPattern("full_attention"),
+    mask_function: Callable = causal_mask_function,
     attention_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ):
@@ -409,18 +367,11 @@ def flash_attention_mask(
             The size that the key and value states will have during the attention computation.
         kv_offset (`int`, optional):
             An optional offset to indicate at which first position the key and values states will refer to.
-        layer_pattern (`LayerPattern`):
-            The structure describing the attention pattern used by a DecoderLayer.
+        mask_function (`Callable`):
+            The mask factory function describing the mask pattern.
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
     """
-    # Raise if using chunked attention on context too large
-    if layer_pattern.pattern == "chunked_attention" and kv_length + kv_offset > layer_pattern.local_size:
-        raise ValueError(
-            "Flash attention 2 cannot handle attention chunked attention, and the key-value length is larger than the chunk size "
-            "so the chunked pattern cannot be respected. You should use another `attn_implementation` when instantiating the model"
-        )
-
     if attention_mask is not None:
         # Here we need to slice from the right if using sliding or chunked (for full attention, this is equivalent to doing nothing)
         attention_mask = attention_mask[:, -kv_length:]
@@ -437,7 +388,7 @@ def flex_attention_mask(
     cache_position: torch.Tensor,
     kv_length: int,
     kv_offset: int = 0,
-    layer_pattern: LayerPattern = LayerPattern("full_attention"),
+    mask_function: Callable = causal_mask_function,
     attention_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> "BlockMask":
@@ -454,15 +405,12 @@ def flex_attention_mask(
             The size that the key and value states will have during the attention computation.
         kv_offset (`int`, optional):
             An optional offset to indicate at which first position the key and values states will refer to.
-        layer_pattern (`LayerPattern`):
-            The structure describing the attention pattern used by a DecoderLayer.
+        mask_function (`Callable`):
+            The mask factory function describing the mask pattern.
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
     """
     q_length, q_offset = cache_position.shape[0], cache_position[0]
-
-    # Return the mask function based on the layer type
-    mask_function = layer_pattern.get_mask_factory_function()
 
     # Potentially add the padding 2D mask
     if attention_mask is not None:
@@ -500,24 +448,19 @@ class AttentionMaskInterface(GeneralInterface):
 ALL_MASK_CREATION_FUNCTIONS: AttentionMaskInterface = AttentionMaskInterface()
 
 
-def _create_mask(
-    layer_pattern: LayerPattern,
+def _preprocess_mask_arguments(
     config: PretrainedConfig,
     input_embeds: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: Optional[Union[torch.Tensor, BlockMask]],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
-    layer_idx: int,
-    output_attentions: bool = False,
-) -> Optional[Union[torch.Tensor, "BlockMask"]]:
+    layer_idx: Optional[int],
+) -> tuple[bool, Optional[Union[torch.Tensor, BlockMask]], int, int]:
     """
-    General utility function that is able to generate all types of masks, for all attention functions. This is
-    intended to be reused by each public mask creation function (e.g. `create_causal_mask`, `create_sliding_window_causal_mask`,
-    etc)
+    Perform some common pre-processing of the mask arguments we get from the modeling code. Mostly determine the
+    key-value length and offsets, and if we should early exit or not.
 
     Args:
-        layer_pattern (`LayerPattern`):
-            The structure describing the attention pattern used by a DecoderLayer.
         config (`PretrainedConfig`):
             The model config.
         input_embeds (`torch.Tensor`):
@@ -530,18 +473,28 @@ def _create_mask(
             A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
         past_key_values (`Cache`, optional):
             The past key values, if we use a cache.
-        output_attentions (`bool`, optional):
-            Whether we return the attention scores or not. By default `False`.
+        layer_idx (`int`, optional):
+            If `past_key_values` is not None, this is the layer index of the cache from which to get the key-value
+            length and offset. Indeed, for hybrid caches, different layers may return different lengths.
+
+    Returns:
+        early_exit (`bool`):
+            Whether we should early exit mask creation, and return the mask as-is.
+        attention_mask (`torch.Tensor` or `BlockMask` or `None`):
+            The attention mask to either return immediately, or to use in downstream mask creation.
+        kv_length (`int`):
+            The size that the key and value states will have during the attention computation.
+        kv_offset (`int`):
+            An offset to indicate at which first position the key and values states will refer to.
     """
     # If the mask is already 4D, simply return as-is (it was already prepared, or it is custom)
     if isinstance(attention_mask, (torch.Tensor, BlockMask)) and len(attention_mask.shape) == 4:
-        return attention_mask
+        return True, attention_mask, None, None
 
     # For TGI/vLLM backends, or other custom attention without equivalent mask creation: we don't need a mask!
     if config._attn_implementation not in ALL_MASK_CREATION_FUNCTIONS:
-        return None
+        return True, None, None, None
 
-    batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
     # Move the mask to correct device, and potentially switch dtype for efficiency
     if attention_mask is not None and attention_mask.ndim == 2:
         attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
@@ -553,24 +506,24 @@ def _create_mask(
     else:
         kv_length, kv_offset = input_embeds.shape[1], 0
 
+    return False, attention_mask, kv_length, kv_offset
+
+
+def _get_mask_interface(config: PretrainedConfig, output_attentions: bool = False) -> Callable:
+    """
+    Return the mask interface (a function) to be used, based on the type of attention found in the config.
+
+    Args:
+        config (`PretrainedConfig`):
+            The model config.
+        output_attentions (`bool`, optional):
+            Whether we return the attention scores or not. By default `False`.
+    """
     mask_interface = ALL_MASK_CREATION_FUNCTIONS[config._attn_implementation]
     # Sdpa fallbacks to eager in the Attention modules if `output_attentions=True`
     if config._attn_implementation == "sdpa" and output_attentions:
         mask_interface = ALL_MASK_CREATION_FUNCTIONS["eager"]
-
-    # We now create the mask
-    return mask_interface(
-        batch_size=batch_size,
-        cache_position=cache_position,
-        kv_length=kv_length,
-        kv_offset=kv_offset,
-        layer_pattern=layer_pattern,
-        attention_mask=attention_mask,
-        # Additional kwargs for eager
-        dtype=dtype,
-        # Pass the config as well, in case someone wants to easily have their own mask_interface
-        config=config,
-    )
+    return mask_interface
 
 
 def create_causal_mask(
@@ -602,21 +555,32 @@ def create_causal_mask(
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
     """
-    layer_pattern = LayerPattern("full_attention")
     # If we have an HybridCache structure, here we want to create the mask for the full layers
     try:
         layer_idx = past_key_values.is_sliding.index(False)
     except (ValueError, AttributeError):
         layer_idx = 0
-    return _create_mask(
-        layer_pattern=layer_pattern,
-        config=config,
-        input_embeds=input_embeds,
-        attention_mask=attention_mask,
+
+    early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
+        config, input_embeds, attention_mask, cache_position, past_key_values, layer_idx
+    )
+    if early_exit:
+        return attention_mask
+
+    batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
+    mask_factory_function = causal_mask_function
+    mask_interface = _get_mask_interface(config, output_attentions)
+
+    # We now create the mask
+    return mask_interface(
+        batch_size=batch_size,
         cache_position=cache_position,
-        past_key_values=past_key_values,
-        layer_idx=layer_idx,
-        output_attentions=output_attentions,
+        kv_length=kv_length,
+        kv_offset=kv_offset,
+        mask_function=mask_factory_function,
+        attention_mask=attention_mask,
+        dtype=dtype,  # Additional kwarg for eager
+        config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
     )
 
 
@@ -650,25 +614,37 @@ def create_sliding_window_causal_mask(
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
     """
-    sliding_window = getattr(config, "sliding_window", None)
-    if sliding_window is None:
-        raise ValueError("Could not find a `sliding_window` argument in the config")
-
-    layer_pattern = LayerPattern("sliding_attention", sliding_window)
     # If we have an HybridCache structure, here we want to create the mask for the sliding layers
     try:
         layer_idx = past_key_values.is_sliding.index(True)
     except (ValueError, AttributeError):
         layer_idx = 0
-    return _create_mask(
-        layer_pattern=layer_pattern,
-        config=config,
-        input_embeds=input_embeds,
-        attention_mask=attention_mask,
+
+    early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
+        config, input_embeds, attention_mask, cache_position, past_key_values, layer_idx
+    )
+    if early_exit:
+        return attention_mask
+
+    sliding_window = getattr(config, "sliding_window", None)
+    if sliding_window is None:
+        raise ValueError("Could not find a `sliding_window` argument in the config, or it is not set")
+
+    batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
+    mask_factory_function = sliding_window_causal_mask_function(sliding_window)
+    mask_interface = _get_mask_interface(config, output_attentions)
+
+    # We now create the mask
+    return mask_interface(
+        batch_size=batch_size,
         cache_position=cache_position,
-        past_key_values=past_key_values,
-        layer_idx=layer_idx,
-        output_attentions=output_attentions,
+        kv_length=kv_length,
+        kv_offset=kv_offset,
+        mask_function=mask_factory_function,
+        attention_mask=attention_mask,
+        local_size=sliding_window,  # Additional kwarg for sdpa
+        dtype=dtype,  # Additional kwarg for eager
+        config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
     )
 
 
@@ -702,25 +678,44 @@ def create_chunked_causal_mask(
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
     """
-    chunk_size = getattr(config, "attention_chunk_size", None)
-    if chunk_size is None:
-        raise ValueError("Could not find an `attention_chunk_size` argument in the config")
-
-    layer_pattern = LayerPattern("chunked_attention", chunk_size)
     # If we have an HybridCache structure, here we want to create the mask for the sliding layers
     try:
         layer_idx = past_key_values.is_sliding.index(True)
     except (ValueError, AttributeError):
         layer_idx = 0
-    return _create_mask(
-        layer_pattern=layer_pattern,
-        config=config,
-        input_embeds=input_embeds,
-        attention_mask=attention_mask,
+
+    early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
+        config, input_embeds, attention_mask, cache_position, past_key_values, layer_idx
+    )
+    if early_exit:
+        return attention_mask
+
+    chunk_size = getattr(config, "attention_chunk_size", None)
+    if chunk_size is None:
+        raise ValueError("Could not find an `attention_chunk_size` argument in the config, or it is not set")
+
+    # Raise if using chunked attention on context too large with FA2
+    if config._attn_implementation == "flash_attention_2" and kv_length + kv_offset > chunk_size:
+        raise ValueError(
+            "Flash attention 2 cannot handle chunked attention, and the key-value length is larger than the chunk size so the "
+            "chunked pattern cannot be respected. You should use another `attn_implementation` when instantiating the model"
+        )
+
+    batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
+    mask_factory_function = chunked_causal_mask_function(chunk_size)
+    mask_interface = _get_mask_interface(config, output_attentions)
+
+    # We now create the mask
+    return mask_interface(
+        batch_size=batch_size,
         cache_position=cache_position,
-        past_key_values=past_key_values,
-        layer_idx=layer_idx,
-        output_attentions=output_attentions,
+        kv_length=kv_length,
+        kv_offset=kv_offset,
+        mask_function=mask_factory_function,
+        attention_mask=attention_mask,
+        local_size=chunk_size,  # Additional kwarg for sdpa
+        dtype=dtype,  # Additional kwarg for eager
+        config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
     )
 
 
