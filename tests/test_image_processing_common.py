@@ -245,7 +245,7 @@ class ImageProcessingTestMixin:
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class(**self.image_processor_dict)
-            obj = json.loads(image_processor.to_json_string())
+            obj = json.loads(image_processor.to_json_string())["image_processor_config"]
             for key, value in self.image_processor_dict.items():
                 self.assertEqual(obj[key], value)
 

@@ -119,7 +119,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_image_processor_to_json_string(self):
         image_processor = self.image_processing_class(**self.image_processor_dict)
-        obj = json.loads(image_processor.to_json_string())
+        obj = json.loads(image_processor.to_json_string())["image_processor_config"]
         for key, value in self.image_processor_dict.items():
             if key == "clusters":
                 self.assertTrue(np.array_equal(value, obj[key]))

@@ -350,6 +350,7 @@ class AutoFeatureExtractor:
         kwargs["_from_auto"] = True
 
         config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict = config_dict.get("feature_extractor_config", config_dict)
         feature_extractor_class = config_dict.get("feature_extractor_type", None)
         feature_extractor_auto_map = None
         if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):

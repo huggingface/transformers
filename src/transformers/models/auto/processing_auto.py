@@ -29,9 +29,8 @@ from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
 from ...utils import (
-    FEATURE_EXTRACTOR_NAME,
+    GENERAL_PREPROCESSOR_NAME,
     PROCESSOR_NAME,
-    VIDEO_PROCESSOR_NAME,
     cached_file,
     logging,
 )
@@ -294,20 +293,17 @@ class AutoProcessor:
         if processor_class is None:
             # If not found, let's check whether the processor class is saved in an image processor config
             preprocessor_config_file = cached_file(
-                pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **cached_file_kwargs
+                pretrained_model_name_or_path, GENERAL_PREPROCESSOR_NAME, **cached_file_kwargs
             )
             if preprocessor_config_file is not None:
+                # Saved as image processor
                 config_dict, _ = ImageProcessingMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
                 processor_class = config_dict.get("processor_class", None)
                 if "AutoProcessor" in config_dict.get("auto_map", {}):
                     processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
-            # Saved as video processor
-            if preprocessor_config_file is None:
-                preprocessor_config_file = cached_file(
-                    pretrained_model_name_or_path, VIDEO_PROCESSOR_NAME, **cached_file_kwargs
-                )
-                if preprocessor_config_file is not None:
+                # Saved as video processor
+                if processor_class is None:
                     config_dict, _ = BaseVideoProcessor.get_video_processor_dict(
                         pretrained_model_name_or_path, **kwargs
                     )
@@ -315,12 +311,8 @@ class AutoProcessor:
                     if "AutoProcessor" in config_dict.get("auto_map", {}):
                         processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
-            # Saved as feature extractor
-            if preprocessor_config_file is None:
-                preprocessor_config_file = cached_file(
-                    pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **cached_file_kwargs
-                )
-                if preprocessor_config_file is not None and processor_class is None:
+                # Saved as feature extractor
+                if processor_class is None:
                     config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
                         pretrained_model_name_or_path, **kwargs
                     )

@@ -300,6 +300,7 @@ class AutoVideoProcessor:
         kwargs["_from_auto"] = True
 
         config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict = config_dict.get("video_processor_config", config_dict)
         video_processor_class = config_dict.get("video_processor_type", None)
         video_processor_auto_map = None
         if "AutoVideoProcessor" in config_dict.get("auto_map", {}):
