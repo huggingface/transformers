@@ -9,7 +9,6 @@ class BaseImageProcessorFast(metaclass=DummyObject):
         requires_backends(self, ["torchvision"])
 
 
-class SuperPointImageProcessorFast(metaclass=DummyObject):
 class BaseVideoProcessor(metaclass=DummyObject):
     _backends = ["torchvision"]
 

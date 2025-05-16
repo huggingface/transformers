@@ -16,8 +16,10 @@
 
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
+import numpy as np
+
+from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
@@ -32,7 +34,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -53,36 +55,40 @@ if is_torchvision_available():
     else:
         pass
 
-from ...image_processing_utils import BatchFeature
-
-
 if is_vision_available():
-    import PIL
-
-import numpy as np
+    pass
 
 
 def is_grayscale(
-    image: ImageInput,
+    image: "torch.Tensor",
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ):
-    if input_data_format == ChannelDimension.FIRST:
-        if image.shape[0] == 1:
-            return True
-        return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
-    elif input_data_format == ChannelDimension.LAST:
-        if image.shape[-1] == 1:
-            return True
-        return np.all(image[..., 0] == image[..., 1]) and np.all(image[..., 1] == image[..., 2])
+    if isinstance(image, torch.Tensor):
+        if input_data_format == ChannelDimension.FIRST:
+            if image.shape[0] == 1:
+                return True
+            return torch.all(image[0, ...] == image[1, ...]) and torch.all(image[1, ...] == image[2, ...])
+        elif input_data_format == ChannelDimension.LAST:
+            if image.shape[-1] == 1:
+                return True
+            return torch.all(image[..., 0] == image[..., 1]) and torch.all(image[..., 1] == image[..., 2])
+    else:
+        if input_data_format == ChannelDimension.FIRST:
+            if image.shape[0] == 1:
+                return True
+            return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
+        elif input_data_format == ChannelDimension.LAST:
+            if image.shape[-1] == 1:
+                return True
+            return np.all(image[..., 0] == image[..., 1]) and np.all(image[..., 1] == image[..., 2])
 
 
 def convert_to_grayscale(
-    image: ImageInput,
+    image: "torch.Tensor",
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-) -> ImageInput:
+) -> "torch.Tensor":
     """
-    Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image. TODO support torch
-    and tensorflow grayscale conversion
+    Converts an image to grayscale format using the NTSC formula. Supports numpy arrays, PIL Images, and torch tensors.
 
     This function is supposed to return a 1-channel image, but it returns a 3-channel image with the same value in each
     channel, because of an issue that is discussed in :
@@ -96,32 +102,18 @@ def convert_to_grayscale(
     """
     requires_backends(convert_to_grayscale, ["vision"])
 
-    if isinstance(image, np.ndarray):
-        if is_grayscale(image, input_data_format=input_data_format):
-            return image
-        if input_data_format == ChannelDimension.FIRST:
-            gray_image = image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
-            gray_image = np.stack([gray_image] * 3, axis=0)
-        elif input_data_format == ChannelDimension.LAST:
-            gray_image = image[..., 0] * 0.2989 + image[..., 1] * 0.5870 + image[..., 2] * 0.1140
-            gray_image = np.stack([gray_image] * 3, axis=-1)
-        return gray_image
-
-    if not isinstance(image, PIL.Image.Image):
+    if is_grayscale(image, input_data_format=input_data_format):
         return image
+    if input_data_format == ChannelDimension.FIRST:
+        gray_image = image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
+        gray_image = torch.stack([gray_image] * 3, dim=0)
+    elif input_data_format == ChannelDimension.LAST:
+        gray_image = image[..., 0] * 0.2989 + image[..., 1] * 0.5870 + image[..., 2] * 0.1140
+        gray_image = torch.stack([gray_image] * 3, dim=-1)
+    return gray_image
 
-    image = image.convert("L")
-    return image
 
-
-class SuperPointImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    do_reduce_labels: Optional[bool]
-
-
-@add_start_docstrings(
-    "Constructs a fast SuperPoint image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class SuperPointImageProcessorFast(BaseImageProcessorFast):
     resample = None
     size = {"height": 480, "width": 640}
@@ -131,11 +123,11 @@ class SuperPointImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = None
     do_grayscale = False
-    valid_kwargs = SuperPointImageProcessorKwargs
+    valid_kwargs = DefaultFastImageProcessorKwargs
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: List["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
         do_rescale: bool,
@@ -145,20 +137,16 @@ class SuperPointImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size)
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(stacked_images, size)
             if do_rescale:
                 stacked_images = self.rescale(stacked_images, rescale_factor)
+            if do_grayscale:
+                input_data_format = kwargs.pop("input_data_format")
+                stacked_images = convert_to_grayscale(stacked_images, input_data_format=input_data_format)
             processed_images_grouped[shape] = stacked_images
-
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return processed_images
@@ -172,14 +160,10 @@ class SuperPointImageProcessorFast(BaseImageProcessorFast):
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self.valid_kwargs.__annotations__:
             kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-        do_grayscale = kwargs.pop("do_grayscale")
         input_data_format = kwargs.pop("input_data_format")
         device = kwargs.pop("device")
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(images[0])
-
-        if do_grayscale:
-            images = [convert_to_grayscale(image, input_data_format=input_data_format) for image in images]
 
         images = self._prepare_input_images(images=images, input_data_format=input_data_format, device=device)
         kwargs = self._further_process_kwargs(**kwargs)
@@ -193,7 +177,6 @@ class SuperPointImageProcessorFast(BaseImageProcessorFast):
             images=images,
             **kwargs,
         )
-
         data = {"pixel_values": images}
         return BatchFeature(data=data)
 
