@@ -639,9 +639,11 @@ class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
+    # TODO: tests would need a rewrite to check for correct implementation
+    # Current tests always assume certain inputs to be passed
+    _supports_flash_attn_2 = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
 
     def _init_weights(self, module):
         std = self.config.init_std
