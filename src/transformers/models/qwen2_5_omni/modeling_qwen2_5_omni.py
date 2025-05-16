@@ -2187,6 +2187,75 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    def get_video_features(
+        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
+    ):
+        """
+        Encodes videos into continuous embeddings that can be forwarded to the language model.
+
+        Args:
+            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+                The tensors corresponding to the input videos.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+        """
+        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
+        video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
+        return video_embeds
+
+    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
+        """
+        Encodes images into continuous embeddings that can be forwarded to the language model.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+                The tensors corresponding to the input images.
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+        """
+        pixel_values = pixel_values.type(self.visual.dtype)
+        image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
+        return image_embeds
+
+    def get_audio_features(
+        self,
+        input_features: torch.FloatTensor,
+        feature_attention_mask: Optional[torch.LongTensor] = None,
+        audio_feature_lengths: Optional[torch.LongTensor] = None,
+    ):
+        """
+        Encodes audios into continuous embeddings that can be forwarded to the language model.
+
+        Args:
+            input_features (`torch.FloatTensor`):
+                The tensors corresponding to the input audios.
+            feature_attention_mask (`torch.LongTensor`, *optional*):
+                Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+            audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+                The length of feature shape of each audio in LLM.
+        """
+        if feature_attention_mask is not None:
+            audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
+            input_features = input_features.permute(0, 2, 1)[feature_attention_mask.bool()].permute(1, 0)
+        else:
+            audio_feature_lengths = None
+
+        audio_feat_lengths, audio_output_lengths = self.audio_tower._get_feat_extract_output_lengths(
+            audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
+        )
+        feature_lens = audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
+        audio_outputs = self.audio_tower(
+            input_features,
+            feature_lens=feature_lens,
+            aftercnn_lens=audio_feat_lengths,
+        )
+        audio_features = audio_outputs.last_hidden_state
+
+        if audio_features.shape[0] != sum(audio_output_lengths.tolist()):
+            raise ValueError("length of audio_features should match audio_output_lengths")
+
+        return audio_features
+
     @auto_docstring
     def forward(
         self,
@@ -2284,11 +2353,57 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if inputs_embeds is None:
+            # 1. Extract the input embeddings
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        # 2. Merge text , audios , image and video
+        if input_ids is not None and input_ids.shape[1] != 1:  # Prefill stage
+            if input_features is not None:
+                audio_features = self.get_audio_features(
+                    input_features,
+                    feature_attention_mask=feature_attention_mask,
+                    audio_feature_lengths=audio_feature_lengths,
+                )
+                audio_mask = (
+                    (input_ids == self.config.audio_token_id)
+                    .unsqueeze(-1)
+                    .expand_as(inputs_embeds)
+                    .to(inputs_embeds.device)
+                )
+                audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
+
+            if pixel_values is not None:
+                image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+                image_mask = (
+                    (input_ids == self.config.image_token_id)
+                    .unsqueeze(-1)
+                    .expand_as(inputs_embeds)
+                    .to(inputs_embeds.device)
+                )
+                image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+            if pixel_values_videos is not None:
+                video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
+                video_mask = (
+                    (input_ids == self.config.video_token_id)
+                    .unsqueeze(-1)
+                    .expand_as(inputs_embeds)
+                    .to(inputs_embeds.device)
+                )
+                video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(inputs_embeds.device)
+
         if feature_attention_mask is not None:
             audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
-            input_features = input_features.permute(0, 2, 1)[feature_attention_mask.bool()].permute(1, 0)
         else:
             audio_feature_lengths = None
+
         if attention_mask is not None and position_ids is None:
             if (
                 cache_position is None
@@ -2314,63 +2429,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
-
-        if inputs_embeds is None:
-            # 1. Extract the input embeddings
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        # 2. Merge text , audios , image and video
-        if input_ids is not None and input_ids.shape[1] != 1:  # Prefill stage
-            if input_features is not None:
-                audio_feat_lengths, audio_output_lengths = self.audio_tower._get_feat_extract_output_lengths(
-                    audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
-                )
-                feature_lens = (
-                    audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
-                )
-                audio_outputs = self.audio_tower(
-                    input_features,
-                    feature_lens=feature_lens,
-                    aftercnn_lens=audio_feat_lengths,
-                )
-                audio_features = audio_outputs.last_hidden_state
-                if audio_features.shape[0] != sum(audio_output_lengths.tolist()):
-                    raise ValueError("length of audio_features should match audio_output_lengths")
-                audio_mask = (
-                    (input_ids == self.config.audio_token_id)
-                    .unsqueeze(-1)
-                    .expand_as(inputs_embeds)
-                    .to(inputs_embeds.device)
-                )
-                audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
-
-            if pixel_values is not None:
-                pixel_values = pixel_values.type(self.visual.dtype)
-                image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
-                image_mask = (
-                    (input_ids == self.config.image_token_id)
-                    .unsqueeze(-1)
-                    .expand_as(inputs_embeds)
-                    .to(inputs_embeds.device)
-                )
-                image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
-
-            if pixel_values_videos is not None:
-                pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-                video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
-                video_mask = (
-                    (input_ids == self.config.video_token_id)
-                    .unsqueeze(-1)
-                    .expand_as(inputs_embeds)
-                    .to(inputs_embeds.device)
-                )
-                video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
-
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(inputs_embeds.device)
 
         outputs = self.model(
             attention_mask=attention_mask,
