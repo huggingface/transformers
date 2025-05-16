@@ -1147,6 +1147,9 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         rust_tokenizer = self.get_rust_tokenizer()
 
         words, boxes = self.get_words_and_boxes()
+        self._current_sequence = (words, boxes)
+        sp_base = hasattr(tokenizer, "sp_model")
+        self._sp_base = sp_base
 
         ids = tokenizer.encode_boxes(words, boxes=boxes, add_special_tokens=False)
         rust_ids = rust_tokenizer.encode_boxes(words, boxes=boxes, add_special_tokens=False)

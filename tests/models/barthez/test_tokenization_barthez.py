@@ -73,29 +73,6 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         result = batch.input_ids.tolist()[0]
         self.assertListEqual(expected_src_tokens, result)
 
-    def test_rust_and_python_full_tokenizers(self):
-        if not self.test_rust_tokenizer:
-            self.skipTest(reason="test_rust_tokenizer is set to False")
-
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
-
-        sequence = "I was born in 92000, and this is falsé."
-
-        tokens = tokenizer.tokenize(sequence)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, rust_tokens)
-
-        ids = tokenizer.encode(sequence, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        rust_tokenizer = self.get_rust_tokenizer()
-        ids = tokenizer.encode(sequence)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
-
-    @slow
     def test_tokenizer_integration(self):
         expected_encoding = {'input_ids': [[0, 490, 14328, 4507, 354, 47, 43669, 95, 25, 78117, 20215, 19779, 190, 22, 400, 4, 35343, 80310, 603, 86, 24937, 105, 33438, 94762, 196, 39642, 7, 15, 15933, 173, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 10534, 87, 25, 66, 3358, 196, 55289, 8, 82961, 81, 2204, 75203, 7, 15, 763, 12956, 216, 178, 14328, 9595, 1377, 69693, 7, 448, 71021, 196, 18106, 1437, 13974, 108, 9083, 4, 49315, 7, 39, 86, 1326, 2793, 46333, 4, 448, 196, 74588, 7, 49315, 7, 39, 21, 822, 38470, 74, 21, 66723, 62480, 8, 22050, 5, 2]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # fmt: skip
 

@@ -30,6 +30,7 @@ from itertools import takewhile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
 
+from datasets import load_dataset
 from parameterized import parameterized
 
 from transformers import (
@@ -627,28 +628,32 @@ class TokenizerTesterMixin:
         if not self.test_rust_tokenizer:
             self.skipTest(reason="test_rust_tokenizer is set to False")
 
-        if not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            self.skipTest(reason="test_slow_tokenizer is set to False")
+        dataset = load_dataset("hf-internal-testing/tokenization_test_data", split="train")
+        test_cases = [row for row in dataset if row["TestClass"] == self.__class__.__name__]
 
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
+        if not test_cases:
+            self.skipTest(reason="No test data available")
 
-        sequence, _ = self.get_input_output_texts(tokenizer)
+        for test_case in test_cases:
+            expected_tokens = test_case["tokens"]
+            expected_ids = test_case["encoded"]
+            expected_special = test_case["encoded_special"]
+            params = {k: v for k, v in test_case["params"].items() if v is not None}
+            params_encode = {k: v for k, v in test_case["params_encode"].items() if v is not None}
+            sequence = params_encode.pop("text", test_case["sequence"])
 
-        # We don't have an exact equivalence on `tokenize()` between Rust and Slow
-        # Slow tokenizer only split tokens, Rust tokenizers will replace with <unk>
-        # tokens = tokenizer.tokenize(sequence)
-        # rust_tokens = rust_tokenizer.tokenize(sequence)
-        # self.assertListEqual(tokens, rust_tokens)
+            rust_tokenizer = self.get_rust_tokenizer(**params)
 
-        ids = tokenizer.encode(sequence, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
+            # Not all models .tokenize
+            if sequence and expected_tokens:
+                tokens = rust_tokenizer.tokenize(sequence)
+                self.assertListEqual(tokens, expected_tokens, msg=f"Token mismatch for sequence: {sequence}")
 
-        ids = tokenizer.encode(sequence, add_special_tokens=True)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=True)
-        self.assertListEqual(ids, rust_ids)
+            ids = rust_tokenizer.encode(sequence, add_special_tokens=False, **params_encode)
+            self.assertListEqual(ids, expected_ids, msg=f"ID mismatch for sequence: {sequence}")
+
+            ids_special = rust_tokenizer.encode(sequence, add_special_tokens=True, **params_encode)
+            self.assertListEqual(ids_special, expected_special, msg=f"Special ID mismatch for sequence: {sequence}")
 
     def test_tokenizers_common_properties(self):
         tokenizers = self.get_tokenizers()

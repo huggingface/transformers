@@ -109,20 +109,6 @@ class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         token_ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(token_ids, expected_token_ids)
 
-    # Copied from transformers.models.siglip.SiglipTokenizationTest.test_rust_and_python_full_tokenizers
-    def test_rust_and_python_full_tokenizers(self):
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
-
-        sequence = "I need to test this rigor"
-        tokens = tokenizer.tokenize(sequence, add_special_tokens=False)
-        rust_tokens = rust_tokenizer.tokenize(sequence, add_special_tokens=False)
-        self.assertListEqual(tokens, rust_tokens)
-
-        ids = tokenizer.encode(sequence)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
-
     # Copied from transformers.models.siglip.SiglipTokenizationTest.test_max_length
     def test_max_length(self):
         max_length = 20
