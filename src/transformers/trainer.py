@@ -1679,7 +1679,7 @@ class Trainer:
                     "You need to have `torch>2.4` in order to use torch 4-bit optimizers. "
                     "Install it with `pip install --upgrade torch` it is available on pipy. Otherwise, you need to install torch nightly."
                 )
-            if version.parse(importlib.metadata.version("torchao")) > version.parse(
+            if version.parse(importlib.metadata.version("torchao")) >= version.parse(
                 "0.11.0"
             ):
                 # https://github.com/pytorch/ao/pull/2159
