@@ -96,7 +96,7 @@ class UperNetConfig(PretrainedConfig):
         pool_scales=[1, 2, 3, 6],
         use_auxiliary_head=True,
         auxiliary_loss_weight=0.4,
-        auxiliary_in_channels=384,
+        auxiliary_in_channels=None,
         auxiliary_channels=256,
         auxiliary_num_convs=1,
         auxiliary_concat_input=False,
