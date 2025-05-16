@@ -1,4 +1,5 @@
-# Copyright 2024 HuggingFace Inc.
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the ColPali processor."""
+"""Testing suite for the ColQwen2 processor."""
 
 import shutil
 import tempfile
@@ -19,8 +20,8 @@ import unittest
 
 import torch
 
-from transformers import GemmaTokenizer
-from transformers.models.colpali.processing_colpali import ColPaliProcessor
+from transformers import AutoProcessor, Qwen2VLProcessor
+from transformers.models.colqwen2.processing_colqwen2 import ColQwen2Processor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
 from transformers.utils import is_vision_available
 
@@ -29,33 +30,33 @@ from ...test_processing_common import ProcessorTesterMixin
 
 if is_vision_available():
     from transformers import (
-        ColPaliProcessor,
-        PaliGemmaProcessor,
-        SiglipImageProcessor,
+        ColQwen2Processor,
     )
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
+@require_torch
 @require_vision
-class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = ColPaliProcessor
+class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = ColQwen2Processor
 
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
-        image_processor.image_seq_length = 0
-        tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True)
-        processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        processor = Qwen2VLProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
         processor.save_pretrained(cls.tmpdirname)
+
+    def get_tokenizer(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
+
+    def get_image_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+        shutil.rmtree(cls.tmpdirname)
 
-    @require_torch
-    @require_vision
     def test_process_images(self):
         # Processor configuration
         image_input = self.prepare_image_inputs()
@@ -74,10 +75,8 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Assertions
         self.assertIn("pixel_values", batch_feature)
-        self.assertEqual(batch_feature["pixel_values"].shape, torch.Size([1, 3, 384, 384]))
+        self.assertEqual(batch_feature["pixel_values"].shape, torch.Size([1, 56, 1176]))
 
-    @require_torch
-    @require_vision
     def test_process_queries(self):
         # Inputs
         queries = [
@@ -104,7 +103,7 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(batch_feature["input_ids"], torch.Tensor)
         self.assertEqual(batch_feature["input_ids"].shape[0], len(queries))
 
-    # The following tests override the parent tests because ColPaliProcessor can only take one of images or text as input at a time.
+    # The following tests override the parent tests because ColQwen2Processor can only take one of images or text as input at a time.
 
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:

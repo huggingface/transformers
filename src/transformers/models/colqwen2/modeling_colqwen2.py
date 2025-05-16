@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team.
+# Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,39 +12,31 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch ColPali model"""
+
 
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-import torch
-from torch import nn
-
-from transformers import AutoModelForImageTextToText
-
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple
-from .configuration_colpali import ColPaliConfig
+from ...models.auto import AutoModelForImageTextToText
+from ...utils import ModelOutput, auto_docstring, is_torch_available
+from .configuration_colqwen2 import ColQwen2Config
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare ColPali model outputting raw hidden-states without any specific head on top.
-    """
-)
+if is_torch_available():
+    import torch
+    from torch import nn
+
+
 @auto_docstring
-class ColPaliPreTrainedModel(PreTrainedModel):
-    config_class = ColPaliConfig
+class ColQwen2PreTrainedModel(PreTrainedModel):
+    config_class = ColQwen2Config
     base_model_prefix = "model"
     _no_split_modules = []
 
     def _init_weights(self, module):
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.vlm_config.text_config.initializer_range
-        )
+        std = self.config["initializer_range"]
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -57,9 +49,9 @@ class ColPaliPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class ColPaliForRetrievalOutput(ModelOutput):
+class ColQwen2ForRetrievalOutput(ModelOutput):
     """
-    Base class for ColPali embeddings output.
+    Base class for ColQwen2 embeddings output.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -83,9 +75,6 @@ class ColPaliForRetrievalOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -93,56 +82,89 @@ class ColPaliForRetrievalOutput(ModelOutput):
     past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 @auto_docstring(
     custom_intro="""
-    The ColPali architecture leverages VLMs to construct efficient multi-vector embeddings directly
+    Following the ColPali approach, ColQwen2 leverages VLMs to construct efficient multi-vector embeddings directly
     from document images (“screenshots”) for document retrieval. The model is trained to maximize the similarity
     between these document embeddings and the corresponding query embeddings, using the late interaction method
     introduced in ColBERT.
 
-    Using ColPali removes the need for potentially complex and brittle layout recognition and OCR pipelines with a
-    single model that can take into account both the textual and visual content (layout, charts, etc.) of a document.
+    Using ColQwen2 removes the need for potentially complex and brittle layout recognition and OCR pipelines with
+    a single model that can take into account both the textual and visual content (layout, charts, ...) of a document.
 
-    ColPali is part of the ColVision model family, which was first introduced in the following paper:
+    ColQwen2 is part of the ColVision model family, which was introduced with ColPali in the following paper:
     [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://arxiv.org/abs/2407.01449).
     """
 )
-class ColPaliForRetrieval(ColPaliPreTrainedModel):
-    def __init__(self, config: ColPaliConfig):
+class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
+    main_input_name = "input_ids"
+
+    def __init__(self, config: ColQwen2Config):
         super().__init__(config)
         self.config = config
-        self.vocab_size = config.vlm_config.text_config.vocab_size
-
-        vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
-        if vlm._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"vlm.{k}" for k in vlm._tied_weights_keys]
-        self.vlm = vlm
-
+        self.vocab_size = config.vlm_config.vocab_size
+        self.vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
-            self.config.vlm_config.text_config.hidden_size,
+            self.config.vlm_config.hidden_size,
             self.embedding_dim,
         )
-
+        self._tied_weights_keys = ["vlm.model.embed_tokens.weight", "vlm.lm_head.weight"]
         self.post_init()
 
-    @can_return_tuple
+    def get_input_embeddings(self):
+        return self.vlm.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.vlm.model.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.vlm.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.vlm.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.vlm.model = decoder
+
+    def get_decoder(self):
+        return self.vlm.model
+
     @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        labels: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
-    ) -> ColPaliForRetrievalOutput:
+        pixel_values: Optional[torch.Tensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> ColQwen2ForRetrievalOutput:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
         if pixel_values is not None:
-            pixel_values = pixel_values.to(dtype=self.dtype)
+            pixel_values = pixel_values.to(dtype=self.dtype)  # (batch_size, max_num_patches, pixel_values)
+
+        # Handle the custom "pixel_values" input obtained with `ColQwen2Processor` through unpadding
+        if pixel_values is not None and image_grid_thw is not None:
+            # NOTE: image_grid_thw: (batch_size, 3) where image_grid_thw[i] = (num_patches_h, num_patches_w, temporal_patch_size)
+            offsets = image_grid_thw[:, 1] * image_grid_thw[:, 2]  # (num_patches_h, num_patches_w)
+            pixel_values = torch.cat(
+                [pixel_sequence[:offset] for pixel_sequence, offset in zip(pixel_values, offsets)],
+                dim=0,
+            )  # (num_patches_h * num_patches_w, pixel_values)
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         output_hidden_states = (
@@ -150,69 +172,72 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vlm_output = self.vlm(
+        position_ids, rope_deltas = self.vlm.get_rope_index(
             input_ids=input_ids,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=None,
             attention_mask=attention_mask,
-            pixel_values=pixel_values,
-            output_hidden_states=True,
-            return_dict=True,
-            output_attentions=output_attentions,
-            **kwargs,
         )
-        vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
-        vlm_image_hidden_states = vlm_output.image_hidden_states if pixel_values is not None else None
 
-        last_hidden_states = vlm_output.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
+
+        # Custom data preparation to fix an issue with the gradient flow when training with multiple GPUs.
+        if inputs_embeds is None:
+            inputs_embeds = self.vlm.model.embed_tokens(input_ids)
+
+            if pixel_values is not None:
+                pixel_values = pixel_values.type(self.vlm.visual.get_dtype())
+                image_embeds = self.vlm.visual(pixel_values, grid_thw=image_grid_thw)
+                image_mask = (
+                    (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+                )
+                image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(inputs_embeds.device)
+
+        vlm_output = self.vlm.model(
+            input_ids=None,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+        )
+
+        vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
+
+        last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)
         embeddings = self.embedding_proj_layer(last_hidden_states)  # (batch_size, sequence_length, dim)
 
         # L2 normalization
         embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
-
         embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
-        return ColPaliForRetrievalOutput(
+        return ColQwen2ForRetrievalOutput(
             embeddings=embeddings,
             past_key_values=vlm_output.past_key_values,
             hidden_states=vlm_hidden_states,
             attentions=vlm_output.attentions,
-            image_hidden_states=vlm_image_hidden_states,
         )
-
-    def get_input_embeddings(self):
-        return self.vlm.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.vlm.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.vlm.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.vlm.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.vlm.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.vlm.get_decoder()
-
-    def tie_weights(self):
-        return self.vlm.tie_weights()
 
     def resize_token_embeddings(
         self,
         new_num_tokens: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         mean_resizing: bool = True,
-    ) -> nn.Embedding:
+    ) -> "torch.nn.Embedding":
         model_embeds = self.vlm.resize_token_embeddings(
             new_num_tokens=new_num_tokens,
             pad_to_multiple_of=pad_to_multiple_of,
             mean_resizing=mean_resizing,
         )
 
-        self.config.vlm_config.text_config.vocab_size = model_embeds.num_embeddings
-        self.config.vlm_config.vocab_size = model_embeds.num_embeddings
+        self.config.get_text_config().vocab_size = model_embeds.num_embeddings
         self.vlm.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
 
@@ -220,6 +245,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
 
 __all__ = [
-    "ColPaliForRetrieval",
-    "ColPaliPreTrainedModel",
+    "ColQwen2ForRetrieval",
+    "ColQwen2PreTrainedModel",
 ]
