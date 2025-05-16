@@ -1407,7 +1407,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
 
     def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and torch.any(attention_mask == 0.0):
                 return attention_mask
             return None
 

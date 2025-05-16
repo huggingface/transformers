@@ -471,7 +471,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
                         " this may lead to unexpected behaviour for Flash Attention version of Starcoder2. Make sure to "
                         " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                     )
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and torch.any(attention_mask == 0.0):
                 return attention_mask
             return None
         if self.config._attn_implementation == "flex_attention":
