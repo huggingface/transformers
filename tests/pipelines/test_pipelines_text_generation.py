@@ -76,7 +76,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
             framework="pt",
-            max_new_tokens=20,
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
@@ -125,7 +124,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
             framework="pt",
-            max_new_tokens=20,
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
@@ -160,7 +158,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
             framework="pt",
-            max_new_tokens=20,
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
@@ -209,7 +206,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
             framework="pt",
-            max_new_tokens=20,
         )
 
         dataset = MyDataset()
@@ -237,7 +233,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
             framework="pt",
-            max_new_tokens=20,
         )
 
         # Using `do_sample=False` to force deterministic output
@@ -292,7 +287,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
             image_processor=image_processor,
             processor=processor,
             torch_dtype=torch_dtype,
-            max_new_tokens=20,
+            max_new_tokens=5,
         )
         return text_generator, ["This is a test", "Another test"]
 
@@ -323,7 +318,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         self.assertNotIn("This is a test", outputs[0]["generated_text"])
 
         text_generator = pipeline(
-            task="text-generation", model=model, tokenizer=tokenizer, return_full_text=False, max_new_tokens=20
+            task="text-generation", model=model, tokenizer=tokenizer, return_full_text=False, max_new_tokens=5
         )
         outputs = text_generator("This is a test")
         self.assertEqual(outputs, [{"generated_text": ANY(str)}])
@@ -399,9 +394,9 @@ class TextGenerationPipelineTests(unittest.TestCase):
             # Handling of large generations
             if str(text_generator.device) == "cpu":
                 with self.assertRaises((RuntimeError, IndexError, ValueError, AssertionError)):
-                    text_generator("This is a test" * 500, max_new_tokens=20)
+                    text_generator("This is a test" * 500, max_new_tokens=5)
 
-            outputs = text_generator("This is a test" * 500, handle_long_generation="hole", max_new_tokens=20)
+            outputs = text_generator("This is a test" * 500, handle_long_generation="hole", max_new_tokens=5)
             # Hole strategy cannot work
             if str(text_generator.device) == "cpu":
                 with self.assertRaises(ValueError):
