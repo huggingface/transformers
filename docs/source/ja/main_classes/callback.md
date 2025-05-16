@@ -47,6 +47,7 @@ rendered properly in your Markdown viewer.
 - [`~integrations.FlyteCallback`] [flyte](https://flyte.org/) がインストールされている場合。
 - [`~integrations.DVCLiveCallback`] [dvclive](https://www.dvc.org/doc/dvclive) がインストールされている場合。
 - [`~integrations.SwanLabCallback`] [swanlab](http://swanlab.cn/) がインストールされている場合。
+- [`~integrations.LogfireCallback`] [logfire](https://pydantic.dev/logfire) がインストールされている場合。
 
 パッケージがインストールされているが、付随する統合を使用したくない場合は、`TrainingArguments.report_to` を、使用したい統合のみのリストに変更できます (例: `["azure_ml", "wandb"]`) 。
 
@@ -95,6 +96,8 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] integrations.SwanLabCallback
     - setup
+
+[[autodoc]] integrations.LogfireCallback
 
 ## TrainerCallback
 
