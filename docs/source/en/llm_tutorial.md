@@ -20,9 +20,13 @@ rendered properly in your Markdown viewer.
 
 Text generation is the most popular application for large language models (LLMs). A LLM is trained to generate the next word (token) given some initial text (prompt) along with its own generated outputs up to a predefined length or when it reaches an end-of-sequence (`EOS`) token.
 
-In Transformers, the [`~GenerationMixin.generate`] API handles text generation, and it is available for all models with generative capabilities.
+In Transformers, the [`~GenerationMixin.generate`] API handles text generation, and it is available for all models with generative capabilities. This guide will show you the basics of text generation with [`~GenerationMixin.generate`] and some common pitfalls to avoid.
 
-This guide will show you the basics of text generation with [`~GenerationMixin.generate`] and some common pitfalls to avoid.
+> [!TIP]
+> You can also chat with a model directly from the command line. ([reference](./conversations.md#transformers-cli))
+> ```shell
+> transformers chat Qwen/Qwen2.5-0.5B-Instruct
+> ```
 
 ## Default generate
 
@@ -133,6 +137,20 @@ inputs = tokenizer("translate English to French: Configuration files are easy to
 outputs = model.generate(**inputs, generation_config=generation_config)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ```
+
+## Common Options
+
+[`~GenerationMixin.generate`] is a powerful tool that can be heavily customized. This can be daunting for a new users. This section contains a list of popular generation options that you can define in most text generation tools in Transformers: [`~GenerationMixin.generate`], [`GenerationConfig`], `pipelines`, the `chat` CLI, ...
+
+| Option name | Type | Simplified description |
+|---|---|---|
+| `max_new_tokens` | `int` | Controls the maximum generation length. Be sure to define it, as it usually defaults to a small value. |
+| `do_sample` | `bool` | Defines whether generation will sample the next token (`True`), or is greedy instead (`False`). Most use cases should set this flag to `True`. Check [this guide](./generation_strategies.md) for more information. |
+| `temperature` | `float` | How unpredictable the next selected token will be. High values (`>0.8`) are good for creative tasks, low values (e.g. `<0.4`) for tasks that require "thinking". Requires `do_sample=True`. |
+| `num_beams` | `int` | When set to `>1`, activates the beam search algorithm. Beam search is good on input-grounded tasks. Check [this guide](./generation_strategies.md) for more information. |
+| `repetition_penalty` | `float` | Set it to `>1.0` if you're seeing the model repeat itself often. Larger values apply a larger penalty. |
+| `eos_token_id` | `List[int]` | The token(s) that will cause generation to stop. The default value is usually good, but you can specify a different token. |
+
 
 ## Pitfalls
 
