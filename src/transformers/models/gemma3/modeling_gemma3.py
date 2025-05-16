@@ -391,6 +391,7 @@ class Gemma3Attention(nn.Module):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
+
         return attn_output, attn_weights
 
 
@@ -450,8 +451,10 @@ class Gemma3DecoderLayer(nn.Module):
                 mask_indexes += offset
                 attention_mask = attention_mask[:, :, :, mask_indexes]
 
-        residual = hidden_states
+        if hidden_states.dtype == torch.float16:
+            hidden_states = hidden_states.clamp_(-65504, 65504)
 
+        residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
         # apply global RoPE to non-sliding layer only
@@ -471,14 +474,22 @@ class Gemma3DecoderLayer(nn.Module):
             cache_position=cache_position,
             **kwargs,
         )
+
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
+        if hidden_states.dtype == torch.float16:
+            hidden_states = (residual.float() + hidden_states.float()).clamp_(-65504, 65504).half()
+        else:
+            hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.pre_feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.post_feedforward_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
+
+        if hidden_states.dtype == torch.float16:
+            hidden_states = (residual.float() + hidden_states.float()).clamp_(-65504, 65504).half()
+        else:
+            hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
 
