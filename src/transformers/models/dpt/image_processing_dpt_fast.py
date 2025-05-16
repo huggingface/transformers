@@ -257,7 +257,6 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
         processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
         return processed_segmentation_maps
 
-    @auto_docstring
     def pad_image(
         self,
         image: "torch.Tensor",
@@ -272,7 +271,12 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
                 Image to pad.  Can be a batch of images of dimensions (N, C, H, W) or a single image of dimensions (C, H, W).
             size_divisor (`int`):
                 The width and height of the image will be padded to a multiple of this number.
-
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         if image.ndim >= 4:
             # If images is a batch of images, get the first image's size
