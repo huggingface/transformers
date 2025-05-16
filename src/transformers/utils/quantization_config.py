@@ -1403,12 +1403,12 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         """
         quantization_config = {}
         if self.quantization_config is not None:
-            quantization_config = self.quantization_config.dict()
+            quantization_config = self.quantization_config.model_dump()
         else:
             quantization_config["quant_method"] = QuantizationMethod.COMPRESSED_TENSORS
 
         if self.sparsity_config is not None:
-            quantization_config["sparsity_config"] = self.sparsity_config.dict()
+            quantization_config["sparsity_config"] = self.sparsity_config.model_dump()
         else:
             quantization_config["sparsity_config"] = {}
 
@@ -1554,7 +1554,8 @@ class TorchAoConfig(QuantizationConfigMixin):
     quant_type: Union[str, "AOBaseConfig"]  # noqa: F821
     modules_to_not_convert: Optional[List]
     quant_type_kwargs: Dict[str, Any]
-    include_embedding: bool
+    include_input_output_embeddings: bool
+    untie_embedding_weights: bool
 
     """This is a config class for torchao quantization/sparsity techniques.
 
@@ -1569,6 +1570,9 @@ class TorchAoConfig(QuantizationConfigMixin):
         inlcude_embedding (`bool`, default to `False`):
             Whether to include embedding in quantization or not, input embedding will be removed from
             the module_not_to_convert list as well if this flag is set.
+        untie_embedding_weights (`bool`, default to `False`):
+            Whether to untie the weights when we are quantizing input embedding weights that is tied
+            to other weights.
         kwargs (`Dict[str, Any]`, *optional*):
             The keyword arguments for the chosen type of quantization, for example, int4_weight_only quantization supports two keyword arguments
             `group_size` and `inner_k_tiles` currently. More API examples and documentation of arguments can be found in
@@ -1613,14 +1617,16 @@ class TorchAoConfig(QuantizationConfigMixin):
         self,
         quant_type: Union[str, "AOBaseConfig"],  # noqa: F821
         modules_to_not_convert: Optional[List] = None,
-        include_embedding: bool = False,
+        include_input_output_embeddings: bool = False,
+        untie_embedding_weights: bool = False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.TORCHAO
         self.quant_type = quant_type
         self.modules_to_not_convert = modules_to_not_convert
         self.quant_type_kwargs = kwargs.get("quant_type_kwargs", kwargs)
-        self.include_embedding = include_embedding
+        self.include_input_output_embeddings = include_input_output_embeddings
+        self.untie_embedding_weights = untie_embedding_weights
         self.post_init()
 
     @staticmethod
@@ -1785,6 +1791,11 @@ class BitNetQuantConfig(QuantizationConfigMixin):
             In `offline` mode, quantization parameters are pre-calculated *before* inference.
             These parameters are then fixed and loaded into the quantized model. This
             generally results in lower runtime overhead compared to online quantization.
+        use_rms_norm (`bool`, *optional*, defaults to `False`):
+            Whether to apply RMSNorm on the activations before quantization. This matches the original BitNet paper's approach
+            of normalizing activations before quantization/packing.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon value used in the RMSNorm layer for numerical stability.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional keyword arguments that may be used by specific quantization
             backends or future versions.
@@ -1795,6 +1806,8 @@ class BitNetQuantConfig(QuantizationConfigMixin):
         modules_to_not_convert: Optional[List] = None,
         linear_class: Optional[str] = "bitlinear",
         quantization_mode: Optional[str] = "offline",
+        use_rms_norm: Optional[bool] = False,
+        rms_norm_eps: Optional[float] = 1e-6,
         **kwargs,
     ):
         if linear_class not in ["bitlinear", "autobitlinear"]:
@@ -1805,6 +1818,8 @@ class BitNetQuantConfig(QuantizationConfigMixin):
         self.modules_to_not_convert = modules_to_not_convert
         self.linear_class = linear_class
         self.quantization_mode = quantization_mode
+        self.use_rms_norm = use_rms_norm
+        self.rms_norm_eps = rms_norm_eps
         self.post_init()
 
     def post_init(self):
