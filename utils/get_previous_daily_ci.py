@@ -44,6 +44,7 @@ def get_last_daily_ci_runs(token):
 
 def get_last_daily_ci_run_commit(token):
     """Get the commit sha of the last completed scheduled daily CI workflow run."""
+    return "0ef339ff1b63bb03a388c79bfbebec9085e10564"
     workflow_runs = get_daily_ci_runs(token)
     head_sha = None
     for workflow_run in workflow_runs:
