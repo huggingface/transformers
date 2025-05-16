@@ -1,7 +1,6 @@
 import json
 
 import datasets
-import torch
 
 from tests.trainer.test_trainer import StoreLossCallback
 from transformers import (
@@ -15,16 +14,18 @@ from transformers import (
 )
 from transformers.testing_utils import (
     TestCasePlus,
+    backend_device_count,
     execute_subprocess_async,
     get_torch_dist_unique_port,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
+    torch_device,
 )
 
 
 class TestTrainerDistributedLoss(TestCasePlus):
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_trainer(self):
-        device_count = torch.cuda.device_count()
+        device_count = backend_device_count(torch_device)
         min_bs = 1
         output_dir = self.get_auto_remove_tmp_dir()
         for gpu_num, enable, bs, name in (
