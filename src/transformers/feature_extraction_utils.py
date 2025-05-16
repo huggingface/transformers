@@ -27,6 +27,7 @@ import numpy as np
 from .dynamic_module_utils import custom_object_save
 from .utils import (
     FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
     add_model_info_to_auto_map,
@@ -520,6 +521,21 @@ class FeatureExtractionMixin(PushToHubMixin):
                     user_agent=user_agent,
                     revision=revision,
                 )
+            except EnvironmentError:
+                feature_extractor_file = PROCESSOR_NAME
+                resolved_feature_extractor_file = cached_file(
+                    pretrained_model_name_or_path,
+                    feature_extractor_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    subfolder=subfolder,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                )
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -538,6 +554,7 @@ class FeatureExtractionMixin(PushToHubMixin):
             with open(resolved_feature_extractor_file, encoding="utf-8") as reader:
                 text = reader.read()
             feature_extractor_dict = json.loads(text)
+            feature_extractor_dict = feature_extractor_dict.get("feature_extractor", feature_extractor_dict)
 
         except json.JSONDecodeError:
             raise OSError(
