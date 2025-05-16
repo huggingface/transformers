@@ -248,7 +248,6 @@ if __name__ == "__main__":
         "--precision",
         type=str,
         default="fp16",
-        const="fp16",
         required=True,
         choices=("fp32", "fp16", "bf16"),
         help="The precision the model will be saved in. Select from fp32, fp16 or bf16.",
@@ -267,7 +266,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     convert_mamba_ssm_checkpoint_file_to_huggingface_model_file(
-        args.mamba2_checkpoint_directory,
+        args.mamba_ssm_checkpoint_directory,
         args.precision,
         args.output_dir,
+        save_model="sharded",
     )
