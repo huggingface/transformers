@@ -21,8 +21,11 @@ Fine-tuning the library models for token classification.
 import logging
 import os
 import sys
+
 from dataclasses import dataclass, field
 from typing import Optional
+from transformers import Trainer
+
 
 import datasets
 import evaluate
