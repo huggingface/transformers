@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import collections
+import copy
 import csv
 import importlib
 import json
@@ -1027,7 +1028,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 # each pipeline with text generation capabilities should define its own default generation in a
                 # `_default_generation_config` class attribute
                 default_pipeline_generation_config = getattr(self, "_default_generation_config", GenerationConfig())
-                if self.framework == "pt":  # TF doesn't have `_prepare_generation_config`
+                if hasattr(self.model, "_prepare_generation_config"):  # TF doesn't have `_prepare_generation_config`
                     # Uses `generate`'s logic to enforce the following priority of arguments:
                     # 1. user-defined config options in `**kwargs`
                     # 2. model's generation config values
@@ -1039,7 +1040,10 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                     )
                     self.generation_config = prepared_generation_config
                 else:
-                    self.generation_config = default_pipeline_generation_config
+                    # TODO (joao): no PT model should reach this line. However, some audio models with complex
+                    # inheritance patterns do. Streamline those models such that this line is no longer needed.
+                    # In those models, the default generation config is not (yet) used.
+                    self.generation_config = copy.deepcopy(self.model.generation_config)
                 # Update the generation config with task specific params if they exist.
                 # NOTE: 1. `prefix` is pipeline-specific and doesn't exist in the generation config.
                 #       2. `task_specific_params` is a legacy feature and should be removed in a future version.
