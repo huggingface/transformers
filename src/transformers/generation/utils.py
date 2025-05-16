@@ -18,6 +18,7 @@ import inspect
 import os
 import warnings
 from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -1087,10 +1088,10 @@ class GenerationMixin:
     def _get_logits_processor(
         self,
         generation_config: GenerationConfig,
-        input_ids_seq_length: int,
-        encoder_input_ids: torch.LongTensor,
-        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
-        logits_processor: Optional[LogitsProcessorList],
+        input_ids_seq_length: int = None,
+        encoder_input_ids: torch.LongTensor = None,
+        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
         device: Optional[str] = None,
         model_kwargs: Optional[Dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
@@ -1102,6 +1103,8 @@ class GenerationMixin:
         """
         # instantiate processors list
         processors = LogitsProcessorList()
+        if logits_processor is None:
+            logits_processor = []
 
         if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
             processors.append(
@@ -1171,7 +1174,7 @@ class GenerationMixin:
             )
         if (
             generation_config.min_length is not None
-            and generation_config._eos_token_tensor is not None
+            and getattr(generation_config, "_eos_token_tensor", None) is not None
             and generation_config.min_length > 0
         ):
             processors.append(
@@ -1183,7 +1186,7 @@ class GenerationMixin:
             )
         if (
             generation_config.min_new_tokens is not None
-            and generation_config._eos_token_tensor is not None
+            and getattr(generation_config, "_eos_token_tensor", None) is not None
             and generation_config.min_new_tokens > 0
         ):
             processors.append(
@@ -5371,3 +5374,14 @@ def _dola_select_contrast(
     final_logits, base_logits = _relative_top_filter(final_logits, base_logits)
     logits = final_logits - base_logits
     return logits
+
+
+class RequestStatus(Enum):
+    """Status of a generation request through its lifecycle."""
+    PENDING = "pending"
+    PREFILLING = "prefilling"
+    PREFILLING_SPLIT = "prefilling_split"
+    SPLIT_PENDING_REMAINDER = "split_pending_remainder"
+    DECODING = "decoding"
+    FINISHED = "finished"
+    FAILED = "failed"

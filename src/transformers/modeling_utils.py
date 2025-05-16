@@ -54,13 +54,16 @@ if is_torchao_available():
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .generation import CompileConfig, GenerationConfig
+from .generation import CompileConfig, ContinuousMixin, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
+from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
+from .integrations.flash_paged import paged_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
+from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
     SUPPORTED_TP_STYLES,
     shard_and_distribute_module,
@@ -1765,7 +1768,7 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
-class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMixin):
+class PreTrainedModel(nn.Module, ModuleUtilsMixin, ContinuousMixin, PushToHubMixin, PeftAdapterMixin):
     r"""
     Base class for all models.
 
@@ -6082,7 +6085,10 @@ class AttentionInterface(MutableMapping):
     _global_mapping = {
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
+        "paged_attention": paged_attention_forward,
         "sdpa": sdpa_attention_forward,
+        "sdpa_paged": sdpa_attention_paged_forward,
+        "eager_paged": eager_paged_attention_forward,
     }
 
     def __init__(self):
