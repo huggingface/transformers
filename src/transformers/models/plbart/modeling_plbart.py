@@ -129,7 +129,7 @@ def eager_attn_forward(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
     if layer_head_mask is not None:
         attn_weights = attn_weights * layer_head_mask.view(1, -1, 1, 1)
@@ -1022,10 +1022,9 @@ class PLBartDecoder(PLBartPreTrainedModel):
         return encoder_attention_mask
 
 
-# Copied from transformers.models.mbart.modeling_mbart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
     """
-    Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
+    Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that PLBart does not
     have a single `decoder_start_token_id` in contrast to other Bart-like models.
     """
     prev_output_tokens = input_ids.clone()
@@ -1395,8 +1394,8 @@ class PLBartClassificationHead(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    PLBart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for code
-    classification.
+    PLBart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g.
+    for GLUE tasks.
     """
 )
 class PLBartForSequenceClassification(PLBartPreTrainedModel):
@@ -1416,7 +1415,6 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    # Ignore copy
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

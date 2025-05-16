@@ -119,7 +119,7 @@ def eager_attn_forward(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
     if layer_head_mask is not None:
         attn_weights = attn_weights * layer_head_mask.view(1, -1, 1, 1)

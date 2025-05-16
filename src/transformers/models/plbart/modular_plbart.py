@@ -20,14 +20,13 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
-    Seq2SeqSequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
@@ -38,28 +37,9 @@ from ..bart.modeling_bart import (
     BartForCausalLM,
     BartScaledWordEmbedding,
 )
+from ..bigbird_pegasus.modeling_bigbird_pegasus import BigBirdPegasusForSequenceClassification
+from ..mbart.modeling_mbart import shift_tokens_right
 from .configuration_plbart import PLBartConfig
-
-
-# Copied from transformers.models.mbart.modeling_mbart.shift_tokens_right
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
-    """
-    Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
-    have a single `decoder_start_token_id` in contrast to other Bart-like models.
-    """
-    prev_output_tokens = input_ids.clone()
-
-    if pad_token_id is None:
-        raise ValueError("self.model.config.pad_token_id has to be defined.")
-    # replace possible -100 values in labels by `pad_token_id`
-    prev_output_tokens.masked_fill_(prev_output_tokens == -100, pad_token_id)
-
-    index_of_eos = (prev_output_tokens.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
-    decoder_start_tokens = prev_output_tokens.gather(1, index_of_eos).squeeze()
-    prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].clone()
-    prev_output_tokens[:, 0] = decoder_start_tokens
-
-    return prev_output_tokens
 
 
 class PLBartScaledWordEmbedding(BartScaledWordEmbedding):
@@ -426,48 +406,8 @@ class PLBartClassificationHead(BartClassificationHead):
     pass
 
 
-@auto_docstring(
-    custom_intro="""
-    PLBart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for code
-    classification.
-    """
-)
-class PLBartForSequenceClassification(PLBartPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
-
-    def __init__(self, config: PLBartConfig, **kwargs):
-        super().__init__(config, **kwargs)
-        self.model = PLBartModel(config)
-        self.classification_head = PLBartClassificationHead(
-            config.d_model,
-            config.d_model,
-            config.num_labels,
-            config.classifier_dropout,
-        )
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @auto_docstring
-    # Ignore copy
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Seq2SeqSequenceClassifierOutput]:
+class PLBartForSequenceClassification(BigBirdPegasusForSequenceClassification):
+    def forward(**super_kwargs):
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -500,80 +440,7 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        if labels is not None:
-            use_cache = False
-
-        if input_ids is None and inputs_embeds is not None:
-            raise NotImplementedError(
-                f"Passing input embeddings is currently not supported for {self.__class__.__name__}"
-            )
-
-        outputs = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            encoder_outputs=encoder_outputs,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        hidden_states = outputs[0]  # last hidden state
-
-        eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
-
-        if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
-            raise ValueError("All examples must have the same number of <eos> tokens.")
-        sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
-            :, -1, :
-        ]
-        logits = self.classification_head(sentence_representation)
-
-        loss = None
-        if labels is not None:
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.config.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.config.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return Seq2SeqSequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-        )
+        super().forward(**super_kwargs)
 
 
 class PLBartForCausalLM(BartForCausalLM):
