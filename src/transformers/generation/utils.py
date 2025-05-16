@@ -23,11 +23,10 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 import numpy as np
 import torch
 import torch.distributed as dist
+from huggingface_hub import file_exists
 from packaging import version
 from torch import nn
 from torch.nn import functional as F
-
-from transformers.generation.candidate_generator import AssistantVocabTranslatorCache
 
 from ..cache_utils import (
     Cache,
@@ -39,6 +38,12 @@ from ..cache_utils import (
     QuantizedCacheConfig,
 )
 from ..configuration_utils import PretrainedConfig
+from ..dynamic_module_utils import (
+    check_python_requirements,
+    get_cached_module_file,
+    get_class_in_module,
+    resolve_trust_remote_code,
+)
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
@@ -55,6 +60,7 @@ from ..utils import (
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
+    AssistantVocabTranslatorCache,
     AssistedCandidateGenerator,
     AssistedCandidateGeneratorDifferentTokenizers,
     CandidateGenerator,
@@ -375,6 +381,73 @@ class GenerationMixin:
 
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
+
+    def load_custom_generate(
+        self,
+        pretrained_model_name_or_path: Optional[Union[str, os.PathLike]] = None,
+        trust_remote_code: Optional[bool] = None,
+        **kwargs,
+    ) -> Callable:
+        """
+        Loads and returns a custom generate function, given a model repo.
+
+        Args:
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
+                 Can be either:
+                    - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
+                    - A path to a *directory* containing model weights saved using
+                      [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+            trust_remote_code (`bool`, *optional*):
+                Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
+                should only be set to `True` for repositories you trust and in which you have read the code, as it will
+                execute code present on the Hub on your local machine.
+            **kwargs:
+                Additional keyword arguments for remote code loading.
+
+        Raises:
+            OSError: If `pretrained_model_name_or_path` does not contain a `custom_generate` subdirectory.
+
+        Returns:
+            A callable that can be used to generate text.
+        """
+        # Does `pretrained_model_name_or_path` have a `custom_generate` subdirectory? If not -> OSError
+        is_local_code = os.path.exists(pretrained_model_name_or_path)
+        has_custom_generate_folder = True
+        if is_local_code:
+            if not os.path.exists(os.path.join(pretrained_model_name_or_path, "custom_generate/generate.py")):
+                has_custom_generate_folder = False
+        else:
+            if not file_exists(pretrained_model_name_or_path, "custom_generate/generate.py"):
+                has_custom_generate_folder = False
+
+        if not has_custom_generate_folder:
+            raise OSError(
+                f"`{pretrained_model_name_or_path}` does not contain a `custom_generate` subdirectory with a "
+                "`generate.py` file, can't load the custom generate function."
+            )
+
+        # Handle opt-in `trust_remote_code` and related exceptions
+        error_message = (
+            f"The repository `{pretrained_model_name_or_path}` contains custom generation code that will override "
+            "the default `generate` method."
+        )
+        resolve_trust_remote_code(
+            trust_remote_code,
+            pretrained_model_name_or_path,
+            has_local_code=is_local_code,
+            has_remote_code=not is_local_code,
+            error_message=error_message,
+        )
+
+        # Load the custom generate function
+        check_python_requirements(
+            pretrained_model_name_or_path, requirements_file="custom_generate/requirements.txt", **kwargs
+        )
+        module = get_cached_module_file(
+            pretrained_model_name_or_path, module_file="custom_generate/generate.py", **kwargs
+        )
+        custom_generate_function = get_class_in_module("generate", module)
+        return custom_generate_function
 
     def _cache_dependant_input_preparation(
         self,
@@ -2158,6 +2231,7 @@ class GenerationMixin:
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
         use_model_defaults: Optional[bool] = None,
+        custom_generate: Optional[str] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
@@ -2227,6 +2301,11 @@ class GenerationMixin:
                 generation configuration (`model.generation_config`), as opposed to the global defaults
                 (`GenerationConfig()`). If unset, models saved starting from `v4.50` will consider this flag to be
                 `True`.
+            custom_generate (`str`, *optional*):
+                A string containing the name of a huggingface.co repository. If provided, the custom `generate`
+                function defined in that reposity's `custom_generate/generate.py` file will be executed instead of the
+                standard `generate` method. Note that the logic is for generation is entirely defined in that
+                repository, and the return type may be different from the standard `generate` method.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -2248,6 +2327,20 @@ class GenerationMixin:
                     - [`~generation.GenerateEncoderDecoderOutput`],
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
+        # 0. If requested, load an arbitrary generation recipe from the Hub and run it instead
+        if custom_generate is not None:
+            trust_remote_code = kwargs.pop("trust_remote_code", None)
+            # Get all `generate` arguments in a single variable. Custom functions are responsible for handling them:
+            # they receive the same inputs as `generate`, only with `model` instead of `self`. They can access to
+            # methods from `GenerationMixin` through `model`.
+            global_keys_to_exclude = {"self", "kwargs"}
+            generate_arguments = {key: value for key, value in locals().items() if key not in global_keys_to_exclude}
+            generate_arguments.update(kwargs)
+
+            custom_generate_function = self.load_custom_generate(
+                custom_generate, trust_remote_code=trust_remote_code, **kwargs
+            )
+            return custom_generate_function(model=self, **generate_arguments)
 
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria

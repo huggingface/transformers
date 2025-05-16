@@ -55,6 +55,7 @@ This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The
   * mask a span of k tokens with a single mask token (a span of 0 tokens is an insertion of a mask token)
   * permute sentences
   * rotate the document to make it start at a specific token
+- The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`  
 
 ## Implementation Notes
 

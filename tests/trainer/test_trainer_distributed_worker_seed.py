@@ -14,9 +14,11 @@ from transformers import (
 )
 from transformers.testing_utils import (
     TestCasePlus,
+    backend_device_count,
     execute_subprocess_async,
     get_torch_dist_unique_port,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
+    torch_device,
 )
 
 
@@ -47,7 +49,7 @@ class DummyModel(nn.Module):
         self.fc = nn.Linear(3, 1)
 
     def forward(self, x):
-        local_tensor = torch.tensor(x, device="cuda")
+        local_tensor = torch.tensor(x, device=torch_device)
         gathered = gather_from_all_gpus(local_tensor, dist.get_world_size())
         assert not all(torch.allclose(t, gathered[0]) for t in gathered[1:])
         y = self.fc(x)
@@ -55,9 +57,9 @@ class DummyModel(nn.Module):
 
 
 class TestTrainerDistributedWorkerSeed(TestCasePlus):
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_trainer(self):
-        device_count = torch.cuda.device_count()
+        device_count = backend_device_count(torch_device)
         output_dir = self.get_auto_remove_tmp_dir()
         distributed_args = f"""--nproc_per_node={device_count}
             --master_port={get_torch_dist_unique_port()}
