@@ -96,7 +96,7 @@ def _compute_mask_indices(
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    ASR](https://huggingface.co/papers/1904.08779). Note that this method is not optimized to run on TPU and should be run on
     CPU as part of the preprocessing during training.
 
     Args:
@@ -398,7 +398,7 @@ class SpeechT5PositionalConvEmbedding(nn.Module):
 
 class SpeechT5ScaledPositionalEncoding(nn.Module):
     """
-    Scaled positional encoding, see §3.2 in https://arxiv.org/abs/1809.08895
+    Scaled positional encoding, see §3.2 in https://huggingface.co/papers/1809.08895
     """
 
     def __init__(self, dropout, dim, max_len=5000):
@@ -610,7 +610,7 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        [SpecAugment](https://huggingface.co/papers/1904.08779).
         """
 
         # `config.apply_spec_augment` can set masking to False
@@ -682,7 +682,7 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
         input_values: torch.Tensor,
         speaker_embeddings: Optional[torch.Tensor] = None,
     ):
-        # Dropout is always applied, even when evaluating. See §2.2 in https://arxiv.org/abs/1712.05884.
+        # Dropout is always applied, even when evaluating. See §2.2 in https://huggingface.co/papers/1712.05884.
 
         inputs_embeds = input_values
         for layer in self.layers:
@@ -1330,7 +1330,7 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             skip_the_layer = False
             if self.training:
                 dropout_probability = torch.rand([])
@@ -1626,7 +1626,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             skip_the_layer = False
             if self.training:
                 dropout_probability = torch.rand([])
@@ -1840,7 +1840,7 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
 class SpeechT5GuidedMultiheadAttentionLoss(nn.Module):
     """
     Guided attention loss from the paper [Efficiently Trainable Text-to-Speech System Based on Deep Convolutional
-    Networks with Guided Attention](https://arxiv.org/abs/1710.08969), adapted for multi-head attention.
+    Networks with Guided Attention](https://huggingface.co/papers/1710.08969), adapted for multi-head attention.
     """
 
     def __init__(self, config: SpeechT5Config):
@@ -2041,7 +2041,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
             also be used by default.
 
             If you want to change padding behavior, you should read [`SpeechT5Decoder._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
@@ -2206,7 +2206,7 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
             also be used by default.
 
             If you want to change padding behavior, you should read [`SpeechT5Decoder._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
@@ -2535,7 +2535,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             also be used by default.
 
             If you want to change padding behavior, you should read [`SpeechT5Decoder._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
@@ -2886,7 +2886,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             also be used by default.
 
             If you want to change padding behavior, you should read [`SpeechT5Decoder._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:

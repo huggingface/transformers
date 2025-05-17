@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The OLMo2 model is the successor of the OLMo model, which was proposed in
-[OLMo: Accelerating the Science of Language Models](https://arxiv.org/abs/2402.00838).
+[OLMo: Accelerating the Science of Language Models](https://huggingface.co/papers/2402.00838).
 
  The architectural changes from the original OLMo model to this model are:
 

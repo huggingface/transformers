@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-DETA モデルは、[NMS Strikes Back](https://arxiv.org/abs/2212.06137) で Jeffrey Ouyang-Zhang、Jang Hyun Cho、Xingyi Zhou、Philipp Krähenbühl によって提案されました。
+DETA モデルは、[NMS Strikes Back](https://huggingface.co/papers/2212.06137) で Jeffrey Ouyang-Zhang、Jang Hyun Cho、Xingyi Zhou、Philipp Krähenbühl によって提案されました。
 DETA (Detection Transformers with Assignment の略) は、1 対 1 の 2 部ハンガリアン マッチング損失を置き換えることにより、[Deformable DETR](deformable_detr) を改善します。
 非最大抑制 (NMS) を備えた従来の検出器で使用される 1 対多のラベル割り当てを使用します。これにより、最大 2.5 mAP の大幅な増加が得られます。
 
@@ -29,7 +29,7 @@ DETA (Detection Transformers with Assignment の略) は、1 対 1 の 2 部ハ�
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/deta_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> DETA の概要。 <a href="https://arxiv.org/abs/2212.06137">元の論文</a>から抜粋。 </small>
+<small> DETA の概要。 <a href="https://huggingface.co/papers/2212.06137">元の論文</a>から抜粋。 </small>
 
 このモデルは、[nielsr](https://huggingface.co/nielsr) によって提供されました。
 元のコードは [ここ](https://github.com/jozhang97/DETA) にあります。

@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The OPT model was proposed in [Open Pre-trained Transformer Language Models](https://arxiv.org/pdf/2205.01068) by Meta AI.
+The OPT model was proposed in [Open Pre-trained Transformer Language Models](https://huggingface.co/papers/2205.01068) by Meta AI.
 OPT is a series of open-sourced large causal language models which perform similar in performance to GPT3.
 
 The abstract from the paper is the following:

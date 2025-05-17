@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The LayoutLMV2 model was proposed in [LayoutLMv2: Multi-modal Pre-training for Visually-Rich Document Understanding](https://arxiv.org/abs/2012.14740) by Yang Xu, Yiheng Xu, Tengchao Lv, Lei Cui, Furu Wei, Guoxin Wang, Yijuan Lu,
+The LayoutLMV2 model was proposed in [LayoutLMv2: Multi-modal Pre-training for Visually-Rich Document Understanding](https://huggingface.co/papers/2012.14740) by Yang Xu, Yiheng Xu, Tengchao Lv, Lei Cui, Furu Wei, Guoxin Wang, Yijuan Lu,
 Dinei Florencio, Cha Zhang, Wanxiang Che, Min Zhang, Lidong Zhou. LayoutLMV2 improves [LayoutLM](layoutlm) to obtain
 state-of-the-art results across several document image understanding benchmarks:
 
@@ -34,7 +34,7 @@ state-of-the-art results across several document image understanding benchmarks:
   documents for testing).
 - document image classification: the [RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/) dataset (a collection of
   400,000 images belonging to one of 16 classes).
-- document visual question answering: the [DocVQA](https://arxiv.org/abs/2007.00398) dataset (a collection of 50,000
+- document visual question answering: the [DocVQA](https://huggingface.co/papers/2007.00398) dataset (a collection of 50,000
   questions defined on 12,000+ document images).
 
 The abstract from the paper is the following:
@@ -65,7 +65,7 @@ python -m pip install torchvision tesseract
 - The main difference between LayoutLMv1 and LayoutLMv2 is that the latter incorporates visual embeddings during
   pre-training (while LayoutLMv1 only adds visual embeddings during fine-tuning).
 - LayoutLMv2 adds both a relative 1D attention bias as well as a spatial 2D attention bias to the attention scores in
-  the self-attention layers. Details can be found on page 5 of the [paper](https://arxiv.org/abs/2012.14740).
+  the self-attention layers. Details can be found on page 5 of the [paper](https://huggingface.co/papers/2012.14740).
 - Demo notebooks on how to use the LayoutLMv2 model on RVL-CDIP, FUNSD, DocVQA, CORD can be found [here](https://github.com/NielsRogge/Transformers-Tutorials).
 - LayoutLMv2 uses Facebook AI's [Detectron2](https://github.com/facebookresearch/detectron2/) package for its visual
   backbone. See [this link](https://detectron2.readthedocs.io/en/latest/tutorials/install.html) for installation

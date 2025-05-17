@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The GLM Model was proposed
-in [ChatGLM: A Family of Large Language Models from GLM-130B to GLM-4 All Tools](https://arxiv.org/html/2406.12793v1)
+in [ChatGLM: A Family of Large Language Models from GLM-130B to GLM-4 All Tools](https://huggingface.co/papers/2406.12793)
 by GLM Team, THUDM & ZhipuAI.
 
 The abstract from the paper is the following:

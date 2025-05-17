@@ -316,7 +316,7 @@ DP + PP 설정의 전역 배치 크기를 계산하려면 `mbs*chunks*dp_degree`
 - [DeepSpeed](https://www.deepspeed.ai/tutorials/pipeline/)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)은 내부 구현을 가지고 있습니다 - API 없음.
 - [Varuna](https://github.com/microsoft/varuna)
-- [SageMaker](https://arxiv.org/abs/2111.05972) - 이는 AWS에서만 사용할 수 있는 소유 솔루션입니다.
+- [SageMaker](https://huggingface.co/papers/2111.05972) - 이는 AWS에서만 사용할 수 있는 소유 솔루션입니다.
 - [OSLO](https://github.com/tunib-ai/oslo) - 이는 Hugging Face Transformers를 기반으로 구현된 파이프라인 병렬화입니다.
 
 🤗 Transformers 상태: 이 작성 시점에서 모델 중 어느 것도 완전한 PP를 지원하지 않습니다. GPT2와 T5 모델은 naive MP를 지원합니다. 주요 장애물은 모델을 `nn.Sequential`로 변환하고 모든 입력을 텐서로 가져와야 하는 것을 처리할 수 없기 때문입니다. 현재 모델에는 이러한 변환을 매우 복잡하게 만드는 많은 기능이 포함되어 있어 제거해야 합니다.
@@ -336,7 +336,7 @@ OSLO는 `nn.Sequential`로 변환하지 않고 Transformers를 기반으로 한 
 
 텐서 병렬 처리에서는 각 GPU가 텐서의 일부분만 처리하고 전체 텐서가 필요한 연산에 대해서만 전체 텐서를 집계합니다.
 
-이 섹션에서는 [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) 논문인 [Efficient Large-Scale Language Model Training on GPU Clusters](https://arxiv.org/abs/2104.04473)에서의 개념과 다이어그램을 사용합니다.
+이 섹션에서는 [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) 논문인 [Efficient Large-Scale Language Model Training on GPU Clusters](https://huggingface.co/papers/2104.04473)에서의 개념과 다이어그램을 사용합니다.
 
 Transformer의 주요 구성 요소는 fully connected `nn.Linear`와 비선형 활성화 함수인 `GeLU`입니다.
 
@@ -367,7 +367,7 @@ SageMaker는 더 효율적인 처리를 위해 TP와 DP를 결합합니다.
 구현:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)은 내부 구현을 가지고 있으므로 모델에 매우 특화되어 있습니다.
 - [parallelformers](https://github.com/tunib-ai/parallelformers) (현재는 추론에만 해당)
-- [SageMaker](https://arxiv.org/abs/2111.05972) - 이는 AWS에서만 사용할 수 있는 소유 솔루션입니다.
+- [SageMaker](https://huggingface.co/papers/2111.05972) - 이는 AWS에서만 사용할 수 있는 소유 솔루션입니다.
 - [OSLO](https://github.com/tunib-ai/oslo)은 Transformers를 기반으로 한 텐서 병렬 처리 구현을 가지고 있습니다.
 
 🤗 Transformers 현황:
@@ -389,7 +389,7 @@ DeepSpeed [pipeline tutorial](https://www.deepspeed.ai/tutorials/pipeline/)에�
 - [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
-- [SageMaker](https://arxiv.org/abs/2111.05972)
+- [SageMaker](https://huggingface.co/papers/2111.05972)
 - [OSLO](https://github.com/tunib-ai/oslo)
 
 🤗 Transformers 현황: 아직 구현되지 않음
@@ -408,7 +408,7 @@ DeepSpeed [pipeline tutorial](https://www.deepspeed.ai/tutorials/pipeline/)에�
 - [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) - DeepSpeed는 더욱 효율적인 DP인 ZeRO-DP라고도 부릅니다.
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
-- [SageMaker](https://arxiv.org/abs/2111.05972)
+- [SageMaker](https://huggingface.co/papers/2111.05972)
 - [OSLO](https://github.com/tunib-ai/oslo)
 
 🤗 Transformers 현황: 아직 구현되지 않음. PP와 TP가 없기 때문입니다.
@@ -434,7 +434,7 @@ ZeRO 단계 3도 같은 이유로 좋은 선택이 아닙니다 - 더 많은 노
 중요한 논문:
 
 - [Using DeepSpeed and Megatron to Train Megatron-Turing NLG 530B, A Large-Scale Generative Language Model](
-https://arxiv.org/abs/2201.11990)
+https://huggingface.co/papers/2201.11990)
 
 🤗 Transformers 현황: 아직 구현되지 않음, PP와 TP가 없기 때문입니다.
 
@@ -442,7 +442,7 @@ https://arxiv.org/abs/2201.11990)
 
 [FlexFlow](https://github.com/flexflow/FlexFlow)는 약간 다른 방식으로 병렬화 문제를 해결합니다.
 
-논문: ["Beyond Data and Model Parallelism for Deep Neural Networks" by Zhihao Jia, Matei Zaharia, Alex Aiken](https://arxiv.org/abs/1807.05358)
+논문: ["Beyond Data and Model Parallelism for Deep Neural Networks" by Zhihao Jia, Matei Zaharia, Alex Aiken](https://huggingface.co/papers/1807.05358)
 
 이는 Sample-Operator-Attribute-Parameter를 기반으로 하는 일종의 4D 병렬화를 수행합니다.
 

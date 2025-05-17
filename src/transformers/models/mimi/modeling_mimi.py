@@ -377,7 +377,7 @@ class MimiEncoder(nn.Module):
 
 
 class MimiLayerScale(nn.Module):
-    """Layer scale from [Touvron et al 2021] (https://arxiv.org/pdf/2103.17239.pdf).
+    """Layer scale from [Touvron et al 2021] (https://huggingface.co/papers/2103.17239).
     This rescales diagonally the residual outputs close to 0, with a learnt scale.
     """
 
@@ -926,7 +926,7 @@ class MimiTransformerModel(nn.Module):
                 `past_key_values`).
 
                 If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-                and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+                and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
                 information on the default strategy.
 
                 - 1 indicates the head is **not masked**,

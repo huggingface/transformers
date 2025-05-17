@@ -122,7 +122,7 @@ token应该附着在前面那个token的后面，不带空格的附着（分词�
 ### Byte-Pair Encoding (BPE)
 
 Byte-Pair Encoding (BPE)来自于[Neural Machine Translation of Rare Words with Subword Units (Sennrich et
-al., 2015)](https://arxiv.org/abs/1508.07909)。BPE依赖于一个预分词器，这个预分词器会将训练数据分割成单词。预分词可以是简单的
+al., 2015)](https://huggingface.co/papers/1508.07909)。BPE依赖于一个预分词器，这个预分词器会将训练数据分割成单词。预分词可以是简单的
 空格分词，像：：[GPT-2](model_doc/gpt2)，[RoBERTa](model_doc/roberta)。更加先进的预分词方式包括了基于规则的分词，像： [XLM](model_doc/xlm)，[FlauBERT](model_doc/flaubert)，FlauBERT在大多数语言使用了Moses，或者[GPT](model_doc/gpt)，GPT
 使用了Spacy和ftfy，统计了训练语料库中每个单词的频次。
 
@@ -194,7 +194,7 @@ WordPiece不会选择出现频次最大的符号对，而是选择了加入到�
 ### Unigram
 
 Unigram是一个子词分词器算法，介绍见[Subword Regularization: Improving Neural Network Translation
-Models with Multiple Subword Candidates (Kudo, 2018)](https://arxiv.org/pdf/1804.10959.pdf)。和BPE或者WordPiece相比较
+Models with Multiple Subword Candidates (Kudo, 2018)](https://huggingface.co/papers/1804.10959)。和BPE或者WordPiece相比较
 ，Unigram使用大量的符号来初始化它的基础字典，然后逐渐的精简每个符号来获得一个更小的词典。举例来看基础词典能够对应所有的预分词
 的单词以及最常见的子字符串。Unigram没有直接用在任何transformers的任何模型中，但是和[SentencePiece](#sentencepiece)一起联合使用。
 
@@ -224,7 +224,7 @@ $$\mathcal{L} = -\sum_{i=1}^{N} \log \left ( \sum_{x \in S(x_{i})} p(x) \right )
 目前为止描述的所有分词算法都有相同的问题：它们都假设输入的文本使用空格来分开单词。然而，不是所有的语言都使用空格来分开单词。
 一个可能的解决方案是使用某种语言特定的预分词器。像：[XLM](model_doc/xlm)使用了一个特定的中文、日语和Thai的预分词器。
 为了更加广泛的解决这个问题，[SentencePiece: A simple and language independent subword tokenizer and
-detokenizer for Neural Text Processing (Kudo et al., 2018)](https://arxiv.org/pdf/1808.06226.pdf)
+detokenizer for Neural Text Processing (Kudo et al., 2018)](https://huggingface.co/papers/1808.06226)
 将输入文本看作一个原始的输入流，因此使用的符合集合中也包括了空格。SentencePiece然后会使用BPE或者unigram算法来产生合适的
 词典。
 

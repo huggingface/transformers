@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-BridgeTower モデルは、Xiao Xu、Chenfei Wu、Shachar Rosenman、Vasudev Lal、Wanxiang Che、Nan Duan [BridgeTower: Building Bridges Between Encoders in Vision-Language Representative Learning](https://arxiv.org/abs/2206.08657) で提案されました。ドゥアン。このモデルの目標は、
+BridgeTower モデルは、Xiao Xu、Chenfei Wu、Shachar Rosenman、Vasudev Lal、Wanxiang Che、Nan Duan [BridgeTower: Building Bridges Between Encoders in Vision-Language Representative Learning](https://huggingface.co/papers/2206.08657) で提案されました。ドゥアン。このモデルの目標は、
 各ユニモーダル エンコーダとクロスモーダル エンコーダの間のブリッジにより、クロスモーダル エンコーダの各層での包括的かつ詳細な対話が可能になり、追加のパフォーマンスと計算コストがほとんど無視できる程度で、さまざまな下流タスクで優れたパフォーマンスを実現します。
 
 この論文は [AAAI'23](https://aaai.org/Conferences/AAAI-23/) 会議に採択されました。
@@ -35,7 +35,7 @@ BridgeTower モデルは、Xiao Xu、Chenfei Wu、Shachar Rosenman、Vasudev Lal
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/bridgetower_architecture%20.jpg"
 alt="drawing" width="600"/>
 
-<small> ブリッジタワー アーキテクチャ。 <a href="https://arxiv.org/abs/2206.08657">元の論文から抜粋。</a> </small>
+<small> ブリッジタワー アーキテクチャ。 <a href="https://huggingface.co/papers/2206.08657">元の論文から抜粋。</a> </small>
 
 このモデルは、[Anahita Bhiwandiwalla](https://huggingface.co/anahita-b)、[Tiep Le](https://huggingface.co/Tile)、[Shaoyen Tseng](https://huggingface.co/shaoyent) 。元のコードは [ここ](https://github.com/microsoft/BridgeTower) にあります。
 
@@ -124,7 +124,7 @@ BridgeTower は、ビジュアル エンコーダー、テキスト エンコー
 
 - BridgeTower のこの実装では、[`RobertaTokenizer`] を使用してテキスト埋め込みを生成し、OpenAI の CLIP/ViT モデルを使用して視覚的埋め込みを計算します。
 - 事前トレーニングされた [bridgeTower-base](https://huggingface.co/BridgeTower/bridgetower-base) および [bridgetower マスクされた言語モデリングと画像テキスト マッチング](https://huggingface.co/BridgeTower/bridgetower--base-itm-mlm) のチェックポイント がリリースされました。
-- 画像検索およびその他の下流タスクにおける BridgeTower のパフォーマンスについては、[表 5](https://arxiv.org/pdf/2206.08657.pdf) を参照してください。
+- 画像検索およびその他の下流タスクにおける BridgeTower のパフォーマンスについては、[表 5](https://huggingface.co/papers/2206.08657) を参照してください。
 - このモデルの PyTorch バージョンは、torch 1.10 以降でのみ使用できます。
 
 ## BridgeTowerConfig

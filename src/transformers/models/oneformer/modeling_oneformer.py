@@ -1473,7 +1473,7 @@ class OneFormerPixelLevelModule(nn.Module):
     def __init__(self, config: OneFormerConfig):
         """
         Pixel Level Module proposed in [Masked-attention Mask Transformer for Universal Image
-        Segmentation](https://arxiv.org/abs/2112.01527). It runs the input image through a backbone and a pixel
+        Segmentation](https://huggingface.co/papers/2112.01527). It runs the input image through a backbone and a pixel
         decoder, generating multi-scale feature maps and pixel embeddings.
 
         Args:

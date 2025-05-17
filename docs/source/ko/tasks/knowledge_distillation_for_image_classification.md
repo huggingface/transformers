@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-지식 증류(Knowledge distillation)는 더 크고 복잡한 모델(교사)에서 더 작고 간단한 모델(학생)로 지식을 전달하는 기술입니다. 한 모델에서 다른 모델로 지식을 증류하기 위해, 특정 작업(이 경우 이미지 분류)에 대해 학습된 사전 훈련된 교사 모델을 사용하고, 랜덤으로 초기화된 학생 모델을 이미지 분류 작업에 대해 학습합니다. 그다음, 학생 모델이 교사 모델의 출력을 모방하여 두 모델의 출력 차이를 최소화하도록 훈련합니다. 이 기법은 Hinton 등 연구진의 [Distilling the Knowledge in a Neural Network](https://arxiv.org/abs/1503.02531)에서 처음 소개되었습니다. 이 가이드에서는 특정 작업에 맞춘 지식 증류를 수행할 것입니다. 이번에는 [beans dataset](https://huggingface.co/datasets/beans)을 사용할 것입니다.
+지식 증류(Knowledge distillation)는 더 크고 복잡한 모델(교사)에서 더 작고 간단한 모델(학생)로 지식을 전달하는 기술입니다. 한 모델에서 다른 모델로 지식을 증류하기 위해, 특정 작업(이 경우 이미지 분류)에 대해 학습된 사전 훈련된 교사 모델을 사용하고, 랜덤으로 초기화된 학생 모델을 이미지 분류 작업에 대해 학습합니다. 그다음, 학생 모델이 교사 모델의 출력을 모방하여 두 모델의 출력 차이를 최소화하도록 훈련합니다. 이 기법은 Hinton 등 연구진의 [Distilling the Knowledge in a Neural Network](https://huggingface.co/papers/1503.02531)에서 처음 소개되었습니다. 이 가이드에서는 특정 작업에 맞춘 지식 증류를 수행할 것입니다. 이번에는 [beans dataset](https://huggingface.co/datasets/beans)을 사용할 것입니다.
 
 이 가이드는 [미세 조정된 ViT 모델](https://huggingface.co/merve/vit-mobilenet-beans-224) (교사 모델)을 [MobileNet](https://huggingface.co/google/mobilenet_v2_1.4_224) (학생 모델)으로 증류하는 방법을 🤗 Transformers의 [Trainer API](https://huggingface.co/docs/transformers/en/main_classes/trainer#trainer) 를 사용하여 보여줍니다.
 
