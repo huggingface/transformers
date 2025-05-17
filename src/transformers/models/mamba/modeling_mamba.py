@@ -185,6 +185,7 @@ def load_sve_kernel(name, src_folder, build_directory=None, verbose=False, is_py
             _, error, _ = sys.exc_info()
             # error.output contains the stdout and stderr of the build attempt.
             message = f"Error building extension '{name}'"
+            logger.warning_once(message)
             raise RuntimeError(message) from e
 
     if verbose:
@@ -254,7 +255,7 @@ class MambaMixer(nn.Module):
                     ):  # call scan_sve only if dtype is f32 and sve vector length=256
                         self.is_scan_sve_available = True
                 except Exception as e:
-                    logger.warning(f"Could not load the custom kernel for sequential scan SVE kernel: {e}")
+                    logger.warning_once(f"Could not load the custom kernel for sequential scan SVE kernel: {e}")
 
         if not is_fast_path_available:
             if self.use_mambapy:
