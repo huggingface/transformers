@@ -1154,10 +1154,14 @@ if __name__ == "__main__":
     report_repo_subfolder = os.getenv("REPORT_REPO_SUBFOLDER", "")
     workflow_run_id = os.getenv("WORKFLOW_RUN_ID")
 
+    print(os.environ["WORKFLOW_RUN_ID"])
+    print(os.environ["GITHUB_RUN_ID"])
+
     # TODO: better way
-    os.system(f"curl https://api.github.com/repos/huggingface/transformers/actions/runs/${workflow_run_id} >> workflow_run.json")
+    os.system(f"curl https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id} >> workflow_run.json")
     with open("workflow_run.json") as fp:
         workflow_run = json.load(fp)
+        print(workflow_run)
         workflow_run_created_time = workflow_run["created_at"]
 
     # report_repo_folder = f"{datetime.datetime.today().strftime('%Y-%m-%d')}"
