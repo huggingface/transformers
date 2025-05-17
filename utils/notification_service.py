@@ -644,6 +644,8 @@ class Message:
 
     def post(self):
         payload = self.payload
+        return
+
         print("Sending the following payload")
         print(json.dumps({"blocks": json.loads(payload)}))
 
@@ -1285,4 +1287,4 @@ if __name__ == "__main__":
     # send report only if there is any failure (for push CI)
     if message.n_failures or (ci_event != "push" and not ci_event.startswith("Push CI (AMD)")):
         message.post()
-        message.post_reply()
+        # message.post_reply()
