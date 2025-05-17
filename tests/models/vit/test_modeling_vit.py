@@ -242,7 +242,7 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         # assert 1 == 4
 
     def test_model(self):
-        # assert 1 == 3
+        assert 1 == 3
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
