@@ -126,7 +126,7 @@ class GraniteSpeechConformerFeedForward(nn.Module):
 
 class GraniteSpeechConformerAttention(nn.Module):
     """Attention for conformer blocks using Shaw's relative positional embeddings.
-    See the following [paper](https://arxiv.org/pdf/1803.02155) for more details.
+    See the following [paper](https://huggingface.co/papers/1803.02155) for more details.
     """
 
     def __init__(self, config: GraniteSpeechEncoderConfig):

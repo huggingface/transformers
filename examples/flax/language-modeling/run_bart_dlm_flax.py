@@ -265,7 +265,7 @@ class FlaxDataCollatorForBartDenoisingLM:
     Data collator used for BART denoising language modeling. The code is largely copied from
     `<https://github.com/morganmcg1/rotobart/blob/main/data_collator.py#L223>`__.
     For more information on how BART denoising language modeling works, one can take a look
-    at the `official paper <https://arxiv.org/pdf/1910.13461.pdf>`__
+    at the `official paper <https://huggingface.co/papers/1910.13461>`__
     or the `official code for preprocessing <https://github.com/facebookresearch/fairseq/blob/main/fairseq/data/denoising_dataset.py>`__ .
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):

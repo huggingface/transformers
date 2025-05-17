@@ -90,7 +90,7 @@ def _split_into_blocks(x: jnp.ndarray, block_len: int, axis: int) -> jnp.ndarray
 
 def _concatenate_3_blocks(x: jnp.ndarray, block_axis: int, sequence_axis: int, pad_value: int = 0) -> jnp.ndarray:
     """Concatenate three consecutive blocks for each input block for local attentiont.
-    For more information, see: https://arxiv.org/pdf/2112.07916.pdf.
+    For more information, see: https://huggingface.co/papers/2112.07916.
     """
     num_blocks = x.shape[block_axis]
 
@@ -1587,7 +1587,7 @@ LONGT5_DECODE_INPUTS_DOCSTRING = r"""
             be used by default.
 
             If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the
-            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+            paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
         past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
             auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
@@ -1970,7 +1970,7 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
 
 LONGT5_START_DOCSTRING = r"""
     The LongT5 model was proposed in [LongT5: Efficient Text-To-Text Transformer for Long
-    Sequences](https://arxiv.org/abs/2112.07916) by Mandy Guo, Joshua Ainslie, David Uthus, Santiago Ontanon, Jianmo
+    Sequences](https://huggingface.co/papers/2112.07916) by Mandy Guo, Joshua Ainslie, David Uthus, Santiago Ontanon, Jianmo
     Ni, Yun-Hsuan Sung and Yinfei Yang. It's an encoder-decoder transformer pre-trained in a text-to-text denoising
     generative setting. LongT5 model is an extension of T5 model, and it enables using one of the two different
     efficient attention mechanisms - (1) Local attention, or (2) Transient-Global attention.

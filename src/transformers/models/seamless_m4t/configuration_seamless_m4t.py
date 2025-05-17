@@ -58,10 +58,10 @@ class SeamlessM4TConfig(PretrainedConfig):
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
         encoder_layerdrop (`float`, *optional*, defaults to 0.05):
-            The LayerDrop probability for the encoders. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoders. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         decoder_layerdrop (`float`, *optional*, defaults to 0.05):
-            The LayerDrop probability for the decoders. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the decoders. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the decoder and feed-forward layers. If string,
@@ -118,7 +118,7 @@ class SeamlessM4TConfig(PretrainedConfig):
             Add an adapter layer on top of the speech encoder.
         speech_encoder_layerdrop (`float`, *optional*, defaults to 0.1):
             The LayerDrop probability for the speech encoder. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
+            https://huggingface.co/papers/1909.11556) for more details.
         feature_projection_input_dim (`int`, *optional*, defaults to 160):
             Input dimension of the input feature projection of the speech encoder, i.e the dimension after processing
             input audios with [`SeamlessM4TFeatureExtractor`].

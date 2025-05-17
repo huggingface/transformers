@@ -123,7 +123,7 @@ class SegformerOverlapPatchEmbeddings(nn.Module):
 
 class SegformerEfficientSelfAttention(nn.Module):
     """SegFormer's efficient self-attention mechanism. Employs the sequence reduction process introduced in the [PvT
-    paper](https://arxiv.org/abs/2102.12122)."""
+    paper](https://huggingface.co/papers/2102.12122)."""
 
     def __init__(self, config, hidden_size, num_attention_heads, sequence_reduction_ratio):
         super().__init__()

@@ -240,7 +240,7 @@ class TFMobileBertEmbeddings(keras.layers.Layer):
 
         if self.trigram_input:
             # From the paper MobileBERT: a Compact Task-Agnostic BERT for Resource-Limited
-            # Devices (https://arxiv.org/abs/2004.02984)
+            # Devices (https://huggingface.co/papers/2004.02984)
             #
             # The embedding table in BERT models accounts for a substantial proportion of model size. To compress
             # the embedding layer, we reduce the embedding dimension to 128 in MobileBERT.

@@ -62,7 +62,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`Wav2Vec2ConformerForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):
-            The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
+            The LayerDrop probability. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556) for more
             details.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -99,7 +99,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         apply_spec_augment (`bool`, *optional*, defaults to `True`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
             [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
-            Recognition](https://arxiv.org/abs/1904.08779).
+            Recognition](https://huggingface.co/papers/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
             procedure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
@@ -313,7 +313,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
         self.conformer_conv_dropout = conformer_conv_dropout
 
-        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
+        # fine-tuning config parameters for SpecAugment: https://huggingface.co/papers/1904.08779
         self.apply_spec_augment = apply_spec_augment
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length

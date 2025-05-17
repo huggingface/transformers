@@ -621,7 +621,7 @@ WHISPER_INPUTS_DOCSTRING = r"""
 
             If you want to change padding behavior, you should read
             [`modeling_whisper._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in [the
-            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+            paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
         head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
@@ -784,7 +784,7 @@ class TFWhisperEncoder(keras.layers.Layer):
         for idx, encoder_layer in enumerate(self.encoder_layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if training and (dropout_probability < self.layerdrop):  # skip the layer
                 continue
@@ -1020,7 +1020,7 @@ class TFWhisperDecoder(keras.layers.Layer):
                 )
 
         for idx, decoder_layer in enumerate(self.decoder_layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             dropout_probability = random.uniform(0, 1)

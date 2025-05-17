@@ -62,10 +62,10 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
         encoder_layerdrop (`float`, *optional*, defaults to 0.05):
-            The LayerDrop probability for the encoders. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoders. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         decoder_layerdrop (`float`, *optional*, defaults to 0.05):
-            The LayerDrop probability for the decoders. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the decoders. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the decoder and feed-forward layers. If string,
@@ -122,7 +122,7 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             Add an adapter layer on top of the speech encoder.
         speech_encoder_layerdrop (`float`, *optional*, defaults to 0.1):
             The LayerDrop probability for the speech encoder. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
+            https://huggingface.co/papers/1909.11556) for more details.
         feature_projection_input_dim (`int`, *optional*, defaults to 160):
             Input dimension of the input feature projection of the speech encoder, i.e the dimension after processing
             input audios with [`SeamlessM4TFeatureExtractor`].
@@ -138,7 +138,7 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         position_embeddings_type (`str`, *optional*, defaults to `"relative_key"`):
             Can be specified to `relative_key`. If left to `None`, no relative position embedding is applied. Only
             applied to the speech encoder. For more information on `"relative_key"`, please refer to [Self-Attention
-            with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
         conv_depthwise_kernel_size (`int`, *optional*, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks. Only applied to the speech encoder.
         left_max_position_embeddings (`int`, *optional*, defaults to 64):

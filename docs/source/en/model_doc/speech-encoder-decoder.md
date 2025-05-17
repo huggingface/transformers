@@ -29,7 +29,7 @@ with any pretrained speech autoencoding model as the encoder (*e.g.* [Wav2Vec2](
 
 The effectiveness of initializing speech-sequence-to-text-sequence models with pretrained checkpoints for speech
 recognition and speech translation has *e.g.* been shown in [Large-Scale Self- and Semi-Supervised Learning for Speech
-Translation](https://arxiv.org/abs/2104.06678) by Changhan Wang, Anne Wu, Juan Pino, Alexei Baevski, Michael Auli,
+Translation](https://huggingface.co/papers/2104.06678) by Changhan Wang, Anne Wu, Juan Pino, Alexei Baevski, Michael Auli,
 Alexis Conneau.
 
 An example of how to use a [`SpeechEncoderDecoderModel`] for inference can be seen in [Speech2Text2](speech_to_text_2).

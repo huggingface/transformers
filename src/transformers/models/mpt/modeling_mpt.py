@@ -42,7 +42,7 @@ logger = logging.get_logger(__name__)
 
 def build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max=8, device=None):
     r"""
-    Link to paper: https://arxiv.org/abs/2108.12409 - Alibi tensor is not causal as the original paper mentions, it
+    Link to paper: https://huggingface.co/papers/2108.12409 - Alibi tensor is not causal as the original paper mentions, it
     relies on a translation invariance of softmax for quick implementation. This implementation has been copied from
     the alibi implementation of MPT source code that led to slightly different results than the Bloom alibi:
     https://huggingface.co/mosaicml/mpt-7b/blob/main/attention.py#L292

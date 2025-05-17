@@ -207,7 +207,7 @@ class FunnelAttentionStructure(nn.Module):
         For the relative shift attention, it returns all possible vectors R used in the paper, appendix A.2.1, final
         formula.
 
-        Paper link: https://arxiv.org/abs/2006.03236
+        Paper link: https://huggingface.co/papers/2006.03236
         """
         d_model = self.config.d_model
         if self.config.attention_type == "factorized":
@@ -454,7 +454,7 @@ class FunnelRelMultiheadAttention(nn.Module):
         """Relative attention score for the positional encodings"""
         # q_head has shape batch_size x sea_len x n_head x d_head
         if self.config.attention_type == "factorized":
-            # Notations from the paper, appending A.2.2, final formula (https://arxiv.org/abs/2006.03236)
+            # Notations from the paper, appending A.2.2, final formula (https://huggingface.co/papers/2006.03236)
             # phi and pi have shape seq_len x d_model, psi and omega have shape context_len x d_model
             phi, pi, psi, omega = position_embeds
             # Shape n_head x d_head
@@ -473,7 +473,7 @@ class FunnelRelMultiheadAttention(nn.Module):
             )
         else:
             shift = 2 if q_head.shape[1] != context_len else 1
-            # Notations from the paper, appending A.2.1, final formula (https://arxiv.org/abs/2006.03236)
+            # Notations from the paper, appending A.2.1, final formula (https://huggingface.co/papers/2006.03236)
             # Grab the proper positional encoding, shape max_rel_len x d_model
             r = position_embeds[self.block_index][shift - 1]
             # Shape n_head x d_head

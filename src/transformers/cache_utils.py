@@ -733,7 +733,7 @@ class OffloadedCache(DynamicCache):
 
 class QuantizedCache(DynamicCache):
     """
-    A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
+    A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://huggingface.co/papers/2402.02750).
     It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by applying quantization.
 
     The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for the
@@ -955,7 +955,7 @@ class SinkCache(Cache):
     """
     Deprecated.
 
-    A cache that as described in the [Attention Sinks paper](https://arxiv.org/abs/2309.17453). It allows the model to
+    A cache that as described in the [Attention Sinks paper](https://huggingface.co/papers/2309.17453). It allows the model to
     generate beyond the length of its context window, without losing fluency in the conversation. As it discards past
     tokens, the model will lose the ability to generate tokens that depend on the context that was discarded.
 

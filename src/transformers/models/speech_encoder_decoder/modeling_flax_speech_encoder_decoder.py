@@ -46,11 +46,11 @@ SPEECH_ENCODER_DECODER_START_DOCSTRING = r"""
 
     The effectiveness of initializing sequence-to-sequence models with pretrained checkpoints for sequence generation
     tasks was shown in [Leveraging Pre-trained Checkpoints for Sequence Generation
-    Tasks](https://arxiv.org/abs/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn. Michael Matena, Yanqi
+    Tasks](https://huggingface.co/papers/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn. Michael Matena, Yanqi
     Zhou, Wei Li, Peter J. Liu.
 
     Additionally, in [Large-Scale Self- and Semi-Supervised Learning for Speech
-    Translation](https://arxiv.org/abs/2104.06678) it is shown how leveraging large pretrained speech models for speech
+    Translation](https://huggingface.co/papers/2104.06678) it is shown how leveraging large pretrained speech models for speech
     translation yields a significant performance improvement.
 
     After such an Speech-Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other

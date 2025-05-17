@@ -201,7 +201,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             The patch size to use for the image. According to Pix2Struct paper and code, the patch size is 16x16.
         max_patches (`int`, *optional*, defaults to 2048):
             The maximum number of patches to extract from the image as per the [Pix2Struct
-            paper](https://arxiv.org/pdf/2210.03347.pdf).
+            paper](https://huggingface.co/papers/2210.03347).
         is_vqa (`bool`, *optional*, defaults to `False`):
             Whether or not the image processor is for the VQA task. If `True` and `header_text` is passed in, text is
             rendered onto the input images.

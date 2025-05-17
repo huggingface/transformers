@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 BertGeneration モデルは、次を使用してシーケンス間のタスクに利用できる BERT モデルです。
-[Leveraging Pre-trained Checkpoints for Sequence Generation Tasks](https://arxiv.org/abs/1907.12461) で提案されている [`EncoderDecoderModel`]
+[Leveraging Pre-trained Checkpoints for Sequence Generation Tasks](https://huggingface.co/papers/1907.12461) で提案されている [`EncoderDecoderModel`]
 タスク、Sascha Rothe、Sishi Nagayan、Aliaksei Severyn 著。
 
 論文の要約は次のとおりです。

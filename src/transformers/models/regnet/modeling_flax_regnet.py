@@ -212,7 +212,7 @@ class FlaxRegNetSELayerCollection(nn.Module):
 
 class FlaxRegNetSELayer(nn.Module):
     """
-    Squeeze and Excitation layer (SE) proposed in [Squeeze-and-Excitation Networks](https://arxiv.org/abs/1709.01507).
+    Squeeze and Excitation layer (SE) proposed in [Squeeze-and-Excitation Networks](https://huggingface.co/papers/1709.01507).
     """
 
     in_channels: int

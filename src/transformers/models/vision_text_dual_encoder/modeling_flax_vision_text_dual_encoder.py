@@ -40,7 +40,7 @@ VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     via the [`~FlaxAutoModel.from_pretrained`] method. The projection layers are automatically added to the model and
     should be fine-tuned on a downstream task, like contrastive image-text modeling.
 
-    In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://arxiv.org/abs/2111.07991) it is shown how
+    In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://huggingface.co/papers/2111.07991) it is shown how
     leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvement
     on new zero-shot vision tasks such as image classification or retrieval.
 

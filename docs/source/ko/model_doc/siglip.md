@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## 개요[[overview]]
 
-SigLIP 모델은 Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, Lucas Beyer의 [Sigmoid Loss for Language Image Pre-Training](https://arxiv.org/abs/2303.15343) 논문에서 제안되었습니다. SigLIP은 [CLIP](clip)에서 사용된 손실 함수를 간단한 쌍별 시그모이드 손실(pairwise sigmoid loss)로 대체할 것을 제안합니다. 이는 ImageNet에서 제로샷 분류 정확도 측면에서 더 나은 성능을 보입니다.
+SigLIP 모델은 Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, Lucas Beyer의 [Sigmoid Loss for Language Image Pre-Training](https://huggingface.co/papers/2303.15343) 논문에서 제안되었습니다. SigLIP은 [CLIP](clip)에서 사용된 손실 함수를 간단한 쌍별 시그모이드 손실(pairwise sigmoid loss)로 대체할 것을 제안합니다. 이는 ImageNet에서 제로샷 분류 정확도 측면에서 더 나은 성능을 보입니다.
 
 논문의 초록은 다음과 같습니다:
 
@@ -40,7 +40,7 @@ SigLIP 모델은 Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, Lucas Beyer�
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/siglip_table.jpeg"
 alt="drawing" width="600"/>
 
-<small> CLIP과 비교한 SigLIP 평가 결과. <a href="https://arxiv.org/abs/2303.15343">원본 논문</a>에서 발췌.</small>
+<small> CLIP과 비교한 SigLIP 평가 결과. <a href="https://huggingface.co/papers/2303.15343">원본 논문</a>에서 발췌.</small>
 
 이 모델은 [nielsr](https://huggingface.co/nielsr)가 기여했습니다.
 원본 코드는 [여기](https://github.com/google-research/big_vision/tree/main)에서 찾을 수 있습니다.

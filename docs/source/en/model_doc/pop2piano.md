@@ -18,14 +18,14 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The Pop2Piano model was proposed in [Pop2Piano : Pop Audio-based Piano Cover Generation](https://arxiv.org/abs/2211.00895) by Jongho Choi and Kyogu Lee.
+The Pop2Piano model was proposed in [Pop2Piano : Pop Audio-based Piano Cover Generation](https://huggingface.co/papers/2211.00895) by Jongho Choi and Kyogu Lee.
 
 Piano covers of pop music are widely enjoyed, but generating them from music is not a trivial task. It requires great 
 expertise with playing piano as well as knowing different characteristics and melodies of a song. With Pop2Piano you 
 can directly generate a cover from a song's audio waveform. It is the first model to directly generate a piano cover 
 from pop audio without melody and chord extraction modules. 
 
-Pop2Piano is an encoder-decoder Transformer model based on [T5](https://arxiv.org/pdf/1910.10683.pdf). The input audio 
+Pop2Piano is an encoder-decoder Transformer model based on [T5](https://huggingface.co/papers/1910.10683). The input audio 
 is transformed to its waveform and passed to the encoder, which transforms it to a latent representation. The decoder 
 uses these latent representations to generate token ids in an autoregressive way. Each token id corresponds to one of four 
 different token types: time, velocity, note and 'special'. The token ids are then decoded to their equivalent MIDI file.

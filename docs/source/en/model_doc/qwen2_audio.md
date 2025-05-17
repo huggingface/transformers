@@ -29,7 +29,7 @@ The Qwen2-Audio is the new model series of large audio-language models from the 
 * voice chat: users can freely engage in voice interactions with Qwen2-Audio without text input
 * audio analysis: users could provide audio and text instructions for analysis during the interaction
 
-It was proposed in [Qwen2-Audio Technical Report](https://arxiv.org/abs/2407.10759) by Yunfei Chu, Jin Xu, Qian Yang, Haojie Wei, Xipin Wei, Zhifang Guo, Yichong Leng, Yuanjun Lv, Jinzheng He, Junyang Lin, Chang Zhou, Jingren Zhou.
+It was proposed in [Qwen2-Audio Technical Report](https://huggingface.co/papers/2407.10759) by Yunfei Chu, Jin Xu, Qian Yang, Haojie Wei, Xipin Wei, Zhifang Guo, Yichong Leng, Yuanjun Lv, Jinzheng He, Junyang Lin, Chang Zhou, Jingren Zhou.
 
 The abstract from the paper is the following:
 

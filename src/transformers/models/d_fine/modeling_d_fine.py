@@ -2069,7 +2069,7 @@ class DFineEncoder(nn.Module):
 class DFineHybridEncoder(nn.Module):
     """
     Decoder consisting of a projection layer, a set of `DFineEncoder`, a top-down Feature Pyramid Network
-    (FPN) and a bottom-up Path Aggregation Network (PAN). More details on the paper: https://arxiv.org/abs/2304.08069
+    (FPN) and a bottom-up Path Aggregation Network (PAN). More details on the paper: https://huggingface.co/papers/2304.08069
 
     Args:
         config: DFineConfig

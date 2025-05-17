@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-条件付き DETR モデルは、[Conditional DETR for Fast Training Convergence](https://arxiv.org/abs/2108.06152) で Depu Meng、Xiaokang Chen、Zejia Fan、Gang Zeng、Houqiang Li、Yuhui Yuan、Lei Sun,  Jingdong Wang によって提案されました。王京東。条件付き DETR は、高速 DETR トレーニングのための条件付きクロスアテンション メカニズムを提供します。条件付き DETR は DETR よりも 6.7 倍から 10 倍速く収束します。
+条件付き DETR モデルは、[Conditional DETR for Fast Training Convergence](https://huggingface.co/papers/2108.06152) で Depu Meng、Xiaokang Chen、Zejia Fan、Gang Zeng、Houqiang Li、Yuhui Yuan、Lei Sun,  Jingdong Wang によって提案されました。王京東。条件付き DETR は、高速 DETR トレーニングのための条件付きクロスアテンション メカニズムを提供します。条件付き DETR は DETR よりも 6.7 倍から 10 倍速く収束します。
 
 論文の要約は次のとおりです。
 
@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/conditional_detr_curve.jpg"
 alt="描画" width="600"/>
 
-<small> 条件付き DETR は、元の DETR に比べてはるかに速い収束を示します。 <a href="https://arxiv.org/abs/2108.06152">元の論文</a>から引用。</small>
+<small> 条件付き DETR は、元の DETR に比べてはるかに速い収束を示します。 <a href="https://huggingface.co/papers/2108.06152">元の論文</a>から引用。</small>
 
 このモデルは [DepuMeng](https://huggingface.co/DepuMeng) によって寄稿されました。元のコードは [ここ](https://github.com/Atten4Vis/ConditionalDETR) にあります。
 

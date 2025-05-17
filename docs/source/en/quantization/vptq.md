@@ -69,4 +69,4 @@ VPTQ achieves better accuracy and higher throughput with lower quantization over
 
 See an example demo of VPTQ on the VPTQ Online Demo [Space](https://huggingface.co/spaces/microsoft/VPTQ) or try running the VPTQ inference [notebook](https://colab.research.google.com/github/microsoft/VPTQ/blob/main/notebooks/vptq_example.ipynb).
 
-For more information, read the VPTQ [paper](https://arxiv.org/pdf/2409.17066).
+For more information, read the VPTQ [paper](https://huggingface.co/papers/2409.17066).

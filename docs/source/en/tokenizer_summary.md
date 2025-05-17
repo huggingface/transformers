@@ -140,7 +140,7 @@ on.
 ### Byte-Pair Encoding (BPE)
 
 Byte-Pair Encoding (BPE) was introduced in [Neural Machine Translation of Rare Words with Subword Units (Sennrich et
-al., 2015)](https://arxiv.org/abs/1508.07909). BPE relies on a pre-tokenizer that splits the training data into
+al., 2015)](https://huggingface.co/papers/1508.07909). BPE relies on a pre-tokenizer that splits the training data into
 words. Pretokenization can be as simple as space tokenization, e.g. [GPT-2](model_doc/gpt2), [RoBERTa](model_doc/roberta). More advanced pre-tokenization include rule-based tokenization, e.g. [XLM](model_doc/xlm),
 [FlauBERT](model_doc/flaubert) which uses Moses for most languages, or [GPT](model_doc/openai-gpt) which uses
 spaCy and ftfy, to count the frequency of each word in the training corpus.
@@ -230,7 +230,7 @@ to ensure it's _worth it_.
 ### Unigram
 
 Unigram is a subword tokenization algorithm introduced in [Subword Regularization: Improving Neural Network Translation
-Models with Multiple Subword Candidates (Kudo, 2018)](https://arxiv.org/pdf/1804.10959.pdf). In contrast to BPE or
+Models with Multiple Subword Candidates (Kudo, 2018)](https://huggingface.co/papers/1804.10959). In contrast to BPE or
 WordPiece, Unigram initializes its base vocabulary to a large number of symbols and progressively trims down each
 symbol to obtain a smaller vocabulary. The base vocabulary could for instance correspond to all pre-tokenized words and
 the most common substrings. Unigram is not used directly for any of the models in the transformers, but it's used in
@@ -270,7 +270,7 @@ All tokenization algorithms described so far have the same problem: It is assume
 separate words. However, not all languages use spaces to separate words. One possible solution is to use language
 specific pre-tokenizers, *e.g.* [XLM](model_doc/xlm) uses a specific Chinese, Japanese, and Thai pre-tokenizer.
 To solve this problem more generally, [SentencePiece: A simple and language independent subword tokenizer and
-detokenizer for Neural Text Processing (Kudo et al., 2018)](https://arxiv.org/pdf/1808.06226.pdf) treats the input
+detokenizer for Neural Text Processing (Kudo et al., 2018)](https://huggingface.co/papers/1808.06226) treats the input
 as a raw input stream, thus including the space in the set of characters to use. It then uses the BPE or unigram
 algorithm to construct the appropriate vocabulary.
 

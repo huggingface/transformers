@@ -218,7 +218,7 @@ class TFRetrievAugLMOutput(ModelOutput):
 class TFRagPreTrainedModel(TFPreTrainedModel):
     r"""
     RAG models were released with the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP
-    Tasks](https://arxiv.org/abs/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandra Piktus et al.
+    Tasks](https://huggingface.co/papers/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandra Piktus et al.
 
     RAG is a retriever augmented model and encapsulate three components: a question encoder, a dataset retriever and a
     generator, the encoder and generator are trainable while the retriever is just an indexed dataset.
@@ -881,7 +881,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             `torch.nn.functional.log_softmax`.
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss according to Rag-Token model formulation See
-            https://arxiv.org/pdf/2005.11401.pdf Section 2.1 for details about Rag-Token formulation. Indices should be
+            https://huggingface.co/papers/2005.11401 Section 2.1 for details about Rag-Token formulation. Indices should be
             in `[0, ..., config.vocab_size - 1]`.
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `tf.Tensor.sum`
@@ -1395,7 +1395,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
             the loss.
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss according to Rag-Sequence model formulation See
-            https://arxiv.org/pdf/2005.11401.pdf Section 2.1 for details about Rag-Sequence formulation. Indices should
+            https://huggingface.co/papers/2005.11401 Section 2.1 for details about Rag-Sequence formulation. Indices should
             be in `[0, ..., config.vocab_size - 1]`.
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `tf.Tensor.sum`

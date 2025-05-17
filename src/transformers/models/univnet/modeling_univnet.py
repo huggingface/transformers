@@ -277,7 +277,7 @@ class UnivNetLvcResidualBlock(nn.Module):
         """
         Performs location-variable convolution operation on the input sequence (hidden_states) using the local
         convolution kernel. This was introduced in [LVCNet: Efficient Condition-Dependent Modeling Network for Waveform
-        Generation](https://arxiv.org/abs/2102.10815) by Zhen Zheng, Jianzong Wang, Ning Cheng, and Jing Xiao.
+        Generation](https://huggingface.co/papers/2102.10815) by Zhen Zheng, Jianzong Wang, Ning Cheng, and Jing Xiao.
 
         Time: 414 μs ± 309 ns per loop (mean ± std. dev. of 7 runs, 1000 loops each), test on NVIDIA V100.
 

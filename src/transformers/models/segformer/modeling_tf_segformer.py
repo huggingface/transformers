@@ -115,7 +115,7 @@ class TFSegformerOverlapPatchEmbeddings(keras.layers.Layer):
 
 class TFSegformerEfficientSelfAttention(keras.layers.Layer):
     """SegFormer's efficient self-attention mechanism. Employs the sequence reduction process introduced in the [PvT
-    paper](https://arxiv.org/abs/2102.12122)."""
+    paper](https://huggingface.co/papers/2102.12122)."""
 
     def __init__(
         self,

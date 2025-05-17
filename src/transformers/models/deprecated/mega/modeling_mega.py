@@ -319,7 +319,7 @@ class MegaMultiDimensionDampedEma(nn.Module):
     """
     Mega's Exponential Moving Average layer, largely left unmodified from the original repo with the exception of
     variable names and moving away from the stateful representation of incremental decoding state. See
-    "https://arxiv.org/abs/2209.10655" for more details.
+    "https://huggingface.co/papers/2209.10655" for more details.
     """
 
     def __init__(self, config: MegaConfig):
@@ -784,7 +784,7 @@ class MegaGatedCrossAttention(nn.Module):
 
 class MegaMovingAverageGatedAttention(nn.Module):
     """
-    Pure PyTorch implementation of Mega block; see https://arxiv.org/abs/2209.10655 and original fairseq implementation
+    Pure PyTorch implementation of Mega block; see https://huggingface.co/papers/2209.10655 and original fairseq implementation
     at https://github.com/facebookresearch/mega (copyright Meta Research, licensed under MIT License)
 
     Differences from original implementation include hidden state refactor and fixed inconsistency with additive /
@@ -1457,7 +1457,7 @@ class MegaModel(MegaPreTrainedModel):
     `is_decoder=True` and `bidirectional=False` argument as well as `add_cross_attention` set to `True`; an
     `encoder_hidden_states` is then expected as an input to the forward pass.
 
-    .. _*Mega: Moving Average Equipped Gated Attention*: https://arxiv.org/abs/2209.10655
+    .. _*Mega: Moving Average Equipped Gated Attention*: https://huggingface.co/papers/2209.10655
 
     """
 
