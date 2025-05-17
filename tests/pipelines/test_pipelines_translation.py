@@ -55,6 +55,7 @@ class TranslationPipelineTests(unittest.TestCase):
                 torch_dtype=torch_dtype,
                 src_lang=src_lang,
                 tgt_lang=tgt_lang,
+                max_new_tokens=20,
             )
         else:
             translator = TranslationPipeline(
@@ -64,6 +65,7 @@ class TranslationPipelineTests(unittest.TestCase):
                 image_processor=image_processor,
                 processor=processor,
                 torch_dtype=torch_dtype,
+                max_new_tokens=20,
             )
         return translator, ["Some string", "Some other text"]
 

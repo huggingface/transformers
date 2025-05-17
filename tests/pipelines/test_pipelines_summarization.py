@@ -48,6 +48,7 @@ class SummarizationPipelineTests(unittest.TestCase):
             image_processor=image_processor,
             processor=processor,
             torch_dtype=torch_dtype,
+            max_new_tokens=20,
         )
         return summarizer, ["(CNN)The Palestinian Authority officially became", "Some other text"]
 
