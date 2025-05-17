@@ -238,6 +238,7 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_foo(self):
+        pass
         # assert 1 == 4
 
     def test_model(self):
