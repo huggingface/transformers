@@ -11,7 +11,7 @@ on:
 
 
 env:
-  REPORT_REPO_SUBFOLDER: 'bonbon'
+  REPORT_REPO_SUBFOLDER: bonbon
 
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
       # workflow_dispatch: check inputs.REPORT_REPO_SUBFOLDER; push: check env.REPORT_REPO_SUBFOLDER; scheduled: empty; if empty --> check run_id and commit
-      report_repo_subfolder: ${{ inputs.REPORT_REPO_SUBFOLDER || env.REPORT_REPO_SUBFOLDER }}
+      report_repo_subfolder: ${{ env.REPORT_REPO_SUBFOLDER }}
     secrets: inherit
 
 #  torch-pipeline:
