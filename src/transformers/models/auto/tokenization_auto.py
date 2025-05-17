@@ -944,7 +944,7 @@ class AutoTokenizer:
             if tokenizer_class is None:
                 raise ValueError(f"Tokenizer class {tokenizer_class_name} is not currently imported.")
 
-            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return PreTrainedTokenizerFast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
@@ -1010,7 +1010,8 @@ class AutoTokenizer:
                 raise ValueError(
                     f"Tokenizer class {tokenizer_class_candidate} does not exist or is not currently imported."
                 )
-            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            kwargs["config_class"] = config_tokenizer_class
+            return PreTrainedTokenizerFast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Otherwise we have to be creative.
         # if model is an encoder decoder, the encoder tokenizer class is used by default

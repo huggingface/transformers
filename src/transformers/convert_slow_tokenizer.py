@@ -1326,6 +1326,67 @@ class GemmaConverter(SpmConverter):
         )
 
 
+class GeneralSPMConverter(SpmConverter):
+    handle_byte_fallback = True
+
+    def vocab(self, proto):
+        vocab = [
+            (self.original_tokenizer.convert_ids_to_tokens(0), 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(1), 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(2), 0.0),
+        ]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        return vocab
+
+    def unk_id(self, proto):
+        unk_id = 0
+        return unk_id
+
+    def decoder(self, replacement, add_prefix_space):
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+        if add_prefix_space:
+            sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
+
+    def normalizer(self, proto):
+        if getattr(self.original_tokenizer, "legacy", True):
+            sequence = []
+            if getattr(self.original_tokenizer, "add_prefix_space", True):
+                sequence += [normalizers.Prepend(prepend="▁")]
+            sequence += [normalizers.Replace(pattern=" ", content="▁")]
+            return normalizers.Sequence(sequence)
+        return None  # non-legacy, no normalizer
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        if not getattr(self.original_tokenizer, "legacy", True):  # non-legacy, we need a replace
+            prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+            return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
+        return None
+
+    def post_processor(self):
+        # return None
+        single = f"{(self.original_tokenizer.bos_token + ':0 ') if self.original_tokenizer.add_bos_token else ''}$A:0{(' ' + self.original_tokenizer.eos_token + ':0') if self.original_tokenizer.add_eos_token else ''}"
+        pair = f"{single}{(' ' + self.original_tokenizer.bos_token + ':1') if self.original_tokenizer.add_bos_token else ''} $B:1{(' ' + self.original_tokenizer.eos_token + ':1') if self.original_tokenizer.add_eos_token else ''}"
+        return processors.TemplateProcessing(
+            single=single,
+            pair=pair,
+            special_tokens=[
+                (
+                    self.original_tokenizer.bos_token,
+                    self.original_tokenizer.convert_tokens_to_ids(self.original_tokenizer.bos_token),
+                ),
+                (
+                    self.original_tokenizer.eos_token,
+                    self.original_tokenizer.convert_tokens_to_ids(self.original_tokenizer.eos_token),
+                ),
+            ],
+        )
+
+
 class LlamaConverter(SpmConverter):
     handle_byte_fallback = True
 
@@ -1368,7 +1429,6 @@ class LlamaConverter(SpmConverter):
         return None
 
     def post_processor(self):
-        # the processor is defined in the LlamaTokenizerFast class.
         return None
 
 
@@ -1692,6 +1752,8 @@ SLOW_TO_FAST_CONVERTERS = {
     "RobertaTokenizer": RobertaConverter,
     "RoFormerTokenizer": RoFormerConverter,
     "SeamlessM4TTokenizer": SeamlessM4TConverter,
+    "SPMTokenizer": GeneralSPMConverter,
+    "PreTrainedTokenizerFast": GeneralSPMConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
     "UdopTokenizer": UdopConverter,
@@ -1724,7 +1786,13 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
     """
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__
-    if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not from_tiktoken:
+    if (
+        hasattr(transformer_tokenizer, "config_class")
+        and transformer_tokenizer.config_class in SLOW_TO_FAST_CONVERTERS
+    ):
+        converter_class = SLOW_TO_FAST_CONVERTERS[transformer_tokenizer.config_class]
+        return converter_class(transformer_tokenizer).converted()
+    elif tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not from_tiktoken:
         converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
         return converter_class(transformer_tokenizer).converted()
 
