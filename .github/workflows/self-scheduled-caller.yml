@@ -17,13 +17,17 @@ jobs:
       - name: DEF
         shell: bash
         run: |
-          echo "${{ github.run_id }}"
-          echo "${{ github.run_number }}"
+#          echo "${{ github.run_id }}"
+#          echo "${{ github.run_number }}"
+          echo "${{ github.workflow }}"
+          echo "${{ github.workflow_ref }}"
+          echo "${{ github.workflow_sha }}"
           echo "${{ github.sha }}"
-          echo "${{ toJSON(github.event) }}"
           curl https://api.github.com/repos/huggingface/transformers/actions/runs/${{ github.run_id }} >> workflow_run.json
-          echo "========================================"
-          python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["id"]); workflow_run = json.dumps(workflow_run, indent=4); print(workflow_run)'
+          python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["workflow_id"])'
+          python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["path"])'
+          python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["id"])'
+          python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["created_at"])'
 
 #  model-ci:
 #    name: Model CI
