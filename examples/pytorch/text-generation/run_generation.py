@@ -34,7 +34,6 @@ from transformers import (
     GPT2Tokenizer,
     GPTJForCausalLM,
     LlamaForCausalLM,
-    LlamaTokenizer,
     OpenAIGPTLMHeadModel,
     OpenAIGPTTokenizer,
     OPTForCausalLM,
@@ -63,7 +62,7 @@ MODEL_CLASSES = {
     "xlm": (XLMWithLMHeadModel, XLMTokenizer),
     "gptj": (GPTJForCausalLM, AutoTokenizer),
     "bloom": (BloomForCausalLM, BloomTokenizerFast),
-    "llama": (LlamaForCausalLM, LlamaTokenizer),
+    "llama": (LlamaForCausalLM, AutoTokenizer),
     "opt": (OPTForCausalLM, GPT2Tokenizer),
 }
 
