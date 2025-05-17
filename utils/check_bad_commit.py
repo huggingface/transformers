@@ -38,12 +38,16 @@ def create_script(target_test):
 import os
 import subprocess
 
+os.system("echo 'asyncio_default_fixture_loop_scope = "function"' >> pyproject.toml")
+
 result = subprocess.run(
     ["python3", "-m", "pytest", "-v", f"{target_test}"],
     capture_output = True,
     text=True,
 )
 print(result.stdout)
+
+os.system("git checkout -- .")
 
 if len(result.stderr) > 0:
     if "ERROR: file or directory not found: " in result.stderr:
