@@ -9,20 +9,12 @@ on:
     branches:
       - ci_with_torch_version_base
 
-jobs:
-  setup:
-    name: ABC
-    runs-on: ubuntu-22.04
-    steps:
-      - name: DEF
-        shell: bash
-        id: set-output
-        run: |
-          echo "${{ github.sha }}"
-          curl https://api.github.com/repos/huggingface/transformers/actions/runs/${{ github.run_id }} >> workflow_run.json
-          echo "workflow_id=$(python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["workflow_id"])')"
-          echo "workflow_created_at=$(python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["created_at"])')"
 
+env:
+  REPORT_REPO_SUBFOLDER: ''
+
+
+jobs:
   model-ci:
     name: Model CI
     uses: ./.github/workflows/self-scheduled.yml
@@ -32,7 +24,8 @@ jobs:
       runner: daily-ci
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
-      report_repo_subfolder: dummy
+      # workflow_dispatch: check inputs.REPORT_REPO_SUBFOLDER; push: check env.REPORT_REPO_SUBFOLDER; scheduled: empty; if empty --> check run_id and commit
+      report_repo_subfolder: ${{ inputs.REPORT_REPO_SUBFOLDER || env.REPORT_REPO_SUBFOLDER }}
     secrets: inherit
 
 #  torch-pipeline:
