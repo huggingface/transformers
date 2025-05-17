@@ -201,6 +201,7 @@ _deps = [
     "pytest-rich",
     "libcst",
     "rich",
+    "cython",
 ]
 
 
@@ -447,6 +448,7 @@ install_requires = [
     deps["tokenizers"],
     deps["safetensors"],
     deps["tqdm"],  # progress bars in model download and training scripts
+    deps["cython"],
 ]
 
 setup(

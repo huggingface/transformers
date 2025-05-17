@@ -1,5 +1,6 @@
 # coding=utf-8
 # Copyright 2024 state-spaces/mamba org and HuggingFace Inc. team.
+# Copyright 2025 FUJITSU LIMITED
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,11 +15,19 @@
 # limitations under the License.
 """PyTorch MAMBA model."""
 
+import glob
+import importlib
 import math
+import os
+import platform
+import subprocess
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
+import torch._appdirs
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -37,6 +46,8 @@ from .configuration_mamba import MambaConfig
 
 
 logger = logging.get_logger(__name__)
+IS_WINDOWS = sys.platform == "win32"
+LIB_EXT = ".pyd" if IS_WINDOWS else ".so"
 
 if is_mambapy_available():
     from mambapy.pscan import pscan
@@ -57,6 +68,130 @@ else:
 is_fast_path_available = all(
     (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
 )
+scan_sve_kernel = None
+
+
+def get_default_build_root() -> str:
+    """
+    Return the path to the root folder under which extensions will built.
+
+    For each extension module built, there will be one folder underneath the
+    folder returned by this function. For example, if ``p`` is the path
+    returned by this function and ``ext`` the name of an extension, the build
+    folder for the extension will be ``p/ext``.
+
+    This directory is **user-specific** so that multiple users on the same
+    machine won't meet permission issues.
+    """
+    return os.path.realpath(torch._appdirs.user_cache_dir(appname="torch_extensions"))
+
+
+def _get_build_directory(name: str, verbose: bool) -> str:
+    root_extensions_directory = os.environ.get("TORCH_EXTENSIONS_DIR")
+    if root_extensions_directory is None:
+        root_extensions_directory = get_default_build_root()
+        python_version = f"py{sys.version_info.major}{sys.version_info.minor}{getattr(sys, 'abiflags', '')}"
+        build_folder = f"{python_version}_cpu"
+        root_extensions_directory = os.path.join(root_extensions_directory, build_folder)
+
+    if verbose:
+        logger.debug(f"Using {root_extensions_directory} as PyTorch extensions root...")
+
+    build_directory = os.path.join(root_extensions_directory, name)
+    if not os.path.exists(build_directory):
+        if verbose:
+            logger.debug(f"Creating extension directory {build_directory}...")
+        # This is like mkdir -p, i.e. will also create parent directories.
+        os.makedirs(build_directory, exist_ok=True)
+
+    return build_directory
+
+
+def _import_module_from_library(module_name, path, is_python_module):
+    filepath = glob.glob(os.path.join(path, f"{module_name}*{LIB_EXT}"))[0]  # get absolute location of .so file
+    module_name = os.path.splitext(os.path.basename(filepath))[0]  # get only name of .so file
+    module_name = module_name.split(".")[
+        0
+    ]  # remove meta data from .so file name, Ex: seq_sve from seq_sve.cpython-310-aarch64-linux-gnu.so
+    if is_python_module:
+        spec = importlib.util.spec_from_file_location(module_name, filepath)
+        assert spec is not None
+        module = importlib.util.module_from_spec(spec)
+        assert isinstance(spec.loader, importlib.abc.Loader)
+        spec.loader.exec_module(module)
+        return module
+    else:
+        torch.ops.load_library(filepath)
+        return filepath
+
+
+def load_sve_kernel(name, src_folder, build_directory=None, verbose=False, is_python_module=True):
+    """
+    Load a cython C++ extension
+
+    To load an extension, , cython is used to compile the given sources
+    into a dynamic library. This library is subsequently loaded into the
+    current Python process as a module and returned from this function, ready for use.
+
+    To compile the sources, the default system compiler (``c++``) is used,
+    which can be overridden by setting the ``CXX`` environment variable.
+
+    By default, the directory to which the build file is emitted and the
+    resulting library compiled to is ``<tmp>/torch_extensions/<name>``, where
+    ``<tmp>`` is the temporary folder on the current platform and ``<name>``
+    the name of the extension. This location can be overridden in two ways.
+    First, if the ``TORCH_EXTENSIONS_DIR`` environment variable is set, it
+    replaces ``<tmp>/torch_extensions`` and all extensions will be compiled
+    into subfolders of this directory. Second, if the ``build_directory``
+    argument to this function is supplied, it overrides the entire path, i.e.
+    the library will be compiled into that folder directly.
+
+    Args:
+        name: The name of the extension to build.
+        build_directory: optional path to use as build workspace.
+        verbose: If ``True``, turns on verbose logging of load steps.
+        is_python_module: If ``True`` (default), imports the produced shared
+            library as a Python module.
+    Returns:
+        If ``is_python_module`` is ``True``:
+            Returns the loaded c++ extension as a Python module.
+    Example:
+        >>> module = load_sve_kernel(
+        ...     name='seq_sve',
+        ...     sources=['seq_sve.pyx', 'seq_sve.pxd', 'seq_sve.h', 'helper.cpp', 'setup.py'],
+        ...     verbose=True)
+    """
+
+    global scan_sve_kernel
+
+    if not build_directory:
+        build_directory = _get_build_directory(name, verbose)
+
+    if not glob.glob((os.path.join(build_directory + "/sve_kernels/", f"{name}*{LIB_EXT}"))):
+        command = ["python", "setup.py", "build_ext", "--inplace"]
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            subprocess.run(["cp", "-r", src_folder, build_directory], check=True)  # copy contents to build_directory
+            subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=build_directory + "/sve_kernels/",
+                check=True,
+            )  # start building .so file
+        except subprocess.CalledProcessError as e:
+            # Python 2 and 3 compatible way of getting the error object.
+            _, error, _ = sys.exc_info()
+            # error.output contains the stdout and stderr of the build attempt.
+            message = f"Error building extension '{name}'"
+            logger.warning_once(message)
+            raise RuntimeError(message) from e
+
+    if verbose:
+        logger.debug(f"Loading extension module {name}...")
+
+    scan_sve_kernel = _import_module_from_library(name, build_directory + "/sve_kernels/", is_python_module)
 
 
 class MambaMixer(nn.Module):
@@ -107,6 +242,20 @@ class MambaMixer(nn.Module):
         self.D = nn.Parameter(torch.ones(self.intermediate_size))
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.use_bias = config.use_bias
+
+        kernel_loaded = scan_sve_kernel is not None
+        self.is_scan_sve_available = False
+        if platform.machine().lower() == "aarch64":
+            if not kernel_loaded:
+                try:
+                    src_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "mamba" / "sve_kernels/"
+                    load_sve_kernel("seq_sve", src_folder, verbose=True)
+                    if (
+                        scan_sve_kernel.check_vector_length() == 8
+                    ):  # call scan_sve only if dtype is f32 and sve vector length=256
+                        self.is_scan_sve_available = True
+                except Exception as e:
+                    logger.warning_once(f"Could not load the custom kernel for sequential scan SVE kernel: {e}")
 
         if not is_fast_path_available:
             if self.use_mambapy:
@@ -279,20 +428,27 @@ class MambaMixer(nn.Module):
         )
         discrete_time_step = self.dt_proj(time_step)                                    # [batch, seq_len, intermediate_size]
         discrete_time_step = nn.functional.softplus(discrete_time_step).transpose(1, 2) # [batch, intermediate_size, seq_len]
-
-        # 3.b. Discretization: B and C to [batch, seq_len, intermediate_size, ssm_state_size] (SRAM)
         A = -torch.exp(self.A_log.float())                                              # [intermediate_size, ssm_state_size]
-        discrete_A = torch.exp(A[None, :, None, :] * discrete_time_step[:, :, :, None]) # [batch, intermediate_size, seq_len, ssm_state_size]
-        discrete_B = discrete_time_step[:, :, :, None] * B[:, None, :, :].float()       # [batch, intermediate_size, seq_len, ssm_state_size]
-        deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
+        if self.is_scan_sve_available and (not self.training) and (batch_size>= 16 or seq_len>1):
+            discrete_time_step = discrete_time_step.contiguous()
+        else:
+            # 3.b. Discretization: B and C to [batch, seq_len, intermediate_size, ssm_state_size] (SRAM)
+            discrete_A = torch.exp(A[None, :, None, :] * discrete_time_step[:, :, :, None]) # [batch, intermediate_size, seq_len, ssm_state_size]
+            discrete_B = discrete_time_step[:, :, :, None] * B[:, None, :, :].float()       # [batch, intermediate_size, seq_len, ssm_state_size]
+            deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
         if self.use_mambapy and self.training and cache_params is None:
-            hs = pscan(discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2)) # [batch, seq_len, intermediate_size, ssm_state_size]
 
+            hs = pscan(discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2)) # [batch, seq_len, intermediate_size, ssm_state_size]
             scan_output = (hs @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2) # [batch, intermediate_size, seq_len]
-            scan_output = scan_output + hidden_states * self.D[None, :, None]
-            scan_output = scan_output * self.act(gate)
+
+        elif self.is_scan_sve_available and (not self.training) and (batch_size>= 16 or seq_len>1):
+
+            B_size, D_size, L_size, N_size = batch_size, self.intermediate_size, seq_len, self.ssm_state_size
+            scan_output = torch.zeros(B_size,D_size,L_size)
+            scan_sve_kernel.scan_sve(A.data_ptr(), B.data_ptr(), C.data_ptr(), hidden_states.data_ptr(), discrete_time_step.data_ptr(),
+                                   ssm_state.data_ptr(), scan_output.data_ptr(), B_size, D_size, L_size, N_size)
         else:
             scan_outputs = []
             for i in range(seq_len):
@@ -300,11 +456,12 @@ class MambaMixer(nn.Module):
                 scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))  # [batch, intermediate_size, 1]
                 scan_outputs.append(scan_output[:, :, 0])
             scan_output = torch.stack(scan_outputs, dim=-1)                                # [batch, intermediate_size, seq_len]
-            scan_output = scan_output + (hidden_states * self.D[None, :, None])
-            scan_output = (scan_output * self.act(gate))
 
-            if cache_params is not None:
-                cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
+        scan_output = scan_output + (hidden_states * self.D[None, :, None])
+        scan_output = (scan_output * self.act(gate))
+
+        if not self.use_mambapy and cache_params is not None:
+            cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
 
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]

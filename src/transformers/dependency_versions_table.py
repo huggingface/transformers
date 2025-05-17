@@ -103,4 +103,5 @@ deps = {
     "pytest-rich": "pytest-rich",
     "libcst": "libcst",
     "rich": "rich",
+    "cython": "cython",
 }
