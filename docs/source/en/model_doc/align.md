@@ -13,70 +13,182 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    <img alt="Transformers" src="https://img.shields.io/badge/Transformers-6B5B95?style=flat&logo=transformers&logoColor=white">
+  </div>
+</div>
 
 # ALIGN
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[ALIGN](https://huggingface.co/papers/2102.05918) trains on over 1.8 billion raw HTML alt‑text and image pairs, mining captions directly from web pages rather than curated datasets. It uses a simple dual‑encoder: EfficientNet processes images and BERT processes text, and a contrastive loss pulls matching image–text embeddings together while pushing mismatches apart. Once trained, encode any image and candidate captions into a shared vector space for zero‑shot retrieval or classification—no extra labels needed. This scale‑first approach slashes curation costs and powers state‑of‑the‑art image–text retrieval and zero‑shot ImageNet classification—but replicating it at full scale demands substantial GPU resources. The Hub's kakaobrain/align-base checkpoint provides the best available open‑source weights.
 
-## Overview
+You can find all the original ALIGN checkpoints under the [kakaobrain/align-base](https://huggingface.co/kakaobrain/align-base) collection.
 
-The ALIGN model was proposed in [Scaling Up Visual and Vision-Language Representation Learning With Noisy Text Supervision](https://arxiv.org/abs/2102.05918) by Chao Jia, Yinfei Yang, Ye Xia, Yi-Ting Chen, Zarana Parekh, Hieu Pham, Quoc V. Le, Yunhsuan Sung, Zhen Li, Tom Duerig. ALIGN is a multi-modal vision and language model. It can be used for image-text similarity and for zero-shot image classification. ALIGN features a dual-encoder architecture with [EfficientNet](efficientnet) as its vision encoder and [BERT](bert) as its text encoder, and learns to align visual and text representations with contrastive learning. Unlike previous work, ALIGN leverages a massive noisy dataset and shows that the scale of the corpus can be used to achieve SOTA representations with a simple recipe.
+> [!TIP]
+> Click on the ALIGN models in the right sidebar for more examples of how to apply ALIGN to different vision and text related tasks.
 
-The abstract from the paper is the following:
+The example below demonstrates how to retrieve zero-shot image labels with [Pipeline] or the [AutoModel] class.
 
-*Pre-trained representations are becoming crucial for many NLP and perception tasks. While representation learning in NLP has transitioned to training on raw text without human annotations, visual and vision-language representations still rely heavily on curated training datasets that are expensive or require expert knowledge. For vision applications, representations are mostly learned using datasets with explicit class labels such as ImageNet or OpenImages. For vision-language, popular datasets like Conceptual Captions, MSCOCO, or CLIP all involve a non-trivial data collection (and cleaning) process. This costly curation process limits the size of datasets and hence hinders the scaling of trained models. In this paper, we leverage a noisy dataset of over one billion image alt-text pairs, obtained without expensive filtering or post-processing steps in the Conceptual Captions dataset. A simple dual-encoder architecture learns to align visual and language representations of the image and text pairs using a contrastive loss. We show that the scale of our corpus can make up for its noise and leads to state-of-the-art representations even with such a simple learning scheme. Our visual representation achieves strong performance when transferred to classification tasks such as ImageNet and VTAB. The aligned visual and language representations enables zero-shot image classification and also set new state-of-the-art results on Flickr30K and MSCOCO image-text retrieval benchmarks, even when compared with more sophisticated cross-attention models. The representations also enable cross-modality search with complex text and text + image queries.*
+<hfoptions id="usage">  
+<hfoption id="Pipeline">
 
-This model was contributed by [Alara Dirik](https://huggingface.co/adirik).
-The original code is not released, this implementation is based on the Kakao Brain implementation based on the original paper.
+```py
+from transformers import pipeline
+from PIL import Image
+import requests
 
-## Usage example
+# Initialize the zero-shot image-classification pipeline with ALIGN
+pipe = pipeline(
+    task="zero-shot-image-classification",
+    model="kakaobrain/align-base"
+)
 
-ALIGN uses EfficientNet to get visual features and BERT to get the text features. Both the text and visual features are then projected to a latent space with identical dimension. The dot product between the projected image and text features is then used as a similarity score.
+# Fetch and open the image from a URL
+# you can provide any image you want, this is just for example usecase
+url = "https://huggingface.co/roschmid/dog-races/resolve/main/images/Golden_Retriever.jpg"
+response = requests.get(url, stream=True)
+image = Image.open(response.raw)
 
-[`AlignProcessor`] wraps [`EfficientNetImageProcessor`] and [`BertTokenizer`] into a single instance to both encode the text and preprocess the images. The following example shows how to get the image-text similarity scores using [`AlignProcessor`] and [`AlignModel`].
+# Define candidate captions or labels
+candidate_labels = [
+    "a photo of a dog",
+    "a photo of a cat",
+    "a photo of a person"
+]
 
-```python
+# Run zero-shot classification
+outputs = pipe(image, candidate_labels=candidate_labels)
+print(outputs)
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+from transformers import AlignProcessor, AlignModel
+from PIL import Image
 import requests
 import torch
-from PIL import Image
-from transformers import AlignProcessor, AlignModel
 
+# device
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+# 1. Load processor and model
+processor = AlignProcessor.from_pretrained("kakaobrain/align-base")
+model     = AlignModel.from_pretrained("kakaobrain/align-base").to(device)
+model.eval()
+
+# 2. Fetch and open image
+url      = "https://huggingface.co/roschmid/dog-races/resolve/main/images/Golden_Retriever.jpg"
+response = requests.get(url, stream=True)
+image    = Image.open(response.raw).convert("RGB")
+
+# 3. Prepare inputs
+#   a) image embeddings
+image_inputs = processor(images=image, return_tensors="pt").to(device)
+with torch.no_grad():
+    image_embeds = model.get_image_features(**image_inputs)
+
+#   b) text embeddings
+candidate_labels = ["a photo of a dog", "a photo of a cat", "a photo of a person"]
+text_inputs      = processor(text=candidate_labels, padding=True, return_tensors="pt").to(device)
+with torch.no_grad():
+    text_embeds = model.get_text_features(**text_inputs)
+
+# 4. Normalize embeddings
+image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
+text_embeds  = text_embeds  / text_embeds.norm(p=2, dim=-1, keepdim=True)
+
+# 5. Compute logits and probabilities
+logits = (image_embeds @ text_embeds.T) * 100.0
+probs  = logits.softmax(dim=-1).cpu().squeeze()
+
+# 6. Display results
+for label, score in zip(candidate_labels, probs):
+    print(f"{label:20s} → {score.item():.4f}")
+```
+
+</hfoption>
+<hfoption id="transformers-cli">
+
+```py
+# this command downloads the kakaobrain/align-base for offline use
+transformers-cli download kakaobrain/align-base
+```
+
+</hfoption>
+</hfoptions>
+
+### Quantization
+
+Quantizing `align-base` to 8-bit or 4-bit does not reduce memory usage—in fact, it can increase it. This is because the model is relatively small, and components like the vision encoder aren’t optimized for quantized execution. Quantization benefits are typically seen in larger models (e.g., LLMs) where memory and compute reductions are more significant. Use full precision unless you're experimenting or working under extreme constraints.
+
+---
+
+### Attention Mask Visualization
+
+ALIGN is a **dual‑encoder** (separate image+text) model with **no** autoregressive decoding head, so it does **not** support AttentionMaskVisualizer.  
+That utility only works on models with a `.generate()` step that emits token‑level attentions (e.g. GPT‑style or encoder‑decoder models).
+
+## Notes
+
+- ALIGN uses a dual-encoder architecture with EfficientNet for images and BERT for text processing
+- The model is designed for zero-shot image-text retrieval tasks
+- Pre-trained on 1.8B image-text pairs from the web
+
+```py
+# Example of using ALIGN for image-text similarity
+from transformers import AlignProcessor, AlignModel
+import torch
+from PIL import Image
+import requests
+from io import BytesIO
+
+# Load processor and model
 processor = AlignProcessor.from_pretrained("kakaobrain/align-base")
 model = AlignModel.from_pretrained("kakaobrain/align-base")
 
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
-candidate_labels = ["an image of a cat", "an image of a dog"]
+# Download image from URL
+url = "https://huggingface.co/roschmid/dog-races/resolve/main/images/Golden_Retriever.jpg"
+response = requests.get(url)
+image = Image.open(BytesIO(response.content))  # Convert the downloaded bytes to a PIL Image
 
-inputs = processor(images=image ,text=candidate_labels, return_tensors="pt")
+texts = ["a photo of a cat", "a photo of a dog"]
 
+# Process image and text inputs
+inputs = processor(images=image, text=texts, return_tensors="pt")
+
+# Get the embeddings
 with torch.no_grad():
     outputs = model(**inputs)
 
-# this is the image-text similarity score
-logits_per_image = outputs.logits_per_image
+image_embeds = outputs.image_embeds
+text_embeds = outputs.text_embeds
 
-# we can take the softmax to get the label probabilities
-probs = logits_per_image.softmax(dim=1)
-print(probs)
+# Normalize embeddings for cosine similarity
+image_embeds = image_embeds / image_embeds.norm(dim=1, keepdim=True)
+text_embeds = text_embeds / text_embeds.norm(dim=1, keepdim=True)
+
+# Calculate similarity scores
+similarity_scores = torch.matmul(text_embeds, image_embeds.T)
+
+# Print raw scores
+print("Similarity scores:", similarity_scores)
+
+# Convert to probabilities
+probs = torch.nn.functional.softmax(similarity_scores, dim=0)
+print("Probabilities:", probs)
+
+# Get the most similar text
+most_similar_idx = similarity_scores.argmax().item()
+print(f"Most similar text: '{texts[most_similar_idx]}'")
 ```
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ALIGN.
-
-- A blog post on [ALIGN and the COYO-700M dataset](https://huggingface.co/blog/vit-align).
-- A zero-shot image classification [demo](https://huggingface.co/spaces/adirik/ALIGN-zero-shot-image-classification).
-- [Model card](https://huggingface.co/kakaobrain/align-base) of `kakaobrain/align-base` model.
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we will review it. The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 ## AlignConfig
 
-[[autodoc]] AlignConfig
-    - from_text_vision_configs
+[[autodoc]] AlignConfig - from_text_vision_configs
 
 ## AlignTextConfig
 
@@ -92,17 +204,12 @@ If you're interested in submitting a resource to be included here, please feel f
 
 ## AlignModel
 
-[[autodoc]] AlignModel
-    - forward
-    - get_text_features
-    - get_image_features
+[[autodoc]] AlignModel - forward - get_text_features - get_image_features
 
 ## AlignTextModel
 
-[[autodoc]] AlignTextModel
-    - forward
+[[autodoc]] AlignTextModel - forward
 
 ## AlignVisionModel
 
-[[autodoc]] AlignVisionModel
-    - forward
+[[autodoc]] AlignVisionModel - forward
