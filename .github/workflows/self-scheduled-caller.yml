@@ -21,9 +21,9 @@ jobs:
           echo "${{ github.run_number }}"
           echo "${{ github.sha }}"
           echo "${{ toJSON(github.event) }}"
-          curl https://api.github.com/repos/huggingface/transformers/actions/runs/${{ github.run_id }} >> workflow_run.txt
+          curl https://api.github.com/repos/huggingface/transformers/actions/runs/${{ github.run_id }} >> workflow_run.json
           echo "========================================"
-          cat workflow_run.txt
+          python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["id"]); workflow_run = json.dumps(workflow_run, indent=4); print(workflow_run)'
 
 #  model-ci:
 #    name: Model CI
