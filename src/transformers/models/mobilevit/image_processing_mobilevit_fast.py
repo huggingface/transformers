@@ -29,8 +29,6 @@ from ...utils import auto_docstring
 @auto_docstring
 class MobileViTImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
-    image_mean = None
-    image_std = None
     size = {"shortest_edge": 224}
     default_to_square = False
     crop_size = {"height": 256, "width": 256}
