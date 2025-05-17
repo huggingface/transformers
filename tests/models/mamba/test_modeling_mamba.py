@@ -32,10 +32,10 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MambaCache,
         MambaForCausalLM,
         MambaModel,
     )
-    from transformers.models.mamba.modeling_mamba import MambaCache
 
 
 class MambaModelTester:
@@ -532,11 +532,11 @@ class MambaIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        output = model.generate(input_ids, max_new_tokens=20, cache_implementation="mamba")
+        output = model.generate(input_ids, max_new_tokens=20)
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)
 
         model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
-        output = model.generate(input_ids, max_new_tokens=20, cache_implementation="mamba")
+        output = model.generate(input_ids, max_new_tokens=20)
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)
