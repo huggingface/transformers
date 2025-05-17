@@ -22,6 +22,7 @@ jobs:
           echo "${{ github.sha }}"
           echo "${{ toJSON(github.event) }}"
           curl https://api.github.com/repos/huggingface/transformers/actions/runs/${{ github.run_id }} >> workflow_run.txt
+          cat "========================================"
           cat workflow_run.txt
 
 #  model-ci:
