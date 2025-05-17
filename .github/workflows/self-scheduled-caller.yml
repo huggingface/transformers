@@ -11,7 +11,7 @@ on:
 
 
 env:
-  REPORT_REPO_SUBFOLDER: ''
+  REPORT_REPO_SUBFOLDER: 'bonbon'
 
 
 jobs:
