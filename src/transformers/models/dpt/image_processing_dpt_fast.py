@@ -40,7 +40,10 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
     make_list_of_images,
+    pil_torch_interpolation_mapping,
+    validate_kwargs,
 )
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
@@ -49,7 +52,6 @@ from ...utils import (
     is_torchvision_v2_available,
     requires_backends,
 )
-
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
@@ -111,25 +113,26 @@ class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     ensure_multiple_of (`int`, *optional*, defaults to 1):
         If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
         by `ensure_multiple_of` in `preprocess`.
-    size_divisor (`int`, *optional*):
-        If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
-        DINOv2 paper, which uses the model in combination with DPT.
     do_pad (`bool`, *optional*, defaults to `False`):
         Whether to apply center padding. This was introduced in the DINOv2 paper, which uses the model in
         combination with DPT.
+    size_divisor (`int`, *optional*):
+        If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
+        DINOv2 paper, which uses the model in combination with DPT.
     keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
         If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
         be overidden by `keep_aspect_ratio` in `preprocess`.
-    segmentation_maps (`ImageInput`, *optional*):
-        Segmentation map to preprocess.
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
     """
 
     ensure_multiple_of: Optional[int]
     size_divisor: Optional[int]
     do_pad: Optional[bool]
     keep_aspect_ratio: Optional[bool]
-    segmentation_maps: Optional[ImageInput] = (None,)
-
+    do_reduce_labels: Optional[bool]
 
 @auto_docstring
 class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
@@ -144,6 +147,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
     rescale_factor = 1 / 255
     ensure_multiple_of = 1
     keep_aspect_ratio = False
+    do_reduce_labels = False
 
     valid_kwargs = DPTFastImageProcessorKwargs
 
@@ -153,63 +157,107 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
         # be passed in as positional arguments.
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
 
-    def _preprocess(
+    @auto_docstring
+    def preprocess(
         self,
-        images: list["torch.Tensor"],
-        return_tensors: Optional[Union[str, TensorType]],
+        images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        **kwargs,
+        **kwargs: Unpack[DPTFastImageProcessorKwargs],
     ) -> BatchFeature:
-        processed_images = self._preprocess_images(
-            images=images,
-            return_tensors=return_tensors,
-            **kwargs,
-        )
-        data = {"pixel_values": processed_images}
+        r"""
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to preprocess.
+        """
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
+        # Set default kwargs from self. This ensures that if a kwarg is not provided
+        # by the user, it gets its default value from the instance, or is set to None.
+        for kwarg_name in self.valid_kwargs.__annotations__:
+            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 
+        # Extract parameters that are only used for preparing the input images
+        do_convert_rgb = kwargs.pop("do_convert_rgb")
+        input_data_format = kwargs.pop("input_data_format")
+        device = kwargs.pop("device")
+        # Prepare input images
+        images = self._prepare_input_images(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+
+        # Prepare segmentation maps
         if segmentation_maps is not None:
             segmentation_maps = make_list_of_images(images=segmentation_maps, expected_ndims=2)
+
+        # Update kwargs that need further processing before being validated
+        kwargs = self._further_process_kwargs(**kwargs)
+
+        # Validate kwargs
+        self._validate_preprocess_kwargs(**kwargs)
+
+        # torch resize uses interpolation instead of resample
+        resample = kwargs.pop("resample")
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+        )
+
+        # Pop kwargs that are not needed in _preprocess
+        kwargs.pop("default_to_square")
+        kwargs.pop("data_format")
+
+        images = self._preprocess_images(
+            images=images,
+            **kwargs,
+        )
+        data = {"pixel_values": images}
+
+        if segmentation_maps is not None:
             segmentation_maps = self._preprocess_segmentation_maps(
                 segmentation_maps=segmentation_maps,
-                return_tensors=return_tensors,
                 **kwargs,
             )
             data["labels"] = segmentation_maps
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data)
+    
+    def reduce_label(self, labels: list["torch.Tensor"]):
+        for idx in range(len(labels)):
+            label = labels[idx]
+            label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype), label)
+            label = label - 1
+            label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype), label)
+            labels[idx] = label
 
-    def _preprocess_images(
+        return label
+    
+    def _preprocess(
         self,
         images: list["torch.Tensor"],
+        do_reduce_labels: bool,
         do_resize: bool,
-        do_center_crop: bool,
-        do_pad: bool,
-        return_tensors: bool,
-        do_rescale: bool,
-        rescale_factor: float,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
-        ensure_multiple_of: Optional[int],
-        keep_aspect_ratio: bool,
+        do_center_crop: bool,
         crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        return_tensors: Optional[Union[str, TensorType]],
+        keep_aspect_ratio: bool,
+        ensure_multiple_of: Optional[int],
+        do_pad: bool,
         size_divisor: Optional[int],
         **kwargs,
-    ) -> "torch.Tensor":
+    ) -> BatchFeature:
+        if do_reduce_labels:
+            images = self.reduce_label(images)
+
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(
-                    image=stacked_images,
-                    size=size,
-                    interpolation=interpolation,
-                    ensure_multiple_of=ensure_multiple_of,
-                    keep_aspect_ratio=keep_aspect_ratio,
-                )
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -232,6 +280,16 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return processed_images
 
+    def _preprocess_images(
+        self,
+        images,
+        **kwargs,
+    ):
+        """Preprocesses images."""
+        kwargs["do_reduce_labels"] = False
+        processed_images = self._preprocess(images=images, **kwargs)
+        return processed_images
+
     def _preprocess_segmentation_maps(
         self,
         segmentation_maps,
@@ -252,7 +310,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
         kwargs["input_data_format"] = ChannelDimension.FIRST
         processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
 
-        processed_segmentation_maps = processed_segmentation_maps["pixel_values"].squeeze(1)
+        processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
 
         processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
         return processed_segmentation_maps
@@ -260,7 +318,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
     def pad_image(
         self,
         image: "torch.Tensor",
-        size_divisor: int,
+        size_divisor: int = 1,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> "torch.Tensor":
         r"""
@@ -302,7 +360,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
         size: SizeDict,
         interpolation: "F.InterpolationMode" = None,
         antialias: bool = True,
-        ensure_multiple_of: Optional[int] = None,
+        ensure_multiple_of: Optional[int] = 1,
         keep_aspect_ratio: bool = False,
     ) -> "torch.Tensor":
         """
@@ -320,7 +378,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
             ensure_multiple_of (`int`, *optional*):
                 If `do_resize` is `True`, the image is resized to a size that is a multiple of this value
             keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
-                If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
+                If `True`, and `do_resize` is `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
 
         Returns:
             `torch.Tensor`: The resized image.
