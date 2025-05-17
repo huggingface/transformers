@@ -19,7 +19,7 @@ jobs:
       runner: daily-ci
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
-      report_repo_subfolder: try
+      report_repo_subfolder: 0ef339ff-torch-2.7.0
     secrets: inherit
 #
 #  torch-pipeline:
