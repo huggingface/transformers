@@ -35,10 +35,10 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
-    is_torch_tensor,
     PILImageResampling,
     SizeDict,
     get_image_size,
+    is_torch_tensor,
     make_list_of_images,
     pil_torch_interpolation_mapping,
     validate_kwargs,
@@ -52,6 +52,7 @@ from ...utils import (
     is_torchvision_v2_available,
     requires_backends,
 )
+
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
@@ -133,6 +134,7 @@ class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     do_pad: Optional[bool]
     keep_aspect_ratio: Optional[bool]
     do_reduce_labels: Optional[bool]
+
 
 @auto_docstring
 class DPTImageProcessorFast(BaseImageProcessorFast):
@@ -217,7 +219,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
             data["labels"] = segmentation_maps
 
         return BatchFeature(data=data)
-    
+
     def reduce_label(self, labels: list["torch.Tensor"]):
         for idx in range(len(labels)):
             label = labels[idx]
@@ -227,7 +229,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
             labels[idx] = label
 
         return label
-    
+
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -257,7 +259,13 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio)
+                stacked_images = self.resize(
+                    image=stacked_images,
+                    size=size,
+                    interpolation=interpolation,
+                    ensure_multiple_of=ensure_multiple_of,
+                    keep_aspect_ratio=keep_aspect_ratio,
+                )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -412,7 +420,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
                 f" {size}."
             )
         return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
-    
+
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->DPT
     def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple]] = None):
         """
