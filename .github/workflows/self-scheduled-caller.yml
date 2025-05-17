@@ -13,19 +13,29 @@ jobs:
   setup:
     name: ABC
     runs-on: ubuntu-22.04
+    outputs:
+      workflow_id: ${{ steps.set-output.outputs.workflow_id }}
+      workflow_created_at: ${{ steps.set-output.outputs.workflow_created_at }}
     steps:
       - name: DEF
         shell: bash
+        id: set-output
         run: |
-          echo "${{ github.workflow }}"
-          echo "${{ github.workflow_ref }}"
-          echo "${{ github.workflow_sha }}"
           echo "${{ github.sha }}"
           curl https://api.github.com/repos/huggingface/transformers/actions/runs/${{ github.run_id }} >> workflow_run.json
-          python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["workflow_id"])'
-          python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["path"])'
-          python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["id"])'
-          python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["created_at"])'
+          echo "workflow_id=$(python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["workflow_id"])')"
+          echo "workflow_created_at=$(python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["created_at"])')"
+
+  check:
+    name: ABC2
+    runs-on: ubuntu-22.04
+    needs: setup
+    steps:
+      - name: DEF2
+        shell: bash
+        run: |
+          echo "${{ needs.setup.outputs.workflow_id }}"
+          echo "${{ needs.setup.outputs.workflow_created_at }}"
 
 #  model-ci:
 #    name: Model CI
