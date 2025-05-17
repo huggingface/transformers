@@ -43,6 +43,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bamba", "BambaModel"),
         ("bark", "BarkModel"),
         ("bart", "BartModel"),
+        ("florence2", "Florence2Model"),
         ("beit", "BeitModel"),
         ("bert", "BertModel"),
         ("bert-generation", "BertGenerationEncoder"),
@@ -359,6 +360,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         # Model for pre-training mapping
         ("albert", "AlbertForPreTraining"),
         ("bart", "BartForConditionalGeneration"),
+        ("florence2", "Florence2ForConditionalGeneration"),
         ("bert", "BertForPreTraining"),
         ("big_bird", "BigBirdForPreTraining"),
         ("bloom", "BloomForCausalLM"),
@@ -446,6 +448,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         # Model with LM heads mapping
         ("albert", "AlbertForMaskedLM"),
         ("bart", "BartForConditionalGeneration"),
+        ("florence2", "Florence2ForConditionalGeneration"),
         ("bert", "BertForMaskedLM"),
         ("big_bird", "BigBirdForMaskedLM"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
@@ -534,6 +537,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("aria_text", "AriaTextForCausalLM"),
         ("bamba", "BambaForCausalLM"),
         ("bart", "BartForCausalLM"),
+        ("florence2", "Florence2ForCausalLM"),
         ("bert", "BertLMHeadModel"),
         ("bert-generation", "BertGenerationDecoder"),
         ("big_bird", "BigBirdForCausalLM"),
@@ -918,6 +922,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         # Model for Masked LM mapping
         ("albert", "AlbertForMaskedLM"),
         ("bart", "BartForConditionalGeneration"),
+        ("florence2", "Florence2ForConditionalGeneration"),
         ("bert", "BertForMaskedLM"),
         ("big_bird", "BigBirdForMaskedLM"),
         ("camembert", "CamembertForMaskedLM"),
@@ -1006,6 +1011,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
         ("bart", "BartForConditionalGeneration"),
+        ("florence2", "Florence2ForConditionalGeneration"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("blenderbot", "BlenderbotForConditionalGeneration"),
         ("blenderbot-small", "BlenderbotSmallForConditionalGeneration"),
@@ -1054,6 +1060,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Sequence Classification mapping
         ("albert", "AlbertForSequenceClassification"),
         ("bart", "BartForSequenceClassification"),
+        ("florence2", "Florence2ForSequenceClassification"),
         ("bert", "BertForSequenceClassification"),
         ("big_bird", "BigBirdForSequenceClassification"),
         ("bigbird_pegasus", "BigBirdPegasusForSequenceClassification"),
@@ -1158,6 +1165,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         # Model for Question Answering mapping
         ("albert", "AlbertForQuestionAnswering"),
         ("bart", "BartForQuestionAnswering"),
+        ("florence2", "Florence2ForQuestionAnswering"),
         ("bert", "BertForQuestionAnswering"),
         ("big_bird", "BigBirdForQuestionAnswering"),
         ("bigbird_pegasus", "BigBirdPegasusForQuestionAnswering"),

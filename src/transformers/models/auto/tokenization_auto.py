@@ -72,6 +72,7 @@ else:
             ("aya_vision", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
             ("bark", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
+            ("florence2", ("BartTokenizer", "BartTokenizerFast")),
             (
                 "barthez",
                 (
