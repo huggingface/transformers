@@ -13,9 +13,6 @@ jobs:
   setup:
     name: ABC
     runs-on: ubuntu-22.04
-    outputs:
-      workflow_id: ${{ steps.set-output.outputs.workflow_id }}
-      workflow_created_at: ${{ steps.set-output.outputs.workflow_created_at }}
     steps:
       - name: DEF
         shell: bash
@@ -23,32 +20,21 @@ jobs:
         run: |
           echo "${{ github.sha }}"
           curl https://api.github.com/repos/huggingface/transformers/actions/runs/${{ github.run_id }} >> workflow_run.json
-          echo "workflow_id=$(python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["workflow_id"])')" >> $GITHUB_OUTPUT
-          echo "workflow_created_at=$(python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["created_at"])')" >> $GITHUB_OUTPUT
+          echo "workflow_id=$(python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["workflow_id"])')"
+          echo "workflow_created_at=$(python -c 'import json; fp = open("workflow_run.json"); workflow_run = json.load(fp); print(workflow_run["created_at"])')"
 
-  check:
-    name: ABC2
-    runs-on: ubuntu-22.04
-    needs: setup
-    steps:
-      - name: DEF2
-        shell: bash
-        run: |
-          echo "${{ needs.setup.outputs.workflow_id }}"
-          echo "${{ needs.setup.outputs.workflow_created_at }}"
+  model-ci:
+    name: Model CI
+    uses: ./.github/workflows/self-scheduled.yml
+    with:
+      job: run_models_gpu
+      slack_report_channel: "#transformers-ci-daily-models"
+      runner: daily-ci
+      docker: huggingface/transformers-all-latest-gpu
+      ci_event: Daily CI
+      report_repo_subfolder: dummy
+    secrets: inherit
 
-#  model-ci:
-#    name: Model CI
-#    uses: ./.github/workflows/self-scheduled.yml
-#    with:
-#      job: run_models_gpu
-#      slack_report_channel: "#transformers-ci-daily-models"
-#      runner: daily-ci
-#      docker: huggingface/transformers-all-latest-gpu
-#      ci_event: Daily CI
-#      report_repo_subfolder: 0ef339ff-torch-2.7.0
-#    secrets: inherit
-#
 #  torch-pipeline:
 #    name: Torch pipeline CI
 #    uses: ./.github/workflows/self-scheduled.yml
