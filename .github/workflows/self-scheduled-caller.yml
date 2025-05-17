@@ -10,17 +10,28 @@ on:
       - ci_with_torch_version_base
 
 jobs:
-  model-ci:
-    name: Model CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_models_gpu
-      slack_report_channel: "#transformers-ci-daily-models"
-      runner: daily-ci
-      docker: huggingface/transformers-all-latest-gpu
-      ci_event: Daily CI
-      report_repo_subfolder: 0ef339ff-torch-2.7.0
-    secrets: inherit
+  setup:
+    name: ABC
+    runs-on: ubuntu-22.04
+    steps:
+      - name: DEF
+        shell: bash
+        run: |
+          echo "${{ github.run_id }}"
+          echo "${{ github.run_number }}"
+          echo "${{ github.sha }}"
+
+#  model-ci:
+#    name: Model CI
+#    uses: ./.github/workflows/self-scheduled.yml
+#    with:
+#      job: run_models_gpu
+#      slack_report_channel: "#transformers-ci-daily-models"
+#      runner: daily-ci
+#      docker: huggingface/transformers-all-latest-gpu
+#      ci_event: Daily CI
+#      report_repo_subfolder: 0ef339ff-torch-2.7.0
+#    secrets: inherit
 #
 #  torch-pipeline:
 #    name: Torch pipeline CI
