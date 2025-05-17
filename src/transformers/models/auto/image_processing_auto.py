@@ -48,7 +48,6 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
-
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
@@ -148,6 +147,13 @@ else:
             ("siglip", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("siglip2", ("Siglip2ImageProcessor", "Siglip2ImageProcessorFast")),
             ("superglue", ("SuperGlueImageProcessor",)),
+            (
+                "superpoint",
+                (
+                    "SuperPointImageProcessor",
+                    "SuperPointImageProcessorFast",
+                ),
+            ),
             ("swiftformer", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("swin", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("swin2sr", ("Swin2SRImageProcessor", "Swin2SRImageProcessorFast")),
