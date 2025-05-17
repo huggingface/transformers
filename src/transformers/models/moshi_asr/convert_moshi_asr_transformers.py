@@ -28,7 +28,6 @@ from transformers import (
     CsmDepthDecoderConfig,
     CsmForConditionalGeneration,
     CsmProcessor,
-    MimiModel,
 )
 from transformers.utils.hub import cached_file
 

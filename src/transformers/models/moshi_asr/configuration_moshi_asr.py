@@ -87,35 +87,46 @@ class MoshiAsrConfig(PretrainedConfig):
     #TODO: add example
     ```"""
 
-    model_type = "moshi"
+    model_type = "moshi_asr"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"audio_encoder_config": AutoConfig}
+    sub_configs = {"codec_config": AutoConfig}
 
     def __init__(
-        self, #TODO: change all defaults to match the original Moshi ASR config
+        self,
         codebook_vocab_size=2049,
         vocab_size=48001,
-        hidden_size=4096,
-        num_hidden_layers=32,
-        num_attention_heads=32,
+        hidden_size=1024,
+        num_hidden_layers=16,
+        num_attention_heads=8,
         num_key_value_heads=None,
-        audio_vocab_size=None,
-        max_position_embeddings=3000,
-        rope_theta=10000.0,
+        max_position_embeddings=750,
+        rope_theta=100000.0,
         hidden_act="silu",
         head_dim=None,
         initializer_range=0.02,
         use_cache=True,
         sliding_window=3000,
         attention_dropout=0.0,
-        ffn_dim=22528,
+        ffn_dim=5632,
         rms_norm_eps=1e-8,
-        num_codebooks=8,
+        num_codebooks=32,
+        frame_size=1920,
+        delay_in_tokens=25,
+        audio_bos_token_id=2048,
+        audio_pad_token_id=113569,
         tie_word_embeddings=False,
-        codec_config=None,
+        pad_token_id=3,
         bos_token_id=48000,
+        codec_config=None,
         **kwargs,
     ):
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs
+        )
+
         if codec_config is None:
             self.codec_config = AutoConfig.for_model("mimi")
             logger.info("codec_config is None, using default audio encoder config.")
@@ -124,41 +135,35 @@ class MoshiAsrConfig(PretrainedConfig):
         elif isinstance(codec_config, PretrainedConfig):
             self.codec_config = codec_config
 
+        self.num_codebooks = num_codebooks
+        self.frame_size = frame_size
+        self.delay_in_tokens = delay_in_tokens
+        self.audio_bos_token_id = audio_bos_token_id
+        self.audio_pad_token_id = audio_pad_token_id
         self.codebook_vocab_size = codebook_vocab_size
+
         self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
         self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
-        self.hidden_act = hidden_act
-        self.head_dim = head_dim or hidden_size // num_attention_heads
-        self.initializer_range = initializer_range
-        self.use_cache = use_cache
-        self.sliding_window = sliding_window
-        self.attention_dropout = attention_dropout
+        self.hidden_size = hidden_size
         if ffn_dim % 2 == 1:
             raise ValueError(f"`ffn_dim={ffn_dim}` must be even.")
         self.ffn_dim = ffn_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.num_codebooks = num_codebooks
-
-        audio_encoder_config = kwargs.pop("audio_encoder_config", {})
-        audio_encoder_model_type = audio_encoder_config.pop("model_type", "mimi")
-
-        self.audio_encoder_config = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
-
-        if self.num_codebooks > self.audio_encoder_config.num_codebooks:
-            raise ValueError(
-                f"`num_codebooks={num_codebooks}` is greater than the maximum number of codebooks that the audio encoder can deal with ({self.audio_encoder_config.num_codebooks}). Please lower it."
-            )
-
-        self.audio_vocab_size = (
-            self.audio_encoder_config.codebook_size if audio_vocab_size is None else audio_vocab_size
-        )
-
-        super().__init__(bos_token_id=bos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.use_cache = use_cache
+        self.rope_theta = rope_theta
+        self.attention_dropout = attention_dropout
+        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+        self.sliding_window = sliding_window
 
 
 __all__ = ["MoshiAsrConfig"]
