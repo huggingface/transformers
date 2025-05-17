@@ -17,8 +17,6 @@ jobs:
       - name: DEF
         shell: bash
         run: |
-#          echo "${{ github.run_id }}"
-#          echo "${{ github.run_number }}"
           echo "${{ github.workflow }}"
           echo "${{ github.workflow_ref }}"
           echo "${{ github.workflow_sha }}"
