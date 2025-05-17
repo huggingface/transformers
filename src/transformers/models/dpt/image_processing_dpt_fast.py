@@ -29,13 +29,13 @@ from transformers.image_transforms import (
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
-    SemanticSegmentationMixin,
 )
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
+    is_torch_tensor,
     PILImageResampling,
     SizeDict,
     get_image_size,
@@ -135,7 +135,7 @@ class DPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     do_reduce_labels: Optional[bool]
 
 @auto_docstring
-class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
+class DPTImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -412,6 +412,50 @@ class DPTImageProcessorFast(BaseImageProcessorFast, SemanticSegmentationMixin):
                 f" {size}."
             )
         return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+    
+    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->DPT
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple]] = None):
+        """
+        Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+
+        Args:
+            outputs ([`DPTForSemanticSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
+
+        Returns:
+            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+        """
+        # TODO: add support for other frameworks
+        logits = outputs.logits
+
+        # Resize logits and compute semantic segmentation maps
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+            if is_torch_tensor(target_sizes):
+                target_sizes = target_sizes.numpy()
+
+            semantic_segmentation = []
+
+            for idx in range(len(logits)):
+                resized_logits = torch.nn.functional.interpolate(
+                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                )
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(semantic_map)
+        else:
+            semantic_segmentation = logits.argmax(dim=1)
+            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+
+        return semantic_segmentation
 
     # Copied from transformers.models.dpt.image_processing_dpt.DPTImageProcessor.post_process_depth_estimation
     def post_process_depth_estimation(
