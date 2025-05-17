@@ -20,6 +20,7 @@ jobs:
           echo "${{ github.run_id }}"
           echo "${{ github.run_number }}"
           echo "${{ github.sha }}"
+          echo "${{ github.event }}"
 
 #  model-ci:
 #    name: Model CI
