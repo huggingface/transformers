@@ -45,8 +45,11 @@ if is_torch_available():
         Cache,
         ClvpForCausalLM,
         DynamicCache,
+        Gemma2Config,
         GenerationConfig,
+        HybridCache,
         LlamaConfig,
+        SlidingWindowCache,
         StaticCache,
         convert_and_export_with_cache,
     )
@@ -719,4 +722,325 @@ class CacheExportIntegrationTest(unittest.TestCase):
             input_ids=input_ids,
             dynamic_shapes=dynamic_shapes,
             strict=False,
+        )
+
+
+class SyntheticCacheTest(unittest.TestCase):
+    """Tests cache behavior with simple dummy data."""
+
+    def setUp(self):
+        """Set up common configuration and cache instances for all tests."""
+        self.window_size = 4
+        self.max_cache_len = 4
+        self.config = Gemma2Config(
+            num_hidden_layers=1,
+            num_key_value_heads=1,
+            num_attention_heads=1,
+            head_dim=1,
+            hidden_size=1,
+            sliding_window=self.window_size,
+            sliding_window_pattern=2,  # Default pattern for hybrid sliding
+        )
+        self.static_cache = StaticCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        self.sliding_cache = SlidingWindowCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        self.hybrid_cache = HybridCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+
+    def test_static_cache_out_of_bounds(self):
+        """Test StaticCache raises IndexError for out-of-bounds positions."""
+        self.static_cache.reset()
+        pos_out_of_bounds = torch.tensor([self.max_cache_len])  # Position >= max_cache_len
+
+        with self.assertRaises(IndexError):
+            self.static_cache.update(
+                key_states=torch.tensor([[[[1.0]]]]),
+                value_states=torch.tensor([[[[1.0]]]]),
+                layer_idx=0,
+                cache_kwargs={"cache_position": pos_out_of_bounds},
+            )
+
+    def test_static_cache(self):
+        """Test StaticCache with manually prefilled states and hardcoded assertions.
+
+        Scenario 1: Fill up to near capacity
+        prefill:       [1.0, 2.0, 0.0, 0.0]
+        update pos 2:  [1.0, 2.0, 3.0, 0.0]
+
+        Scenario 2: Fill to capacity
+        update pos 3:  [1.0, 2.0, 3.0, 4.0]
+        """
+        self.static_cache.reset()
+
+        # Scenario 1: Fill up to near capacity
+        prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
+        self.static_cache.update(key_states=prefill, value_states=prefill, layer_idx=0, cache_kwargs=None)
+        self.static_cache.update(
+            key_states=torch.tensor(3.0)[None, None, None, None],
+            value_states=torch.tensor(3.0)[None, None, None, None],
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.tensor([2])},
+        )
+        self.assertEqual(
+            self.static_cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0], "StaticCache Scenario 1 failed"
+        )
+
+        # Scenario 2: Fill to capacity
+        self.static_cache.update(
+            key_states=torch.tensor(4.0)[None, None, None, None],
+            value_states=torch.tensor(4.0)[None, None, None, None],
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.tensor([3])},
+        )
+        self.assertEqual(
+            self.static_cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "StaticCache Scenario 2 failed"
+        )
+
+    def test_sliding_window_cache(self):
+        """Test SlidingWindowCache with manually prefilled states and hardcoded assertions.
+
+        Scenario 1: Update within window, no slide yet
+        prefill:       [1.0, 2.0, 0.0, 0.0]
+        update pos 2:  [1.0, 2.0, 3.0, 0.0]
+
+        Scenario 2: Update causing slide
+        prefill:       [1.0, 2.0, 3.0, 4.0]
+        update pos 4:  [2.0, 3.0, 4.0, 5.0] (shift happens as pos > window_size-1)
+
+        Scenario 3: Long prompt handling (prompt_len > window_size)
+        input:         [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        result:        [3.0, 4.0, 5.0, 6.0] (keeps last window_size tokens)
+        """
+        self.sliding_cache.reset()
+
+        # Scenario 1: Update within window, no slide yet
+        prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
+        self.sliding_cache.update(
+            key_states=prefill,
+            value_states=prefill,
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.arange(4), "sliding_window": self.window_size},
+        )
+        self.sliding_cache.update(
+            key_states=torch.tensor(3.0)[None, None, None, None],
+            value_states=torch.tensor(3.0)[None, None, None, None],
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.tensor([2]), "sliding_window": self.window_size},
+        )
+        self.assertEqual(
+            self.sliding_cache.key_cache[0][0, 0, :, 0].tolist(),
+            [1.0, 2.0, 3.0, 0.0],
+            "SlidingWindowCache Scenario 1 failed",
+        )
+
+        # Scenario 2: Update causing slide
+        self.sliding_cache.reset()
+        prefill = torch.tensor([1.0, 2.0, 3.0, 4.0])[None, None, :, None]
+        self.sliding_cache.update(
+            key_states=prefill,
+            value_states=prefill,
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.arange(4), "sliding_window": self.window_size},
+        )
+        self.sliding_cache.update(
+            key_states=torch.tensor(5.0)[None, None, None, None],
+            value_states=torch.tensor(5.0)[None, None, None, None],
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.tensor([4]), "sliding_window": self.window_size},
+        )
+        self.assertEqual(
+            self.sliding_cache.key_cache[0][0, 0, :, 0].tolist(),
+            [2.0, 3.0, 4.0, 5.0],
+            "SlidingWindowCache Scenario 2 failed",
+        )
+
+        # Scenario 3: Long prompt handling
+        self.sliding_cache.reset()
+        long_prefill = torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])[None, None, :, None]
+        self.sliding_cache.update(
+            key_states=long_prefill,
+            value_states=long_prefill,
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.arange(6), "sliding_window": self.window_size},
+        )
+        self.assertEqual(
+            self.sliding_cache.key_cache[0][0, 0, :, 0].tolist(),
+            [3.0, 4.0, 5.0, 6.0],
+            "SlidingWindowCache Scenario 3 failed",
+        )
+
+    def test_hybrid_cache_static_mode(self):
+        """Test HybridCache in static mode with hardcoded assertions.
+
+        Scenario 1: Static layer behavior
+        prefill:       [1.0, 2.0, 0.0, 0.0]
+        update pos 2:  [1.0, 2.0, 3.0, 0.0]
+
+        Scenario 2: Fill to capacity
+        update pos 3:  [1.0, 2.0, 3.0, 4.0]
+        """
+        config = copy.deepcopy(self.config)
+        config.sliding_window_pattern = 1  # Layer 0 is static (1 % 1 == 0)
+        hybrid_cache_static_mode = HybridCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        hybrid_cache_static_mode.reset()  # Ensure it's clean even if it's new
+
+        # Scenario 1
+        prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
+        hybrid_cache_static_mode.update(
+            key_states=prefill,
+            value_states=prefill,
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.arange(4)},
+        )
+        hybrid_cache_static_mode.update(
+            key_states=torch.tensor(3.0)[None, None, None, None],
+            value_states=torch.tensor(3.0)[None, None, None, None],
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.tensor([2])},
+        )
+        self.assertEqual(
+            hybrid_cache_static_mode.key_cache[0][0, 0, :, 0].tolist(),
+            [1.0, 2.0, 3.0, 0.0],
+            "HybridCache Static Scenario 1 failed",
+        )
+
+        # Scenario 2
+        hybrid_cache_static_mode.update(
+            key_states=torch.tensor(4.0)[None, None, None, None],
+            value_states=torch.tensor(4.0)[None, None, None, None],
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.tensor([3])},
+        )
+        self.assertEqual(
+            hybrid_cache_static_mode.key_cache[0][0, 0, :, 0].tolist(),
+            [1.0, 2.0, 3.0, 4.0],
+            "HybridCache Static Scenario 2 failed",
+        )
+
+    def test_hybrid_cache_sliding_mode(self):
+        """Test HybridCache in sliding mode with hardcoded assertions.
+
+        Scenario 1: Update within window, no slide yet
+        prefill:       [1.0, 2.0, 0.0, 0.0]
+        update pos 2:  [1.0, 2.0, 3.0, 0.0]
+
+        Scenario 2: Update causing first slide
+        prefill:       [1.0, 2.0, 3.0, 4.0]
+        update pos 4:  [2.0, 3.0, 4.0, 5.0] (shift happens as pos > window_size-1)
+
+        Scenario 3: Update causing subsequent slide
+        update pos 5:  [3.0, 4.0, 5.0, 6.0] (shift continues)
+
+        Scenario 4: Long prompt handling (prompt_len > window_size)
+        input:         [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        result:        [3.0, 4.0, 5.0, 6.0] (keeps last window_size tokens)
+        """
+        self.hybrid_cache.reset()
+
+        # Scenario 1: Update within window, no slide yet
+        prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
+        self.hybrid_cache.update(
+            key_states=prefill,
+            value_states=prefill,
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.arange(4), "sliding_window": self.window_size},
+        )
+        self.hybrid_cache.update(
+            key_states=torch.tensor(3.0)[None, None, None, None],
+            value_states=torch.tensor(3.0)[None, None, None, None],
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.tensor([2]), "sliding_window": self.window_size},
+        )
+        self.assertEqual(
+            self.hybrid_cache.key_cache[0][0, 0, :, 0].tolist(),
+            [1.0, 2.0, 3.0, 0.0],
+            "HybridCache Sliding Scenario 1 failed",
+        )
+
+        # Scenario 2: Update causing first slide
+        self.hybrid_cache.reset()
+        prefill = torch.tensor([1.0, 2.0, 3.0, 4.0])[None, None, :, None]
+        self.hybrid_cache.update(
+            key_states=prefill,
+            value_states=prefill,
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.arange(4), "sliding_window": self.window_size},
+        )
+        self.hybrid_cache.update(
+            key_states=torch.tensor(5.0)[None, None, None, None],
+            value_states=torch.tensor(5.0)[None, None, None, None],
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.tensor([4]), "sliding_window": self.window_size},
+        )
+        self.assertEqual(
+            self.hybrid_cache.key_cache[0][0, 0, :, 0].tolist(),
+            [2.0, 3.0, 4.0, 5.0],
+            "HybridCache Sliding Scenario 2 failed",
+        )
+
+        # Scenario 3: Update causing subsequent slide
+        self.hybrid_cache.update(
+            key_states=torch.tensor(6.0)[None, None, None, None],
+            value_states=torch.tensor(6.0)[None, None, None, None],
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.tensor([5]), "sliding_window": self.window_size},
+        )
+        self.assertEqual(
+            self.hybrid_cache.key_cache[0][0, 0, :, 0].tolist(),
+            [3.0, 4.0, 5.0, 6.0],
+            "HybridCache Sliding Scenario 3 failed",
+        )
+
+        # Scenario 4: Long prompt handling
+        self.hybrid_cache.reset()
+        long_prefill = torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])[None, None, :, None]
+        self.hybrid_cache.update(
+            key_states=long_prefill,
+            value_states=long_prefill,
+            layer_idx=0,
+            cache_kwargs={"cache_position": torch.arange(6), "sliding_window": self.window_size},
+        )
+        self.assertEqual(
+            self.hybrid_cache.key_cache[0][0, 0, :, 0].tolist(),
+            [3.0, 4.0, 5.0, 6.0],
+            "HybridCache Sliding Scenario 4 failed",
+        )
+
+    def test_dynamic_cache(self):
+        """Test DynamicCache with manually prefilled states and hardcoded assertions.
+        Scenario 1: prefill and update for one layer
+        prefill:       [1.0, 2.0]
+        update pos 2:  [1.0, 2.0, 3.0]
+        Scenario 2: prefill and update for two layers independently
+        """
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
+        update3 = torch.tensor(3.0)[None, None, None, None]
+        update4 = torch.tensor(4.0)[None, None, None, None]
+
+        # Scenario 1: prefill and update for one layer
+        cache = DynamicCache()
+        cache.update(prefill, prefill, 0)
+        cache.update(update3, update3, 0)
+        self.assertEqual(cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0], "DynamicCache Scenario 1 failed")
+        cache.update(update4, update4, 0)
+        self.assertEqual(
+            cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "DynamicCache Scenario 1 (to 4) failed"
+        )
+
+        # Scenario 2: prefill and update for two layers independently
+        prefill1 = torch.tensor([10.0, 20.0])[None, None, :, None]
+        update3_1 = torch.tensor(30.0)[None, None, None, None]
+        update4_1 = torch.tensor(40.0)[None, None, None, None]
+
+        cache = DynamicCache()
+        cache.update(prefill, prefill, 0)
+        cache.update(prefill1, prefill1, 1)
+
+        cache.update(update3, update3, 0)
+        cache.update(update3_1, update3_1, 1)
+        cache.update(update4, update4, 0)
+        cache.update(update4_1, update4_1, 1)
+        self.assertEqual(
+            cache.key_cache[0][0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "DynamicCache Scenario 2 layer 0 failed"
+        )
+        self.assertEqual(
+            cache.key_cache[1][0, 0, :, 0].tolist(), [10.0, 20.0, 30.0, 40.0], "DynamicCache Scenario 2 layer 1 failed"
         )
