@@ -198,9 +198,9 @@ class PagedAttentionCache(Cache):
         """Allocates n_blocks for a given request_id."""
         if len(self._free_blocks) < n_blocks:
             logger.warning(
-                f"Not enough free blocks for {request_id}. Requested: {n_blocks}, Available: {len(self._free_blocks)}"
+                f"Not enough free blocks for {request_id}. Requested: {n_blocks}, Available: {len(self._free_blocks)}, Allocated: {self._block_tables.get(request_id, [])}"
             )
-            return []
+            return False
 
         allocated = []
         for _ in range(n_blocks):
@@ -209,7 +209,6 @@ class PagedAttentionCache(Cache):
         if request_id not in self._block_tables:
             self._block_tables[request_id] = []
         self._block_tables[request_id].extend(allocated)
-
         return allocated
 
     @traced
@@ -696,38 +695,29 @@ class ContinuousBatchProcessor:
         # Get the request objects for this batch
         self.requests_in_batch = [self.active_requests[req_id] for req_id in self.requests_to_process_next]
         self.reset_static_tensors()
-
-        # pointers into our static flat tensors
-        token_position = 0
-        read_position = 0
-        write_position = 0
-        cumq_ptr = 1  # because at 0 we always have 0?
-        cumk_ptr = 1
-
         position_ids = []
         input_ids = []
         read_index = []
         write_index = []
         cumulative_seqlens_q = [0]
         cumulative_seqlens_k = [0]
-        logits_to_track = 0
         logits_indices = []
         self.metrics.record_batch_metrics(self.requests_in_batch)
 
         for state in self.requests_in_batch:
+            if not self._allocate_blocks_if_needed(state, len(state.prompt_ids)):
+                continue
+
             next_input_ids = state.prompt_ids
             input_ids.extend(next_input_ids)
             start_pos = state.current_len()
-            positions_to_add = list(range(start_pos, start_pos + len(next_input_ids)))
-            state.position_offset += len(next_input_ids)
-
-            if not self._allocate_blocks_if_needed(state, state.current_len()):
-                continue
-
             seq_len_q = len(next_input_ids)
-            read_indices: list[int]  = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))
-            write_indices: list[int] = read_indices[-seq_len_q:]
-            seq_len_k = state.current_len()  # Key length includes previously split context #TODO not sure about +1
+            state.position_offset += seq_len_q
+            seq_len_k = state.current_len()
+            positions_to_add = list(range(start_pos,  seq_len_k))
+
+            read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))
+            write_indices = read_indices[-seq_len_q:]
 
             position_ids.extend(positions_to_add)
             read_index.extend(read_indices)
@@ -736,58 +726,38 @@ class ContinuousBatchProcessor:
             cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + seq_len_k)
             if len(state.remaining_prompt_ids) == 0:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
-                logits_to_track += 1
-
             self.max_seqlen_q = max(self.max_seqlen_q, seq_len_q)
             self.max_seqlen_k = max(self.max_seqlen_k, seq_len_k)
 
-            token_position += len(positions_to_add)
-            read_position += len(read_indices)
-            write_position += len(write_indices)
-            cumq_ptr += 1
-            cumk_ptr += 1
         self._build_tensors(
             input_ids,
-            token_position,
             position_ids,
             read_index,
-            read_position,
             write_index,
-            write_position,
-            cumq_ptr,
-            cumk_ptr,
             cumulative_seqlens_q,
             cumulative_seqlens_k,
             logits_indices,
-            logits_to_track,
         )
 
     @traced
     def _build_tensors(
         self,
         input_ids,
-        token_position,
         position_ids,
         read_index,
-        read_position,
         write_index,
-        write_position,
-        cumq_ptr,
-        cumk_ptr,
         cumulative_seqlens_q,
         cumulative_seqlens_k,
         logits_indices,
-        logits_to_track,
     ):
-        # now if sdpa or eager, create the attention mask!
-        self.input_ids[:, : len(input_ids)] = torch.tensor(input_ids, **self.tensor_metadata)
-        self.position_ids[:, :token_position] = torch.tensor(position_ids, **self.tensor_metadata)
-        self.write_index[:write_position] = torch.tensor(write_index, **self.tensor_metadata)
-        self.read_index[:read_position] = torch.tensor(read_index, **self.tensor_metadata)
-        self.cumulative_seqlens_q[:cumq_ptr] = torch.tensor(cumulative_seqlens_q, **self.tensor_metadata)
-        self.cumulative_seqlens_k[:cumk_ptr] = torch.tensor(cumulative_seqlens_k, **self.tensor_metadata)
-        self.logits_indices[:logits_to_track] = torch.tensor(logits_indices, **self.tensor_metadata)
-        if self.config._attn_implementation != "paged_attention":
+        self.input_ids[:, :len(input_ids)] = torch.tensor(input_ids, **self.tensor_metadata)
+        self.position_ids[:, :len(position_ids)] = torch.tensor(position_ids, **self.tensor_metadata)
+        self.write_index[:len(write_index)] = torch.tensor(write_index, **self.tensor_metadata)
+        self.read_index[:len(read_index)] = torch.tensor(read_index, **self.tensor_metadata)
+        self.cumulative_seqlens_q[:len(cumulative_seqlens_q)] = torch.tensor(cumulative_seqlens_q, **self.tensor_metadata)
+        self.cumulative_seqlens_k[:len(cumulative_seqlens_k)] = torch.tensor(cumulative_seqlens_k, **self.tensor_metadata)
+        self.logits_indices[:len(logits_indices)] = torch.tensor(logits_indices, **self.tensor_metadata)
+        if self.config._attn_implementation != "paged_attention": # we set `is_causal` to True in paged call`
             for i in range(len(cumulative_seqlens_q) - 1):
                 if (
                     cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
@@ -811,12 +781,12 @@ class ContinuousBatchProcessor:
                 )
 
     @traced
-    def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
-        """Helper function to allocate blocks for a request."""
-        current_blocks = len(state.allocated_blocks)
-        needed_blocks = (needed_slots // self.cache.block_size) + 1
-        if needed_blocks > current_blocks:
-            blocks_needed = needed_blocks - current_blocks
+    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int):
+        # 1. we check that we indeed need a new block
+        current_len = state.current_len()
+        if current_len // self.cache.block_size > len(state.allocated_blocks) or (len(state.allocated_blocks) == 0):
+            # we need to allocate more blocks
+            blocks_needed = (len_next_tokens // self.cache.block_size) + 1
             allocated = self.cache.allocate_blocks(blocks_needed, state.request_id)
             if not allocated:
                 return False
@@ -923,9 +893,9 @@ class ContinuousBatchingManager:
         self._request_counter = 0
         self._request_lock = threading.Lock()
         self.model.generation_config.top_p = None
+        self.do_sample = getattr(generation_config, "do_sample", False)
         self.logit_processor = self.model._get_logits_processor(self.model.generation_config)
-        self.do_sample = getattr(generation_config, "do_sample", True)
-        self.use_cuda_graph = getattr(generation_config, "use_cuda_graph", True)
+        self.use_cuda_graph = getattr(generation_config, "use_cuda_graph", False)
         self.profile = getattr(generation_config, "profile", False)
 
     @traced
@@ -1119,7 +1089,6 @@ class ContinuousBatchingManager:
                     activities = activities,
                     schedule = tracing_schedule,
                     on_trace_ready = trace_handler,
-                    # profile_memory = True,
                     record_shapes = False,
                     with_stack = True
                 ) as prof:                    
@@ -1130,9 +1099,9 @@ class ContinuousBatchingManager:
                         prof.step()
             else:
                 while not self.stop_event.is_set() or batch_processor.has_pending_requests():
-                        self._inner_generation_loop(batch_processor, is_first)
-                        if is_first:
-                            is_first = False
+                    self._inner_generation_loop(batch_processor, is_first)
+                    if is_first:
+                        is_first = False
 
 
 

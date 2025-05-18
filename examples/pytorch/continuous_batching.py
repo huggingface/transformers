@@ -1,25 +1,23 @@
 import time
 import datasets
 import torch
-
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
-# torch.set_float32_matmul_precision('high')
+
 model_id = "meta-llama/Meta-Llama-3-8B"
 model = AutoModelForCausalLM.from_pretrained(
     model_id, attn_implementation="paged_attention", torch_dtype=torch.bfloat16, device_map="auto"
 ).eval()
 tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
-# Configure generation parameters
+
 generation_config = GenerationConfig(
-    max_new_tokens=2048,
-    eos_token_id=model.eos_token_id,
-    eos_token_id=model.config.eos_token_id,
+    max_new_tokens=30,
+    eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
     use_cache=False,
-    num_blocks=1024,
-    block_size=64,
-    max_batch_tokens=512,  # Maximum number of tokens to process in a single batch
+    num_blocks=512,
+    block_size=128,
+    max_batch_tokens=256,  # Maximum number of tokens to process in a single batch
 )
 
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
@@ -30,10 +28,10 @@ def tokenize_function(examples):
     return tokenizer(examples["question"])
 
 tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
-simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets][:100]
+simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets][:5]
 
 start_time_simple = time.time()
-model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs", fullgraph=True)
+# model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs", fullgraph=True)
 batch_outputs = model.generate_batch(
     inputs=simple_batch_inputs,
     generation_config=generation_config,

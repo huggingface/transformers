@@ -13,12 +13,13 @@ def paged_attention_forward(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
-    attention_mask: torch.Tensor,
+    attention_mask: torch.Tensor=None,
     cache: PagedAttentionCache=None,
     cumulative_seqlens_q=None,
     cumulative_seqlens_k=None,
     max_seqlen_q=None,
     max_seqlen_k=None,
+    block_tables=None,
     **kwargs,
 ) -> torch.Tensor:
     r"""Perform the forward pass of attention with paged key-value cache.
@@ -54,9 +55,9 @@ def paged_attention_forward(
         max_seqlen_q,
         max_seqlen_k,
         softmax_scale=module.scaling,
-        causal=True,
+        causal=True, # kind of a must, it automatically aligns the mask for q < k
         window_size=(-1, -1),  # -1 means infinite context window
-        # rotary_interleaved=True,
+        # block_table=block_tables, -> torch.Tensor
         # **kwargs,
     )
 
