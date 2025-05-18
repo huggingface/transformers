@@ -1284,7 +1284,10 @@ if __name__ == "__main__":
             output_dir = os.path.join(os.getcwd(), "previous_reports")
             os.makedirs(output_dir, exist_ok=True)
             prev_ci_artifacts = get_last_daily_ci_reports(
-                artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+                artifact_names=artifact_names,
+                output_dir=output_dir,
+                token=os.environ["ACCESS_REPO_INFO_TOKEN"],
+                workflow_run_id="14277576462",
             )
 
     message = Message(
