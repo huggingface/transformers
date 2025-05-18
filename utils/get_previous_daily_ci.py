@@ -36,7 +36,6 @@ def get_last_daily_ci_runs(token, workflow_run_id=None):
     if workflow_run_id is not None and workflow_run_id != "":
         return workflow_run_id
 
-    return "14277576462"
     workflow_runs = get_daily_ci_runs(token)
     workflow_run_id = None
     for workflow_run in workflow_runs:
