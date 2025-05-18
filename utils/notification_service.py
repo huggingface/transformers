@@ -109,6 +109,7 @@ class Message:
         additional_results: Dict,
         selected_warnings: List = None,
         prev_ci_artifacts=None,
+        other_ci_artifacts=None,
     ):
         self.title = title
         self.ci_title = ci_title
@@ -159,6 +160,7 @@ class Message:
         self.selected_warnings = selected_warnings
 
         self.prev_ci_artifacts = prev_ci_artifacts
+        self.other_ci_artifacts = other_ci_artifacts
 
     @property
     def time(self) -> str:
@@ -515,7 +517,7 @@ class Message:
         if len(self.selected_warnings) > 0:
             blocks.append(self.warnings)
 
-        for idx, prev_ci_artifacts in enumerate(self.prev_ci_artifacts):
+        for idx, (prev_workflow_run_id, prev_ci_artifacts) in enumerate([self.prev_ci_artifacts] + self.other_ci_artifacts):
 
             if idx == 0:
                 # This is to show on slack. For now, let's only show this for the same workflow id
@@ -526,21 +528,28 @@ class Message:
             # To save the list of new model failures and uploaed to hub repositories
             extra_blocks = self.get_new_model_failure_blocks(prev_ci_artifacts=prev_ci_artifacts, to_truncate=False)
             if extra_blocks:
+
+                filename = "new_model_failures"
+                if idx > 0:
+                    filename = f"{filename}_against_{prev_workflow_run_id}"
+
+                # prepare the file name `new_model_failures` or `new_model_failures_against_{}`
+
                 failure_text = extra_blocks[-1]["text"]["text"]
-                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/{filename}.txt")
                 with open(file_path, "w", encoding="UTF-8") as fp:
                     fp.write(failure_text)
 
                 # upload results to Hub dataset
-                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/{filename}.txt")
                 commit_info = api.upload_file(
                     path_or_fileobj=file_path,
-                    path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/new_model_failures.txt",
+                    path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{filename}.txt",
                     repo_id="hf-internal-testing/transformers_daily_ci",
                     repo_type="dataset",
                     token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
                 )
-                url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/new_model_failures.txt"
+                url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/{filename}.txt"
 
                 # extra processing to save to json format
                 new_failed_tests = {}
@@ -554,33 +563,34 @@ class Message:
                             new_failed_tests[model] = {"single-gpu": [], "multi-gpu": []}
                         for url, device in items:
                             new_failed_tests[model][f"{device}-gpu"].append(line)
-                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.json")
+                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/{filename}.json")
                 with open(file_path, "w", encoding="UTF-8") as fp:
                     json.dump(new_failed_tests, fp, ensure_ascii=False, indent=4)
 
                 # upload results to Hub dataset
-                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.json")
+                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/{filename}.json")
                 _ = api.upload_file(
                     path_or_fileobj=file_path,
-                    path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/new_model_failures.json",
+                    path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{filename}.json",
                     repo_id="hf-internal-testing/transformers_daily_ci",
                     repo_type="dataset",
                     token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
                 )
 
-                block = {
-                    "type": "section",
-                    "text": {
-                        "type": "plain_text",
-                        "text": " ",
-                    },
-                    "accessory": {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "Check New model failures"},
-                        "url": url,
-                    },
-                }
-                blocks.append(block)
+                if idx == 0:
+                    block = {
+                        "type": "section",
+                        "text": {
+                            "type": "plain_text",
+                            "text": " ",
+                        },
+                        "accessory": {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "Check New model failures"},
+                            "url": url,
+                        },
+                    }
+                    blocks.append(block)
 
         return json.dumps(blocks)
 
@@ -1273,38 +1283,47 @@ if __name__ == "__main__":
     #   - might want to specify multiple runs
     #   - could be no runs specified
 
-    prev_ci_artifacts = None
-    target_workflow_run_ids = []
+    prev_workflow_run_id = None
+    other_workflow_run_ids = []
 
-    if is_scheduled_ci_run:
+    if not is_scheduled_ci_run:
         # TODO: remove `if job_name == "run_models_gpu"`
         if job_name == "run_models_gpu":
             # This is the previous completed scheduled run
-            workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"])
-            target_workflow_run_ids.append(workflow_run_id)
+            prev_workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"])
             # If we really need this?
             target_workflow_id = os.environ["TARGET_WORKFLOW_ID"]
-            workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=target_workflow_id)
-            target_workflow_run_ids.append(workflow_run_id)
-            print(target_workflow_run_ids)
+            target_workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=target_workflow_id)
+            other_workflow_run_ids.append(target_workflow_run_id)
     else:
-        target_workflow_id = os.environ["LAST_WORKFLOW_RUN_ID"]
-        workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_run_id=target_workflow_id)
-        target_workflow_run_ids.append(workflow_run_id)
+        target_workflow_run_id = os.environ["LAST_WORKFLOW_RUN_ID"]
+        # TODO: remove this one
+        prev_workflow_run_id = target_workflow_run_id
+        other_workflow_run_ids.append(target_workflow_run_id)
 
-    all_prev_ci_artifacts = []
-    for target_workflow_run_id in target_workflow_run_ids:
-            # Get the last previously completed CI's failure tables
-            artifact_names = [f"ci_results_{job_name}"]
-            output_dir = os.path.join(os.getcwd(), "previous_reports")
-            os.makedirs(output_dir, exist_ok=True)
-            prev_ci_artifacts = get_last_daily_ci_reports(
-                artifact_names=artifact_names,
-                output_dir=output_dir,
-                token=os.environ["ACCESS_REPO_INFO_TOKEN"],
-                workflow_run_id=target_workflow_run_id,
-            )
-            all_prev_ci_artifacts.append(prev_ci_artifacts)
+    prev_ci_artifacts = None
+    other_ci_artifacts = []
+
+    for idx, target_workflow_run_id in enumerate([prev_workflow_run_id] + other_workflow_run_ids):
+            if target_workflow_run_id is None:
+                assert idx == 0
+                prev_ci_artifacts = (None, None)
+            else:
+                # Get the last previously completed CI's failure tables
+                artifact_names = [f"ci_results_{job_name}"]
+                output_dir = os.path.join(os.getcwd(), "previous_reports")
+                os.makedirs(output_dir, exist_ok=True)
+                # TODO: better name
+                ci_artifacts = get_last_daily_ci_reports(
+                    artifact_names=artifact_names,
+                    output_dir=output_dir,
+                    token=os.environ["ACCESS_REPO_INFO_TOKEN"],
+                    workflow_run_id=target_workflow_run_id,
+                )
+                if idx == 0:
+                    prev_ci_artifacts = (target_workflow_run_id, ci_artifacts)
+                else:
+                    other_ci_artifacts.append((target_workflow_run_id, ci_artifacts))
 
     message = Message(
         title,
@@ -1312,7 +1331,8 @@ if __name__ == "__main__":
         model_results,
         additional_results,
         selected_warnings=selected_warnings,
-        prev_ci_artifacts=all_prev_ci_artifacts,
+        prev_ci_artifacts=prev_ci_artifacts,
+        other_ci_artifacts=other_ci_artifacts,
     )
 
     # send report only if there is any failure (for push CI)
