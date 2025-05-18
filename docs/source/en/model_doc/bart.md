@@ -29,9 +29,6 @@ rendered properly in your Markdown viewer.
 
 You can find all the original BART checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=bart) organization.
 
-> [!TIP]
-> Click on the BART models in the right sidebar for more examples of how to apply BART to different language tasks.
-
 The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">

@@ -391,13 +391,7 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
 
 
 class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
-    def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-        if head_mask is not None:
-            # The super dispatch is done in the forward.
-            raise ValueError(
-                "PyTorch SDPA does not support head_mask. Please open an issue in Transformers repository."
-            )
-
+    def _attn(self, query, key, value, attention_mask=None):
         scale = None
         if not self.scale_attn_weights:
             scale = 1
@@ -507,17 +501,17 @@ class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
 
         key, value = key_value.split((self.head_dim, self.head_dim), dim=-1)
 
-        if not output_attentions and head_mask is None:
+        if not output_attentions:
             # Difference with the original implementation: there is no need to transpose the key here,
             # as SDPA expects seq_length to be at index -2 for the key as well
-            attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+            attn_output, attn_weights = self._attn(query, key, value, attention_mask)
         else:
             # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "GPTBigCodeModel is using GPTBigCodeSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` and `head_mask` not None."
+                "GPTBigCodeModel is using GPTBigCodeSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`."
                 ' Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
-            attn_output, attn_weights = super()._attn(query, key.transpose(-1, -2), value, attention_mask, head_mask)
+            attn_output, attn_weights = super()._attn(query, key.transpose(-1, -2), value, attention_mask)
 
         if not self.multi_query:
             attn_output = attn_output.transpose(1, 2).reshape(hidden_states.shape)
