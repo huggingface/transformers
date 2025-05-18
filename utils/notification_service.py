@@ -515,11 +515,12 @@ class Message:
         if len(self.selected_warnings) > 0:
             blocks.append(self.warnings)
 
+        # This is to show on slack. For now, let's only show this for the same workflow id
         new_failure_blocks = self.get_new_model_failure_blocks(with_header=False)
         if len(new_failure_blocks) > 0:
             blocks.extend(new_failure_blocks)
 
-        # To save the list of new model failures
+        # To save the list of new model failures and uploaed to hub repositories
         extra_blocks = self.get_new_model_failure_blocks(to_truncate=False)
         if extra_blocks:
             failure_text = extra_blocks[-1]["text"]["text"]
@@ -1299,8 +1300,9 @@ if __name__ == "__main__":
             print(target_workflow_run_ids)
     else:
         target_workflow_id = os.environ["LAST_WORKFLOW_RUN_ID"]
-        workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=target_workflow_id)
+        workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_run_id=target_workflow_id)
 
+    all_prev_ci_artifacts = []
     for target_workflow_run_id in target_workflow_run_ids:
             # Get the last previously completed CI's failure tables
             artifact_names = [f"ci_results_{job_name}"]
@@ -1312,6 +1314,7 @@ if __name__ == "__main__":
                 token=os.environ["ACCESS_REPO_INFO_TOKEN"],
                 workflow_run_id=target_workflow_run_id,
             )
+            all_prev_ci_artifacts.append(prev_ci_artifacts)
 
     message = Message(
         title,
