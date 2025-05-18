@@ -16,6 +16,9 @@ on:
         default: 'bonbon'
         type: string
 
+env:
+  REPORT_REPO_SUBFOLDER: 'bonbon'
+
 jobs:
   setup:
     name: ABC
@@ -24,20 +27,22 @@ jobs:
       - name: DEF
         shell: bash
         run: |
-          echo "${{ inputs.REPORT_REPO_SUBFOLDER }}"
+          echo "${{ toJSON(env) }}"
+          curl https://api.github.com/repos/huggingface/transformers/actions/runs/${{ github.run_id }} >> workflow_run.txt
+          cat workflow_run.txt
 
-  model-ci:
-    name: Model CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_models_gpu
-      slack_report_channel: "#transformers-ci-daily-models"
-      runner: daily-ci
-      docker: huggingface/transformers-all-latest-gpu
-      ci_event: Daily CI
-      # workflow_dispatch: check inputs.REPORT_REPO_SUBFOLDER; push: check env.REPORT_REPO_SUBFOLDER; scheduled: empty; if empty --> check run_id and commit
-      report_repo_subfolder: ${{ inputs.REPORT_REPO_SUBFOLDER }}
-    secrets: inherit
+#  model-ci:
+#    name: Model CI
+#    uses: ./.github/workflows/self-scheduled.yml
+#    with:
+#      job: run_models_gpu
+#      slack_report_channel: "#transformers-ci-daily-models"
+#      runner: daily-ci
+#      docker: huggingface/transformers-all-latest-gpu
+#      ci_event: Daily CI
+#      # workflow_dispatch: check inputs.REPORT_REPO_SUBFOLDER; push: check env.REPORT_REPO_SUBFOLDER; scheduled: empty; if empty --> check run_id and commit
+#      report_repo_subfolder: ${{ inputs.REPORT_REPO_SUBFOLDER }}
+#    secrets: inherit
 
 #  torch-pipeline:
 #    name: Torch pipeline CI
