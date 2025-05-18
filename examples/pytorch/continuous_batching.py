@@ -43,7 +43,7 @@ generation_config = GenerationConfig(
 
 # Prepare data (using a smaller subset for demonstration)
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
-train_dataset = train_dataset.select(range(5))  # Use only 5 examples for the simple version
+# train_dataset = train_dataset.select(range(5))  # Use only 5 examples for the simple version
 
 # tokenized_test_prompts = tokenizer(_TEST_PROMPTS, padding=True, padding_side="left", truncation=True, max_length=512)
 # simple_batch_inputs = list(tokenized_test_prompts["input_ids"])

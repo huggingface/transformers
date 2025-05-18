@@ -773,7 +773,6 @@ class ContinuousBatchProcessor:
             key_length = query_length + past_length
             cache_index = list(range(key_length))
 
-
             positions_to_add = cache_index[past_length:]
             read_indices = self.cache._get_physical_indices(state, cache_index)
             write_indices = read_indices[-query_length:]
