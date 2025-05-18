@@ -18,6 +18,7 @@ import queue
 import statistics
 import threading
 import time
+from functools import partial
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Deque, Dict, List, Optional, Tuple, Union
@@ -285,7 +286,7 @@ class PagedAttentionCache(Cache):
         """Returns the block table for a request."""
         return self._block_tables.get(request_id, [])
 
-    def _get_physical_indices(self, request_id: str, logical_indices: List[int]) -> torch.Tensor:
+    def _get_physical_indices(self, state: RequestState, logical_indices: List[int]) -> List[int]:
         """
         Maps logical sequence indices to physical cache indices using the block table, using PyTorch.
 
@@ -300,24 +301,26 @@ class PagedAttentionCache(Cache):
             ValueError: If no block table is found for the request ID.
             IndexError: If a logical index maps to a block index that is out of bounds.
         """
+        request_id = state.request_id
         block_table = self._block_tables.get(request_id)
         if not block_table:
             raise ValueError(f"No block table found for request {request_id}")
 
-        # Convert to PyTorch tensor for vectorized operations
-        logical_indices_tensor = torch.tensor(logical_indices, dtype=torch.long, device=self.device)
         block_size = self.block_size
+        physical_indices = []
 
-        # Vectorized calculations
-        block_indices = logical_indices_tensor // block_size
-        block_offsets = logical_indices_tensor % block_size
+        for idx in logical_indices:
+            block_idx = idx // block_size
+            block_offset = idx % block_size
 
-        if torch.any(block_indices > len(block_table)):
-            raise IndexError(f"Logical indices map to block indices out of bounds for request {request_id}")
+            if block_idx >= len(block_table):
+                raise IndexError(f"Logical index {idx} maps to block index {block_idx} which is out of bounds "
+                                f"for request {request_id}")
 
-        block_table_tensor = torch.tensor(block_table, dtype=torch.long, device=self.device)
-        physical_block_nums = block_table_tensor[block_indices]
-        physical_indices = physical_block_nums * block_size + block_offsets
+            physical_block_num = block_table[block_idx]
+            physical_index = physical_block_num * block_size + block_offset
+            physical_indices.append(physical_index)
+
         return physical_indices
 
     @traced
@@ -789,64 +792,53 @@ class ContinuousBatchProcessor:
         # Get the request objects for this batch
         self.requests_in_batch = [self.active_requests[req_id] for req_id in self.requests_to_process_next]
         self.reset_static_tensors()
-
-        # pointers into our static flat tensors
-        token_position = 0
-        read_position = 0
-        write_position = 0
-        cumq_ptr = 1  # because at 0 we always have 0?
-        cumk_ptr = 1
-
         position_ids = []
         input_ids = []
         read_index = []
         write_index = []
         cumulative_seqlens_q = [0]
         cumulative_seqlens_k = [0]
-        logits_to_track = 0
         logits_indices = []
         self._record_batch_metrics(self.requests_in_batch)
 
         for state in self.requests_in_batch:
-            next_input_ids = state.prompt_ids
-            input_ids.extend(next_input_ids)
-            start_pos = state.current_len()
-            positions_to_add = list(range(start_pos, start_pos + len(next_input_ids)))
-            state.position_offset += len(next_input_ids)
-
-            if not self._allocate_blocks_if_needed(state, state.current_len()):
+            if not self._allocate_blocks_if_needed(state, len( state.prompt_ids)):
                 continue
 
-            write_indices = self.cache._get_physical_indices(state.request_id, positions_to_add)
-            read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))
-            seq_len_q = len(next_input_ids)
-            seq_len_k = state.current_len()  # Key length includes previously split context #TODO not sure about +1
+            next_input_ids = state.prompt_ids
+            input_ids.extend(next_input_ids)
+            past_length = state.position_offset
+            query_length = len(next_input_ids)
+            key_length = query_length + past_length
+            cache_index = list(range(key_length))
+
+
+            positions_to_add = cache_index[past_length:]
+            read_indices = self.cache._get_physical_indices(state, cache_index)
+            write_indices = read_indices[-query_length:]
 
             position_ids.extend(positions_to_add)
             read_index.extend(read_indices)
             write_index.extend(write_indices)
-            cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + seq_len_q)
-            cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + seq_len_k)
+            cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
+            cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + key_length)
             if len(state.remaining_prompt_ids) == 0:
-                logits_indices.append(cumulative_seqlens_q[-1] - 1)
-                logits_to_track += 1
+                logits_indices.append(cumulative_seqlens_q[-1]-1)
+            self.max_seqlen_q = max(self.max_seqlen_q, query_length)
+            self.max_seqlen_k = max(self.max_seqlen_k, key_length)
+            state.position_offset += query_length
 
-            self.max_seqlen_q = max(self.max_seqlen_q, seq_len_q)
-            self.max_seqlen_k = max(self.max_seqlen_k, seq_len_k)
-
-            token_position += len(positions_to_add)
-            read_position += len(read_indices)
-            write_position += len(write_indices)
-            cumq_ptr += 1
-            cumk_ptr += 1
         # now if sdpa or eager, create the attention mask!
-        self.input_ids[:, : len(input_ids)].copy_(torch.tensor(input_ids, **self.tensor_metadata))
-        self.position_ids[:, :token_position].copy_(torch.tensor(position_ids, **self.tensor_metadata))
-        self.write_index[:write_position].copy_(torch.tensor(write_index, **self.tensor_metadata))
-        self.read_index[:read_position].copy_(torch.tensor(read_index, **self.tensor_metadata))
-        self.cumulative_seqlens_q[:cumq_ptr].copy_(torch.tensor(cumulative_seqlens_q, **self.tensor_metadata))
-        self.cumulative_seqlens_k[:cumk_ptr].copy_(torch.tensor(cumulative_seqlens_k, **self.tensor_metadata))
-        self.logits_indices[:logits_to_track].copy_(torch.tensor(logits_indices, **self.tensor_metadata))
+        to_tensor = partial(torch.tensor, **self.tensor_metadata)
+        self.input_ids[:, :len(input_ids)] = to_tensor(input_ids)
+        self.position_ids[:, :len(position_ids)] = to_tensor(position_ids)
+        self.write_index[:len(write_index)] = to_tensor(write_index)
+        self.read_index[:len(read_index)] = to_tensor(read_index)
+        self.cumulative_seqlens_q[:len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
+        self.cumulative_seqlens_k[:len(cumulative_seqlens_k)] = to_tensor(cumulative_seqlens_k)
+        self.logits_indices[:len(logits_indices)] = to_tensor(logits_indices)
+        min_value = torch.finfo(self.model_dtype).min
+        # if self.config._attn_implementation != "paged_attention": # we set `is_causal` to True in paged call`
         for i in range(len(cumulative_seqlens_q) - 1):
             if (
                 cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
@@ -859,25 +851,23 @@ class ContinuousBatchProcessor:
                 diagonal = 1
             query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
             key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
-            self.attention_mask[..., query_range, key_range].copy_(
-                torch.triu(
-                    torch.full(
-                        self.attention_mask[..., query_range, key_range].shape,
-                        fill_value=torch.finfo(self.model_dtype).min,
-                        dtype=self.model_dtype,
-                        device=self.model_device,
-                    ),
-                    diagonal=diagonal,
-                )
-            )
 
-    @traced
-    def _allocate_blocks_if_needed(self, state: RequestState, needed_slots: int):
-        """Helper function to allocate blocks for a request."""
-        current_blocks = len(state.allocated_blocks)
-        needed_blocks = (needed_slots // self.cache.block_size) + 1
-        if needed_blocks > current_blocks:
-            blocks_needed = needed_blocks - current_blocks
+            mask = torch.triu(
+                torch.full(
+                    self.attention_mask[..., query_range, key_range].shape, min_value, dtype=self.model_dtype, device=self.model_device
+                ),
+                diagonal=diagonal,
+            )
+            # visualize_mask = AttentionMask(mask)
+            self.attention_mask[..., query_range, key_range] = mask
+
+    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int):
+        # 1. we check that the occupency is less than the requested length
+        # 2. we allocate enough blocks to cover the requested length
+        current_len = state.current_len()
+        occupency = len(state.allocated_blocks) * self.cache.block_size - current_len
+        if occupency < len_next_tokens or (len(state.allocated_blocks) == 0):
+            blocks_needed = ((len_next_tokens-occupency+1) // self.cache.block_size) + 1
             allocated = self.cache.allocate_blocks(blocks_needed, state.request_id)
             if not allocated:
                 return False
