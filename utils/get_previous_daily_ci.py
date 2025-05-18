@@ -1,3 +1,4 @@
+import json
 import os
 import zipfile
 
@@ -46,18 +47,16 @@ def get_last_daily_ci_runs(token, workflow_run_id=None):
     return workflow_run_id
 
 
-def get_last_daily_ci_run_commit(token):
+def get_last_daily_ci_run_commit(token, workflow_run_id=None):
     """Get the commit sha of the last completed scheduled daily CI workflow run."""
-    return "0ef339ff1b63bb03a388c79bfbebec9085e10564"
-    return "58261e0f5ecb89508998b0c121bc2c5528dd06c6"
-    workflow_runs = get_daily_ci_runs(token)
-    head_sha = None
-    for workflow_run in workflow_runs:
-        if workflow_run["status"] == "completed":
-            head_sha = workflow_run["head_sha"]
-            break
+    workflow_run_id = get_last_daily_ci_runs(token, workflow_run_id=workflow_run_id)
 
-    return head_sha
+    os.system(f"curl https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id} > last_workflow_run.json")
+    with open("last_workflow_run.json") as fp:
+        workflow_run = json.load(fp)
+        workflow_run_head_sha = workflow_run["head_sha"]
+
+    return workflow_run_head_sha
 
 
 def get_last_daily_ci_artifacts(artifact_names, output_dir, token, workflow_run_id=None):
