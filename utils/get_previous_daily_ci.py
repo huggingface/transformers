@@ -40,12 +40,12 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
     return result["workflow_runs"]
 
 
-def get_last_daily_ci_runs(token, workflow_run_id=None):
+def get_last_daily_ci_runs(token, workflow_run_id=None, workflow_id=None):
     """Get the last completed workflow run id of the scheduled (daily) CI."""
     if workflow_run_id is not None and workflow_run_id != "":
         return workflow_run_id
 
-    workflow_runs = get_daily_ci_runs(token)
+    workflow_runs = get_daily_ci_runs(token, workflow_id=workflow_id)
     workflow_run_id = None
     for workflow_run in workflow_runs:
         if workflow_run["status"] == "completed":
