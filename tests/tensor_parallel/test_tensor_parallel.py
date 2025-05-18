@@ -19,8 +19,10 @@ import textwrap
 from transformers import is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
+    backend_device_count,
     get_torch_dist_unique_port,
     require_torch_multi_gpu,
+    torch_device,
 )
 
 
@@ -91,4 +93,4 @@ class TestTensorParallel(TestCasePlus):
 
 @require_torch_multi_gpu
 class TestTensorParallelCuda(TestTensorParallel):
-    nproc_per_node = torch.cuda.device_count()
+    nproc_per_node = backend_device_count(torch_device)

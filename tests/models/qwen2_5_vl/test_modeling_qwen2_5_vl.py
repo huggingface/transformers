@@ -421,7 +421,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     @slow
     def test_small_model_integration_test(self):

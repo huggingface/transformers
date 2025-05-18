@@ -2651,7 +2651,7 @@ class ModelTesterMixin:
         config = self.model_tester.get_large_model_config()
 
         for model_class in self.all_parallelizable_model_classes:
-            torch.cuda.empty_cache()
+            backend_empty_cache(torch_device)
 
             # 1. single gpu memory load + unload + memory measurements
             # Retrieve initial memory usage (can easily be ~0.6-1.5GB if cuda-kernels have been preloaded by previous tests)
@@ -2667,7 +2667,7 @@ class ModelTesterMixin:
 
             del model
             gc.collect()
-            torch.cuda.empty_cache()
+            backend_empty_cache(torch_device)
 
             # 2. MP test
             # it's essential to re-calibrate the usage before the next stage
@@ -2691,7 +2691,7 @@ class ModelTesterMixin:
 
             del model
             gc.collect()
-            torch.cuda.empty_cache()
+            backend_empty_cache(torch_device)
 
     @require_torch_gpu
     @require_torch_multi_gpu
