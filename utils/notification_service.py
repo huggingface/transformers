@@ -1287,7 +1287,7 @@ if __name__ == "__main__":
                 artifact_names=artifact_names,
                 output_dir=output_dir,
                 token=os.environ["ACCESS_REPO_INFO_TOKEN"],
-                workflow_run_id="14277576462",
+                workflow_run_id=os.environ["LAST_WORKFLOW_RUN_ID"],
             )
 
     message = Message(
