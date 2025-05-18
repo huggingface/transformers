@@ -76,6 +76,10 @@ if __name__ == "__main__":
 
     # TODO: better way
     os.system(f"curl https://api.github.com/repos/huggingface/transformers/actions/runs/{os.getenv('GITHUB_RUN_ID')} >> workflow_run.json")
+    print("=" * 120)
+    print(os.getenv('GITHUB_RUN_ID'))
+    os.system("cat workflow_run.json")
+    print("=" * 120)
     with open("workflow_run.json") as fp:
         workflow_run = json.load(fp)
         workflow_run_created_time = workflow_run["created_at"]
