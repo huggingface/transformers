@@ -192,7 +192,7 @@ class Mask2FormerHungarianMatcher(nn.Module):
         """
         super().__init__()
         if cost_class == 0 and cost_mask == 0 and cost_dice == 0:
-            raise ValueError("All costs cant be 0")
+            raise ValueError("All costs can't be 0")
 
         self.num_points = num_points
         self.cost_class = cost_class
@@ -993,29 +993,28 @@ class EoMTPreTrainedModel(PreTrainedModel):
     config_class = EoMTConfig
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
     _no_split_modules = ["EoMTMLP"]
     _supports_sdpa = True
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
-            ).to(module.weight.dtype)
+    def _init_weights(self, module: nn.Module) -> None:
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, EoMTLayerScale):
-            module.lambda1.data.fill_(self.config.layerscale_value)
+            if hasattr(module, "lambda1"):
+                module.lambda1.data.fill_(self.config.layerscale_value)
+        elif isinstance(module, EoMTEmbeddings):
+            module.cls_token.data.normal_(mean=0.0, std=std)
 
 
 # ToDo: How to add gradient checkpointing to the model?
@@ -1046,7 +1045,6 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
 
         self.register_buffer("attn_mask_probs", torch.ones(config.num_blocks))
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1132,6 +1130,9 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         hidden_states = self.embeddings(pixel_values)
 
         for idx, layer_module in enumerate(self.layers):
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
             if idx == self.num_hidden_layers - self.config.num_blocks:
                 query = self.query.weight[None, :, :].expand(hidden_states.shape[0], -1, -1)
                 hidden_states = torch.cat((query, hidden_states), dim=1)
@@ -1174,12 +1175,12 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
             layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
             hidden_states = layer_outputs[0]
 
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
             if output_attentions:
                 all_attentions += (layer_outputs[1],)
 
         sequence_output = self.layernorm(hidden_states)
+        if output_hidden_states:
+            all_hidden_states += (sequence_output,)
 
         masks_queries_logits, class_queries_logits = self._predict(sequence_output)
         masks_queries_logits_per_layer += (masks_queries_logits,)

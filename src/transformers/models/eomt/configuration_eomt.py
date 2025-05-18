@@ -39,7 +39,7 @@ class EoMTConfig(PretrainedConfig):
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
-        layerscale_value=1e-5,
+        layerscale_value=1.0,
         drop_path_rate=0.0,
         num_upscale_blocks=2,
         attention_dropout=0.0,
@@ -52,6 +52,8 @@ class EoMTConfig(PretrainedConfig):
         train_num_points: int = 12544,
         oversample_ratio: float = 3.0,
         importance_sample_ratio: float = 0.75,
+        num_queries=200,
+        num_register_tokens=4,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -71,8 +73,8 @@ class EoMTConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.layerscale_value = layerscale_value
         self.drop_path_rate = drop_path_rate
-        self.num_queries = 200
-        self.num_register_tokens = 4
+        self.num_queries = num_queries
+        self.num_register_tokens = num_register_tokens
         self.num_upscale_blocks = num_upscale_blocks
         self.attention_dropout = attention_dropout
         self.projection_dropout = projection_dropout
