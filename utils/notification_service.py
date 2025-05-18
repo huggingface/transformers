@@ -515,69 +515,72 @@ class Message:
         if len(self.selected_warnings) > 0:
             blocks.append(self.warnings)
 
-        # This is to show on slack. For now, let's only show this for the same workflow id
-        new_failure_blocks = self.get_new_model_failure_blocks(with_header=False)
-        if len(new_failure_blocks) > 0:
-            blocks.extend(new_failure_blocks)
+        for idx, prev_ci_artifacts in enumerate(self.prev_ci_artifacts):
 
-        # To save the list of new model failures and uploaed to hub repositories
-        extra_blocks = self.get_new_model_failure_blocks(to_truncate=False)
-        if extra_blocks:
-            failure_text = extra_blocks[-1]["text"]["text"]
-            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
-            with open(file_path, "w", encoding="UTF-8") as fp:
-                fp.write(failure_text)
+            if idx == 0:
+                # This is to show on slack. For now, let's only show this for the same workflow id
+                new_failure_blocks = self.get_new_model_failure_blocks(prev_ci_artifacts=prev_ci_artifacts, with_header=False)
+                if len(new_failure_blocks) > 0:
+                    blocks.extend(new_failure_blocks)
 
-            # upload results to Hub dataset
-            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
-            commit_info = api.upload_file(
-                path_or_fileobj=file_path,
-                path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/new_model_failures.txt",
-                repo_id="hf-internal-testing/transformers_daily_ci",
-                repo_type="dataset",
-                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
-            )
-            url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/new_model_failures.txt"
+            # To save the list of new model failures and uploaed to hub repositories
+            extra_blocks = self.get_new_model_failure_blocks(prev_ci_artifacts=prev_ci_artifacts, to_truncate=False)
+            if extra_blocks:
+                failure_text = extra_blocks[-1]["text"]["text"]
+                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+                with open(file_path, "w", encoding="UTF-8") as fp:
+                    fp.write(failure_text)
 
-            # extra processing to save to json format
-            new_failed_tests = {}
-            for line in failure_text.split():
-                if "https://github.com/huggingface/transformers/actions/runs" in line:
-                    pattern = r"<(https://github.com/huggingface/transformers/actions/runs/.+?/job/.+?)\|(.+?)>"
-                    items = re.findall(pattern, line)
-                elif "tests/models/" in line:
-                    model = line.split("/")[2]
-                    if model not in new_failed_tests:
-                        new_failed_tests[model] = {"single-gpu": [], "multi-gpu": []}
-                    for url, device in items:
-                        new_failed_tests[model][f"{device}-gpu"].append(line)
-            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.json")
-            with open(file_path, "w", encoding="UTF-8") as fp:
-                json.dump(new_failed_tests, fp, ensure_ascii=False, indent=4)
+                # upload results to Hub dataset
+                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+                commit_info = api.upload_file(
+                    path_or_fileobj=file_path,
+                    path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/new_model_failures.txt",
+                    repo_id="hf-internal-testing/transformers_daily_ci",
+                    repo_type="dataset",
+                    token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+                )
+                url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/new_model_failures.txt"
 
-            # upload results to Hub dataset
-            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.json")
-            _ = api.upload_file(
-                path_or_fileobj=file_path,
-                path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/new_model_failures.json",
-                repo_id="hf-internal-testing/transformers_daily_ci",
-                repo_type="dataset",
-                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
-            )
+                # extra processing to save to json format
+                new_failed_tests = {}
+                for line in failure_text.split():
+                    if "https://github.com/huggingface/transformers/actions/runs" in line:
+                        pattern = r"<(https://github.com/huggingface/transformers/actions/runs/.+?/job/.+?)\|(.+?)>"
+                        items = re.findall(pattern, line)
+                    elif "tests/models/" in line:
+                        model = line.split("/")[2]
+                        if model not in new_failed_tests:
+                            new_failed_tests[model] = {"single-gpu": [], "multi-gpu": []}
+                        for url, device in items:
+                            new_failed_tests[model][f"{device}-gpu"].append(line)
+                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.json")
+                with open(file_path, "w", encoding="UTF-8") as fp:
+                    json.dump(new_failed_tests, fp, ensure_ascii=False, indent=4)
 
-            block = {
-                "type": "section",
-                "text": {
-                    "type": "plain_text",
-                    "text": " ",
-                },
-                "accessory": {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Check New model failures"},
-                    "url": url,
-                },
-            }
-            blocks.append(block)
+                # upload results to Hub dataset
+                file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.json")
+                _ = api.upload_file(
+                    path_or_fileobj=file_path,
+                    path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/new_model_failures.json",
+                    repo_id="hf-internal-testing/transformers_daily_ci",
+                    repo_type="dataset",
+                    token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+                )
+
+                block = {
+                    "type": "section",
+                    "text": {
+                        "type": "plain_text",
+                        "text": " ",
+                    },
+                    "accessory": {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Check New model failures"},
+                        "url": url,
+                    },
+                }
+                blocks.append(block)
 
         return json.dumps(blocks)
 
@@ -700,18 +703,18 @@ class Message:
             {"type": "section", "text": {"type": "mrkdwn", "text": failure_text}},
         ]
 
-    def get_new_model_failure_blocks(self, with_header=True, to_truncate=True):
-        if self.prev_ci_artifacts is None:
+    def get_new_model_failure_blocks(self, prev_ci_artifacts, with_header=True, to_truncate=True):
+        if prev_ci_artifacts is None:
             return []
 
         sorted_dict = sorted(self.model_results.items(), key=lambda t: t[0])
 
         prev_model_results = {}
         if (
-            f"ci_results_{job_name}" in self.prev_ci_artifacts
-            and "model_results.json" in self.prev_ci_artifacts[f"ci_results_{job_name}"]
+            f"ci_results_{job_name}" in prev_ci_artifacts
+            and "model_results.json" in prev_ci_artifacts[f"ci_results_{job_name}"]
         ):
-            prev_model_results = json.loads(self.prev_ci_artifacts[f"ci_results_{job_name}"]["model_results.json"])
+            prev_model_results = json.loads(prev_ci_artifacts[f"ci_results_{job_name}"]["model_results.json"])
 
         all_failure_lines = {}
         for job, job_result in sorted_dict:
@@ -811,20 +814,6 @@ class Message:
                     )
 
                     time.sleep(1)
-
-        blocks = self.get_new_model_failure_blocks()
-        if blocks:
-            print("Sending the following reply")
-            print(json.dumps({"blocks": blocks}))
-
-            client.chat_postMessage(
-                channel=SLACK_REPORT_CHANNEL_ID,
-                text="Results for new failures",
-                blocks=blocks,
-                thread_ts=self.thread_ts["ts"],
-            )
-
-            time.sleep(1)
 
 
 def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
@@ -1287,7 +1276,7 @@ if __name__ == "__main__":
     prev_ci_artifacts = None
     target_workflow_run_ids = []
 
-    if not is_scheduled_ci_run:
+    if is_scheduled_ci_run:
         # TODO: remove `if job_name == "run_models_gpu"`
         if job_name == "run_models_gpu":
             # This is the previous completed scheduled run
@@ -1323,7 +1312,7 @@ if __name__ == "__main__":
         model_results,
         additional_results,
         selected_warnings=selected_warnings,
-        prev_ci_artifacts=prev_ci_artifacts,
+        prev_ci_artifacts=all_prev_ci_artifacts,
     )
 
     # send report only if there is any failure (for push CI)
