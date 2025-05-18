@@ -31,12 +31,12 @@ if tokenizer.pad_token is None:
 
 # Configure generation parameters
 generation_config = GenerationConfig(
-    max_new_tokens=512,
+    max_new_tokens=2048,
     top_k=0,
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
     use_cache=False,
-    num_blocks=512,
+    num_blocks=2038,
     block_size=128,
     max_batch_tokens=512,  # Maximum number of tokens to process in a single batch
 )

@@ -763,9 +763,10 @@ class ContinuousBatchProcessor:
         self._record_batch_metrics(self.requests_in_batch)
 
         for state in self.requests_in_batch:
-            if not self._allocate_blocks_if_needed(state, len( state.prompt_ids)):
+            if not self._allocate_blocks_if_needed(state, len(state.prompt_ids) + self.cache.block_size):
+                state.waiting = True
                 continue
-
+            state.waiting = False
             next_input_ids = state.prompt_ids
             input_ids.extend(next_input_ids)
             past_length = state.position_offset
@@ -837,21 +838,16 @@ class ContinuousBatchProcessor:
     @traced
     def update_batch(self):
         """Update request states based on generated tokens."""
-        # TODO I ANM HERE NEED TO FIGURE LOGIC OPTIAML HERE
-        # has_eos = self.output_ids == self.generation_config.eos_token_id
-        # is_max_len = self.cumulative_seqlens_q[1:] + 1 >= self.max_context_len
-        # to_remove = has_eos | is_max_len
-        # tokens_to_keep = torch.where(~to_remove & self.output_ids >= 0)[1]  # can get request ids with this
-        out_tokens = self.output_ids.clone().detach().cpu()  # should be the only synch we do
+        out_tokens = self.output_ids.tolist()[0] # should be the only synch we do
         finished_request_ids = []
         for i, state in enumerate(self.requests_in_batch):
             req_id = state.request_id
-            if len(state.remaining_prompt_ids) == 0:
+            if len(state.remaining_prompt_ids) == 0 and state.waiting == False:
                 self._record_ttft_metric(state)
                 state.status = "decoding"
-                token = out_tokens[:, self.logits_indices[i]]
-                state.static_outputs.extend(token.tolist())
-                state.prompt_ids = token.tolist()
+                token = out_tokens[self.logits_indices[i]]
+                state.static_outputs.extend([token])
+                state.prompt_ids = [token]
                 if state.update_with_token(token):
                     finished_request_ids.append(req_id)
                 self._maybe_send_output(state, token)
