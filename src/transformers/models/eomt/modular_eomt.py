@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch EoMT model."""
 
-import collections
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
@@ -647,19 +646,8 @@ class Mask2FormerLoss(nn.Module):
 
 class EoMTPatchEmbeddings(Dinov2PatchEmbeddings, nn.Module):
     def __init__(self, config: EoMTConfig):
-        nn.Module().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
-
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+        super().__init__()
         self.grid_size = (self.image_size[0] // self.patch_size[0], self.image_size[1] // self.patch_size[1])
-        self.num_patches = self.grid_size[0] * self.grid_size[1]
 
 
 class EoMTEmbeddings(nn.Module):
@@ -711,7 +699,6 @@ def eager_attention_forward(
 ):
     attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
 
-    # This is the change from Dinov2 func.
     if attention_mask is not None:
         attn_weights = attn_weights * attention_mask
 
@@ -1021,7 +1008,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
     def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
 
-    def _predict(self, logits: torch.Tensor):
+    def predict(self, logits: torch.Tensor):
         query_tokens = logits[:, : self.config.num_queries, :]
         class_logits = self.class_predictor(query_tokens)
 
@@ -1083,7 +1070,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
 
             if self.training and idx >= self.num_hidden_layers - self.config.num_blocks:
                 norm_hidden_states = self.layernorm(hidden_states)
-                masks_queries_logits, class_queries_logits = self._predict(norm_hidden_states)
+                masks_queries_logits, class_queries_logits = self.predict(norm_hidden_states)
 
                 masks_queries_logits_per_layer += (masks_queries_logits,)
                 class_queries_logits_per_layer += (class_queries_logits,)
@@ -1126,7 +1113,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (sequence_output,)
 
-        masks_queries_logits, class_queries_logits = self._predict(sequence_output)
+        masks_queries_logits, class_queries_logits = self.predict(sequence_output)
         masks_queries_logits_per_layer += (masks_queries_logits,)
         class_queries_logits_per_layer += (class_queries_logits,)
 
