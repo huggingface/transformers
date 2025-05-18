@@ -678,77 +678,38 @@ class ContinuousBatchProcessor:
 
         self.output_queue.put(state)
 
+  
     @traced
     def _schedule_batch(self) -> List[str]:
-        """Select requests for the next processing batch."""
-        selected_requests = []
-        num_free_blocks = self.cache.get_num_free_blocks()
-        batch_token_count = 0
+        priority_states = []
+        second_priority_states = []
+        scheduled_requests = []
+        token_budget = self.max_batch_tokens
 
-        # First prioritize running decoding requests (need just 1 token each)
-        decoding_requests = [req_id for req_id, state in self.active_requests.items() if state.status == "decoding"]
-
-        if decoding_requests:
-            # Start with the max batch tokens
-            available_slots = self.max_batch_tokens
-            selected_requests.extend(decoding_requests[:available_slots])
-            if len(selected_requests) == available_slots:
-                return selected_requests
-            batch_token_count += len(decoding_requests)  # 1 token per request
-
-        # priortise requests for which we already started prefilling
-        candidates: List[RequestState] = [
-            state for state in self.active_requests.values() if state.status == "split_pending_remainder"
-        ]
-        candidates.extend(list(self.waiting_requests))
-
+        for state in self.active_requests.values():
+            if state.status == "decoding":
+                priority_states.append(state)
+            if state.status == "split_pending_remainder":
+                second_priority_states.append(state)
+        second_priority_states.extend(list(self.waiting_requests))
+        candidates = priority_states + second_priority_states
         request_ids_to_remove_from_waiting = set()
 
-        for i, state in enumerate(candidates):
-            if state.request_id in selected_requests:
-                continue
-
-            # Get tokens to process
-            token_budget = (
-                len(state.remaining_prompt_ids) if state.status == "split_pending_remainder" else len(state.prompt_ids)
-            )
-            if token_budget == 0:
-                if i < len(self.waiting_requests):
-                    request_ids_to_remove_from_waiting.add(state.request_id)
-                continue
-
-            # Check if we need to split the request
-            if batch_token_count + token_budget > self.max_batch_tokens:
-                remaining_space = self.max_batch_tokens - batch_token_count
-                # Only split if we have enough space for a meaningful chunk
-                if remaining_space >= 1:
-                    token_budget = remaining_space
-                else:
-                    continue  # Not enough space to split
-
-            # Check if we have enough blocks
-            needed_blocks = math.ceil(token_budget / self.cache.block_size)
-            if needed_blocks > num_free_blocks:
-                logger.debug(
-                    f"Request {state.request_id} needs {needed_blocks} blocks but only {num_free_blocks} available. Skipping."
-                )
-                continue
-
-            # We can process this request
-            num_free_blocks -= needed_blocks
-            batch_token_count += token_budget
-            selected_requests.append(state.request_id)
-
-            # Set up the request based on whether we're splitting
+        for state in candidates:
             self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
+            request_len = len(state.prompt_ids)
+            # maybe pre-allocate more blocks for full length?
+            # if self._allocate_blocks_if_needed(state, request_len):
+            scheduled_requests.append(state.request_id)
+            token_budget -= request_len
+            if token_budget == 0:
+                break
 
         # Remove processed requests from waiting queue
         self.waiting_requests = deque(
             [req for req in self.waiting_requests if req.request_id not in request_ids_to_remove_from_waiting]
         )
-
-        logger.debug(f"Scheduled batch with {len(selected_requests)} requests and {batch_token_count} tokens")
-        return selected_requests
+        return scheduled_requests
 
     @traced(span_name="prepare_request")
     def _prepare_request_for_processing(self, state: RequestState, token_budget, request_ids_to_remove_from_waiting):
