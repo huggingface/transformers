@@ -26,7 +26,7 @@ from typing import Dict, List, Optional, Union
 
 import requests
 from get_ci_error_statistics import get_jobs
-from get_previous_daily_ci import get_last_daily_ci_reports
+from get_previous_daily_ci import get_last_daily_ci_reports, get_last_daily_ci_runs
 from huggingface_hub import HfApi
 from slack_sdk import WebClient
 
@@ -1276,19 +1276,40 @@ if __name__ == "__main__":
             token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
         )
 
+    # scheduled daily CI --> compared to the previous run
+    #   - scheduled AMD CI or other CI --> compared to nvidia scheduled daily CI run
+    # push CI / workflow_dispatch --> need specific workflow runs specified
+    #   - might want to specify multiple runs
+    #   - could be no runs specified
+
     prev_ci_artifacts = None
+    target_workflow_run_ids = []
+
     if is_scheduled_ci_run:
+        # TODO: remove `if job_name == "run_models_gpu"`
         if job_name == "run_models_gpu":
-            # Get the last previously completed CI's failure tables
-            artifact_names = [f"ci_results_{job_name}"]
-            output_dir = os.path.join(os.getcwd(), "previous_reports")
-            os.makedirs(output_dir, exist_ok=True)
-            prev_ci_artifacts = get_last_daily_ci_reports(
-                artifact_names=artifact_names,
-                output_dir=output_dir,
-                token=os.environ["ACCESS_REPO_INFO_TOKEN"],
-                workflow_run_id=os.environ["LAST_WORKFLOW_RUN_ID"],
-            )
+            # This is the previous completed scheduled run
+            workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"])
+            target_workflow_run_ids.append(workflow_run_id)
+            # If we really need this?
+            target_workflow_ids = os.environ["TARGET_WORKFLOW_ID"]
+
+
+    else:
+        pass
+
+    # if is_scheduled_ci_run:
+    #     if job_name == "run_models_gpu":
+    #         # Get the last previously completed CI's failure tables
+    #         artifact_names = [f"ci_results_{job_name}"]
+    #         output_dir = os.path.join(os.getcwd(), "previous_reports")
+    #         os.makedirs(output_dir, exist_ok=True)
+    #         prev_ci_artifacts = get_last_daily_ci_reports(
+    #             artifact_names=artifact_names,
+    #             output_dir=output_dir,
+    #             token=os.environ["ACCESS_REPO_INFO_TOKEN"],
+    #             workflow_run_id=os.environ["LAST_WORKFLOW_RUN_ID"],
+    #         )
 
     message = Message(
         title,
