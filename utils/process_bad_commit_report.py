@@ -69,8 +69,19 @@ if __name__ == "__main__":
 
     # Upload to Hub and get the url
     report_repo_subfolder = os.getenv("REPORT_REPO_SUBFOLDER", "")
+    if report_repo_subfolder == "":
+        if os.getenv("GITHUB_EVENT_NAME") != "schedule":
+            # use workflow run id (if it is not a scheduled run)
+            report_repo_subfolder = os.getenv('GITHUB_RUN_ID')
 
-    report_repo_folder = f"{datetime.datetime.today().strftime('%Y-%m-%d')}"
+    # TODO: better way
+    os.system(f"curl https://api.github.com/repos/huggingface/transformers/actions/runs/{os.getenv('GITHUB_RUN_ID')} >> workflow_run.json")
+    with open("workflow_run.json") as fp:
+        workflow_run = json.load(fp)
+        workflow_run_created_time = workflow_run["created_at"]
+
+    report_repo_folder = workflow_run_created_time.split("T")[0]
+
     if report_repo_subfolder:
         report_repo_folder = f"{report_repo_folder}/{report_repo_subfolder}"
 

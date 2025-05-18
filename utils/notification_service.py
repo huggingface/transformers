@@ -1152,7 +1152,6 @@ if __name__ == "__main__":
     test_name = None
     job_name = os.getenv("CI_TEST_JOB")
     report_repo_subfolder = os.getenv("REPORT_REPO_SUBFOLDER", "")
-    print(os.getenv("GITHUB_EVENT_NAME"))
     if report_repo_subfolder == "":
         if os.getenv("GITHUB_EVENT_NAME") != "schedule":
             # use workflow run id (if it is not a scheduled run)
