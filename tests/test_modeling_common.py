@@ -73,6 +73,7 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    backend_empty_cache,
     get_device_properties,
     hub_retry,
     is_flaky,

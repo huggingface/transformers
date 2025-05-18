@@ -27,7 +27,7 @@ from transformers.testing_utils import (
 
 
 if is_torch_available():
-    import torch
+    import torch  # noqa: F401
 
 
 # RUN_SLOW=1 pytest -sv tests/tensor_parallel/test_tensor_parallel.py

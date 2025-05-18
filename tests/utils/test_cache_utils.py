@@ -199,7 +199,7 @@ class CacheIntegrationTest(unittest.TestCase):
             "HuggingFaceTB/SmolLM2-135M-Instruct", device_map="auto", torch_dtype=torch.float16
         )
         cls.model.config.sliding_window = 256  # hack to enable the use of caches with sliding windows
-`
+
     def _skip_on_failed_cache_prerequisites(self, cache_implementation):
         """Function to skip tests on failed cache prerequisites, given a cache implementation"""
         # Installed dependencies

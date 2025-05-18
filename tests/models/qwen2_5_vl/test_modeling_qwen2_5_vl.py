@@ -29,6 +29,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    backend_empty_cache,
     is_flaky,
     require_cv2,
     require_flash_attn,

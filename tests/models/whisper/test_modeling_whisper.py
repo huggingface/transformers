@@ -32,7 +32,6 @@ from transformers import WhisperConfig
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
-    require_non_xpu,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -42,7 +41,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_torchaudio_available, is_torch_xpu_available
+from transformers.utils import cached_property, is_torch_available, is_torch_xpu_available, is_torchaudio_available
 from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_utils import GenerationTesterMixin
