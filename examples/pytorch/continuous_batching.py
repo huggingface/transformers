@@ -18,11 +18,11 @@ _TEST_PROMPTS = [
 
 # --- Common Setup ---
 model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.2-3b-Instruct", attn_implementation="sdpa", torch_dtype=torch.bfloat16, device_map="auto"
+    "meta-llama/Llama-3.2-3b-Instruct", attn_implementation="paged_attention", torch_dtype=torch.bfloat16, device_map="auto"
 ).eval()
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", padding_side="left")
 
-device = "mps"
+device = "cuda"
 model.use_cache = False
 # Set pad token if missing (common for Llama models)
 if tokenizer.pad_token is None:
@@ -31,7 +31,7 @@ if tokenizer.pad_token is None:
 
 # Configure generation parameters
 generation_config = GenerationConfig(
-    max_new_tokens=50,
+    max_new_tokens=512,
     top_k=0,
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
@@ -43,7 +43,7 @@ generation_config = GenerationConfig(
 
 # Prepare data (using a smaller subset for demonstration)
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
-# train_dataset = train_dataset.select(range(100))  # Use only 5 examples for the simple version
+train_dataset = train_dataset.select(range(5))  # Use only 5 examples for the simple version
 
 # tokenized_test_prompts = tokenizer(_TEST_PROMPTS, padding=True, padding_side="left", truncation=True, max_length=512)
 # simple_batch_inputs = list(tokenized_test_prompts["input_ids"])

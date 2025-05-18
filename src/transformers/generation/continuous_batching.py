@@ -1226,8 +1226,7 @@ class ContinuousBatchingManager:
                         self.warmup(batch_processor)
                         first = False
                     try:
-                        with self.tracer.start_as_current_span("graph_replay"):
-                            self.graph.replay()
+                        self.graph.replay()
                     except Exception as e:
                         logger.error(f"Model forward pass failed: {e}", exc_info=True)
                         batch_processor.handle_batch_error(e)
