@@ -111,7 +111,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("electra", "ElectraModel"),
         ("emu3", "Emu3Model"),
         ("encodec", "EncodecModel"),
-        ("eomt", "EoMTModel"),
         ("ernie", "ErnieModel"),
         ("ernie_m", "ErnieMModel"),
         ("esm", "EsmModel"),

@@ -212,6 +212,8 @@ def convert_model(
     config.num_queries = config_data["num_queries"]
     config.num_labels = config_data["num_labels"]
     config.num_blocks = config_data["num_blocks"]
+    # With 1e-5 the test_initialization fails hence set it directly in config.
+    config.layerscale_value = 1e-5
 
     # Save the config
     if output_dir:
