@@ -1293,9 +1293,10 @@ if __name__ == "__main__":
             workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"])
             target_workflow_run_ids.append(workflow_run_id)
             # If we really need this?
-            target_workflow_ids = os.environ["TARGET_WORKFLOW_ID"]
-
-
+            target_workflow_id = os.environ["TARGET_WORKFLOW_ID"]
+            workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=target_workflow_id)
+            target_workflow_run_ids.append(workflow_run_id)
+            print(target_workflow_run_ids)
     else:
         pass
 

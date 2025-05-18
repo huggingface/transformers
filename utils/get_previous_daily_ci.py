@@ -6,7 +6,7 @@ import requests
 from get_ci_error_statistics import download_artifact, get_artifacts_links
 
 
-def get_daily_ci_runs(token, num_runs=7):
+def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
     """Get the workflow runs of the scheduled (daily) CI.
 
     This only selects the runs triggered by the `schedule` event on the `main` branch.
@@ -20,15 +20,16 @@ def get_daily_ci_runs(token, num_runs=7):
     # https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}
     # and check the `workflow_id` key.
     # workflow_id = "90575235"
-    workflow_run_id =  os.environ['GITHUB_RUN_ID']
-    print(workflow_run_id)
+    if not workflow_id:
+        workflow_run_id =  os.environ['GITHUB_RUN_ID']
+        print(workflow_run_id)
 
-    # TODO: better way
-    os.system(f"curl https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id} > workflow_run.json")
-    with open("workflow_run.json") as fp:
-        workflow_run = json.load(fp)
-        workflow_id = workflow_run["workflow_id"]
-    print(workflow_id)
+        # TODO: better way
+        os.system(f"curl https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id} > workflow_run.json")
+        with open("workflow_run.json") as fp:
+            workflow_run = json.load(fp)
+            workflow_id = workflow_run["workflow_id"]
+        print(workflow_id)
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/workflows/{workflow_id}/runs"
     # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results

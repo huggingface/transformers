@@ -91,6 +91,7 @@ jobs:
           SETUP_STATUS: ${{ inputs.setup_status }}
           REPORT_REPO_SUBFOLDER: ${{ inputs.report_repo_subfolder }}
           LAST_WORKFLOW_RUN_ID: "14277576462"
+          TARGET_WORKFLOW_ID: "90575235"
         # We pass `needs.setup.outputs.quantization_matrix` as the argument. A processing in `notification_service_quantization.py` to change
         # `quantization/bnb` to `quantization_bnb` is required, as the artifact names use `_` instead of `/`.
         run: |
