@@ -1286,7 +1286,7 @@ if __name__ == "__main__":
     prev_ci_artifacts = None
     target_workflow_run_ids = []
 
-    if is_scheduled_ci_run:
+    if not is_scheduled_ci_run:
         # TODO: remove `if job_name == "run_models_gpu"`
         if job_name == "run_models_gpu":
             # This is the previous completed scheduled run
@@ -1298,20 +1298,20 @@ if __name__ == "__main__":
             target_workflow_run_ids.append(workflow_run_id)
             print(target_workflow_run_ids)
     else:
-        pass
+        target_workflow_id = os.environ["LAST_WORKFLOW_RUN_ID"]
+        workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=target_workflow_id)
 
-    # if is_scheduled_ci_run:
-    #     if job_name == "run_models_gpu":
-    #         # Get the last previously completed CI's failure tables
-    #         artifact_names = [f"ci_results_{job_name}"]
-    #         output_dir = os.path.join(os.getcwd(), "previous_reports")
-    #         os.makedirs(output_dir, exist_ok=True)
-    #         prev_ci_artifacts = get_last_daily_ci_reports(
-    #             artifact_names=artifact_names,
-    #             output_dir=output_dir,
-    #             token=os.environ["ACCESS_REPO_INFO_TOKEN"],
-    #             workflow_run_id=os.environ["LAST_WORKFLOW_RUN_ID"],
-    #         )
+    for target_workflow_run_id in target_workflow_run_ids:
+            # Get the last previously completed CI's failure tables
+            artifact_names = [f"ci_results_{job_name}"]
+            output_dir = os.path.join(os.getcwd(), "previous_reports")
+            os.makedirs(output_dir, exist_ok=True)
+            prev_ci_artifacts = get_last_daily_ci_reports(
+                artifact_names=artifact_names,
+                output_dir=output_dir,
+                token=os.environ["ACCESS_REPO_INFO_TOKEN"],
+                workflow_run_id=target_workflow_run_id,
+            )
 
     message = Message(
         title,
