@@ -59,6 +59,7 @@ jobs:
           SETUP_STATUS: ${{ inputs.setup_status }}
           REPORT_REPO_SUBFOLDER: ${{ inputs.report_repo_subfolder }}
           LAST_WORKFLOW_RUN_ID: "14277576462"
+          TARGET_WORKFLOW_ID: "90575235"
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         # For a job that doesn't depend on (i.e. `needs`) `setup`, the value for `inputs.folder_slices` would be an
