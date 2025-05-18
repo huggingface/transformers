@@ -3013,6 +3013,11 @@ if is_torch_available():
         "cpu": 0,
         "default": 0,
     }
+    BACKEND_SYNCHRONIZE = {
+        "cuda": torch.cuda.synchronize,
+        "cpu": None,
+        "default": None,
+    }
     BACKEND_TORCH_ACCELERATOR_MODULE = {
         "cuda": torch.cuda,
         "cpu": None,
@@ -3025,6 +3030,7 @@ else:
     BACKEND_RESET_MAX_MEMORY_ALLOCATED = {"default": None}
     BACKEND_MAX_MEMORY_ALLOCATED = {"default": 0}
     BACKEND_MEMORY_ALLOCATED = {"default": 0}
+    BACKEND_SYNCHRONIZE = {"default": None}
     BACKEND_TORCH_ACCELERATOR_MODULE = {"default": None}
 
 
@@ -3052,6 +3058,7 @@ if is_torch_xpu_available():
     BACKEND_RESET_MAX_MEMORY_ALLOCATED["xpu"] = torch.xpu.reset_peak_memory_stats
     BACKEND_MAX_MEMORY_ALLOCATED["xpu"] = torch.xpu.max_memory_allocated
     BACKEND_MEMORY_ALLOCATED["xpu"] = torch.xpu.memory_allocated
+    BACKEND_SYNCHRONIZE["xpu"] = torch.xpu.synchronize
     BACKEND_TORCH_ACCELERATOR_MODULE["xpu"] = torch.xpu
 
 
@@ -3083,6 +3090,10 @@ def backend_max_memory_allocated(device: str):
 
 def backend_memory_allocated(device: str):
     return _device_agnostic_dispatch(device, BACKEND_MEMORY_ALLOCATED)
+
+
+def backend_synchronize(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_SYNCHRONIZE)
 
 
 def backend_torch_accelerator_module(device: str):
