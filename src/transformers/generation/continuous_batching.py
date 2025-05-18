@@ -763,7 +763,7 @@ class ContinuousBatchProcessor:
         self._record_batch_metrics(self.requests_in_batch)
 
         for state in self.requests_in_batch:
-            if not self._allocate_blocks_if_needed(state, len(state.prompt_ids) + self.cache.block_size):
+            if not self._allocate_blocks_if_needed(state, len(state.prompt_ids) + self.generation_config.max_new_tokens// self.cache.block_size):
                 state.waiting = True
                 continue
             state.waiting = False
@@ -961,7 +961,7 @@ class ContinuousBatchingManager:
     """
 
     def __init__(
-        self, model: GenerationMixin, generation_config: GenerationConfig, max_queue_size=0, streaming: bool = True
+        self, model: GenerationMixin, generation_config: GenerationConfig, max_queue_size=0, streaming: bool = False
     ):
         """Initialize the continuous batching manager.
 
