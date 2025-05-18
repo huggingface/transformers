@@ -95,6 +95,7 @@ jobs:
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
           REPORT_REPO_SUBFOLDER: ${{ inputs.report_repo_subfolder }}
         run: |
+          apt-get install -y curl
           python3 utils/process_bad_commit_report.py
 
       - name: Process report
