@@ -31,8 +31,11 @@ def get_daily_ci_runs(token, num_runs=7):
     return result["workflow_runs"]
 
 
-def get_last_daily_ci_runs(token):
+def get_last_daily_ci_runs(token, workflow_run_id=None):
     """Get the last completed workflow run id of the scheduled (daily) CI."""
+    if workflow_run_id is not None and workflow_run_id != "":
+        return workflow_run_id
+
     return "14277576462"
     workflow_runs = get_daily_ci_runs(token)
     workflow_run_id = None
@@ -58,9 +61,9 @@ def get_last_daily_ci_run_commit(token):
     return head_sha
 
 
-def get_last_daily_ci_artifacts(artifact_names, output_dir, token):
+def get_last_daily_ci_artifacts(artifact_names, output_dir, token, workflow_run_id=None):
     """Get the artifacts of last completed workflow run id of the scheduled (daily) CI."""
-    workflow_run_id = get_last_daily_ci_runs(token)
+    workflow_run_id = get_last_daily_ci_runs(token, workflow_run_id=workflow_run_id)
     if workflow_run_id is not None:
         artifacts_links = get_artifacts_links(worflow_run_id=workflow_run_id, token=token)
         for artifact_name in artifact_names:
@@ -71,9 +74,9 @@ def get_last_daily_ci_artifacts(artifact_names, output_dir, token):
                 )
 
 
-def get_last_daily_ci_reports(artifact_names, output_dir, token):
+def get_last_daily_ci_reports(artifact_names, output_dir, token, workflow_run_id=None):
     """Get the artifacts' content of the last completed workflow run id of the scheduled (daily) CI."""
-    get_last_daily_ci_artifacts(artifact_names, output_dir, token)
+    get_last_daily_ci_artifacts(artifact_names, output_dir, token, workflow_run_id=workflow_run_id)
 
     results = {}
     for artifact_name in artifact_names:
