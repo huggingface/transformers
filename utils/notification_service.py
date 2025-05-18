@@ -1301,6 +1301,7 @@ if __name__ == "__main__":
     else:
         target_workflow_id = os.environ["LAST_WORKFLOW_RUN_ID"]
         workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_run_id=target_workflow_id)
+        target_workflow_run_ids.append(workflow_run_id)
 
     all_prev_ci_artifacts = []
     for target_workflow_run_id in target_workflow_run_ids:
