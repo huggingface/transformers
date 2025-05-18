@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
+from functools import partial
 import queue
 import statistics
 import threading
@@ -35,7 +35,7 @@ from ..utils import (
 )
 from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from torch.profiler import profile, schedule, tensorboard_trace_handler
-
+from ..modeling_attn_mask_utils import AttentionMask
 
 logger = logging.get_logger(__name__)
 
@@ -111,11 +111,10 @@ class RequestState:
         if is_eos or is_max_len:
             self.status = RequestStatus.FINISHED
             return True
-
         return False
 
     def __repr__(self):
-        return f"RequestState(\nrequest_id={self.request_id},\nstatus={self.status}, \nout_tokens={self.generated_len()}, \ncurrent_prompt={len(self.prompt_ids)}, \nprefilled_tokens={self.current_len()}, \nremaining_length={len(self.remaining_prompt_ids)}, \nfull_lenght={len(self.full_prompt_ids)},\nallocated_blocks={self.allocated_blocks}\n)"
+        return f"RequestState(\n\trequest_id={self.request_id},\n\tstatus={self.status},\n\tout_tokens={self.generated_len()},\n\tquery_length={len(self.prompt_ids)}, \n\tremaining_tokens={len(self.remaining_prompt_ids)}, \n\tkv_length={self.position_offset}\n\tfull_prompt_lenght={len(self.full_prompt_ids)},\n\tallocated_blocks={self.allocated_blocks},\n\tgenerated_tokens={self.static_outputs}\n)"
 
     def to_generation_output(self):
         """Convert the request state to a GenerationOutput object."""
@@ -229,7 +228,7 @@ class PagedAttentionCache(Cache):
         return self._block_tables.get(request_id, [])
 
     @traced
-    def _get_physical_indices(self, request_id: str, logical_indices: List[int]) -> List[int]:
+    def _get_physical_indices(self, state: RequestState, logical_indices: List[int]) -> List[int]:
         """
         Maps logical sequence indices to physical cache indices using the block table, using PyTorch.
 
@@ -244,6 +243,7 @@ class PagedAttentionCache(Cache):
             ValueError: If no block table is found for the request ID.
             IndexError: If a logical index maps to a block index that is out of bounds.
         """
+        request_id = state.request_id
         block_table = self._block_tables.get(request_id)
         if not block_table:
             raise ValueError(f"No block table found for request {request_id}")
@@ -474,29 +474,28 @@ class ContinuousBatchProcessor:
     def setup_static_tensors(self):
         T = self.max_batch_tokens
         max_token_budget = self.cache.num_blocks * self.cache.block_size
-        tensor_metadata = {"dtype": torch.long, "device": self.model_device}
+        tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
         self.tensor_metadata = tensor_metadata
         self.input_ids = torch.zeros((1, T), **tensor_metadata)
-        self.output_ids = torch.ones((1, T), **tensor_metadata) * -1
+        self.position_ids = torch.zeros((1, T), **tensor_metadata)
         self.attention_mask = torch.zeros(
             (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
         )
-        self.position_ids = torch.zeros((1, T), **tensor_metadata)
         self.cumulative_seqlens_q = torch.zeros((T + 1,), **tensor_metadata)
         self.cumulative_seqlens_k = torch.zeros((T + 1,), **tensor_metadata)
         self.write_index = torch.zeros((T,), **tensor_metadata)
         self.read_index = torch.zeros((max_token_budget,), **tensor_metadata)
-        self.logits_indices = torch.ones((T,), **tensor_metadata) * -1
+        self.logits_indices = torch.full((T, ), -1 , **tensor_metadata) 
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
+        self.output_ids = torch.full((1, T), -1 , **tensor_metadata) 
 
     @traced
     def reset_static_tensors(self):
         """Reset static tensors for the next batch."""
         self.input_ids.zero_()
-        self.output_ids.zero_()
-        self.attention_mask.fill_(torch.finfo(self.model_dtype).min)
         self.position_ids.zero_()
+        self.attention_mask.fill_(torch.finfo(self.model_dtype).min)
         self.cumulative_seqlens_q.zero_()
         self.cumulative_seqlens_k.zero_()
         self.write_index.fill_(-1)
@@ -504,20 +503,22 @@ class ContinuousBatchProcessor:
         self.logits_indices.fill_(-1)
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
+        self.output_ids.zero_()
 
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
+        # torch.set_printoptions(threshold=100000,linewidth=10000)
         return dict(
             input_ids=self.input_ids,
             position_ids=self.position_ids,
             attention_mask=self.attention_mask,
             cumulative_seqlens_q=self.cumulative_seqlens_q,
             cumulative_seqlens_k=self.cumulative_seqlens_k,
-            max_seqlen_q=self.max_seqlen_q,
-            max_seqlen_k=self.max_seqlen_k,
             write_index=self.write_index,
             read_index=self.read_index,
             logits_indices=self.logits_indices,
+            max_seqlen_q=self.max_seqlen_q,
+            max_seqlen_k=self.max_seqlen_k,
             block_tables=self.cache._block_tables,
             cache=self.cache,
             use_cache=False,
@@ -556,7 +557,6 @@ class ContinuousBatchProcessor:
                 state = self.input_queue.get_nowait()
                 if state is None:  # Sentinel value
                     continue
-
                 self.waiting_requests.append(state)
 
             except queue.Empty:
@@ -580,78 +580,6 @@ class ContinuousBatchProcessor:
             state.static_outputs = []
 
         self.output_queue.put(state.to_generation_output())
-
-    @traced
-    def _schedule_batch(self) -> List[str]:
-        """Select requests for the next processing batch."""
-        selected_requests = []
-        num_free_blocks = self.cache.get_num_free_blocks()
-        batch_token_count = 0
-
-        # First prioritize running decoding requests (need just 1 token each)
-        decoding_requests = [req_id for req_id, state in self.active_requests.items() if state.status == RequestStatus.DECODING]
-
-        if decoding_requests:
-            # Start with the max batch tokens
-            available_slots = self.max_batch_tokens
-            selected_requests.extend(decoding_requests[:available_slots])
-            if len(selected_requests) == available_slots:
-                return selected_requests
-            batch_token_count += len(decoding_requests)  # 1 token per request
-
-        # priortise requests for which we already started prefilling
-        candidates: List[RequestState] = [
-            state for state in self.active_requests.values() if state.status == RequestStatus.SPLIT_PENDING_REMAINDER
-        ]
-        candidates.extend(list(self.waiting_requests))
-
-        request_ids_to_remove_from_waiting = set()
-
-        for i, state in enumerate(candidates):
-            if state.request_id in selected_requests:
-                continue
-
-            # Get tokens to process
-            token_budget = (
-                len(state.remaining_prompt_ids) if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else len(state.prompt_ids)
-            )
-            if token_budget == 0:
-                if i < len(self.waiting_requests):
-                    request_ids_to_remove_from_waiting.add(state.request_id)
-                continue
-
-            # Check if we need to split the request
-            if batch_token_count + token_budget > self.max_batch_tokens:
-                remaining_space = self.max_batch_tokens - batch_token_count
-                # Only split if we have enough space for a meaningful chunk
-                if remaining_space >= 1:
-                    token_budget = remaining_space
-                else:
-                    continue  # Not enough space to split
-
-            # Check if we have enough blocks
-            needed_blocks = math.ceil(token_budget / self.cache.block_size)
-            if needed_blocks > num_free_blocks:
-                logger.debug(
-                    f"Request {state.request_id} needs {needed_blocks} blocks but only {num_free_blocks} available. Skipping."
-                )
-                continue
-
-            # We can process this request
-            num_free_blocks -= needed_blocks
-            batch_token_count += token_budget
-            selected_requests.append(state.request_id)
-
-            # Set up the request based on whether we're splitting
-            self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
-
-        # Remove processed requests from waiting queue
-        self.waiting_requests = deque(
-            [req for req in self.waiting_requests if req.request_id not in request_ids_to_remove_from_waiting]
-        )
-
-        logger.debug(f"Scheduled batch with {len(selected_requests)} requests and {batch_token_count} tokens")
-        return selected_requests
 
     @traced(span_name="prepare_request")
     def _prepare_request_for_processing(self, state: RequestState, token_budget, request_ids_to_remove_from_waiting):
@@ -679,15 +607,59 @@ class ContinuousBatchProcessor:
             state.prompt_ids = request_tokens[:token_budget]
 
     @traced
+    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int):
+        # 1. we check that the occupency is less than the requested length
+        # 2. we allocate enough blocks to cover the requested length
+        current_len = state.current_len()
+        occupency = len(state.allocated_blocks) * self.cache.block_size - current_len
+        if occupency < len_next_tokens or (len(state.allocated_blocks) == 0):
+            blocks_needed = ((len_next_tokens-occupency+1) // self.cache.block_size) + 1
+            allocated = self.cache.allocate_blocks(blocks_needed, state.request_id)
+            if not allocated:
+                return False
+            state.allocated_blocks.extend(allocated)
+        return True
+
+    @traced
+    def _schedule_batch(self) -> List[str]:
+        priority_states = []
+        second_priority_states = []
+        scheduled_requests = []
+        token_budget = self.max_batch_tokens
+
+        for state in self.active_requests.values():
+            if state.status == RequestStatus.DECODING:
+                priority_states.append(state)
+            if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
+                second_priority_states.append(state)
+        second_priority_states.extend(list(self.waiting_requests))
+        candidates = priority_states + second_priority_states
+        request_ids_to_remove_from_waiting = set()
+
+        for state in candidates:
+            self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
+            request_len = len(state.prompt_ids)
+            # maybe pre-allocate more blocks for full length?
+            if self._allocate_blocks_if_needed(state, request_len):
+                scheduled_requests.append(state.request_id)
+                token_budget -= request_len
+            if token_budget == 0:
+                break
+
+        # Remove processed requests from waiting queue
+        self.waiting_requests = deque(
+            [req for req in self.waiting_requests if req.request_id not in request_ids_to_remove_from_waiting]
+        )
+        return scheduled_requests
+
+    @traced
     def prepare_next_batch(self):
         """Prepare tensors and metadata for the next model forward pass."""
         # Get new requests from the queue
         self._get_new_requests()
-
         if not self.active_requests and not self.waiting_requests:
             return None
 
-        # Schedule requests for this batch
         self.requests_to_process_next = self._schedule_batch()
         if not self.requests_to_process_next:
             return None
@@ -705,29 +677,27 @@ class ContinuousBatchProcessor:
         self.metrics.record_batch_metrics(self.requests_in_batch)
 
         for state in self.requests_in_batch:
-            if not self._allocate_blocks_if_needed(state, len(state.prompt_ids)):
-                continue
-
             next_input_ids = state.prompt_ids
             input_ids.extend(next_input_ids)
-            start_pos = state.current_len()
-            seq_len_q = len(next_input_ids)
-            state.position_offset += seq_len_q
-            seq_len_k = state.current_len()
-            positions_to_add = list(range(start_pos,  seq_len_k))
+            past_length = state.position_offset
+            query_length = len(next_input_ids)
+            key_length = query_length + past_length
+            cache_index = list(range(key_length))
 
-            read_indices = self.cache._get_physical_indices(state.request_id, list(range(state.current_len())))
-            write_indices = read_indices[-seq_len_q:]
+            positions_to_add = cache_index[past_length:]
+            read_indices = self.cache._get_physical_indices(state, cache_index)
+            write_indices = read_indices[-query_length:]
 
             position_ids.extend(positions_to_add)
             read_index.extend(read_indices)
             write_index.extend(write_indices)
-            cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + seq_len_q)
-            cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + seq_len_k)
+            cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
+            cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + key_length)
             if len(state.remaining_prompt_ids) == 0:
-                logits_indices.append(cumulative_seqlens_q[-1] - 1)
-            self.max_seqlen_q = max(self.max_seqlen_q, seq_len_q)
-            self.max_seqlen_k = max(self.max_seqlen_k, seq_len_k)
+                logits_indices.append(cumulative_seqlens_q[-1]-1)
+            self.max_seqlen_q = max(self.max_seqlen_q, query_length)
+            self.max_seqlen_k = max(self.max_seqlen_k, key_length)
+            state.position_offset += query_length
 
         self._build_tensors(
             input_ids,
@@ -750,13 +720,15 @@ class ContinuousBatchProcessor:
         cumulative_seqlens_k,
         logits_indices,
     ):
-        self.input_ids[:, :len(input_ids)] = torch.tensor(input_ids, **self.tensor_metadata)
-        self.position_ids[:, :len(position_ids)] = torch.tensor(position_ids, **self.tensor_metadata)
-        self.write_index[:len(write_index)] = torch.tensor(write_index, **self.tensor_metadata)
-        self.read_index[:len(read_index)] = torch.tensor(read_index, **self.tensor_metadata)
-        self.cumulative_seqlens_q[:len(cumulative_seqlens_q)] = torch.tensor(cumulative_seqlens_q, **self.tensor_metadata)
-        self.cumulative_seqlens_k[:len(cumulative_seqlens_k)] = torch.tensor(cumulative_seqlens_k, **self.tensor_metadata)
-        self.logits_indices[:len(logits_indices)] = torch.tensor(logits_indices, **self.tensor_metadata)
+        to_tensor = partial(torch.tensor, **self.tensor_metadata)
+        self.input_ids[:, :len(input_ids)] = to_tensor(input_ids)
+        self.position_ids[:, :len(position_ids)] = to_tensor(position_ids)
+        self.write_index[:len(write_index)] = to_tensor(write_index)
+        self.read_index[:len(read_index)] = to_tensor(read_index)
+        self.cumulative_seqlens_q[:len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
+        self.cumulative_seqlens_k[:len(cumulative_seqlens_k)] = to_tensor(cumulative_seqlens_k)
+        self.logits_indices[:len(logits_indices)] = to_tensor(logits_indices)
+        min_value = torch.finfo(self.model_dtype).min
         if self.config._attn_implementation != "paged_attention": # we set `is_causal` to True in paged call`
             for i in range(len(cumulative_seqlens_q) - 1):
                 if (
@@ -770,28 +742,28 @@ class ContinuousBatchProcessor:
                     diagonal = 1
                 query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
                 key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
-                self.attention_mask[..., query_range, key_range] = torch.triu(
+
+                mask = torch.triu(
                     torch.full(
-                        self.attention_mask[..., query_range, key_range].shape,
-                        fill_value=torch.finfo(self.model_dtype).min,
-                        dtype=self.model_dtype,
-                        device=self.model_device,
+                        self.attention_mask[..., query_range, key_range].shape, min_value, dtype=self.model_dtype, device=self.model_device
                     ),
                     diagonal=diagonal,
                 )
+                visualize_mask = AttentionMask(mask)
+                self.attention_mask[..., query_range, key_range] = mask
 
     @traced
-    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int):
-        # 1. we check that we indeed need a new block
-        current_len = state.current_len()
-        if current_len // self.cache.block_size > len(state.allocated_blocks) or (len(state.allocated_blocks) == 0):
-            # we need to allocate more blocks
-            blocks_needed = (len_next_tokens // self.cache.block_size) + 1
-            allocated = self.cache.allocate_blocks(blocks_needed, state.request_id)
-            if not allocated:
-                return False
-            state.allocated_blocks.extend(allocated)
-        return True
+    def _sync(self):
+        return self.output_ids.tolist()[0]  # should be the only synch we do
+
+    @traced
+    def _maybe_send_output(self, state: RequestState, token: int):
+        """Send output to the queue based on streaming mode and request state."""
+        if self.streaming or True:
+            state.next_token = token
+            self.output_queue.put(state.to_generation_output())
+        elif state.status == RequestStatus.FINISHED:
+            self.output_queue.put(state.to_generation_output())
 
     @traced
     def update_batch(self):
@@ -815,19 +787,6 @@ class ContinuousBatchProcessor:
             if req_id in self.active_requests:
                 self.cache.free_blocks(req_id)
                 del self.active_requests[req_id]
-
-    @traced
-    def _sync(self):
-        return self.output_ids.tolist()[0]  # should be the only synch we do
-
-    @traced
-    def _maybe_send_output(self, state: RequestState, token: int):
-        """Send output to the queue based on streaming mode and request state."""
-        if self.streaming or True:
-            state.next_token = token
-            self.output_queue.put(state.to_generation_output())
-        elif state.status == RequestStatus.FINISHED:
-            self.output_queue.put(state.to_generation_output())
 
     @traced
     def has_pending_requests(self) -> bool:
@@ -1034,8 +993,8 @@ class ContinuousBatchingManager:
             logits = self._model_forward(batch_data)
             if self.log_prob_generation:
                 batch_processor.output_probs.copy_(logits)  # TODO
-            probs = self._process_logit(batch_data, logits)
-            self._sample(batch_processor, probs)
+            # probs = self._process_logit(batch_data, logits)
+            self._sample(batch_processor, logits)
 
     @traced(span_name="model_forward")
     def _model_forward(self, batch_data):

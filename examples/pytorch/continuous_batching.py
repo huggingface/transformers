@@ -6,18 +6,18 @@ from transformers.generation import GenerationConfig
 
 model_id = "meta-llama/Meta-Llama-3-8B"
 model = AutoModelForCausalLM.from_pretrained(
-    model_id, attn_implementation="paged_attention", torch_dtype=torch.bfloat16, device_map="auto"
+    model_id, attn_implementation="eager_paged", torch_dtype=torch.bfloat16, device_map="auto"
 ).eval()
 tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
 generation_config = GenerationConfig(
-    max_new_tokens=30,
+    max_new_tokens=10,
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
     use_cache=False,
-    num_blocks=512,
-    block_size=128,
-    max_batch_tokens=256,  # Maximum number of tokens to process in a single batch
+    num_blocks=16,
+    block_size=512,
+    max_batch_tokens=512,  # Maximum number of tokens to process in a single batch
 )
 
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
@@ -38,7 +38,7 @@ batch_outputs = model.generate_batch(
 )
 end_time_simple = time.time()
 
-print(f"CB generation took: a{end_time_simple - start_time_simple:.2f} seconds")
+print(f"CB generation took: {end_time_simple - start_time_simple:.2f} seconds")
 for request in batch_outputs:
     input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=False)
     try:
