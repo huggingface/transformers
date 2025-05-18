@@ -981,7 +981,7 @@ class ContinuousBatchingManager:
         self._generation_thread = None
         self._request_counter = 0
         self._request_lock = threading.Lock()
-        self.model.generation_config.top_p = None
+
         self.logit_processor = self.model._get_logits_processor(self.model.generation_config)
         self.do_sample = getattr(generation_config, "do_sample", True)
         self._setup_tracer()
