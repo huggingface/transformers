@@ -1163,6 +1163,7 @@ if __name__ == "__main__":
     with open("workflow_run.json") as fp:
         workflow_run = json.load(fp)
         workflow_run_created_time = workflow_run["created_at"]
+        workflow_id = workflow_run["workflow_id"]
 
     report_repo_folder = workflow_run_created_time.split("T")[0]
 
