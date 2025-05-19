@@ -1363,7 +1363,9 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                 )
                 self.run_compressed = False
             elif not self.is_quantization_compressed:
-                logger.warning("`run_compressed` is only supported for compressed models. Setting `run_compressed=False`")
+                logger.warning(
+                    "`run_compressed` is only supported for compressed models. Setting `run_compressed=False`"
+                )
                 self.run_compressed = False
 
     @classmethod
