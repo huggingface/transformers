@@ -31,8 +31,6 @@ from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
     _prepare_4d_attention_mask,
     _prepare_4d_attention_mask_for_sdpa,
-    _prepare_4d_causal_attention_mask,
-    _prepare_4d_causal_attention_mask_for_sdpa,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -44,12 +42,19 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, is_torch_flex_attn_available, is_torchdynamo_compiling, logging
+from ...utils import (
+    auto_docstring,
+    is_torch_flex_attn_available,
+    is_torchdynamo_compiling,
+    logging,
+)
 from .configuration_marian import MarianConfig
 
 
 if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import BlockMask, make_flex_block_causal_mask
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -94,13 +99,16 @@ class MarianSinusoidalPositionalEmbedding(nn.Embedding):
         self.weight = nn.Parameter(out, requires_grad=False)
 
     @torch.no_grad()
-    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0) -> torch.Tensor:
+    def forward(
+        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        bsz, seq_len = input_ids_shape[:2]
-        positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-        )
-        return super().forward(positions)
+        if position_ids is None:
+            bsz, seq_len = input_ids_shape[:2]
+            position_ids = torch.arange(
+                past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+            )
+        return super().forward(position_ids)
 
 
 # Copied from transformers.models.bart.modeling_bart.eager_attn_forward
@@ -420,6 +428,7 @@ class MarianDecoderLayer(nn.Module):
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
+            cache_position=cache_position,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -437,6 +446,7 @@ class MarianDecoderLayer(nn.Module):
                 layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
+                cache_position=cache_position,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
@@ -736,7 +746,7 @@ class MarianEncoder(MarianPreTrainedModel):
         self.embed_positions = MarianSinusoidalPositionalEmbedding(
             config.max_position_embeddings, embed_dim, self.padding_idx
         )
-        self.layers = nn.ModuleList([MarianEncoderLayer(config, layer_idx=i) for i in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([MarianEncoderLayer(config) for _ in range(config.encoder_layers)])
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -930,7 +940,7 @@ class MarianDecoder(MarianPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Args:
@@ -1018,15 +1028,20 @@ class MarianDecoder(MarianPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = input_ids.size()
+            input = input_ids
+            input_shape = input.shape
             input_ids = input_ids.view(-1, input_shape[-1])
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
+            input = inputs_embeds[:, :, -1]
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input)
+
+        # Important to apply outside of the above `if`, in case user passes `embeds`
+        inputs_embeds = inputs_embeds * self.embed_scale
 
         # initialize `past_key_values`
         return_legacy_cache = False
@@ -1046,9 +1061,6 @@ class MarianDecoder(MarianPreTrainedModel):
                 past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
             )
 
-        # TODO: update mask creation with new interface
-        _unsupported_features = output_attentions is True or cross_attn_head_mask is not None or head_mask is not None
-
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
             mask_seq_length = past_key_values_length + seq_length
@@ -1059,7 +1071,10 @@ class MarianDecoder(MarianPreTrainedModel):
             if isinstance(past_key_values, EncoderDecoderCache)
             else past_key_values
         )
-        attention_mask = self._update_causal_mask(
+
+        # TODO: update mask creation with new interface
+        _unsupported_features = output_attentions is True or cross_attn_head_mask is not None or head_mask is not None
+        causal_mask = self._update_causal_mask(
             attention_mask,
             inputs_embeds,
             cache_position,
@@ -1077,10 +1092,10 @@ class MarianDecoder(MarianPreTrainedModel):
         )
 
         # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
-
-        hidden_states = inputs_embeds + positions
-
+        position_ids = self.embed_positions(
+            (batch_size, seq_length), past_key_values_length, position_ids=cache_position
+        )
+        hidden_states = inputs_embeds + position_ids
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
@@ -1109,7 +1124,7 @@ class MarianDecoder(MarianPreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    attention_mask,
+                    causal_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     head_mask[idx] if head_mask is not None else None,
@@ -1122,7 +1137,7 @@ class MarianDecoder(MarianPreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=attention_mask,
+                    attention_mask=causal_mask,
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),
@@ -1271,7 +1286,7 @@ class MarianModel(MarianPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Seq2SeqModelOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1529,7 +1544,7 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Seq2SeqLMOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
