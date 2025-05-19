@@ -34,23 +34,21 @@ class Florence2VisionConfig(PretrainedConfig):
     Args:
         drop_path_rate (`float`, *optional*, defaults to 0.1):
             The dropout rate of the drop path layer.
-        patch_size (`List[int]`, *optional*, defaults to [7, 3, 3, 3]):
+        patch_size (`Tuple[int]`, *optional*, defaults to (7, 3, 3, 3)):
             The patch size of the image.
-        patch_stride (`List[int]`, *optional*, defaults to [4, 2, 2, 2]):
+        patch_stride (`Tuple[int]`, *optional*, defaults to (4, 2, 2, 2)):
             The patch stride of the image.
-        patch_padding (`List[int]`, *optional*, defaults to [3, 1, 1, 1]):
+        patch_padding (`Tuple[int]`, *optional*, defaults to (3, 1, 1, 1)):
             The patch padding of the image.
-        patch_prenorm (`List[bool]`, *optional*, defaults to [false, true, true, true]):
+        patch_prenorm (`Tuple[bool]`, *optional*, defaults to (false, true, true, true)):
             Whether to apply layer normalization before the patch embedding layer.
-        enable_checkpoint (`bool`, *optional*, defaults to False):
-            Whether to enable checkpointing.
-        dim_embed (`List[int]`, *optional*, defaults to [256, 512, 1024, 2048]):
+        dim_embed (`Tuple[int]`, *optional*, defaults to (256, 512, 1024, 2048)):
             The dimension of the embedding layer.
-        num_heads (`List[int]`, *optional*, defaults to [8, 16, 32, 64]):
+        num_heads (`Tuple[int]`, *optional*, defaults to (8, 16, 32, 64)):
             The number of attention heads.
-        num_groups (`List[int]`, *optional*, defaults to [8, 16, 32, 64]):
+        num_groups (`Tuple[int]`, *optional*, defaults to (8, 16, 32, 64)):
             The number of groups.
-        depths (`List[int]`, *optional*, defaults to [1, 1, 9, 1]):
+        depths (`Tuple[int]`, *optional*, defaults to (1, 1, 9, 1)):
             The depth of the model.
         window_size (`int`, *optional*, defaults to 12):
             The window size of the model.
@@ -60,7 +58,7 @@ class Florence2VisionConfig(PretrainedConfig):
             The configuration of the visual temporal embedding.
         image_pos_embed (`dict`, *optional*):
             The configuration of the image position embedding.
-        image_feature_source (`List[str]`, *optional*, defaults to ["spatial_avg_pool", "temporal_avg_pool"]):
+        image_feature_source (`Tuple[str]`, *optional*, defaults to ("spatial_avg_pool", "temporal_avg_pool")):
             The source of the image feature.
     Example:
 
@@ -83,20 +81,19 @@ class Florence2VisionConfig(PretrainedConfig):
     def __init__(
         self,
         drop_path_rate=0.1,
-        patch_size=[7, 3, 3, 3],
-        patch_stride=[4, 2, 2, 2],
-        patch_padding=[3, 1, 1, 1],
-        patch_prenorm=[False, True, True, True],
-        enable_checkpoint=False,
-        dim_embed=[256, 512, 1024, 2048],
-        num_heads=[8, 16, 32, 64],
-        num_groups=[8, 16, 32, 64],
-        depths=[1, 1, 9, 1],
+        patch_size=(7, 3, 3, 3),
+        patch_stride=(4, 2, 2, 2),
+        patch_padding=(3, 1, 1, 1),
+        patch_prenorm=(False, True, True, True),
+        dim_embed=(256, 512, 1024, 2048),
+        num_heads=(8, 16, 32, 64),
+        num_groups=(8, 16, 32, 64),
+        depths=(1, 1, 9, 1),
         window_size=12,
         projection_dim=1024,
         visual_temporal_embedding=None,
         image_pos_embed=None,
-        image_feature_source=["spatial_avg_pool", "temporal_avg_pool"],
+        image_feature_source=("spatial_avg_pool", "temporal_avg_pool"),
         **kwargs,
     ):
         self.drop_path_rate = drop_path_rate
@@ -104,7 +101,6 @@ class Florence2VisionConfig(PretrainedConfig):
         self.patch_stride = patch_stride
         self.patch_padding = patch_padding
         self.patch_prenorm = patch_prenorm
-        self.enable_checkpoint = enable_checkpoint
         self.dim_embed = dim_embed
         self.num_heads = num_heads
         self.num_groups = num_groups
@@ -156,8 +152,6 @@ class Florence2LanguageConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        classifier_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for classifier.
         max_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -173,8 +167,6 @@ class Florence2LanguageConfig(PretrainedConfig):
             Scale embeddings by diving by sqrt(d_model).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        num_labels (`int`, *optional*, defaults to 3):
-            The number of labels to use in [`Florence2LanguageForSequenceClassification`].
         forced_eos_token_id (`int`, *optional*, defaults to 2):
             The id of the token to force as the last generated token when `max_length` is reached. Usually set to
             `eos_token_id`.
@@ -216,10 +208,8 @@ class Florence2LanguageConfig(PretrainedConfig):
         attention_dropout=0.0,
         activation_dropout=0.0,
         init_std=0.02,
-        classifier_dropout=0.0,
         scale_embedding=False,
         use_cache=True,
-        num_labels=3,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -244,13 +234,11 @@ class Florence2LanguageConfig(PretrainedConfig):
         self.init_std = init_std
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
-        self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
         super().__init__(
-            num_labels=num_labels,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
@@ -263,7 +251,7 @@ class Florence2LanguageConfig(PretrainedConfig):
         # ensure backward compatibility for BART CNN models
         if self.forced_bos_token_id is None and kwargs.get("force_bos_token_to_be_generated", False):
             self.forced_bos_token_id = self.bos_token_id
-            warnings.warn(
+            warnings.warning(
                 f"Please make sure the config includes `forced_bos_token_id={self.bos_token_id}` in future versions. "
                 "The config can simply be saved and uploaded again to be fixed."
             )
@@ -274,6 +262,9 @@ class Florence2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Florence2ForConditionalGeneration`]. It is used to instantiate an
     Florence-2 model according to the specified arguments, defining the model architecture.
 
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Florence-2
+    [microsoft/Florence-2-base](https://huggingface.co/microsoft/Florence-2-base) architecture.
+
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
@@ -282,8 +273,6 @@ class Florence2Config(PretrainedConfig):
             Custom vision config or dict
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object of the text backbone.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
         vocab_size (`int`, *optional*, defaults to 51289):
             Vocabulary size of the Florence2model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`~Florence2ForConditionalGeneration`]
@@ -318,18 +307,15 @@ class Florence2Config(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
-        ignore_index=-100,
         vocab_size=51289,
         projection_dim=1024,
         **kwargs,
     ):
-        self.ignore_index = ignore_index
         self.vocab_size = vocab_size
         self.projection_dim = projection_dim
         if vision_config is not None:
             vision_config = PretrainedConfig(**vision_config)
         self.vision_config = vision_config
-        self.vocab_size = self.vocab_size
 
         self.text_config = text_config
         if text_config is not None:
