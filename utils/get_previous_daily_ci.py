@@ -48,11 +48,11 @@ def get_last_daily_ci_runs(token, workflow_run_id=None, workflow_id=None, commit
     workflow_runs = get_daily_ci_runs(token, workflow_id=workflow_id)
     workflow_run_id = None
     for workflow_run in workflow_runs:
-        # if `commit_sha` is specified, and `workflow_run["head_sha"]` matches it, return it.
-        if commit_sha not in [None, ""] and workflow_run["head_sha"] == commit_sha:
+        if commit_sha in [None, ""] and workflow_run["status"] == "completed":
             workflow_run_id = workflow_run["id"]
             break
-        elif workflow_run["status"] == "completed":
+        # if `commit_sha` is specified, and `workflow_run["head_sha"]` matches it, return it.
+        elif commit_sha not in [None, ""] and workflow_run["head_sha"] == commit_sha:
             workflow_run_id = workflow_run["id"]
             break
 
