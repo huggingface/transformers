@@ -34,7 +34,7 @@ jobs:
     steps:
       - name: Setup
         run: |
-          mkdir "values"
+          mkdir "setup_values"
           echo "${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}" > "setup_values/prev_workflow_run_id.txt"
           echo "${{ inputs.other_workflow_run_id || env.prev_workflow_run_id }}" > "setup_values/other_workflow_run_id.txt"
 
