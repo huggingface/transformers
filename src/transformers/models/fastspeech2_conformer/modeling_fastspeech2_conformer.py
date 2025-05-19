@@ -411,7 +411,7 @@ class FastSpeech2ConformerVarianceEmbedding(nn.Module):
 class FastSpeech2ConformerAttention(nn.Module):
     """
     Multi-Head attention layer with relative position encoding. Details can be found in
-    https://github.com/espnet/espnet/pull/2816. Paper: https://arxiv.org/abs/1901.02860.
+    https://github.com/espnet/espnet/pull/2816. Paper: https://huggingface.co/papers/1901.02860.
     """
 
     def __init__(self, config: FastSpeech2ConformerConfig, module_config):
@@ -431,7 +431,7 @@ class FastSpeech2ConformerAttention(nn.Module):
         # linear transformation for positional encoding
         self.linear_pos = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         # these two learnable bias are used in matrix c and matrix d
-        # as described in https://arxiv.org/abs/1901.02860 Section 3.3
+        # as described in https://huggingface.co/papers/1901.02860 Section 3.3
         self.pos_bias_u = nn.Parameter(torch.Tensor(self.num_heads, self.head_dim))
         self.pos_bias_v = nn.Parameter(torch.Tensor(self.num_heads, self.head_dim))
 
@@ -484,7 +484,7 @@ class FastSpeech2ConformerAttention(nn.Module):
 
         # compute attention score
         # first compute matrix a and matrix c
-        # as described in https://arxiv.org/abs/1901.02860 Section 3.3
+        # as described in https://huggingface.co/papers/1901.02860 Section 3.3
         # (batch_size, head, time1, time2)
         matrix_ac = torch.matmul(query_with_bias_u, key_states.permute(0, 2, 3, 1))
 
@@ -730,7 +730,7 @@ class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
     """
     Args:
     Relative positional encoding module (new implementation). Details can be found in
-    https://github.com/espnet/espnet/pull/2816. See : Appendix Batch in https://arxiv.org/abs/1901.02860
+    https://github.com/espnet/espnet/pull/2816. See : Appendix Batch in https://huggingface.co/papers/1901.02860
         config (`FastSpeech2ConformerConfig`):
             FastSpeech2ConformerConfig instance.
         module_config (`dict`):
@@ -774,7 +774,7 @@ class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
 
         # Reserve the order of positive indices and concat both positive and
         # negative indices. This is used to support the shifting trick
-        # as in https://arxiv.org/abs/1901.02860
+        # as in https://huggingface.co/papers/1901.02860
         pos_enc_positive = torch.flip(pos_enc_positive, [0]).unsqueeze(0)
         pos_enc_negative = pos_enc_negative[1:].unsqueeze(0)
         pos_enc = torch.cat([pos_enc_positive, pos_enc_negative], dim=1)
@@ -1046,7 +1046,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
     FastSpeech 2 module.
 
     This is a module of FastSpeech 2 described in 'FastSpeech 2: Fast and High-Quality End-to-End Text to Speech'
-    https://arxiv.org/abs/2006.04558. Instead of quantized pitch and energy, we use token-averaged value introduced in
+    https://huggingface.co/papers/2006.04558. Instead of quantized pitch and energy, we use token-averaged value introduced in
     FastPitch: Parallel Text-to-speech with Pitch Prediction. The encoder and decoder are Conformers instead of regular
     Transformers.
     """

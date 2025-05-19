@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # BitNet
 
-[BitNet](https://arxiv.org/abs/2402.17764) replaces traditional linear layers in Multi-Head Attention and feed-forward networks with specialized BitLinear layers. The BitLinear layers quantize the weights using ternary precision (with values of -1, 0, and 1) and quantize the activations to 8-bit precision.
+[BitNet](https://huggingface.co/papers/2402.17764) replaces traditional linear layers in Multi-Head Attention and feed-forward networks with specialized BitLinear layers. The BitLinear layers quantize the weights using ternary precision (with values of -1, 0, and 1) and quantize the activations to 8-bit precision.
 
 <figure style="text-align: center;">
   <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/1.58llm_extreme_quantization/bitlinear.png" alt="Alt Text" />

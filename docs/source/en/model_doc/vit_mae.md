@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The ViTMAE model was proposed in [Masked Autoencoders Are Scalable Vision Learners](https://arxiv.org/abs/2111.06377v2) by Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li,
+The ViTMAE model was proposed in [Masked Autoencoders Are Scalable Vision Learners](https://huggingface.co/papers/2111.06377v2) by Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li,
 Piotr Dollár, Ross Girshick. The paper shows that, by pre-training a Vision Transformer (ViT) to reconstruct pixel values for masked patches, one can get results after
 fine-tuning that outperform supervised pre-training.
 
@@ -42,7 +42,7 @@ tasks outperforms supervised pre-training and shows promising scaling behavior.*
 <img src="https://user-images.githubusercontent.com/11435359/146857310-f258c86c-fde6-48e8-9cee-badd2b21bd2c.png"
 alt="drawing" width="600"/> 
 
-<small> MAE architecture. Taken from the <a href="https://arxiv.org/abs/2111.06377">original paper.</a> </small>
+<small> MAE architecture. Taken from the <a href="https://huggingface.co/papers/2111.06377">original paper.</a> </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). TensorFlow version of the model was contributed by [sayakpaul](https://github.com/sayakpaul) and 
 [ariG23498](https://github.com/ariG23498) (equal contribution). The original code can be found [here](https://github.com/facebookresearch/mae). 

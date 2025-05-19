@@ -650,7 +650,7 @@ class OmDetTurboEncoder(nn.Module):
 class OmDetTurboHybridEncoder(nn.Module):
     """
     Encoder consisting of channel projection layers, a set of `OmDetTurboEncoder`, a top-down Feature Pyramid Network
-    (FPN) and a bottom-up Path Aggregation Network (PAN). More details on the paper: https://arxiv.org/abs/2304.08069
+    (FPN) and a bottom-up Path Aggregation Network (PAN). More details on the paper: https://huggingface.co/papers/2304.08069
 
     Args:
         config: OmDetTurboConfig

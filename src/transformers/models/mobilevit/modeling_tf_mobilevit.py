@@ -155,7 +155,7 @@ class TFMobileViTConvLayer(keras.layers.Layer):
 
 class TFMobileViTInvertedResidual(keras.layers.Layer):
     """
-    Inverted residual block (MobileNetv2): https://arxiv.org/abs/1801.04381
+    Inverted residual block (MobileNetv2): https://huggingface.co/papers/1801.04381
     """
 
     def __init__(
@@ -487,7 +487,7 @@ class TFMobileViTTransformer(keras.layers.Layer):
 
 class TFMobileViTLayer(keras.layers.Layer):
     """
-    MobileViT block: https://arxiv.org/abs/2110.02178
+    MobileViT block: https://huggingface.co/papers/2110.02178
     """
 
     def __init__(
@@ -1125,7 +1125,7 @@ class TFMobileViTASPPPooling(keras.layers.Layer):
 
 class TFMobileViTASPP(keras.layers.Layer):
     """
-    ASPP module defined in DeepLab papers: https://arxiv.org/abs/1606.00915, https://arxiv.org/abs/1706.05587
+    ASPP module defined in DeepLab papers: https://huggingface.co/papers/1606.00915, https://huggingface.co/papers/1706.05587
     """
 
     def __init__(self, config: MobileViTConfig, **kwargs) -> None:
@@ -1208,7 +1208,7 @@ class TFMobileViTASPP(keras.layers.Layer):
 
 class TFMobileViTDeepLabV3(keras.layers.Layer):
     """
-    DeepLabv3 architecture: https://arxiv.org/abs/1706.05587
+    DeepLabv3 architecture: https://huggingface.co/papers/1706.05587
     """
 
     def __init__(self, config: MobileViTConfig, **kwargs) -> None:

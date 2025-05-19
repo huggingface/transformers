@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The Bart model was proposed in [BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation,
-Translation, and Comprehension](https://arxiv.org/abs/1910.13461) by Mike Lewis, Yinhan Liu, Naman Goyal, Marjan
+Translation, and Comprehension](https://huggingface.co/papers/1910.13461) by Mike Lewis, Yinhan Liu, Naman Goyal, Marjan
 Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov and Luke Zettlemoyer on 29 Oct, 2019.
 
 According to the abstract,
@@ -123,7 +123,7 @@ See also:
 - [Text classification task guide](../tasks/sequence_classification)
 - [Question answering task guide](../tasks/question_answering)
 - [Causal language modeling task guide](../tasks/language_modeling)
-- [Distilled checkpoints](https://huggingface.co/models?search=distilbart) are described in this [paper](https://arxiv.org/abs/2010.13002).
+- [Distilled checkpoints](https://huggingface.co/models?search=distilbart) are described in this [paper](https://huggingface.co/papers/2010.13002).
 
 ## BartConfig
 

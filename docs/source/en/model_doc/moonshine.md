@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The Moonshine model was proposed in [Moonshine: Speech Recognition for Live Transcription and Voice Commands
-](https://arxiv.org/abs/2410.15608) by Nat Jeffries, Evan King, Manjunath Kudlur, Guy Nicholson, James Wang, Pete Warden.
+](https://huggingface.co/papers/2410.15608) by Nat Jeffries, Evan King, Manjunath Kudlur, Guy Nicholson, James Wang, Pete Warden.
 
 The abstract from the paper is the following:
 

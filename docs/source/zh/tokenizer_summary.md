@@ -122,7 +122,7 @@ token应该附着在前面那个token的后面，不带空格的附着（分词�
 ### Byte-Pair Encoding (BPE)
 
 Byte-Pair Encoding (BPE)来自于[Neural Machine Translation of Rare Words with Subword Units (Sennrich et
-al., 2015)](https://arxiv.org/abs/1508.07909)。BPE依赖于一个预分词器，这个预分词器会将训练数据分割成单词。预分词可以是简单的
+al., 2015)](https://huggingface.co/papers/1508.07909)。BPE依赖于一个预分词器，这个预分词器会将训练数据分割成单词。预分词可以是简单的
 空格分词，像：：[GPT-2](model_doc/gpt2)，[RoBERTa](model_doc/roberta)。更加先进的预分词方式包括了基于规则的分词，像： [XLM](model_doc/xlm)，[FlauBERT](model_doc/flaubert)，FlauBERT在大多数语言使用了Moses，或者[GPT](model_doc/gpt)，GPT
 使用了Spacy和ftfy，统计了训练语料库中每个单词的频次。
 

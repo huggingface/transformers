@@ -221,7 +221,7 @@ class RetrievAugLMOutput(ModelOutput):
 @auto_docstring(
     custom_intro="""
     RAG models were released with the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP
-    Tasks](https://arxiv.org/abs/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandra Piktus et al.
+    Tasks](https://huggingface.co/papers/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandra Piktus et al.
 
     RAG is a retriever augmented model and encapsulate three components: a question encoder, a dataset retriever and a
     generator, the encoder and generator are trainable while the retriever is just an indexed dataset.
@@ -1446,7 +1446,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
                 `batch_id`. It has to return a list with the allowed tokens for the next generation step conditioned on
                 the previously generated tokens `inputs_ids` and the batch ID `batch_id`. This argument is useful for
                 constrained generation conditioned on the prefix, as described in [Autoregressive Entity
-                Retrieval](https://arxiv.org/abs/2010.00904).
+                Retrieval](https://huggingface.co/papers/2010.00904).
             logits_processor (`LogitsProcessorList`, *optional*):
                 Custom logits processors that complement the default logits processors built from arguments and a
                 model's config. If a logit processor is passed that is already created with the arguments or a model's

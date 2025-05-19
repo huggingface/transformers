@@ -441,7 +441,7 @@ class FNetModel(FNetPreTrainedModel):
     """
 
     The model can behave as an encoder, following the architecture described in [FNet: Mixing Tokens with Fourier
-    Transforms](https://arxiv.org/abs/2105.03824) by James Lee-Thorp, Joshua Ainslie, Ilya Eckstein, Santiago Ontanon.
+    Transforms](https://huggingface.co/papers/2105.03824) by James Lee-Thorp, Joshua Ainslie, Ilya Eckstein, Santiago Ontanon.
 
     """
 

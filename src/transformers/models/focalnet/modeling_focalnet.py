@@ -711,7 +711,7 @@ class FocalNetModel(FocalNetPreTrainedModel):
     custom_intro="""
     FocalNet Model with a decoder on top for masked image modeling.
 
-    This follows the same implementation as in [SimMIM](https://arxiv.org/abs/2111.09886).
+    This follows the same implementation as in [SimMIM](https://huggingface.co/papers/2111.09886).
 
     <Tip>
 

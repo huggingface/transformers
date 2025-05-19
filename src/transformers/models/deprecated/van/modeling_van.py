@@ -86,7 +86,7 @@ class VanOverlappingPatchEmbedder(nn.Module):
     """
     Downsamples the input using a patchify operation with a `stride` of 4 by default making adjacent windows overlap by
     half of the area. From [PVTv2: Improved Baselines with Pyramid Vision
-    Transformer](https://arxiv.org/abs/2106.13797).
+    Transformer](https://huggingface.co/papers/2106.13797).
     """
 
     def __init__(self, in_channels: int, hidden_size: int, patch_size: int = 7, stride: int = 4):
@@ -105,7 +105,7 @@ class VanOverlappingPatchEmbedder(nn.Module):
 class VanMlpLayer(nn.Module):
     """
     MLP with depth-wise convolution, from [PVTv2: Improved Baselines with Pyramid Vision
-    Transformer](https://arxiv.org/abs/2106.13797).
+    Transformer](https://huggingface.co/papers/2106.13797).
     """
 
     def __init__(

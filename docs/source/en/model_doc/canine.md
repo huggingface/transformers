@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The CANINE model was proposed in [CANINE: Pre-training an Efficient Tokenization-Free Encoder for Language
-Representation](https://arxiv.org/abs/2103.06874) by Jonathan H. Clark, Dan Garrette, Iulia Turc, John Wieting. It's
+Representation](https://huggingface.co/papers/2103.06874) by Jonathan H. Clark, Dan Garrette, Iulia Turc, John Wieting. It's
 among the first papers that trains a Transformer without using an explicit tokenization step (such as Byte Pair
 Encoding (BPE), WordPiece or SentencePiece). Instead, the model is trained directly at a Unicode character-level.
 Training at a character-level inevitably comes with a longer sequence length, which CANINE solves with an efficient

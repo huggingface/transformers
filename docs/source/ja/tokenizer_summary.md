@@ -101,7 +101,7 @@ rendered properly in your Markdown viewer.
 
 ### Byte-Pair Encoding（BPE）
 
-Byte-Pair Encoding（BPE）は、[Neural Machine Translation of Rare Words with Subword Units（Sennrich et al., 2015）](https://arxiv.org/abs/1508.07909)で導入されました。BPEは、トレーニングデータを単語に分割するプリトークナイザに依存しています。プリトークナイゼーションは、空白のトークナイゼーションなど、非常に単純なものであることがあります。例えば、[GPT-2](model_doc/gpt2)、[RoBERTa](model_doc/roberta)です。より高度なプリトークナイゼーションには、ルールベースのトークナイゼーション（[XLM](model_doc/xlm)、[FlauBERT](model_doc/flaubert)などが大部分の言語にMosesを使用）や、[GPT](model_doc/gpt)（Spacyとftfyを使用してトレーニングコーパス内の各単語の頻度を数える）などが含まれます。
+Byte-Pair Encoding（BPE）は、[Neural Machine Translation of Rare Words with Subword Units（Sennrich et al., 2015）](https://huggingface.co/papers/1508.07909)で導入されました。BPEは、トレーニングデータを単語に分割するプリトークナイザに依存しています。プリトークナイゼーションは、空白のトークナイゼーションなど、非常に単純なものであることがあります。例えば、[GPT-2](model_doc/gpt2)、[RoBERTa](model_doc/roberta)です。より高度なプリトークナイゼーションには、ルールベースのトークナイゼーション（[XLM](model_doc/xlm)、[FlauBERT](model_doc/flaubert)などが大部分の言語にMosesを使用）や、[GPT](model_doc/gpt)（Spacyとftfyを使用してトレーニングコーパス内の各単語の頻度を数える）などが含まれます。
 
 プリトークナイゼーションの後、一意の単語セットが作成され、各単語がトレーニングデータで出現した頻度が決定されます。次に、BPEはベース語彙を作成し、ベース語彙の二つのシンボルから新しいシンボルを形成するためのマージルールを学習します。このプロセスは、語彙が所望の語彙サイズに達するまで続けられます。なお、所望の語彙サイズはトークナイザをトレーニングする前に定義するハイパーパラメータであることに注意してください。
 

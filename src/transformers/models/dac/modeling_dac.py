@@ -264,7 +264,7 @@ class DacDecoderBlock(nn.Module):
 
 class DacResidualVectorQuantize(nn.Module):
     """
-    ResidualVectorQuantize block - Introduced in SoundStream: An end2end neural audio codec (https://arxiv.org/abs/2107.03312)
+    ResidualVectorQuantize block - Introduced in SoundStream: An end2end neural audio codec (https://huggingface.co/papers/2107.03312)
     """
 
     def __init__(self, config: DacConfig):

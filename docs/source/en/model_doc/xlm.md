@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The XLM model was proposed in [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by
+The XLM model was proposed in [Cross-lingual Language Model Pretraining](https://huggingface.co/papers/1901.07291) by
 Guillaume Lample, Alexis Conneau. It's a transformer pretrained using one of the following objectives:
 
 - a causal language modeling (CLM) objective (next token prediction),

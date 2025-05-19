@@ -22,8 +22,8 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 ERNIE is a series of powerful models proposed by baidu, especially in Chinese tasks,
-including [ERNIE1.0](https://arxiv.org/abs/1904.09223), [ERNIE2.0](https://ojs.aaai.org/index.php/AAAI/article/view/6428),
-[ERNIE3.0](https://arxiv.org/abs/2107.02137), [ERNIE-Gram](https://arxiv.org/abs/2010.12148), [ERNIE-health](https://arxiv.org/abs/2110.07244), etc.
+including [ERNIE1.0](https://huggingface.co/papers/1904.09223), [ERNIE2.0](https://ojs.aaai.org/index.php/AAAI/article/view/6428),
+[ERNIE3.0](https://huggingface.co/papers/2107.02137), [ERNIE-Gram](https://huggingface.co/papers/2010.12148), [ERNIE-health](https://huggingface.co/papers/2110.07244), etc.
 
 These models are contributed by [nghuyong](https://huggingface.co/nghuyong) and the official code can be found in [PaddleNLP](https://github.com/PaddlePaddle/PaddleNLP) (in PaddlePaddle).
 

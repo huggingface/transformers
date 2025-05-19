@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## 概要
 
-Audio Spectrogram Transformerモデルは、[AST: Audio Spectrogram Transformer](https://arxiv.org/abs/2104.01778)という論文でYuan Gong、Yu-An Chung、James Glassによって提案されました。これは、音声を画像（スペクトログラム）に変換することで、音声に[Vision Transformer](vit)を適用します。このモデルは音声分類において最先端の結果を得ています。
+Audio Spectrogram Transformerモデルは、[AST: Audio Spectrogram Transformer](https://huggingface.co/papers/2104.01778)という論文でYuan Gong、Yu-An Chung、James Glassによって提案されました。これは、音声を画像（スペクトログラム）に変換することで、音声に[Vision Transformer](vit)を適用します。このモデルは音声分類において最先端の結果を得ています。
 
 論文の要旨は以下の通りです：
 
@@ -27,7 +27,7 @@ Audio Spectrogram Transformerモデルは、[AST: Audio Spectrogram Transformer]
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/audio_spectogram_transformer_architecture.png"
 alt="drawing" width="600"/>
 
-<small> Audio Spectrogram Transformerのアーキテクチャ。<a href="https://arxiv.org/abs/2104.01778">元論文</a>より抜粋。</small>
+<small> Audio Spectrogram Transformerのアーキテクチャ。<a href="https://huggingface.co/papers/2104.01778">元論文</a>より抜粋。</small>
 
 このモデルは[nielsr](https://huggingface.co/nielsr)より提供されました。
 オリジナルのコードは[こちら](https://github.com/YuanGongND/ast)で見ることができます。
@@ -35,7 +35,7 @@ alt="drawing" width="600"/>
 ## 使用上のヒント
 
 - 独自のデータセットでAudio Spectrogram Transformer（AST）をファインチューニングする場合、入力の正規化（入力の平均を0、標準偏差を0.5にすること）処理することが推奨されます。[`ASTFeatureExtractor`]はこれを処理します。デフォルトではAudioSetの平均と標準偏差を使用していることに注意してください。著者が下流のデータセットの統計をどのように計算しているかは、[`ast/src/get_norm_stats.py`](https://github.com/YuanGongND/ast/blob/master/src/get_norm_stats.py)で確認することができます。
-- ASTは低い学習率が必要であり 著者は[PSLA論文](https://arxiv.org/abs/2102.01243)で提案されたCNNモデルに比べて10倍小さい学習率を使用しています）、素早く収束するため、タスクに適した学習率と学習率スケジューラーを探すことをお勧めします。
+- ASTは低い学習率が必要であり 著者は[PSLA論文](https://huggingface.co/papers/2102.01243)で提案されたCNNモデルに比べて10倍小さい学習率を使用しています）、素早く収束するため、タスクに適した学習率と学習率スケジューラーを探すことをお勧めします。
 
 ## 参考資料
 

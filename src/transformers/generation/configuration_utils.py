@@ -171,7 +171,7 @@ class GenerationConfig(PushToHubMixin):
             If a list of integers, it must contain the indices of the layers to use for candidate premature layers in DoLa.
             The 0-th layer is the word embedding layer of the model. Set to `'low'` to improve long-answer reasoning tasks,
             `'high'` to improve short-answer tasks. Check the [documentation](https://github.com/huggingface/transformers/blob/main/docs/source/en/generation_strategies.md)
-            or [the paper](https://arxiv.org/abs/2309.03883) for more details.
+            or [the paper](https://huggingface.co/papers/2309.03883) for more details.
 
         > Parameters that control the cache
 
@@ -221,14 +221,14 @@ class GenerationConfig(PushToHubMixin):
             If set to float strictly between 0 and 1, only tokens with a conditional probability greater than
             `epsilon_cutoff` will be sampled. In the paper, suggested values range from 3e-4 to 9e-4, depending on the
             size of the model. See [Truncation Sampling as Language Model
-            Desmoothing](https://arxiv.org/abs/2210.15191) for more details.
+            Desmoothing](https://huggingface.co/papers/2210.15191) for more details.
         eta_cutoff (`float`, *optional*, defaults to 0.0):
             Eta sampling is a hybrid of locally typical sampling and epsilon sampling. If set to float strictly between
             0 and 1, a token is only considered if it is greater than either `eta_cutoff` or `sqrt(eta_cutoff) *
             exp(-entropy(softmax(next_token_logits)))`. The latter term is intuitively the expected next token
             probability, scaled by `sqrt(eta_cutoff)`. In the paper, suggested values range from 3e-4 to 2e-3,
             depending on the size of the model. See [Truncation Sampling as Language Model
-            Desmoothing](https://arxiv.org/abs/2210.15191) for more details.
+            Desmoothing](https://huggingface.co/papers/2210.15191) for more details.
         diversity_penalty (`float`, *optional*, defaults to 0.0):
             This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
             particular time. Note that `diversity_penalty` is only effective if `group beam search` is enabled.
@@ -362,7 +362,7 @@ class GenerationConfig(PushToHubMixin):
             (defined by `num_assistant_tokens`) is not yet reached. The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes, biased towards avoiding false negatives.
             `assistant_confidence_threshold` value is persistent over multiple generation calls with the same assistant model.
             It is an unsupervised version of the dynamic speculation lookahead
-            from Dynamic Speculation Lookahead Accelerates Speculative Decoding of Large Language Models <https://arxiv.org/abs/2405.04304>.
+            from Dynamic Speculation Lookahead Accelerates Speculative Decoding of Large Language Models <https://huggingface.co/papers/2405.04304>.
         prompt_lookup_num_tokens (`int`, *optional*):
             The number of tokens to be output as candidate tokens.
         max_matching_ngram_size (`int`, *optional*):
@@ -1409,7 +1409,7 @@ class BaseWatermarkingConfig(ABC):
 class WatermarkingConfig(BaseWatermarkingConfig):
     """
     Class that holds arguments for watermark generation and should be passed into `GenerationConfig` during `generate`.
-    See [this paper](https://arxiv.org/abs/2306.04634) for more details on the arguments.
+    See [this paper](https://huggingface.co/papers/2306.04634) for more details on the arguments.
 
     Accepts the following keys:
         - greenlist_ratio (`float`):
