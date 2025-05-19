@@ -9,7 +9,7 @@ from transformers.generation import GenerationConfig
 
 # --- Common Setup ---
 model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.2-3b-Instruct", attn_implementation="sdpa_paged", torch_dtype=torch.bfloat16, device_map="auto"
+    "meta-llama/Llama-3.2-3b-Instruct", attn_implementation="paged_attention", torch_dtype=torch.bfloat16, device_map="auto"
 ).eval()
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", padding_side="left")
 
@@ -22,7 +22,7 @@ if tokenizer.pad_token is None:
 
 # Configure generation parameters
 generation_config = GenerationConfig(
-    max_new_tokens=10,
+    max_new_tokens=2048,
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
     do_sample=True,
