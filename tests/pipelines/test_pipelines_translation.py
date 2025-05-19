@@ -25,7 +25,7 @@ from transformers import (
     TranslationPipeline,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow
+from transformers.testing_utils import is_pipeline_test, require_torch, slow
 
 from .test_pipelines_common import ANY
 
@@ -95,41 +95,9 @@ class TranslationPipelineTests(unittest.TestCase):
             ],
         )
 
-    @require_tf
-    def test_small_model_tf(self):
-        translator = pipeline("translation_en_to_ro", model="patrickvonplaten/t5-tiny-random", framework="tf")
-        outputs = translator("This is a test string", max_length=20)
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "translation_text": (
-                        "Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide"
-                        " Beide Beide"
-                    )
-                }
-            ],
-        )
-
     @require_torch
     def test_en_to_de_pt(self):
         translator = pipeline("translation_en_to_de", model="patrickvonplaten/t5-tiny-random", framework="pt")
-        outputs = translator("This is a test string", max_length=20)
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "translation_text": (
-                        "monoton monoton monoton monoton monoton monoton monoton monoton monoton monoton urine urine"
-                        " urine urine urine urine urine urine urine"
-                    )
-                }
-            ],
-        )
-
-    @require_tf
-    def test_en_to_de_tf(self):
-        translator = pipeline("translation_en_to_de", model="patrickvonplaten/t5-tiny-random", framework="tf")
         outputs = translator("This is a test string", max_length=20)
         self.assertEqual(
             outputs,
