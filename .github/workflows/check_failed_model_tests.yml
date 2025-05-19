@@ -46,7 +46,7 @@ jobs:
       - name: Get target commit
         working-directory: /transformers/utils
         env:
-          PREV_WORKFLOW_RUN_ID: "14277576462"
+          PREV_WORKFLOW_RUN_ID: ${{ inputs.prev_workflow_run_id }}
         # how to get the commit, especially in multiple files? This only makes sense if it's the same workflow id.
         run: |
           # how to get the good last commit
