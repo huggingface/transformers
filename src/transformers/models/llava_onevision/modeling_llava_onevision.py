@@ -456,9 +456,9 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
                 grid_pinpoints=self.config.image_grid_pinpoints,
                 patch_size=self.config.vision_config.image_size,
             )
-            if b
+            if should_patch
             else 1
-            for imsize, b in zip(image_sizes, need_patching)
+            for imsize, should_patch in zip(image_sizes, need_patching)
         ]
         if pixel_values.dim() == 5:
             # stacked if input is (batch_size, num_patches, num_channels, height, width)

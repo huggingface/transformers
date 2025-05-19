@@ -214,17 +214,33 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
         length = 384
         scale_single, scale_multi = 2, 3
         image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
-        image_processor_dict["size"] = {"height": length, "width": length}
+        image_processor_dict["size"] = {"height": length, "width": length}  # patch size
         for image_processing_class in self.image_processor_list:
             image_processing = image_processing_class(**image_processor_dict)
 
             # Test batched as a nested list of images, where each sublist is one batch
-            image_inputs_1 = prepare_image_inputs(1, length, length * scale_single, 3, equal_resolution=True)
-            image_inputs_2 = prepare_image_inputs(7, length, length * scale_multi, 3, equal_resolution=True)
+            len_image_1 = length * scale_single
+            image_inputs_1 = prepare_image_inputs(
+                batch_size=1,
+                min_resolution=0,   # not used
+                max_resolution=len_image_1,
+                num_channels=3,
+                equal_resolution=True,
+            )
+            len_image_2 = length * scale_multi
+            image_inputs_2 = prepare_image_inputs(
+                batch_size=7,
+                min_resolution=0,   # not used
+                max_resolution=len_image_2,
+                num_channels=3,
+                equal_resolution=True,
+            )
             image_inputs = [image_inputs_1, image_inputs_2]
 
+            # Only single image should be patchified
+            expected_num_patches = scale_single**2 + 1  # +1 for base image patch
+            expected_output_image_shape = (8, expected_num_patches, 3, length, length)
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = (8, scale_single**2 + 1, 3, length, length)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     @unittest.skip(

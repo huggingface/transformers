@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 
@@ -280,11 +280,9 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
                     interpolation=interpolation,
                 )
             else:
-                image_size = image.shape[1:]
-                longest_edge = max(image_size)
-                padding = self._get_padding_size(image_size, (longest_edge, longest_edge))
-                constant_values = tuple(int(x * 255) for x in self.image_mean)
-                padded_image = F.pad(image, padding=padding, fill=constant_values)
+                padded_image = self.pad_to_square(
+                    images=image, background_color=tuple(int(x * 255) for x in self.image_mean)
+                )
                 image_patches = [padded_image]
 
             # Group images by size for batched processing
@@ -318,6 +316,49 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
             data={"pixel_values": processed_images, "image_sizes": image_sizes, "batch_num_images": batch_num_images},
             tensor_type=return_tensors,
         )
+
+    # Copied from transformers.models.llava.image_processing_llava_fast.LlavaImageProcessorFast.pad_to_square
+    def pad_to_square(
+        self,
+        images: "torch.Tensor",
+        background_color: Union[int, Tuple[int, int, int]] = 0,
+    ) -> "torch.Tensor":
+        """
+        Pads an image to a square based on the longest edge.
+
+        Args:
+            images (`np.ndarray`):
+                The images to pad.
+            background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
+                The color to use for the padding. Can be an integer for single channel or a
+                tuple of integers representing for multi-channel images. If passed as integer
+                in mutli-channel mode, it will default to `0` in subsequent channels.
+        Returns:
+            `torch.Tensor`: The padded images.
+        """
+        height, width = get_image_size(images, ChannelDimension.FIRST)
+
+        if height == width:
+            return images
+
+        num_channels = images.shape[1] if len(images.shape) == 4 else images.shape[0]
+        if isinstance(background_color, int):
+            background_color = [background_color] + [0] * (num_channels - 1)
+        elif len(background_color) != num_channels:
+            raise ValueError(
+                f"background_color must have no more than {num_channels} elements to match the number of channels"
+            )
+
+        max_dim = max(height, width)
+        paste_x_left = (max_dim - width) // 2
+        paste_y_left = (max_dim - height) // 2
+        paste_x_right = max_dim - width - paste_x_left
+        paste_y_right = max_dim - height - paste_y_left
+        padded_images = F.pad(
+            images, padding=[paste_x_left, paste_y_left, paste_x_right, paste_y_right], fill=background_color
+        )
+
+        return padded_images
 
 
 __all__ = ["LlavaOnevisionImageProcessorFast"]

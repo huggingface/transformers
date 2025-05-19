@@ -97,6 +97,49 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
     image_grid_pinpoints = [[384, 384], [384, 768], [384, 1152], [384, 1536], [384, 1920], [384, 2304], [768, 384], [768, 768], [768, 1152], [768, 1536], [768, 1920], [768, 2304], [1152, 384], [1152, 768], [1152, 1152], [1152, 1536], [1152, 1920], [1152, 2304], [1536, 384], [1536, 768], [1536, 1152], [1536, 1536], [1536, 1920], [1536, 2304], [1920, 384], [1920, 768], [1920, 1152], [1920, 1536], [1920, 1920], [1920, 2304], [2304, 384], [2304, 768], [2304, 1152], [2304, 1536], [2304, 1920], [2304, 2304]]  # fmt: skip
     model_input_names = ["pixel_values_videos"]
 
+    # Copied from transformers.models.llava.image_processing_llava_fast.LlavaImageProcessorFast.pad_to_square
+    def pad_to_square(
+        self,
+        images: "torch.Tensor",
+        background_color: Union[int, Tuple[int, int, int]] = 0,
+    ) -> "torch.Tensor":
+        """
+        Pads an image to a square based on the longest edge.
+
+        Args:
+            images (`np.ndarray`):
+                The images to pad.
+            background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
+                The color to use for the padding. Can be an integer for single channel or a
+                tuple of integers representing for multi-channel images. If passed as integer
+                in mutli-channel mode, it will default to `0` in subsequent channels.
+        Returns:
+            `torch.Tensor`: The padded images.
+        """
+        height, width = get_image_size(images, ChannelDimension.FIRST)
+
+        if height == width:
+            return images
+
+        num_channels = images.shape[1] if len(images.shape) == 4 else images.shape[0]
+        if isinstance(background_color, int):
+            background_color = [background_color] + [0] * (num_channels - 1)
+        elif len(background_color) != num_channels:
+            raise ValueError(
+                f"background_color must have no more than {num_channels} elements to match the number of channels"
+            )
+
+        max_dim = max(height, width)
+        paste_x_left = (max_dim - width) // 2
+        paste_y_left = (max_dim - height) // 2
+        paste_x_right = max_dim - width - paste_x_left
+        paste_y_right = max_dim - height - paste_y_left
+        padded_images = F.pad(
+            images, padding=[paste_x_left, paste_y_left, paste_x_right, paste_y_right], fill=background_color
+        )
+
+        return padded_images
+
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionFastImageProcessorKwargs]) -> BatchFeature:
         if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
@@ -158,11 +201,9 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
                     interpolation=interpolation,
                 )
             else:
-                image_size = image.shape[1:]
-                longest_edge = max(image_size)
-                padding = self._get_padding_size(image_size, (longest_edge, longest_edge))
-                constant_values = tuple(int(x * 255) for x in self.image_mean)
-                padded_image = F.pad(image, padding=padding, fill=constant_values)
+                padded_image = self.pad_to_square(
+                    images=image, background_color=tuple(int(x * 255) for x in self.image_mean)
+                )
                 image_patches = [padded_image]
 
             # Group images by size for batched processing
@@ -336,9 +377,9 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
                 grid_pinpoints=self.config.image_grid_pinpoints,
                 patch_size=self.config.vision_config.image_size,
             )
-            if b
+            if should_patch
             else 1
-            for imsize, b in zip(image_sizes, need_patching)
+            for imsize, should_patch in zip(image_sizes, need_patching)
         ]
         if pixel_values.dim() == 5:
             # stacked if input is (batch_size, num_patches, num_channels, height, width)

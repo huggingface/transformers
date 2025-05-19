@@ -442,6 +442,85 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
 
         return pixel_values
 
+    # Copied from transformers.models.llava.modeling_llava.pad_to_square
+    def pad_to_square(
+        self,
+        image: np.ndarray,
+        background_color: Union[int, Tuple[int, int, int]] = 0,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.array:
+        """
+        Pads an image to a square based on the longest edge.
+
+        Args:
+            image (`np.ndarray`):
+                The image to pad.
+            background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
+                The color to use for the padding. Can be an integer for single channel or a
+                tuple of integers representing for multi-channel images. If passed as integer
+                in mutli-channel mode, it will default to `0` in subsequent channels.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use same as the input image.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the input image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use the inferred format of the input image.
+
+        Returns:
+            `np.ndarray`: The padded image.
+        """
+        height, width = get_image_size(image, input_data_format)
+        num_channels = image.shape[0] if input_data_format == ChannelDimension.FIRST else image.shape[-1]
+
+        if height == width:
+            image = (
+                to_channel_dimension_format(image, data_format, input_data_format)
+                if data_format is not None
+                else image
+            )
+            return image
+
+        max_dim = max(height, width)
+
+        # Ensure background_color is the correct shape
+        if isinstance(background_color, int):
+            background_color = [background_color]
+        elif len(background_color) != num_channels:
+            raise ValueError(
+                f"background_color must have no more than {num_channels} elements to match the number of channels"
+            )
+
+        if input_data_format == ChannelDimension.FIRST:
+            result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)
+            for i, color in enumerate(background_color):
+                result[i, :, :] = color
+            if width > height:
+                start = (max_dim - height) // 2
+                result[:, start : start + height, :] = image
+            else:
+                start = (max_dim - width) // 2
+                result[:, :, start : start + width] = image
+        else:
+            result = np.zeros((max_dim, max_dim, num_channels), dtype=image.dtype)
+            for i, color in enumerate(background_color):
+                result[:, :, i] = color
+            if width > height:
+                start = (max_dim - height) // 2
+                result[start : start + height, :, :] = image
+            else:
+                start = (max_dim - width) // 2
+                result[:, start : start + width, :] = image
+
+        image = (
+            to_channel_dimension_format(result, data_format, input_data_format) if data_format is not None else result
+        )
+        return image
+
     def _preprocess(
         self,
         images: ImageInput,
@@ -668,14 +747,11 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
                     input_data_format=input_data_format,
                 )
             else:
-                longest_edge = max(image_sizes[i])
-                padding = self._get_padding_size(image_sizes[i], (longest_edge, longest_edge))
-                num_channels = image.shape[0] if input_data_format == ChannelDimension.FIRST else image.shape[-1]
-                constant_values = [int(x * 255) for x in self.image_mean]
-                padded_channels = [
-                    np.pad(image[..., c], padding, constant_values=constant_values[c]) for c in range(num_channels)
-                ]
-                padded_image = np.stack(padded_channels, axis=-1)
+                padded_image = self.pad_to_square(
+                    image=image,
+                    background_color=tuple(int(x * 255) for x in self.image_mean),
+                    input_data_format=input_data_format,
+                )
                 image_patches = [padded_image]
 
             # preprocess patches
