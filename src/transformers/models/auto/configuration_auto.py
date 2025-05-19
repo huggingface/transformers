@@ -120,7 +120,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("falcon", "FalconConfig"),
         ("falcon_mamba", "FalconMambaConfig"),
         ("fastspeech2_conformer", "FastSpeech2ConformerConfig"),
-        ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGan"),
         ("flaubert", "FlaubertConfig"),
         ("flava", "FlavaConfig"),
         ("fnet", "FNetConfig"),
