@@ -204,8 +204,9 @@ class GenerationConfigTest(unittest.TestCase):
 
         # By default we throw a short warning. However, we log with INFO level the details.
         # Default: we don't log the incorrect input values, only a short summary. We explain how to get more details.
-        with CaptureLogger(logger) as captured_logs:
-            GenerationConfig(do_sample=False, temperature=0.5)
+        with LoggingLevel(logging.WARNING):
+            with CaptureLogger(logger) as captured_logs:
+                GenerationConfig(do_sample=False, temperature=0.5)
         self.assertNotIn("0.5", captured_logs.out)
         self.assertTrue(len(captured_logs.out) < 150)  # short log
         self.assertIn("Set `TRANSFORMERS_VERBOSITY=info` for more details", captured_logs.out)
@@ -259,9 +260,10 @@ class GenerationConfigTest(unittest.TestCase):
             # Catch warnings
             with warnings.catch_warnings(record=True) as captured_warnings:
                 # Catch logs (up to WARNING level, the default level)
-                logger = transformers_logging.get_logger("transformers.generation.configuration_utils")
-                with CaptureLogger(logger) as captured_logs:
-                    config.save_pretrained(tmp_dir)
+                with LoggingLevel(logging.WARNING):
+                    logger = transformers_logging.get_logger("transformers.generation.configuration_utils")
+                    with CaptureLogger(logger) as captured_logs:
+                        config.save_pretrained(tmp_dir)
             self.assertEqual(len(captured_warnings), 0)
             self.assertEqual(len(captured_logs.out), 0)
             self.assertEqual(len(os.listdir(tmp_dir)), 1)
