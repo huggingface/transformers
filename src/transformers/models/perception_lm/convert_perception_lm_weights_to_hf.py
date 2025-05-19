@@ -40,11 +40,13 @@ from transformers.models.perception_lm.video_processing_perception_lm import (
     PerceptionLMVideoProcessor,
 )
 from transformers.models.perception_lm.modeling_perception_lm import (
+    PerceptionEncoder,
     PerceptionLMForConditionalGeneration,
 )
 from transformers.models.perception_lm.processing_perception_lm import (
     PerceptionLMProcessor,
 )
+from timm.models.eva import checkpoint_filter_fn
 
 
 try:
@@ -155,6 +157,15 @@ def write_json(text, path):
         json.dump(text, f)
 
 
+def write_weights(state_dict, index_dict, param_count, filename):
+    for k, v in state_dict.items():
+        index_dict["weight_map"][k] = filename
+        param_count += v.numel()
+    torch.save(state_dict, filename)
+    print(f"Saved {filename}")
+    return param_count
+
+
 def write_model(
     model_path,
     input_base_path,
@@ -227,7 +238,7 @@ def write_model(
         param_count = 0
         index_dict = {"weight_map": {}}
         for layer_i in range(n_layers):
-            filename = f"pytorch_model-{layer_i + 1}-of-{n_layers + 1}.bin"
+            filename = f"pytorch_model-{layer_i + 1}-of-{n_layers + 2}.bin"
             assert num_shards == 1, "PerceptionLM does not support sharded weights"
             state_dict = {
                 f"language_model.model.layers.{layer_i}.self_attn.q_proj.weight": permute(
@@ -269,7 +280,7 @@ def write_model(
             torch.save(state_dict, os.path.join(tmp_model_path, filename))
             print(f"Saved {filename}")
 
-        filename = f"pytorch_model-{n_layers + 1}-of-{n_layers + 1}.bin"
+        filename = f"pytorch_model-{n_layers + 1}-of-{n_layers + 2}.bin"
 
         state_dict = {
             "language_model.model.embed_tokens.weight": loaded["tok_embeddings.weight"],
@@ -292,14 +303,30 @@ def write_model(
                 "vision_projector.projector.2.bias"
             ],
         }
-        for k, v in loaded.items():
-            if "vision_model" in k:
-                state_dict[k.replace("vision_model", "vision_tower")] = v
         for k, v in state_dict.items():
             index_dict["weight_map"][k] = filename
             param_count += v.numel()
         torch.save(state_dict, os.path.join(tmp_model_path, filename))
         print(f"Saved {filename}")
+
+        filename = f"pytorch_model-{n_layers + 2}-of-{n_layers + 2}.bin"
+        state_dict = {
+            k.replace("vision_model.", ""): v
+            for k, v in loaded.items()
+            if "vision_model" in k
+        }
+        vision_config = PerceptionEncoderConfig(**model_params["vision_model"])
+        perception_encoder = PerceptionEncoder(vision_config)
+        state_dict = checkpoint_filter_fn(
+            state_dict, perception_encoder.eva_pe
+        )
+        state_dict = { "vision_tower.eva_pe." + k: v for k, v in state_dict.items()}
+        for k, v in state_dict.items():
+            index_dict["weight_map"][k] = filename
+            param_count += v.numel()
+        torch.save(state_dict, os.path.join(tmp_model_path, filename))
+        print(f"Saved {filename}")
+
         # Write configs
         index_dict["metadata"] = {"total_size": param_count * 2}
         write_json(
@@ -350,7 +377,6 @@ def write_model(
             tie_word_embeddings=tie_word_embeddings,
         )
 
-        vision_config = PerceptionEncoderConfig(**model_params["vision_model"])
         config = PerceptionLMConfig(
             text_config=text_config.to_dict(),
             vision_config=vision_config.to_dict(),
