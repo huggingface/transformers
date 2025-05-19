@@ -44,8 +44,7 @@ Tensor parallelism requires slight changes to the model parameters, therefore in
 </details>
 
 ## Tensor parallelism in-depth
-
-Our implementation of tensor parallelism is built on top of `torch.distributed` package. We heavily utilize abstractions as: `DeviceMesh` or `DTensor` to provide a simple and extensible interface to the user.
+Our implementation of tensor parallelism is framework-agnostic in design, but the specific implementations we've developed rely on the torch.distributed package. We heavily utilize abstractions such as `DeviceMesh` or `DTensor` to provide a simple and extensible interface to the user.
 
 ### DeviceMesh
 Imagine `DeviceMesh` as a multi-dimensional grid of devices that communicate together. Different parallelization strategies require different types of communication patterns, therefore we can create a `DeviceMesh` with multiple submeshes:
@@ -58,11 +57,7 @@ device_mesh = init_device_mesh("cuda", (2, 2), mesh_dim_names=["dp", "tp"])
 # Create a 1D mesh of 4 GPUs
 device_mesh = init_device_mesh("cuda", (4,), mesh_dim_names=["tp"])
 ```
-Then, most of the `torch.distributed` defined parallelization strategies can be applied to a submesh of the `DeviceMesh`, and will automatically handle the communication patterns.
-
-```python
-tp_submesh = device_mesh["tp"]
-```
+Then, most of the `torch.distributed` defined parallelization strategies can be applied to a mesh itself, or its submesh, automatically handling the communication patterns.
 
 ### DTensor
 
@@ -114,24 +109,32 @@ strategies.
 You can use any of these with their corresponding key as such:
 
 ```python
-supported_parallel_strategies = {
-    "colwise": ColwiseParallel(),
-    "rowwise": RowwiseParallel(),
-    "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
-    "rowwise_rep": RowwiseParallel(input_layouts=Replicate()),
-    "local_colwise": ColwiseParallel(use_dtensor=False),
-    "local_rowwise": RowwiseParallel(use_dtensor=False),
-    "local": IsolatedParallel(),
-    "gather": GatherParallel(),
-    "local_packed_rowwise": PackedRowwiseParallel(use_dtensor=False),
-    "sequence_parallel": SequenceParallel(),
-    "replicate": ReplicateParallel(),
-}
+class ParallelInterface(MutableMapping):
+    """
+    Dict-like object keeping track of allowed attention functions. You can easily add a new attention function
+    with a call to `register()`. If a model needs to locally overwrite an existing attention function, say `sdpa`,
+    it needs to declare a new instance of this class inside the `modeling_<model>.py`, and declare it on that instance.
+    """
+
+    # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
+    # a new instance is created (in order to locally override a given function)
+    _global_mapping = {
+        "colwise": ColwiseParallel(),
+        "rowwise": RowwiseParallel(),
+        "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
+        "rowwise_rep": RowwiseParallel(input_layouts=Replicate()),
+        "local_colwise": ColwiseParallel(use_dtensor=False),
+        "local_rowwise": RowwiseParallel(use_dtensor=False),
+        "local": IsolatedParallel(),
+        "gather": GatherParallel(),
+        "local_packed_rowwise": PackedRowwiseParallel(use_dtensor=False),
+        "sequence_parallel": SequenceParallel(),
+        "replicate": ReplicateParallel(),
+    }
 ```
 
-
-### `PackedColwiseParallel` and `PackedRowwiseParallel`
-These two classes are special cases of `ColwiseParallel` and `RowwiseParallel` respectively, they are used to shard packed weights. Weight packing is a common technique used in models. It's a technique where we pack multiple linear layers into a single bigger one.
+### PackedRowwiseParallel
+This class is a special case of `RowwiseParallel`, it's used to shard packed weights. Weight packing is a common technique used in models. It's a technique where we pack multiple linear layers into a single bigger one.
 
 For example in `Llama4` model, we pack `up_proj` and `gate_proj` into a single `Linear` module.
 ```python
@@ -149,7 +152,7 @@ def forward(self, hidden_states):
     gate, up = gate_up.chunk(2, dim=-1) # Split the output into gate and up
 ```
 
-In this case, we need to use the `Packed*` strategies to shard the `gate_up_proj` module, as using a simple `ColwiseParallel` or `RowwiseParallel` will shard the layers wrongly.
+In this case, we need to use the `PackedRowwiseParallel` strategy to shard the `gate_up_proj` module, as using a simple `RowwiseParallel` will shard the layers wrongly.
 
 > [!TIP]
 > If this is a bit difficult to wrap your head around, check out [this comment](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108) for an amazing visual representation of why `Packed*` needs to be used.
