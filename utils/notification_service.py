@@ -1239,7 +1239,7 @@ if __name__ == "__main__":
         os.makedirs(os.path.join(os.getcwd(), f"ci_results_{job_name}"))
 
     target_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml@refs/heads/main"
-    is_scheduled_ci_run = os.environ.get("CI_WORKFLOW_REF") == target_workflow
+    is_scheduled_ci_run = os.environ.get("GITHUB_WORKFLOW_REF") == target_workflow
     is_scheduled_ci_run = True
 
     # Only the model testing job is concerned: this condition is to avoid other jobs to upload the empty list as
@@ -1290,10 +1290,13 @@ if __name__ == "__main__":
         if job_name == "run_models_gpu":
             # This is the previous completed scheduled run
             prev_workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"])
-            # If we really need this? If this is not Nvidia scheduled daily CI --> we get it with the same commit?
-            other_workflow_id = os.environ["OTHER_WORKFLOW_ID"]
-            other_workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=other_workflow_id)
-            other_workflow_run_ids.append(other_workflow_run_id)
+            # For a scheduled run that is not the Nvidia's scheduled daily CI, let's add Nvidia's scheduled daily CI as a target to compare.
+            if not os.environ.get("GITHUB_WORKFLOW_REF").startswith("huggingface/transformers/.github/workflows/self-scheduled-caller.yml"):
+                # The id of the workflow `.github/workflows/self-scheduled-caller.yml` (not of a workflow run of it).
+                other_workflow_id = "90575235"
+                # We need to get the Nvidia's scheduled daily CI run that match the current run (i.e. run with the same commit SHA)
+                other_workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=other_workflow_id)
+                other_workflow_run_ids.append(other_workflow_run_id)
     else:
         prev_workflow_run_id = os.environ["PREV_WORKFLOW_RUN_ID"]
         other_workflow_run_id = os.environ["OTHER_WORKFLOW_RUN_ID"]

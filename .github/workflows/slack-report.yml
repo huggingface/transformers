@@ -50,7 +50,6 @@ jobs:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           CI_EVENT: ${{ inputs.ci_event }}
           CI_SHA: ${{ github.sha }}
-          CI_WORKFLOW_REF: ${{ github.workflow_ref }}
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
           PREV_WORKFLOW_RUN_ID: "14277576462"

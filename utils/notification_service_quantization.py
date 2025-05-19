@@ -253,7 +253,7 @@ if __name__ == "__main__":
         json.dump(quantization_results, fp, indent=4, ensure_ascii=False)
 
     target_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml@refs/heads/main"
-    is_scheduled_ci_run = os.environ.get("CI_WORKFLOW_REF") == target_workflow
+    is_scheduled_ci_run = os.environ.get("GITHUB_WORKFLOW_REF") == target_workflow
 
     # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
     if is_scheduled_ci_run:
