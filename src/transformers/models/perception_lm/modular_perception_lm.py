@@ -70,6 +70,10 @@ class PerceptionEncoder(nn.Module):
             "global_pool": "",
             "use_post_transformer_norm": config.use_ln_post,
             "init_values": config.ls_init_value,
+            "ref_feat_shape": (
+                config.image_size // config.patch_size,
+                config.image_size // config.patch_size,
+            ),
         }
         if config.layers == 23 and config.width == 1024:
             self.eva_pe = vit_pe_core_large_patch14_336(
@@ -83,9 +87,7 @@ class PerceptionEncoder(nn.Module):
             raise ValueError(
                 f"Unsupported PE config: {config.layers} layers and {config.width} width"
             )
-        self.eva_pe._initialize_weights = (
-            lambda x: x
-        )  # disable weight initialization
+        self.eva_pe._initialize_weights = lambda x: x  # disable weight initialization
 
     def forward(self, x):
         x = self.eva_pe(x)
@@ -93,7 +95,7 @@ class PerceptionEncoder(nn.Module):
             return x[:, 1:, :]
         else:
             return x
-        
+
     def _initialize_weights(self):
         pass
 
