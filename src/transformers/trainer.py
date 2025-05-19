@@ -1615,6 +1615,7 @@ class Trainer:
                 "scale": float(optim_args.pop("scale", 1.0)),
                 "proj_type": optim_args.pop("proj_type", "std"),
             }
+            apollo_optim_kwargs.update(adam_kwargs)
 
             optimizer_cls, optimizer_kwargs = setup_low_rank_optimizer(
                 args.optim, optimizer_mapping, apollo_optim_kwargs
