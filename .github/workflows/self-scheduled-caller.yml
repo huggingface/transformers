@@ -23,8 +23,8 @@ on:
 
 
 env:
-    prev_workflow_run_id: "eee"
-    other_workflow_run_id: "ggg"
+    prev_workflow_run_id: "14277576462"
+    other_workflow_run_id: ""
 
 
 jobs:
@@ -43,18 +43,6 @@ jobs:
         with:
           name: setup_values
           path: setup_values
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: setup_values
-          path: setup_values2
-
-      - name: Prepare some setup values
-        # How to use these value
-        run: |
-          ls -la setup_values2
-          cat setup_values2/prev_workflow_run_id.txt
-          cat setup_values2/other_workflow_run_id.txt
 
   model-ci:
     name: Model CI
