@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
+from ..bert import BertTokenizerFast as DPRContextEncoderTokenizerFast  # Direct import from BERT
 
 
 if TYPE_CHECKING:

@@ -107,6 +107,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
         self.add_prefix_space = kwargs.get("add_prefix_space", False)
         self.config_class = kwargs.pop("config_class", None)
+        self._do_lower_case = kwargs.pop("do_lower_case", False)
         if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None and self.config_class is None:
             raise ValueError(
                 "Cannot instantiate this tokenizer from a slow version. If it's based on sentencepiece, make sure you "
@@ -932,6 +933,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     @property
     def add_bos_token(self):
         return self._add_bos_token
+
+    @property
+    def do_lower_case(self):
+        """
+        `bool`: Whether or not the tokenizer should lowercase the input when tokenizing.
+        """
+        return self._do_lower_case
 
     @add_eos_token.setter
     def add_eos_token(self, value):

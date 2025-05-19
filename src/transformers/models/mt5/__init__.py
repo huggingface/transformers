@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
+from ..t5 import T5TokenizerFast as MT5TokenizerFast  # Direct import from T5
 
 
 if TYPE_CHECKING:
