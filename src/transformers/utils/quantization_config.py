@@ -1357,13 +1357,15 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
     def post_init(self):
         if self.run_compressed:
             if self.is_sparsification_compressed:
-                logger.warn(
+                logger.warning(
                     "`run_compressed` is only supported for quantized_compressed models"
                     " and not for sparsified models. Setting `run_compressed=False`"
                 )
                 self.run_compressed = False
             elif not self.is_quantization_compressed:
-                logger.warn("`run_compressed` is only supported for compressed models. Setting `run_compressed=False`")
+                logger.warning(
+                    "`run_compressed` is only supported for compressed models. Setting `run_compressed=False`"
+                )
                 self.run_compressed = False
 
     @classmethod
@@ -1732,7 +1734,7 @@ class TorchAoConfig(QuantizationConfigMixin):
                         dataclasses.asdict(d["quant_type_kwargs"]["layout"]),
                     ]
                 if isinstance(d["quant_type_kwargs"]["layout"], list):
-                    assert len(d["quant_type_kwargs"]["layout"]) == 2, "layout saves layout name and layour kwargs"
+                    assert len(d["quant_type_kwargs"]["layout"]) == 2, "layout saves layout name and layout kwargs"
                     assert isinstance(d["quant_type_kwargs"]["layout"][0], str), "layout name must be a string"
                     assert isinstance(d["quant_type_kwargs"]["layout"][1], dict), "layout kwargs must be a dict"
                 else:
