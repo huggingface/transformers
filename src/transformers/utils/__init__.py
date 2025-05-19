@@ -21,6 +21,17 @@ from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEME
 from packaging import version
 
 from .. import __version__
+from .args_doc import (
+    ClassAttrs,
+    ClassDocstring,
+    ImageProcessorArgs,
+    ModelArgs,
+    auto_class_docstring,
+    auto_docstring,
+    parse_docstring,
+    set_min_indent,
+    source_args_doc,
+)
 from .backbone_utils import BackboneConfigMixin, BackboneMixin
 from .chat_template_utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 from .constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
@@ -129,6 +140,7 @@ from .import_utils import (
     is_bitsandbytes_available,
     is_bitsandbytes_multi_backend_available,
     is_bs4_available,
+    is_ccl_available,
     is_coloredlogs_available,
     is_compressed_tensors_available,
     is_cv2_available,
@@ -155,6 +167,7 @@ from .import_utils import (
     is_habana_gaudi1,
     is_hadamard_available,
     is_hqq_available,
+    is_huggingface_hub_greater_or_equal,
     is_in_notebook,
     is_ipex_available,
     is_jieba_available,
@@ -273,7 +286,8 @@ SAFE_WEIGHTS_NAME = "model.safetensors"
 SAFE_WEIGHTS_INDEX_NAME = "model.safetensors.index.json"
 CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
-IMAGE_PROCESSOR_NAME = FEATURE_EXTRACTOR_NAME
+IMAGE_PROCESSOR_NAME = "preprocessor_config.json"
+VIDEO_PROCESSOR_NAME = "video_preprocessor_config.json"
 PROCESSOR_NAME = "processor_config.json"
 GENERATION_CONFIG_NAME = "generation_config.json"
 MODEL_CARD_NAME = "modelcard.json"

@@ -46,16 +46,12 @@ from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, VideoInput
+from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import (
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import logging
+from ...video_utils import VideoInput
 
 
 if is_flash_attn_available():
@@ -63,8 +59,6 @@ if is_flash_attn_available():
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "Qwen2_5_VLConfig"
 
 
 def apply_rotary_pos_emb_flashatt(
@@ -420,6 +414,7 @@ class Qwen2_5_VLModelOutputWithPast(Qwen2VLModelOutputWithPast):
 
 class Qwen2_5_VLModel(Qwen2VLModel):
     config_class = Qwen2_5_VLConfig
+    base_model_prefix = ""
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
 
     def __init__(self, config):
@@ -627,6 +622,21 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         cache_position: Optional[torch.LongTensor] = None,
         second_per_grid_ts: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, Qwen2_5_VLModelOutputWithPast]:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(seq_length, num_channels * temporal_size * image_size * image_size)):
+            The tensors corresponding to the input videos. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`Qwen2_5_VLImageProcessor.__call__`] for details. [`Qwen2_5_VLProcessor`] uses
+            [`Qwen2_5_VLImageProcessor`] for processing videos.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+            The rope index difference between sequence length and multimodal rope.
+        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+        """
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -636,8 +646,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
             if pixel_values is not None:
-                pixel_values = pixel_values.type(self.visual.dtype)
-                image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
+                image_embeds = self.get_image_features(pixel_values, image_grid_thw)
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
                 n_image_features = image_embeds.shape[0]
                 if n_image_tokens != n_image_features:
@@ -654,8 +663,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
             if pixel_values_videos is not None:
-                pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-                video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
+                video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
                 n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
                 n_video_features = video_embeds.shape[0]
                 if n_video_tokens != n_video_features:
@@ -733,13 +741,7 @@ class Qwen2_5_VLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
     pass
 
 
-QWEN2_5_VL_INPUTS_DOCSTRING = None
-
-
 class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
-    @can_return_tuple
-    @add_start_docstrings_to_model_forward(QWEN2_5_VL_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Qwen2_5_VLCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -761,12 +763,22 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         second_per_grid_ts: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, Qwen2_5_VLCausalLMOutputWithPast]:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        pixel_values_videos (`torch.FloatTensor` of shape `(seq_length, num_channels * temporal_size * image_size * image_size)):
+            The tensors corresponding to the input videos. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`Qwen2_5_VLImageProcessor.__call__`] for details. [`Qwen2_5_VLProcessor`] uses
+            [`Qwen2_5_VLImageProcessor`] for processing videos.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+            The rope index difference between sequence length and multimodal rope.
+        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
 
         Example:
 
@@ -916,6 +928,8 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
             The image processor is a required input.
         tokenizer ([`Qwen2TokenizerFast`], *optional*):
             The tokenizer is a required input.
+        video_processor ([`Qwen2_5_VLVideoProcessor`], *optional*):
+            The video processor is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
@@ -978,37 +992,32 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
+        image_inputs = videos_inputs = {}
         if images is not None:
-            image_inputs = self.image_processor(images=images, videos=None, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
-        else:
-            image_inputs = {}
-            image_grid_thw = None
 
         if videos is not None:
-            videos_inputs = self.image_processor(images=None, videos=videos, **output_kwargs["images_kwargs"])
+            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
 
             fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
             if isinstance(fps, (int, float)):
-                second_per_grid_ts = [self.image_processor.temporal_patch_size / fps] * len(video_grid_thw)
+                second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
             elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
-                second_per_grid_ts = [self.image_processor.temporal_patch_size / tmp for tmp in fps]
+                second_per_grid_ts = [self.video_processor.temporal_patch_size / tmp for tmp in fps]
             else:
                 raise ValueError(
                     f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(video_grid_thw)}) or fps should be a single number."
                 )
             videos_inputs.update({"second_per_grid_ts": second_per_grid_ts})
 
-        else:
-            videos_inputs = {}
-            video_grid_thw = None
-
         if not isinstance(text, list):
             text = [text]
 
         text = text.copy()  # below lines change text in-place
-        if image_grid_thw is not None:
+        if images is not None:
             merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):
@@ -1018,8 +1027,8 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
-        if video_grid_thw is not None:
-            merge_length = self.image_processor.merge_size**2
+        if videos is not None:
+            merge_length = self.video_processor.merge_size**2
             index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:

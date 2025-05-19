@@ -26,13 +26,7 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_peft_available,
-    logging,
-)
+from ...utils import auto_docstring, is_peft_available, logging
 from .configuration_data2vec_audio import Data2VecAudioConfig
 
 
@@ -41,12 +35,6 @@ if is_flash_attn_available():
 
 
 logger = logging.get_logger(__name__)
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/data2vec-audio-base-960h"
-
-# General docstring
-_CONFIG_FOR_DOC = "Data2VecAudioConfig"
 
 
 class Data2VecAudioConvLayer(nn.Module):
@@ -364,10 +352,6 @@ class Data2VecAudioFlashAttention2(Data2VecAudioAttention):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # Data2VecAudioFlashAttention2 attention does not support output_attentions
-        if output_attentions:
-            raise ValueError("Data2VecAudioFlashAttention2 attention does not support output_attentions")
-
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
@@ -474,10 +458,10 @@ class Data2VecAudioSdpaAttention(Data2VecAudioAttention):
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-        if output_attentions or layer_head_mask is not None:
+        if output_attentions:
             # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "Data2VecAudioModel is using Data2VecAudioSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention"
+                "Data2VecAudioModel is using Data2VecAudioSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` . Falling back to the manual attention"
                 ' implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -485,7 +469,6 @@ class Data2VecAudioSdpaAttention(Data2VecAudioAttention):
                 key_value_states=key_value_states,
                 past_key_value=past_key_value,
                 attention_mask=attention_mask,
-                layer_head_mask=layer_head_mask,
                 output_attentions=output_attentions,
             )
 
@@ -769,12 +752,8 @@ class Data2VecAudioAdapter(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class Data2VecAudioPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = Data2VecAudioConfig
     base_model_prefix = "data2vec_audio"
     main_input_name = "input_values"
@@ -970,70 +949,10 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
-
-
-DATA2VEC_AUDIO_START_DOCSTRING = r"""
-    Data2VecAudio was proposed in [data2vec: A General Framework for Self-supervised Learning in Speech, Vision and
-    Language](https://arxiv.org/pdf/2202.03555) by Alexei Baevski, Wei-Ning Hsu, Qiantong Xu, Arun Babu, Jiatao Gu and
-    Michael Auli.
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving etc.).
-
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`Data2VecAudioConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-DATA2VEC_AUDIO_INPUTS_DOCSTRING = r"""
-    Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-            1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            <Tip warning={true}>
-
-            `attention_mask` should be passed if the corresponding processor has `config.return_attention_mask ==
-            True`, which is the case for all pre-trained Data2Vec Audio models. Be aware that that even with
-            `attention_mask`, zero-padded inputs will have slightly different outputs compared to non-padded inputs
-            because there are more than one convolutional layer in the positional encodings. For a more detailed
-            explanation, see [here](https://github.com/huggingface/transformers/issues/25621#issuecomment-1713759349).
-
-            </Tip>
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
 Data2VecAudioBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
-@add_start_docstrings(
-    "The bare Data2VecAudio Model transformer outputting raw hidden-states without any specific head on top.",
-    DATA2VEC_AUDIO_START_DOCSTRING,
-)
+@auto_docstring
 class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
     def __init__(self, config: Data2VecAudioConfig):
         super().__init__(config)
@@ -1105,14 +1024,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
 
         return hidden_states
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Data2VecAudioBaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1122,6 +1034,11 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Data2VecAudioBaseModelOutput]:
+        r"""
+        mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
+            masked extracted features in *config.proj_codevector_dim* space.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1168,17 +1085,20 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
 
 _HIDDEN_STATES_START_POSITION = 2
 
-# CTC docstring
-_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
-_CTC_EXPECTED_LOSS = 66.95
 
-
-@add_start_docstrings(
-    """Data2VecAudio Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    DATA2VEC_AUDIO_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    Data2VecAudio Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
+    """
 )
 class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
     def __init__(self, config):
+        r"""
+        target_lang (`str`, *optional*):
+            Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
+            adapter.<lang>.bin. Only relevant when using an instance of [`Data2VecAudioForCTC`] with adapters. Uses 'eng' by
+            default.
+        """
         super().__init__(config)
 
         self.data2vec_audio = Data2VecAudioModel(config)
@@ -1218,14 +1138,7 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
         """
         self.data2vec_audio.feature_extractor._freeze_parameters()
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_CTC_EXPECTED_OUTPUT,
-        expected_loss=_CTC_EXPECTED_LOSS,
-    )
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1297,12 +1210,11 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
         )
 
 
-@add_start_docstrings(
+@auto_docstring(
+    custom_intro="""
+    Data2VecAudio Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
+    SUPERB Keyword Spotting.
     """
-    Data2VecAudio Model with a sequence classification head on top (a linear layer over the pooled output) for tasks
-    like SUPERB Keyword Spotting.
-    """,
-    DATA2VEC_AUDIO_START_DOCSTRING,
 )
 class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
     def __init__(self, config):
@@ -1349,13 +1261,7 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
         for param in self.data2vec_audio.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-    )
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1366,6 +1272,11 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Data2VecAudioProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1419,12 +1330,7 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    Data2VecAudio Model with a frame classification head on top for tasks like Speaker Diarization.
-    """,
-    DATA2VEC_AUDIO_START_DOCSTRING,
-)
+@auto_docstring
 class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1469,13 +1375,7 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
         for param in self.data2vec_audio.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-    )
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1486,6 +1386,11 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Data2VecAudioProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1585,11 +1490,10 @@ class TDNNLayer(nn.Module):
         return hidden_states
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Data2VecAudio Model with an XVector feature extraction head on top for tasks like Speaker Verification.
-    """,
-    DATA2VEC_AUDIO_START_DOCSTRING,
+    """
 )
 class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
     def __init__(self, config):
@@ -1653,13 +1557,7 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
 
         return input_lengths
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=XVectorOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-    )
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1670,6 +1568,11 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, XVectorOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Data2VecAudioProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
