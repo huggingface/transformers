@@ -22,14 +22,12 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
     # workflow_id = "90575235"
     if not workflow_id:
         workflow_run_id =  os.environ['GITHUB_RUN_ID']
-        print(workflow_run_id)
 
         # TODO: better way
         os.system(f"curl https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id} > workflow_run.json")
         with open("workflow_run.json") as fp:
             workflow_run = json.load(fp)
             workflow_id = workflow_run["workflow_id"]
-        print(workflow_id)
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/workflows/{workflow_id}/runs"
     # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results
