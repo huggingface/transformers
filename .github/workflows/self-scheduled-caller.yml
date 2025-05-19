@@ -22,7 +22,28 @@ on:
         default: ""
 
 
+env:
+    prev_workflow_run_id: "eee"
+    other_workflow_run_id: ""
+
+
 jobs:
+  setup:
+    name: Setup
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Setup
+        run: |
+          mkdir "values"
+          echo "${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}" > "setup_values/prev_workflow_run_id.txt"
+          echo "${{ inputs.other_workflow_run_id || env.prev_workflow_run_id }}" > "setup_values/other_workflow_run_id.txt"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: setup_values
+          path: setup_values
+
   model-ci:
     name: Model CI
     uses: ./.github/workflows/self-scheduled.yml

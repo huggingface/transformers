@@ -39,6 +39,14 @@ jobs:
 
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
+
+      - name: Prepare some setup values
+        # How to use these value
+        run: |
+          ls -la setup_values
+          cat setup_values/prev_workflow_run_id.txt
+          cat setup_values/other_workflow_run_id.txt
+
       - name: Send message to Slack
         if: ${{ inputs.job != 'run_quantization_torch_gpu' }}
         env:
@@ -53,8 +61,8 @@ jobs:
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
           # TODO: we can use `inputs.prev_workflow_run_id` or `github.event.inputs.other_workflow_run_id`, but need to check with push event
-          PREV_WORKFLOW_RUN_ID: ${{ inputs.prev_workflow_run_id }}
-          OTHER_WORKFLOW_RUN_ID: ${{ inputs.other_workflow_run_id }}
+          PREV_WORKFLOW_RUN_ID: ${{ inputs.prev_workflow_run_id || '14277576462' }}
+          OTHER_WORKFLOW_RUN_ID: ${{ inputs.other_workflow_run_id || '14277576462' }}
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         # For a job that doesn't depend on (i.e. `needs`) `setup`, the value for `inputs.folder_slices` would be an
@@ -85,8 +93,8 @@ jobs:
           CI_SHA: ${{ github.sha }}
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
-          PREV_WORKFLOW_RUN_ID: ${{ inputs.prev_workflow_run_id }}
-          OTHER_WORKFLOW_RUN_ID: ${{ inputs.other_workflow_run_id }}
+          PREV_WORKFLOW_RUN_ID: ${{ inputs.prev_workflow_run_id || '14277576462' }}
+          OTHER_WORKFLOW_RUN_ID: ${{ inputs.other_workflow_run_id || '14277576462' }}
         # We pass `needs.setup.outputs.quantization_matrix` as the argument. A processing in `notification_service_quantization.py` to change
         # `quantization/bnb` to `quantization_bnb` is required, as the artifact names use `_` instead of `/`.
         run: |
