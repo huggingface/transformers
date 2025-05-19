@@ -88,6 +88,8 @@ class CausalLMModelTester:
         num_labels=3,
         num_choices=4,
         pad_token_id=0,
+        bos_token_id=1,
+        eos_token_id=2,
         is_decoder=False,
         scope=None,
         expert_interval=1,
@@ -96,6 +98,7 @@ class CausalLMModelTester:
         shared_expert_gate=True,
         num_experts_per_tok=2,
         num_experts=8,
+
     ):
         self._verify_model_attributes()
         self.parent = parent
@@ -121,6 +124,8 @@ class CausalLMModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.scope = scope
         self.head_dim = self.hidden_size // self.num_attention_heads
         self.is_decoder = is_decoder
