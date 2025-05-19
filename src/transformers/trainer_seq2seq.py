@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import contextlib
-import warnings
 from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
