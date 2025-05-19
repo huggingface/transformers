@@ -50,11 +50,12 @@ jobs:
       - name: Get target commit
         working-directory: /transformers/utils
         env:
-          LAST_WORKFLOW_RUN_ID: "14277576462"
+          PREV_WORKFLOW_RUN_ID: "14277576462"
+        # how to get the commit, especially in multiple files? This only makes sense if it's the same workflow id.
         run: |
           # how to get the good last commit
           apt-get install -y curl
-          echo "END_SHA=$(TOKEN=${{ secrets.ACCESS_REPO_INFO_TOKEN }} python3 -c 'import os; from get_previous_daily_ci import get_last_daily_ci_run_commit; commit=get_last_daily_ci_run_commit(token=os.environ["TOKEN"], workflow_run_id=os.environ["LAST_WORKFLOW_RUN_ID"]); print(commit)')" >> $GITHUB_ENV
+          echo "END_SHA=$(TOKEN=${{ secrets.ACCESS_REPO_INFO_TOKEN }} python3 -c 'import os; from get_previous_daily_ci import get_last_daily_ci_run_commit; commit=get_last_daily_ci_run_commit(token=os.environ["TOKEN"], workflow_run_id=os.environ["PREV_WORKFLOW_RUN_ID"]); print(commit)')" >> $GITHUB_ENV
 
       - name: Checkout to `start_sha`
         working-directory: /transformers
@@ -79,6 +80,7 @@ jobs:
 
       - name: Check failed tests
         working-directory: /transformers
+        # how to run multiple ones?
         run: python3 utils/check_bad_commit.py --start_commit ${{ inputs.start_sha }} --end_commit ${{ env.END_SHA }} --file ci_results_run_models_gpu/new_model_failures.json --output_file new_model_failures_with_bad_commit.json
 
       - name: Show results

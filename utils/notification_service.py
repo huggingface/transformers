@@ -1292,15 +1292,13 @@ if __name__ == "__main__":
             # This is the previous completed scheduled run
             prev_workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"])
             # If we really need this? If this is not Nvidia scheduled daily CI --> we get it with the same commit?
-            target_workflow_id = os.environ["TARGET_WORKFLOW_ID"]
-            target_workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=target_workflow_id)
-            other_workflow_run_ids.append(target_workflow_run_id)
+            other_workflow_id = os.environ["OTHER_WORKFLOW_ID"]
+            other_workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=other_workflow_id)
+            other_workflow_run_ids.append(other_workflow_run_id)
     else:
-        # TODO: we still want to push the `prev_ci_artifacts` in some cases
-        target_workflow_run_id = os.environ["LAST_WORKFLOW_RUN_ID"]
-        # TODO: remove this one, or enable if possible
-        prev_workflow_run_id = target_workflow_run_id
-        other_workflow_run_ids.append(target_workflow_run_id)
+        prev_workflow_run_id = os.environ["PREV_WORKFLOW_RUN_ID"]
+        other_workflow_run_id = os.environ["OTHER_WORKFLOW_RUN_ID"]
+        other_workflow_run_ids.append(other_workflow_run_id)
 
     prev_ci_artifacts = None
     other_ci_artifacts = []
