@@ -1298,7 +1298,7 @@ if __name__ == "__main__":
     else:
         # TODO: we still want to push the `prev_ci_artifacts` in some cases
         target_workflow_run_id = os.environ["LAST_WORKFLOW_RUN_ID"]
-        # TODO: remove this one
+        # TODO: remove this one, or enable if possible
         prev_workflow_run_id = target_workflow_run_id
         other_workflow_run_ids.append(target_workflow_run_id)
 
