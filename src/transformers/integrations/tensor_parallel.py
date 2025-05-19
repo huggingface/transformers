@@ -688,6 +688,20 @@ def convert_local_tensor_to_dtensor(
     return DTensor.from_local(parameter, device_mesh, placements, run_check=False)
 
 
+def replace_state_dict_local_with_dtensor(
+    state_dict: dict[str, torch.Tensor],
+    tp_plan: dict[str, str],
+    device_mesh,
+) -> dict[str, torch.Tensor]:
+    """
+    Replaces all tensors that were sharded with `local_*` strategy with DTensor to make determining their proper size possible.
+    """
+    for key, value in state_dict.items():
+        if isinstance(value, torch.Tensor) and not isinstance(value, DTensor):
+            state_dict[key] = convert_local_tensor_to_dtensor(value, key, device_mesh, tp_plan)
+    return state_dict
+
+
 def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, current_module_plan, device_mesh):
     """
     Add hooks to the module holding the layer. Meaning:

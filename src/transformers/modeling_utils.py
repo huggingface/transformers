@@ -64,8 +64,8 @@ from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.tensor_parallel import (
     SUPPORTED_TP_STYLES,
     _get_parameter_tp_plan,
-    convert_local_tensor_to_dtensor,
     repack_weights,
+    replace_state_dict_local_with_dtensor,
     shard_and_distribute_module,
 )
 from .loss.loss_utils import LOSS_MAPPING
@@ -3498,7 +3498,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         state_dict = self._fix_state_dict_keys_on_save(state_dict)
         # If model was sharded, we cannot properly determine sizes of tensors that `local_*` strategy was used,
         # therefore we replace them with DTensors that are equivalently sharded
-        state_dict = self._replace_state_dict_local_with_dtensor(state_dict)
+        if self._tp_size is not None:
+            state_dict = replace_state_dict_local_with_dtensor(state_dict, self._tp_plan, self._device_mesh)
 
         if safe_serialization:
             # Safetensors does not allow tensor aliasing.
@@ -4740,18 +4741,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         Apply `_fix_state_dict_key_on_save` to all keys in `state_dict`.
         """
         return {self._fix_state_dict_key_on_save(key)[0]: value for key, value in state_dict.items()}
-
-    def _replace_state_dict_local_with_dtensor(self, state_dict):
-        """
-        Replaces all tensors that were sharded with `local_*` strategy with DTensor to make saving possible.
-        """
-        if self._tp_size is None:
-            return state_dict
-        # TODO: optimize this to avoid iterating over all
-        for key, value in state_dict.items():
-            if isinstance(value, torch.Tensor) and not isinstance(value, DTensor):
-                state_dict[key] = convert_local_tensor_to_dtensor(value, key, self._device_mesh, self._tp_plan)
-        return state_dict
 
     @classmethod
     def _load_pretrained_model(
