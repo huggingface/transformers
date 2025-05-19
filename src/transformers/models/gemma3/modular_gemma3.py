@@ -23,7 +23,7 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 
-from ...cache_utils import Cache, DynamicCache, HybridCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -744,15 +744,14 @@ class Gemma3Model(PaliGemmaModel):
         image_features = self.multi_modal_projector(vision_outputs)
         return image_features
 
-    def _update_causal_mask(
-        self,
-        causal_mask,
-        token_type_ids,
-        attention_mask
-    ):
+    def _update_causal_mask(self, causal_mask, token_type_ids, attention_mask):
         # Apply bidirectional mask on images if token type ids are provided
-        if token_type_ids is not None and sequence_length != 1:
+        if causal_mask is not None:
             sequence_length = causal_mask.shape[2]
+        else:
+            sequence_length = attention_mask.shape[-1]
+
+        if token_type_ids is not None and sequence_length != 1:
             token_type_mask = token_type_ids.unsqueeze(1) == token_type_ids.unsqueeze(2)
             token_type_mask[token_type_ids == 0] = False  # if text token do not change anything
 
@@ -777,7 +776,9 @@ class Gemma3Model(PaliGemmaModel):
                 mask_length = attention_mask.shape[-1]
 
                 # Then apply padding mask (will mask pad tokens)
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(causal_mask.device)
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, 0 if causal_mask.dtype == torch.bool else causal_mask.min()
@@ -812,8 +813,6 @@ class Gemma3Model(PaliGemmaModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        is_training = token_type_ids is not None and labels is not None
 
         # Replace image id woth PAD if the image token if OOV, to avoid index-errors
         if input_ids is not None and self.config.image_token_id >= self.vocab_size:
@@ -870,7 +869,9 @@ class Gemma3Model(PaliGemmaModel):
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
-            causal_mask_mapping = {k: self._update_causal_mask(v, token_type_ids, attention_mask) for k,v in causal_mask_mapping.items()}
+            causal_mask_mapping = {
+                k: self._update_causal_mask(v, token_type_ids, attention_mask) for k, v in causal_mask_mapping.items()
+            }
 
         outputs = self.language_model(
             attention_mask=causal_mask_mapping,
@@ -1056,11 +1057,14 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
 
-        causal_mask_mapping = {k: self.model._update_causal_mask(v, token_type_ids, attention_mask) for k,v in model_inputs["attention_mask"].items()}
+        causal_mask_mapping = {
+            k: self.model._update_causal_mask(v, token_type_ids, attention_mask)
+            for k, v in model_inputs["attention_mask"].items()
+        }
         model_inputs["attention_mask"] = causal_mask_mapping
 
         return model_inputs
-    
+
     def _prepare_4d_causal_attention_mask_with_cache_position(self, **super_kwargs):
         raise AttributeError("We don't want to inherit it")
 

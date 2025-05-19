@@ -817,8 +817,12 @@ class Gemma3Model(Gemma3PreTrainedModel):
 
     def _update_causal_mask(self, causal_mask, token_type_ids, attention_mask):
         # Apply bidirectional mask on images if token type ids are provided
-        if token_type_ids is not None and sequence_length != 1:
+        if causal_mask is not None:
             sequence_length = causal_mask.shape[2]
+        else:
+            sequence_length = attention_mask.shape[-1]
+
+        if token_type_ids is not None and sequence_length != 1:
             token_type_mask = token_type_ids.unsqueeze(1) == token_type_ids.unsqueeze(2)
             token_type_mask[token_type_ids == 0] = False  # if text token do not change anything
 
@@ -921,8 +925,6 @@ class Gemma3Model(Gemma3PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        is_training = token_type_ids is not None and labels is not None
 
         # Replace image id woth PAD if the image token if OOV, to avoid index-errors
         if input_ids is not None and self.config.image_token_id >= self.vocab_size:
