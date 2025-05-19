@@ -577,9 +577,10 @@ class GenerationConfig(PushToHubMixin):
             if generation_mode in ("greedy_search", "sample"):
                 generation_mode = GenerationMode.ASSISTED_GENERATION
             else:
-                raise ValueError(
+                logger.warning(
                     "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
-                    "is only supported with Greedy Search and Sample."
+                    "is only supported with Greedy Search and Sample. However, the base decoding mode (based on "
+                    f"current flags) is {generation_mode} -- some of the set flags will be ignored."
                 )
 
         # DoLa generation may extend some generation modes
@@ -587,9 +588,10 @@ class GenerationConfig(PushToHubMixin):
             if generation_mode in ("greedy_search", "sample"):
                 generation_mode = GenerationMode.DOLA_GENERATION
             else:
-                raise ValueError(
+                logger.warning(
                     "You've set `dola_layers`, which triggers DoLa generate. Currently, DoLa generate "
-                    "is only supported with Greedy Search and Sample."
+                    "is only supported with Greedy Search and Sample.  However, the base decoding mode (based on "
+                    f"current flags) is {generation_mode} -- some of the set flags will be ignored."
                 )
         return generation_mode
 
