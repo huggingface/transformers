@@ -218,6 +218,9 @@ class EncdecGemma2Attention(nn.Module):
         # creating an alternating pattern of local and global attention.
         self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
 
+        # Requied by flash attention
+        self.is_causal = not is_cross_attention and config.is_decoder
+
         # validity checking
         if self.is_cross_attention:
             # cross-attention only supports global attention.
@@ -338,8 +341,11 @@ class EncdecGemma2Attention(nn.Module):
                     past_key_value.is_updated[self.layer_idx] = True
 
                 # we need to slice as we use a static cache by default, but FA2 does not support it
-                if attention_mask is not None and self.config._attn_implementation == "flash_attention_2":
-                    seq_len = attention_mask.shape[-1]
+                if self.config._attn_implementation in ("flash_attention_2", "flex_attention"):
+                    if attention_mask is not None:
+                        seq_len = attention_mask.shape[-1]
+                    else:
+                        seq_len = torch.max(cache_position) + 1
                     key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
         # cross-attention: reuse cached states
         else:
@@ -547,17 +553,25 @@ class EncdecGemma2ClassificationHead(nn.Module):
 
     def __init__(self, hidden_size: int, num_labels: int, classifier_dropout_rate: float = 0.0):
         super().__init__()
-        self.dense = nn.Linear(hidden_size, hidden_size)
         self.dropout = nn.Dropout(p=classifier_dropout_rate)
         self.out_proj = nn.Linear(hidden_size, num_labels)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.dense(hidden_states)
-        hidden_states = torch.tanh(hidden_states)
-        hidden_states = self.dropout(hidden_states)
         hidden_states = self.out_proj(hidden_states)
         return hidden_states
+
+
+class EncdecGemma2LMHead(nn.Module):
+    """Head for language modeling (generation) tasks."""
+
+    def __init__(self, hidden_size: int, vocab_size: int, bias: bool = False):
+        super().__init__()
+        self.out_proj = nn.Linear(hidden_size, vocab_size, bias=bias)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        logits = self.out_proj(hidden_states)
+        return logits
 
 
 ENCDECGEMMA2_START_DOCSTRING = r"""
@@ -609,13 +623,14 @@ class EncdecGemma2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, EncdecGemma2RMSNorm):
             module.weight.data.fill_(1.0)
         elif isinstance(module, EncdecGemma2ClassificationHead):
-            scale = module.dense.weight.shape[0] ** -0.5
-            module.dense.weight.data.normal_(mean=0.0, std=std * scale)
-            if hasattr(module.dense, "bias") and module.dense.bias is not None:
-                module.dense.bias.data.zero_()
+            scale = module.out_proj.weight.shape[0] ** -0.5
             module.out_proj.weight.data.normal_(mean=0.0, std=std * scale)
             if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
                 module.out_proj.bias.data.zero_()
+        elif isinstance(module, EncdecGemma2LMHead):
+            if not self.config.tie_word_embeddings:
+                scale = module.out_proj.weight.shape[0] ** -0.5
+                module.out_proj.weight.data.normal_(mean=0.0, std=std * scale)
 
     def _shift_right(self, input_ids):
         """
@@ -762,7 +777,16 @@ class EncdecGemma2Stack(EncdecGemma2PreTrainedModel):
             )
         # Encoder bidirectional mask
         elif attention_mask is not None:
-            causal_mask = self.invert_attention_mask(attention_mask)
+            if self.config._attn_implementation == "flash_attention_2":
+                # FA2: boolean mask of shape [batch, seq_eln]
+                causal_mask = attention_mask
+            elif self.config._attn_implementation == "flex_attention":
+                # Flex: inverted mask of shape [batch, 1, q_len, kv_len]
+                q_len = attention_mask.shape[-1]
+                expanded_attention_mask = attention_mask[:, None, :].repeat(1, q_len, 1)
+                causal_mask = self.invert_attention_mask(expanded_attention_mask)
+            else:
+                causal_mask = self.invert_attention_mask(attention_mask)
         else:
             causal_mask = None
 
@@ -775,7 +799,15 @@ class EncdecGemma2Stack(EncdecGemma2PreTrainedModel):
                 encoder_attention_mask = torch.ones(
                     encoder_hidden_shape, device=inputs_embeds.device, dtype=torch.long
                 )
-            cross_mask = self.invert_attention_mask(encoder_attention_mask)
+            if self.config._attn_implementation == "flash_attention_2":
+                cross_mask = encoder_attention_mask
+            elif self.config._attn_implementation == "flex_attention":
+                # Flex: inverted mask of shape [batch, 1, q_len, kv_len]
+                q_len = input_ids.shape[-1]
+                expanded_encoder_attention_mask = encoder_attention_mask[:, None, :].repeat(1, q_len, 1)
+                cross_mask = self.invert_attention_mask(expanded_encoder_attention_mask)
+            else:
+                cross_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             cross_mask = None
 
@@ -1154,9 +1186,9 @@ class EncdecGemma2Model(EncdecGemma2PreTrainedModel):
 
 
 class EncdecGemma2ForConditionalGeneration(EncdecGemma2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["model.decoder.embed_tokens.weight", "lm_head.weight"]
-    _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _tied_weights_keys = ["model.decoder.embed_tokens.weight", "lm_head.out_proj.weight"]
+    _tp_plan = {"lm_head.out_proj": "colwise_rep"}
+    _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: EncdecGemma2Config):
         config.is_encoder_decoder = True
@@ -1164,16 +1196,21 @@ class EncdecGemma2ForConditionalGeneration(EncdecGemma2PreTrainedModel, Generati
 
         self.model = EncdecGemma2Model(config)
         self.vocab_size = config.decoder.vocab_size
-        self.lm_head = nn.Linear(config.decoder.hidden_size, self.vocab_size, bias=False)
+        self.lm_head = EncdecGemma2LMHead(config.decoder.hidden_size, self.vocab_size)
         self.loss_type = "ForMaskedLMLoss"
 
         self.post_init()
 
     def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
+        self.lm_head.out_proj = new_embeddings
 
     def get_output_embeddings(self):
-        return self.lm_head
+        return self.lm_head.out_proj
+
+    def _tie_weights(self):
+        # Decoder input and output embeddings are tied.
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.lm_head.out_proj, self.get_decoder().get_input_embeddings())
 
     def get_encoder(self):
         return self.model.encoder
@@ -1279,63 +1316,6 @@ class EncdecGemma2ForConditionalGeneration(EncdecGemma2PreTrainedModel, Generati
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        cache_position=None,
-        position_ids=None,
-        use_cache=True,
-        logits_to_keep=None,
-        **kwargs,
-    ):
-        # Overwritten: has a special cache type, `HybridCache`
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            **kwargs,
-        )
-
-        if logits_to_keep is None:
-            _ = model_inputs.pop("logits_to_keep", None)
-
-        # Encoder doesn't need cache at all, so only handle decoder self attention.
-        decoder_attention_mask = model_inputs.get("decoder_attention_mask", None)
-        if (
-            decoder_attention_mask is not None
-            and isinstance(past_key_values, EncoderDecoderCache)
-            and isinstance(past_key_values.self_attention_cache, HybridCache)
-            and decoder_attention_mask.ndim == 2
-            and not self.config._attn_implementation == "flash_attention_2"
-        ):
-            if model_inputs["decoder_inputs_embeds"] is not None:
-                batch_size, sequence_length, _ = model_inputs["decoder_inputs_embeds"].shape
-                device = model_inputs["decoder_inputs_embeds"].device
-            else:
-                batch_size, sequence_length = model_inputs["decoder_input_ids"].shape
-                device = model_inputs["decoder_input_ids"].device
-
-            decoder_attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
-                decoder_attention_mask,
-                sequence_length=sequence_length,
-                target_length=past_key_values.self_attention_cache.get_max_cache_shape(),
-                dtype=self.lm_head.weight.dtype,
-                device=device,
-                cache_position=cache_position,
-                batch_size=batch_size,
-            )
-            model_inputs["decoder_attention_mask"] = decoder_attention_mask
-
-        return model_inputs
 
 
 @add_start_docstrings(
@@ -1505,12 +1485,13 @@ class EncdecGemma2ForTokenClassification(EncdecGemma2PreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = EncdecGemma2Model(config)
-        self.dropout = nn.Dropout(config.classifier_dropout_rate)
 
         hidden_size = config.encoder.hidden_size
         if is_encoder_decoder:
             hidden_size = config.decoder.hidden_size
-        self.score = nn.Linear(hidden_size, config.num_labels)
+
+        classifier_dropout = getattr(config, "classifier_dropout_rate", 0.1)
+        self.score = EncdecGemma2ClassificationHead(hidden_size, self.num_labels, classifier_dropout)
 
         self.post_init()
 
@@ -1593,7 +1574,6 @@ class EncdecGemma2ForTokenClassification(EncdecGemma2PreTrainedModel):
             hidden_states = outputs.encoder_last_hidden_state
 
         sequence_output = hidden_states
-        sequence_output = self.dropout(sequence_output)
         logits = self.score(sequence_output)
 
         loss = None
