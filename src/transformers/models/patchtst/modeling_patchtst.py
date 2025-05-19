@@ -32,7 +32,7 @@ from .configuration_patchtst import PatchTSTConfig
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PatchTST
+# Copied from transformers.models.hubert.modeling_hubert.HubertAttention with Hubert->PatchTST
 class PatchTSTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
