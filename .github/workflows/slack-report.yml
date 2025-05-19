@@ -52,6 +52,7 @@ jobs:
           CI_SHA: ${{ github.sha }}
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
+          # TODO: we can use `inputs.prev_workflow_run_id` or `github.event.inputs.other_workflow_run_id`, but need to check with push event
           PREV_WORKFLOW_RUN_ID: "14277576462"
           OTHER_WORKFLOW_RUN_ID: "14277576462"
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change

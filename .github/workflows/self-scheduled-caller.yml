@@ -14,12 +14,12 @@ on:
         description: 'previous workflow run id to compare'
         type: string
         required: false
-        default: "aaa"
+        default: ""
       other_workflow_run_id:
         description: 'other workflow run id to compare'
         type: string
         required: false
-        default: "bbb"
+        default: ""
 
 
 jobs:
