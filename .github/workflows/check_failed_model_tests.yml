@@ -41,17 +41,37 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: setup_values
+          pattern: setup_values*
           path: setup_values
+          merge-multiple: true
+
+      - name: Prepare some setup values
+        run: |
+          if [ -f setup_values/prev_workflow_run_id.txt ]; then
+            echo "PREV_WORKFLOW_RUN_ID=$(cat setup_values/prev_workflow_run_id.txt)" >> $GITHUB_ENV
+          else
+            echo "PREV_WORKFLOW_RUN_ID=" >> $GITHUB_ENV
+          fi
+
+          if [ -f setup_values/other_workflow_run_id.txt ]; then
+            echo "OTHER_WORKFLOW_RUN_ID=$(cat setup_values/other_workflow_run_id.txt)" >> $GITHUB_ENV
+          else
+            echo "OTHER_WORKFLOW_RUN_ID=" >> $GITHUB_ENV
+          fi
+
+      - name: Check
+        run: |
+          echo $PREV_WORKFLOW_RUN_ID
+          echo $OTHER_WORKFLOW_RUN_ID
 
       - name: Update clone
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
 
-      - name: Prepare some setup values
-        run: |
-          cat setup_values/prev_workflow_run_id.txt
-          echo "PREV_WORKFLOW_RUN_ID=$(cat setup_values/prev_workflow_run_id.txt)" >> $GITHUB_ENV
+#      - name: Prepare some setup values
+#        run: |
+#          cat setup_values/prev_workflow_run_id.txt
+#          echo "PREV_WORKFLOW_RUN_ID=$(cat setup_values/prev_workflow_run_id.txt)" >> $GITHUB_ENV
 
       - name: Get target commit
         working-directory: /transformers/utils

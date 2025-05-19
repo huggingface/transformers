@@ -42,8 +42,22 @@ jobs:
 
       - name: Prepare some setup values
         run: |
-          echo "PREV_WORKFLOW_RUN_ID=$(cat setup_values/prev_workflow_run_id.txt)" >> $GITHUB_ENV
-          echo "OTHER_WORKFLOW_RUN_ID=$(cat setup_values/other_workflow_run_id.txt)" >> $GITHUB_ENV
+          if [ -f setup_values/prev_workflow_run_id.txt ]; then
+            echo "PREV_WORKFLOW_RUN_ID=$(cat setup_values/prev_workflow_run_id.txt)" >> $GITHUB_ENV
+          else
+            echo "PREV_WORKFLOW_RUN_ID=" >> $GITHUB_ENV
+          fi
+
+          if [ -f setup_values/other_workflow_run_id.txt ]; then
+            echo "OTHER_WORKFLOW_RUN_ID=$(cat setup_values/other_workflow_run_id.txt)" >> $GITHUB_ENV
+          else
+            echo "OTHER_WORKFLOW_RUN_ID=" >> $GITHUB_ENV
+          fi
+
+      - name: Check
+        run: |
+          echo $PREV_WORKFLOW_RUN_ID
+          echo $OTHER_WORKFLOW_RUN_ID
 
       - name: Send message to Slack
         if: ${{ inputs.job != 'run_quantization_torch_gpu' }}
