@@ -42,7 +42,6 @@ from ...utils import (
     LossKwargs,
     auto_docstring,
     is_torch_flex_attn_available,
-    is_torchdynamo_compiling,
     logger,
 )
 from ..bart.modeling_bart import (
@@ -197,7 +196,7 @@ class BioGptPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    # Copied from trasformers.models.bart.modeling_bart.BartPreTrainedModel._update_causal_mask
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: Optional[Union[torch.Tensor, "BlockMask"]],

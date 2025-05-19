@@ -30,8 +30,6 @@ from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
     _prepare_4d_attention_mask,
     _prepare_4d_attention_mask_for_sdpa,
-    _prepare_4d_causal_attention_mask,
-    _prepare_4d_causal_attention_mask_for_sdpa,
 )
 from ...modeling_flash_attention_utils import (
     FlashAttentionKwargs,
@@ -562,7 +560,7 @@ class M2M100PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
 
-    # Copied from trasformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
     def _update_full_mask(
         self,
         attention_mask: Union[torch.Tensor, None],
@@ -591,7 +589,7 @@ class M2M100PreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-    # Copied from trasformers.models.bart.modeling_bart.BartPreTrainedModel._update_causal_mask
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: Optional[Union[torch.Tensor, "BlockMask"]],
@@ -727,7 +725,7 @@ class M2M100PreTrainedModel(PreTrainedModel):
 
         return causal_mask
 
-    # Copied from trasformers.models.bart.modeling_bart.BartPreTrainedModel._update_cross_attn_mask
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_cross_attn_mask
     def _update_cross_attn_mask(
         self,
         encoder_hidden_states: Union[torch.Tensor, None],

@@ -537,7 +537,7 @@ class MBartPreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
-    # Copied from trasformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
     def _update_full_mask(
         self,
         attention_mask: Union[torch.Tensor, None],
@@ -566,7 +566,7 @@ class MBartPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-    # Copied from trasformers.models.bart.modeling_bart.BartPreTrainedModel._update_causal_mask
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: Optional[Union[torch.Tensor, "BlockMask"]],
@@ -702,7 +702,7 @@ class MBartPreTrainedModel(PreTrainedModel):
 
         return causal_mask
 
-    # Copied from trasformers.models.bart.modeling_bart.BartPreTrainedModel._update_cross_attn_mask
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_cross_attn_mask
     def _update_cross_attn_mask(
         self,
         encoder_hidden_states: Union[torch.Tensor, None],
