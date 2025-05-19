@@ -76,6 +76,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             # But the slow tokenizer test should still run as they're quite small
             self.skipTest(reason="No tokenizer available")
 
+        if model.can_generate():
+            extra_kwargs = {"max_new_tokens": 20}
+        else:
+            extra_kwargs = {}
+
         speech_recognizer = AutomaticSpeechRecognitionPipeline(
             model=model,
             tokenizer=tokenizer,
@@ -83,7 +88,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             image_processor=image_processor,
             processor=processor,
             torch_dtype=torch_dtype,
-            max_new_tokens=20,
+            **extra_kwargs,
         )
 
         # test with a raw waveform
