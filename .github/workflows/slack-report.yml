@@ -41,11 +41,19 @@ jobs:
       - uses: actions/download-artifact@v4
 
       - name: Prepare some setup values
-        # How to use these value
         run: |
           ls -la setup_values
           cat setup_values/prev_workflow_run_id.txt
           cat setup_values/other_workflow_run_id.txt
+          echo "prev_workflow_run_id=$(cat setup_values/prev_workflow_run_id.txt)" >> $GITHUB_ENV
+          echo "other_workflow_run_id=$(cat setup_values/other_workflow_run_id.txt)" >> $GITHUB_ENV
+
+      - name: Check setup values
+        run: |
+          echo "${{ env.prev_workflow_run_id }}"
+          echo "${{ env.other_workflow_run_id }}"
+          echo "$prev_workflow_run_id"
+          echo "$other_workflow_run_id"
 
       - name: Send message to Slack
         if: ${{ inputs.job != 'run_quantization_torch_gpu' }}
@@ -61,13 +69,17 @@ jobs:
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
           # TODO: we can use `inputs.prev_workflow_run_id` or `github.event.inputs.other_workflow_run_id`, but need to check with push event
-          PREV_WORKFLOW_RUN_ID: ${{ inputs.prev_workflow_run_id || '14277576462' }}
-          OTHER_WORKFLOW_RUN_ID: ${{ inputs.other_workflow_run_id || '14277576462' }}
+          PREV_WORKFLOW_RUN_ID: ${{ env.prev_workflow_run_id }}
+          OTHER_WORKFLOW_RUN_ID: ${{ env.other_workflow_run_id }}
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         # For a job that doesn't depend on (i.e. `needs`) `setup`, the value for `inputs.folder_slices` would be an
         # empty string, and the called script still get one argument (which is the emtpy string).
         run: |
+          echo "$PREV_WORKFLOW_RUN_ID"
+          echo "$OTHER_WORKFLOW_RUN_ID"
+          echo "$prev_workflow_run_id"
+          echo "$other_workflow_run_id"
           sudo apt-get install -y curl
           pip install huggingface_hub
           pip install slack_sdk
@@ -93,8 +105,8 @@ jobs:
           CI_SHA: ${{ github.sha }}
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
-          PREV_WORKFLOW_RUN_ID: ${{ inputs.prev_workflow_run_id || '14277576462' }}
-          OTHER_WORKFLOW_RUN_ID: ${{ inputs.other_workflow_run_id || '14277576462' }}
+          PREV_WORKFLOW_RUN_ID: ${{ env.prev_workflow_run_id }}
+          OTHER_WORKFLOW_RUN_ID: ${{ env.other_workflow_run_id }}
         # We pass `needs.setup.outputs.quantization_matrix` as the argument. A processing in `notification_service_quantization.py` to change
         # `quantization/bnb` to `quantization_bnb` is required, as the artifact names use `_` instead of `/`.
         run: |
