@@ -16,7 +16,6 @@
 Processor class for Idefics3.
 """
 
-import math
 import re
 from itertools import accumulate
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
@@ -25,13 +24,9 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
 from ...utils import logging
-from .image_processing_idefics3 import (
-    _resize_output_size_rescale_to_max_len,
-    _resize_output_size_scale_below_upper_bound,
-)
 
 
 if TYPE_CHECKING:
@@ -376,66 +371,34 @@ class Idefics3Processor(ProcessorMixin):
 
         return BatchFeature(data=inputs, tensor_type=return_tensors)
 
-    def _get_num_mm_tokens_from_sizes(
-        self, image_sizes=None, video_sizes=None, audio_lengths=None, **mm_processor_kwargs
-    ):
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for each multimodal input type
         (image, video, and audio) with the given input sizes.
+
         Args:
-            image_sizes (List[List[str]], *optional*):
+            image_sizes (`List[List[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
-            video_sizes (List[List[str]], *optional*):
-                The input sizes formatted as (num_frames, height, width) per each video.
-            audio_lengths (List[int], *optional*):
-                The input length formatted as per each audio.
+
         Returns:
-            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
-            to a list containing the number of placeholder tokens required. If the model doesn't accept
-            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
         """
-        do_image_splitting = (
-            mm_processor_kwargs.get("do_image_splitting", None) or self.image_processor.do_image_splitting
-        )
-        max_image_size = mm_processor_kwargs.get("max_image_size", None) or self.image_processor.max_image_size
-        size = mm_processor_kwargs.get("size", None) or self.image_processor.size
 
-        base_image_length = self.image_seq_len + 3
+        multimodal_data = {}
+        if image_sizes is not None:
+            images_kwargs = Idefics3ProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
 
-        if do_image_splitting:
-            num_image_tokens_per_item = []
-            for height, width in image_sizes:
-                height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=size["longest_edge"])
-                height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=4096)
-                aspect_ratio = width / height
+            num_tokens_and_patches = [
+                self.image_processor.get_number_of_image_tokens(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [num_tokens for num_tokens, _ in num_tokens_and_patches]
+            num_image_patches = [num_patches for _, num_patches in num_tokens_and_patches]
+            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
-                if width >= height:
-                    resized_width = math.ceil(width / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
-                    resized_height = int(width / aspect_ratio)
-                    resized_height = (
-                        math.ceil(height / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
-                    )
-                elif height > width:
-                    resized_height = (
-                        math.ceil(height / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
-                    )
-                    resized_width = int(height * aspect_ratio)
-                    resized_width = math.ceil(width / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
-
-                max_height = max_width = max_image_size["longest_edge"]
-                if resized_height > max_height or resized_width > max_width:
-                    # Calculate the number of splits
-                    num_rows = math.ceil(resized_height / max_height)
-                    num_cols = math.ceil(resized_width / max_width)
-
-                    col_length = self.image_seq_len + 2
-                    row_length = col_length * num_cols + 1
-                    patches_length = row_length * num_rows
-                    num_image_tokens_per_item.append(base_image_length + patches_length)
-        else:
-            num_image_tokens_per_item = [base_image_length] * len(image_sizes)
-
-        return {"image": num_image_tokens_per_item, "video": [], "audio": []}
+        return MultiModalData(**multimodal_data)
 
     def batch_decode(self, *args, **kwargs):
         """

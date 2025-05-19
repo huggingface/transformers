@@ -490,5 +490,35 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    def get_number_of_image_tokens(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image embeddings and number of patches for a given image size. The
+        number of embeddings are calculated is equal to the number of image placeholder tokens
+        needed for the input. Note, that placeholder tokens include BOI/EOI and other special tokens
+        used to denote each image row or column.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
+        """
+        min_pixels = images_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
+        max_pixels = images_kwargs.get("max_pixels", None) or self.size["longest_edge"]
+        patch_size = images_kwargs.get("patch_size", None) or self.patch_size
+        merge_size = images_kwargs.get("merge_size", None) or self.merge_size
+
+        factor = patch_size * merge_size
+        resized_height, resized_width = smart_resize(
+            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+        )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        image_tokens = (grid_h * grid_w) // merge_size**2
+        return image_tokens, grid_h * grid_w
+
 
 __all__ = ["Qwen2VLImageProcessor"]

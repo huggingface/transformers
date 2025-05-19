@@ -34,7 +34,7 @@ from ...image_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput
 from ...utils import LossKwargs, TensorType, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import is_torch_available
@@ -880,6 +880,32 @@ class AriaImageProcessor(BaseImageProcessor):
         ]
         return patches
 
+    def get_number_of_image_tokens(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image embeddings and number of patches for a given image size. The
+        number of embeddings are calculated is equal to the number of image placeholder tokens
+        needed for the input. Note, that placeholder tokens include BOI/EOI and other special tokens
+        used to denote each image row or column.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
+        """
+        split_image = images_kwargs.get("split_image", None) or self.split_image
+        max_image_size = images_kwargs.get("max_image_size", None) or self.max_image_size
+
+        resized_height, resized_width = select_best_resolution((height, width), self.split_resolutions)
+        num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size
+        size_conversion = {490: 128, 980: 256}  # already hardcoded to accept only these as `max_image_size`
+        num_image_tokens = size_conversion[max_image_size] * num_patches
+        return num_image_tokens, num_patches
+
 
 class AriaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
@@ -1001,37 +1027,32 @@ class AriaProcessor(ProcessorMixin):
 
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
-    def _get_num_mm_tokens_from_sizes(
-        self, image_sizes=None, video_sizes=None, audio_lengths=None, **mm_processor_kwargs
-    ):
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for each multimodal input type
         (image, video, and audio) with the given input sizes.
         Args:
-            image_sizes (List[List[str]], *optional*):
+            image_sizes (`List[List[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
-            video_sizes (List[List[str]], *optional*):
-                The input sizes formatted as (num_frames, height, width) per each video.
-            audio_lengths (List[int], *optional*):
-                The input length formatted as per each audio.
         Returns:
-            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
-            to a list containing the number of placeholder tokens required. If the model doesn't accept
-            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
         """
-        split_image = mm_processor_kwargs.get("split_image", None) or self.image_processor.split_image
-        max_image_size = mm_processor_kwargs.get("max_image_size", None) or self.image_processor.max_image_size
 
-        batch_num_image_tokens = []
-        for height, width in image_sizes:
-            resized_height, resized_width = select_best_resolution(
-                (height, width), self.image_processor.split_resolutions
-            )
-            num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size
-            num_image_tokens = self.size_conversion[max_image_size] * num_patches
-            batch_num_image_tokens.append(num_image_tokens)
+        multimodal_data = {}
+        if image_sizes is not None:
+            images_kwargs = AriaProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
 
-        return {"image": batch_num_image_tokens, "video": [], "audio": []}
+            num_tokens_and_patches = [
+                self.image_processor.get_number_of_image_tokens(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [num_tokens for num_tokens, _ in num_tokens_and_patches]
+            num_image_patches = [num_patches for _, num_patches in num_tokens_and_patches]
+            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**multimodal_data)
 
     def batch_decode(self, *args, **kwargs):
         """

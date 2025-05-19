@@ -496,5 +496,31 @@ class AriaImageProcessor(BaseImageProcessor):
         ]
         return patches
 
+    def get_number_of_image_tokens(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image embeddings and number of patches for a given image size. The
+        number of embeddings are calculated is equal to the number of image placeholder tokens
+        needed for the input. Note, that placeholder tokens include BOI/EOI and other special tokens
+        used to denote each image row or column.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
+        """
+        split_image = images_kwargs.get("split_image", None) or self.split_image
+        max_image_size = images_kwargs.get("max_image_size", None) or self.max_image_size
+
+        resized_height, resized_width = select_best_resolution((height, width), self.split_resolutions)
+        num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size
+        size_conversion = {490: 128, 980: 256}  # already hardcoded to accept only these as `max_image_size`
+        num_image_tokens = size_conversion[max_image_size] * num_patches
+        return num_image_tokens, num_patches
+
 
 __all__ = ["AriaImageProcessor"]

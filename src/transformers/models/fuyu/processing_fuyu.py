@@ -22,7 +22,13 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import (
+    MultiModalData,
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+    _validate_images_text_input_order,
+)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging, requires_backends
 from ...utils.import_utils import requires
@@ -574,6 +580,29 @@ class FuyuProcessor(ProcessorMixin):
             model_inputs=all_encodings, return_attention_mask=True
         )
         return FuyuBatchFeature(data=batch_encoding)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for each multimodal input type
+        (image, video, and audio) with the given input sizes.
+
+        Args:
+            image_sizes (`List[List[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        multimodal_data = {}
+        if image_sizes is not None:
+            num_image_tokens = [self.image_seq_length + 2] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+
+            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**multimodal_data)
 
     def post_process_box_coordinates(self, outputs, target_sizes=None):
         """

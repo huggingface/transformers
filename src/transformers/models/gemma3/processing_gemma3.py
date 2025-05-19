@@ -20,7 +20,7 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import to_py_obj
 
@@ -151,25 +151,28 @@ class Gemma3Processor(ProcessorMixin):
 
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
-    def _get_num_mm_tokens_from_sizes(
-        self, image_sizes=None, video_sizes=None, audio_lengths=None, **mm_processor_kwargs
-    ):
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for each multimodal input type
         (image, video, and audio) with the given input sizes.
+
         Args:
-            image_sizes (List[List[str]], *optional*):
+            image_sizes (`List[List[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
-            video_sizes (List[List[str]], *optional*):
-                The input sizes formatted as (num_frames, height, width) per each video.
-            audio_lengths (List[int], *optional*):
-                The input length formatted as per each audio.
+
         Returns:
-            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
-            to a list containing the number of placeholder tokens required. If the model doesn't accept
-            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
         """
-        return {"image": [self.image_seq_length] * len(image_sizes), "video": 0, "audio": 0}
+
+        multimodal_data = {}
+        if image_sizes is not None:
+            num_image_tokens = [self.image_seq_length] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+
+            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**multimodal_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):

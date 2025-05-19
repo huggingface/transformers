@@ -27,10 +27,9 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
-from .image_processing_qwen2_vl import smart_resize
 from ...video_utils import VideoInput
 
 
@@ -189,57 +188,43 @@ class Qwen2VLProcessor(ProcessorMixin):
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
-    def _get_num_mm_tokens_from_sizes(
-        self, image_sizes=None, video_sizes=None, audio_lengths=None, **mm_processor_kwargs
-    ):
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for each multimodal input type
         (image, video, and audio) with the given input sizes.
         Args:
-            image_sizes (List[List[str]], *optional*):
+            image_sizes (`List[List[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
-            video_sizes (List[List[str]], *optional*):
+            video_sizes (`List[List[int]]`, *optional*):
                 The input sizes formatted as (num_frames, height, width) per each video.
-            audio_lengths (List[int], *optional*):
-                The input length formatted as per each audio.
         Returns:
-            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
-            to a list containing the number of placeholder tokens required. If the model doesn't accept
-            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
         """
-        min_pixels = mm_processor_kwargs.get("min_pixels", None) or self.image_processor.size["shortest_edge"]
-        max_pixels = mm_processor_kwargs.get("max_pixels", None) or self.image_processor.size["longest_edge"]
-        patch_size = mm_processor_kwargs.get("patch_size", None) or self.image_processor.patch_size
-        merge_size = mm_processor_kwargs.get("merge_size", None) or self.image_processor.merge_size
-        temporal_patch_size = (
-            mm_processor_kwargs.get("temporal_patch_size", None) or self.image_processor.temporal_patch_size
-        )
-        factor = patch_size * merge_size
 
-        batch_image_tokens = []
-        batch_video_tokens = []
-
+        multimodal_data = {}
         if image_sizes is not None:
-            for height, width in image_sizes:
-                resized_height, resized_width = smart_resize(
-                    height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
-                )
-                grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-                image_tokens = (grid_h * grid_w) // merge_size**2
-                batch_image_tokens.append(image_tokens)
-        elif video_sizes is not None:
-            for num_frames, height, width in video_sizes:
-                resized_height, resized_width = smart_resize(
-                    height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
-                )
-                grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-                grid_t = num_frames // temporal_patch_size
-                video_tokens = (grid_t * grid_h * grid_w) // merge_size**2
-                batch_video_tokens.append(video_tokens)
-        else:
-            raise ValueError("No sizes were passed, cannot infer placeholder token length!")
+            images_kwargs = Qwen2VLProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
 
-        return {"image": batch_image_tokens, "video": batch_video_tokens, "audio": []}
+            num_tokens_and_patches = [
+                self.image_processor.get_number_of_image_tokens(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [num_tokens for num_tokens, _ in num_tokens_and_patches]
+            num_image_patches = [num_patches for _, num_patches in num_tokens_and_patches]
+            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = Qwen2VLProcessorKwargs._defaults.get("videos_kwargs", {})
+            videos_kwargs.update(kwargs)
+            num_video_tokens = [
+                self.video_processor.get_number_of_video_tokens(*video_size, videos_kwargs)
+                for video_size in video_sizes
+            ]
+            multimodal_data["num_video_tokens"] = num_video_tokens
+
+        return MultiModalData(**multimodal_data)
 
     def batch_decode(self, *args, **kwargs):
         """

@@ -22,6 +22,7 @@ import os
 import sys
 import typing
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TypedDict, Union
 
@@ -458,6 +459,22 @@ class AllKwargsForChatTemplate(
     template_kwargs: ProcessorChatTemplateKwargs = {
         **ProcessorChatTemplateKwargs.__annotations__,
     }
+
+
+@dataclass
+class MultiModalData:
+    num_image_tokens: list[int] = None
+    num_video_tokens: list[int] = None
+    num_audio_tokens: list[int] = None
+    num_image_patches: list[int] = None
+
+    def __contains__(self, key):
+        return hasattr(self, key) and getattr(self, key) is not None
+
+    def __getitem__(self, key):
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
 
 
 class ProcessorMixin(PushToHubMixin):

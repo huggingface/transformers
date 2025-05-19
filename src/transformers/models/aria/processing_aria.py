@@ -22,9 +22,9 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BatchFeature, select_best_resolution
+from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput
 from ...utils import TensorType
 from ..auto import AutoTokenizer
@@ -150,37 +150,32 @@ class AriaProcessor(ProcessorMixin):
 
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
-    def _get_num_mm_tokens_from_sizes(
-        self, image_sizes=None, video_sizes=None, audio_lengths=None, **mm_processor_kwargs
-    ):
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for each multimodal input type
         (image, video, and audio) with the given input sizes.
         Args:
-            image_sizes (List[List[str]], *optional*):
+            image_sizes (`List[List[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
-            video_sizes (List[List[str]], *optional*):
-                The input sizes formatted as (num_frames, height, width) per each video.
-            audio_lengths (List[int], *optional*):
-                The input length formatted as per each audio.
         Returns:
-            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
-            to a list containing the number of placeholder tokens required. If the model doesn't accept
-            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
         """
-        split_image = mm_processor_kwargs.get("split_image", None) or self.image_processor.split_image
-        max_image_size = mm_processor_kwargs.get("max_image_size", None) or self.image_processor.max_image_size
 
-        batch_num_image_tokens = []
-        for height, width in image_sizes:
-            resized_height, resized_width = select_best_resolution(
-                (height, width), self.image_processor.split_resolutions
-            )
-            num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size
-            num_image_tokens = self.size_conversion[max_image_size] * num_patches
-            batch_num_image_tokens.append(num_image_tokens)
+        multimodal_data = {}
+        if image_sizes is not None:
+            images_kwargs = AriaProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
 
-        return {"image": batch_num_image_tokens, "video": [], "audio": []}
+            num_tokens_and_patches = [
+                self.image_processor.get_number_of_image_tokens(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [num_tokens for num_tokens, _ in num_tokens_and_patches]
+            num_image_patches = [num_patches for _, num_patches in num_tokens_and_patches]
+            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**multimodal_data)
 
     def batch_decode(self, *args, **kwargs):
         """
