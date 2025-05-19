@@ -6,7 +6,7 @@ logger = logging.get_logger(__name__)
 
 class Dots1Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Dots1Model`]. It is used to instantiate an `dots.1`
+    This is the configuration class to store the configuration of a [`Dots1Model`]. It is used to instantiate an `dots.llm1`
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the dots.llm1.base [rednote-hilab/dots.llm1.base]
     (https://huggingface.co/rednote-hilab/dots.llm1.base).
@@ -101,7 +101,7 @@ class Dots1Config(PretrainedConfig):
     ```python
     >>> from transformers import Dots1Model, Dots1Config
 
-    >>> # Initializing a dots.1 style configuration
+    >>> # Initializing a dots1 style configuration
     >>> configuration = Dots1Config()
 
     >>> # Accessing the model configuration
