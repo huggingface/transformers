@@ -1019,57 +1019,56 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         # 1 - create a local generation config. This is done to avoid side-effects on the model as we apply local
         # tweaks to the generation config.
         # 2 - load the assistant model if it is passed.
-        if self._pipeline_calls_generate:
+        if self._pipeline_calls_generate and self.model.can_generate():
             self.assistant_model, self.assistant_tokenizer = load_assistant_model(
                 self.model, kwargs.pop("assistant_model", None), kwargs.pop("assistant_tokenizer", None)
             )
-            if self.model.can_generate():
-                self.prefix = self.model.config.prefix if hasattr(self.model.config, "prefix") else None
-                # each pipeline with text generation capabilities should define its own default generation in a
-                # `_default_generation_config` class attribute
-                default_pipeline_generation_config = getattr(self, "_default_generation_config", GenerationConfig())
-                if hasattr(self.model, "_prepare_generation_config"):  # TF doesn't have `_prepare_generation_config`
-                    # Uses `generate`'s logic to enforce the following priority of arguments:
-                    # 1. user-defined config options in `**kwargs`
-                    # 2. model's generation config values
-                    # 3. pipeline's default generation config values
-                    # NOTE: _prepare_generation_config creates a deep copy of the generation config before updating it,
-                    # and returns all kwargs that were not used to update the generation config
-                    prepared_generation_config, kwargs = self.model._prepare_generation_config(
-                        generation_config=default_pipeline_generation_config, use_model_defaults=True, **kwargs
-                    )
-                    self.generation_config = prepared_generation_config
-                    # if the `max_new_tokens` is set to the pipeline default, but `max_length` is set to a non-default
-                    # value: let's honor `max_length`. E.g. we want Whisper's default `max_length=448` take precedence
-                    # over over the pipeline's length default.
-                    if (
-                        default_pipeline_generation_config.max_new_tokens is not None  # there's a pipeline default
-                        and self.generation_config.max_new_tokens == default_pipeline_generation_config.max_new_tokens
-                        and self.generation_config.max_length is not None
-                        and self.generation_config.max_length != 20  # global default
-                    ):
-                        self.generation_config.max_new_tokens = None
-                else:
-                    # TODO (joao): no PT model should reach this line. However, some audio models with complex
-                    # inheritance patterns do. Streamline those models such that this line is no longer needed.
-                    # In those models, the default generation config is not (yet) used.
-                    self.generation_config = copy.deepcopy(self.model.generation_config)
-                # Update the generation config with task specific params if they exist.
-                # NOTE: 1. `prefix` is pipeline-specific and doesn't exist in the generation config.
-                #       2. `task_specific_params` is a legacy feature and should be removed in a future version.
-                task_specific_params = self.model.config.task_specific_params
-                if task_specific_params is not None and task in task_specific_params:
-                    this_task_params = task_specific_params.get(task)
-                    if "prefix" in this_task_params:
-                        self.prefix = this_task_params.pop("prefix")
-                    self.generation_config.update(**this_task_params)
-                # If the tokenizer has a pad token but the model doesn't, set it so that `generate` is aware of it.
+            self.prefix = self.model.config.prefix if hasattr(self.model.config, "prefix") else None
+            # each pipeline with text generation capabilities should define its own default generation in a
+            # `_default_generation_config` class attribute
+            default_pipeline_generation_config = getattr(self, "_default_generation_config", GenerationConfig())
+            if hasattr(self.model, "_prepare_generation_config"):  # TF doesn't have `_prepare_generation_config`
+                # Uses `generate`'s logic to enforce the following priority of arguments:
+                # 1. user-defined config options in `**kwargs`
+                # 2. model's generation config values
+                # 3. pipeline's default generation config values
+                # NOTE: _prepare_generation_config creates a deep copy of the generation config before updating it,
+                # and returns all kwargs that were not used to update the generation config
+                prepared_generation_config, kwargs = self.model._prepare_generation_config(
+                    generation_config=default_pipeline_generation_config, use_model_defaults=True, **kwargs
+                )
+                self.generation_config = prepared_generation_config
+                # if the `max_new_tokens` is set to the pipeline default, but `max_length` is set to a non-default
+                # value: let's honor `max_length`. E.g. we want Whisper's default `max_length=448` take precedence
+                # over over the pipeline's length default.
                 if (
-                    self.tokenizer is not None
-                    and self.tokenizer.pad_token_id is not None
-                    and self.generation_config.pad_token_id is None
+                    default_pipeline_generation_config.max_new_tokens is not None  # there's a pipeline default
+                    and self.generation_config.max_new_tokens == default_pipeline_generation_config.max_new_tokens
+                    and self.generation_config.max_length is not None
+                    and self.generation_config.max_length != 20  # global default
                 ):
-                    self.generation_config.pad_token_id = self.tokenizer.pad_token_id
+                    self.generation_config.max_new_tokens = None
+            else:
+                # TODO (joao): no PT model should reach this line. However, some audio models with complex
+                # inheritance patterns do. Streamline those models such that this line is no longer needed.
+                # In those models, the default generation config is not (yet) used.
+                self.generation_config = copy.deepcopy(self.model.generation_config)
+            # Update the generation config with task specific params if they exist.
+            # NOTE: 1. `prefix` is pipeline-specific and doesn't exist in the generation config.
+            #       2. `task_specific_params` is a legacy feature and should be removed in a future version.
+            task_specific_params = self.model.config.task_specific_params
+            if task_specific_params is not None and task in task_specific_params:
+                this_task_params = task_specific_params.get(task)
+                if "prefix" in this_task_params:
+                    self.prefix = this_task_params.pop("prefix")
+                self.generation_config.update(**this_task_params)
+            # If the tokenizer has a pad token but the model doesn't, set it so that `generate` is aware of it.
+            if (
+                self.tokenizer is not None
+                and self.tokenizer.pad_token_id is not None
+                and self.generation_config.pad_token_id is None
+            ):
+                self.generation_config.pad_token_id = self.tokenizer.pad_token_id
 
         self.call_count = 0
         self._batch_size = kwargs.pop("batch_size", None)

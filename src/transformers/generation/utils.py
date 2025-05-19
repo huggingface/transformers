@@ -1752,14 +1752,18 @@ class GenerationMixin:
                 use_model_defaults is None and model_base_version >= version.parse("4.50.0")
             ):
                 modified_values = {}
-                default_generation_config = GenerationConfig()
+                global_default_generation_config = GenerationConfig()
+                model_generation_config = self.generation_config
                 # we iterate over the model's generation config: it may hold custom keys, which we'll want to copy
-                for key, model_gen_config_value in self.generation_config.__dict__.items():
+                for key, model_gen_config_value in model_generation_config.__dict__.items():
                     if key.startswith("_") or key == "transformers_version":  # metadata
                         continue
-                    default_value = getattr(default_generation_config, key, None)
+                    global_default_value = getattr(global_default_generation_config, key, None)
                     custom_gen_config_value = getattr(generation_config, key, None)
-                    if custom_gen_config_value == default_value and model_gen_config_value != default_value:
+                    if (
+                        custom_gen_config_value == global_default_value
+                        and model_gen_config_value != global_default_value
+                    ):
                         modified_values[key] = model_gen_config_value
                         setattr(generation_config, key, model_gen_config_value)
                 if use_model_defaults is None and len(modified_values) > 0:
