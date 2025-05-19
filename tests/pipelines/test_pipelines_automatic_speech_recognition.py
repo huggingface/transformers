@@ -627,7 +627,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer(ds["audio"], batch_size=2)
         self.assertEqual(output, EXPECTED_OUTPUT)
 
-    @slow
     def test_find_longest_common_subsequence(self):
         max_source_positions = 1500
         processor = AutoProcessor.from_pretrained("openai/whisper-tiny")
