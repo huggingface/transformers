@@ -1,6 +1,7 @@
 import functools
 import logging
 import time
+import torch
 from typing import Any, Callable, List, Optional, Tuple, Union
 
 from ..generation.utils import RequestStatus
@@ -19,7 +20,7 @@ try:
 
     resource = Resource.create({"service.name": "transformers"})
 
-    metrics_exporter = PeriodicExportingMetricReader(OTLPMetricExporter())
+    metrics_exporter = PeriodicExportingMetricReader(OTLPMetricExporter(), export_interval_millis=1000)
     meter_provider = MeterProvider(resource=resource, metric_readers=[metrics_exporter])
     metrics.set_meter_provider(meter_provider)
 
@@ -231,6 +232,13 @@ class ContinuousBatchProcessorMetrics:
             unit="percent",
         )
 
+        # Create gauge for KV cache memory usage
+        self.kv_cache_memory_gauge = self.meter.create_gauge(
+            name="kv_cache_memory_bytes",
+            description="Memory usage of the PagedAttentionCache in bytes",
+            unit="bytes",
+        )
+
     @traced
     def record_ttft_metric(self, created_time: float, request_id: str) -> None:
         """Record Time to First Token (TTFT).
@@ -280,8 +288,6 @@ class ContinuousBatchProcessorMetrics:
 
             if prefill_tokens > 0:
                 ratio = decode_tokens / prefill_tokens
-            elif decode_tokens > 0:
-                ratio = float("inf")
                 self.decode_prefill_ratio_gauge.set(ratio)
 
             fill_percentage = (total_batch_tokens / self.max_batch_tokens) * 100.0
@@ -292,3 +298,46 @@ class ContinuousBatchProcessorMetrics:
             )
         except Exception as e:
             logger.warning(f"Failed to record batch metrics: {e}")
+
+    @traced
+    def record_kv_cache_memory_metrics(self, cache: "PagedAttentionCache") -> None:
+        """Record memory usage of the PagedAttentionCache without GPU synchronization.
+
+        This calculates the theoretical memory usage based on cache configuration
+        and the number of blocks currently in use.
+
+        Args:
+            cache: The PagedAttentionCache object to measure
+        """
+        if not _has_opentelemetry:
+            return
+
+        try:
+            # Calculate memory usage based on cache configuration
+            num_used_blocks = cache.num_blocks - len(cache._free_blocks)
+            num_layers = len(cache.key_cache)
+
+            # Each used block stores key and value states
+            # Each with shape: (num_kv_heads, block_size, head_dim)
+            bytes_per_parameter = 2 if cache.dtype in [torch.float16, torch.bfloat16] else 4  # Size in bytes
+
+            # Total bytes = num_layers * num_used_blocks * block_size *
+            #               num_kv_heads * head_dim * 2 (both K and V) * bytes_per_parameter
+            memory_bytes = (
+                num_layers
+                * num_used_blocks
+                * cache.block_size
+                * cache.num_key_value_heads
+                * cache.head_dim
+                * 2  # For both key and value caches
+                * bytes_per_parameter
+            )
+
+            self.kv_cache_memory_gauge.set(memory_bytes)
+            logger.debug(
+                f"KV Cache memory: {memory_bytes / (1024 * 1024):.2f}MB, "
+                f"Used blocks: {num_used_blocks}/{cache.num_blocks} "
+                f"({num_used_blocks / cache.num_blocks * 100:.1f}%)"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record KV cache memory metrics: {e}")

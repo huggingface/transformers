@@ -721,6 +721,8 @@ class ContinuousBatchProcessor:
             logits_indices,
         )
 
+        self.metrics.record_kv_cache_memory_metrics(self.cache)
+
     @traced
     def _build_tensors(
         self,
