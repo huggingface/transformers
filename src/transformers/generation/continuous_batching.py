@@ -531,6 +531,15 @@ class ContinuousBatchProcessor:
             + self.get_model_kwargs().__repr__()
         )
 
+    @traced
+    def _maybe_send_output(self, state: RequestState, token: int):
+        """Send output to the queue based on streaming mode and request state."""
+        if self.streaming or True:
+            state.next_token = token
+            self.output_queue.put(state.to_generation_output())
+        elif state.status == RequestStatus.FINISHED:
+            self.output_queue.put(state.to_generation_output())
+
     @traced(standalone=True)
     def _configure_batch_parameters(self):
         """Set up batch processing parameters based on generation config."""
@@ -580,7 +589,7 @@ class ContinuousBatchProcessor:
         else:
             state.static_outputs = []
 
-        self.output_queue.put(state)
+        self.output_queue.put(state.to_generation_output())
 
   
     @traced
@@ -673,10 +682,8 @@ class ContinuousBatchProcessor:
         for state in candidates:
             self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.prompt_ids)
-            # maybe pre-allocate more blocks for full length?
-            if self._allocate_blocks_if_needed(state, request_len):
-                scheduled_requests.append(state.request_id)
-                token_budget -= request_len
+            scheduled_requests.append(state.request_id)
+            token_budget -= request_len
             if token_budget == 0:
                 break
 
@@ -747,28 +754,28 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_k[:len(cumulative_seqlens_k)] = to_tensor(cumulative_seqlens_k)
         self.logits_indices[:len(logits_indices)] = to_tensor(logits_indices)
         min_value = torch.finfo(self.model_dtype).min
-        # if self.config._attn_implementation != "paged_attention": # we set `is_causal` to True in paged call`
-        for i in range(len(cumulative_seqlens_q) - 1):
-            if (
-                cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
-                < cumulative_seqlens_k[i + 1] - cumulative_seqlens_k[i]
-                and cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] >= 1
-            ):
-                diagonal = cumulative_seqlens_k[i + 1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
-                diagonal = diagonal - cumulative_seqlens_k[i]
-            else:
-                diagonal = 1
-            query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
-            key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
+        if self.config._attn_implementation != "paged_attention": # we set `is_causal` to True in paged call`
+            for i in range(len(cumulative_seqlens_q) - 1):
+                if (
+                    cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
+                    < cumulative_seqlens_k[i + 1] - cumulative_seqlens_k[i]
+                    and cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] >= 1
+                ):
+                    diagonal = cumulative_seqlens_k[i + 1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
+                    diagonal = diagonal - cumulative_seqlens_k[i]
+                else:
+                    diagonal = 1
+                query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
+                key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
 
-            mask = torch.triu(
-                torch.full(
-                    self.attention_mask[..., query_range, key_range].shape, min_value, dtype=self.model_dtype, device=self.model_device
-                ),
-                diagonal=diagonal,
-            )
-            # visualize_mask = AttentionMask(mask)
-            self.attention_mask[..., query_range, key_range] = mask
+                mask = torch.triu(
+                    torch.full(
+                        self.attention_mask[..., query_range, key_range].shape, min_value, dtype=self.model_dtype, device=self.model_device
+                    ),
+                    diagonal=diagonal,
+                )
+                # visualize_mask = AttentionMask(mask)
+                self.attention_mask[..., query_range, key_range] = mask
 
     def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int):
         # 1. we check that the occupency is less than the requested length
