@@ -56,10 +56,6 @@ if is_torch_available():
     import torch
 
 
-# We can't use this mixin because it assumes TF support.
-# from .test_pipelines_common import CustomInputPipelineCommonMixin
-
-
 @is_pipeline_test
 class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     model_mapping = dict(
@@ -160,7 +156,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 outputs = speech_recognizer(audio, return_timestamps="char")
 
     @require_torch
-    @slow
     def test_pt_defaults(self):
         pipeline("automatic-speech-recognition", framework="pt")
 
@@ -226,13 +221,13 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         ):
             _ = speech_recognizer(waveform, return_timestamps="char")
 
-    @slow
     @require_torch_accelerator
     def test_whisper_fp16(self):
         speech_recognizer = pipeline(
-            model="openai/whisper-base",
+            model="openai/whisper-tiny",
             device=torch_device,
             torch_dtype=torch.float16,
+            max_new_tokens=5,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         speech_recognizer(waveform)
@@ -348,6 +343,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             model="facebook/wav2vec2-base-960h",
             tokenizer="facebook/wav2vec2-base-960h",
             framework="pt",
+            max_new_tokens=10,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
@@ -365,6 +361,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="hf-audio/wav2vec2-bert-CV16-en",
             framework="pt",
+            max_new_tokens=10,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
