@@ -877,9 +877,9 @@ class ContinuousBatchingManager:
         self._request_counter = 0
         self._request_lock = threading.Lock()
         self.model.generation_config.top_p = None
-        self.do_sample = getattr(generation_config, "do_sample", False)
+        self.do_sample = getattr(generation_config, "do_sample", True)
         self.logit_processor = self.model._get_logits_processor(self.model.generation_config)
-        self.use_cuda_graph = getattr(generation_config, "use_cuda_graph", False)
+        self.use_cuda_graph = getattr(generation_config, "use_cuda_graph", True)
         self.profile = getattr(generation_config, "profile", False)
 
     @traced
