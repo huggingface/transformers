@@ -1207,18 +1207,11 @@ def is_keras_nlp_available():
     return is_tensorflow_text_available() and _keras_nlp_available
 
 
-def is_in_marimo():
-    """Check if code is running inside Marimo (in any mode)."""
-    # Check for environment variables that might indicate Marimo
-    if os.getenv('MARIMO_RUNTIME') is not None:
-        return True
-    
-    # Check if marimo module is importable and loaded
-    return 'marimo' in sys.modules
-
-
 def is_in_notebook():
     try:
+        # Check if we are running inside Marimo
+        if 'marimo' in sys.modules:
+            return True
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
         get_ipython = sys.modules["IPython"].get_ipython
         if "IPKernelApp" not in get_ipython().config:
@@ -1229,9 +1222,9 @@ def is_in_notebook():
             # https://docs.microsoft.com/en-us/azure/databricks/notebooks/ipython-kernel
             raise ImportError("databricks")
 
-        return importlib.util.find_spec("IPython") is not None or is_in_marimo()
+        return importlib.util.find_spec("IPython") is not None
     except (AttributeError, ImportError, KeyError):
-        return is_in_marimo()
+        return False
 
 
 def is_pytorch_quantization_available():
