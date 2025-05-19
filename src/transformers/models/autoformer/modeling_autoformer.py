@@ -1048,7 +1048,7 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
-    # Copied from transformers.models.bart.modeling_bart.BartEncoder._update_full_mask
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
     def _update_full_mask(
         self,
         attention_mask: Union[torch.Tensor, None],

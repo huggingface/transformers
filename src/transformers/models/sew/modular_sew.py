@@ -28,8 +28,8 @@ from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
-from ..bart.modeling_bart import BartAttention
 from ..wav2vec2.modeling_wav2vec2 import (
+    Wav2Vec2Attention,
     Wav2Vec2EncoderLayer,
     Wav2Vec2FeatureEncoder,
     Wav2Vec2FeedForward,
@@ -143,7 +143,7 @@ class SEWFeatureExtractor(SEWFeatureEncoder):
         )
 
 
-class SEWAttention(BartAttention):
+class SEWAttention(Wav2Vec2Attention):
     pass
 
 

@@ -2149,6 +2149,7 @@ class GenerationTesterMixin:
                 "return_dict_in_generate": True,
                 "output_scores": True,
                 "compile_config": compile_config,
+                "use_cache": True,
             }
 
             # 4. get eager + dynamic cache results for future comparison

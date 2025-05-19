@@ -4506,8 +4506,15 @@ class ModelTesterMixin:
             # TODO: raushan, fix for composite models after making VLMs support new attn API
             if not model_class._supports_flex_attn or self._is_composite:
                 self.skipTest(reason="This model does not support flex attention")
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config._attn_implementation = "flex_attention"
+            # Flex Attention can not use dropout
+            if hasattr(config, "attention_droput"):
+                config.attention_droput = 0
+            if hasattr(config, "attention_probs_dropout_prob"):
+                config.attention_probs_dropout_prob = 0
+
             model = model_class(config).to(device=torch_device)
             self.assertTrue(model.config._attn_implementation == "flex_attention")
 
@@ -4518,10 +4525,6 @@ class ModelTesterMixin:
                     dummy_input["decoder_input_ids"] = dummy_input["input_ids"].clone()
             else:
                 dummy_input = {model_class.main_input_name: inputs_dict[model_class.main_input_name].to(torch_device)}
-
-            # Flex Attention can not use dropout
-            if hasattr(config, "attention_droput"):
-                config.attention_droput = 0
 
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(**dummy_input)
