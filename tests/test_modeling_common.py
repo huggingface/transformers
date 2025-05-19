@@ -735,6 +735,7 @@ class ModelTesterMixin:
             model = model_class(config)
             model.to(torch_device)
             model.eval()
+            print(model_class)
             with torch.no_grad():
                 first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
                 second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
@@ -1444,6 +1445,7 @@ class ModelTesterMixin:
         inputs_dict["output_attentions"] = True
         config.output_hidden_states = True
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+        configs_no_init._attn_implementation = "eager"  # head mask works only in eager mode and will be removed soon
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             model.to(torch_device)
@@ -3494,8 +3496,8 @@ class ModelTesterMixin:
                 vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)][0]
                 language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)][0]
 
-                vision_model_sdpa = getattr(model, vision_model_name)
-                language_model_sdpa = getattr(model, language_model_name)
+                vision_model_sdpa = getattr(model_sdpa, vision_model_name)
+                language_model_sdpa = getattr(model_sdpa, language_model_name)
                 text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
                 vision_attn = "sdpa" if vision_model_sdpa._supports_sdpa else "eager"
 
@@ -3765,6 +3767,10 @@ class ModelTesterMixin:
                     key = "decoder_hidden_states"
                 elif "logits" in outputs_eager and "Classification" in model_class.__name__:
                     key = "logits"
+                elif "language_model_outputs" in outputs_eager and "blip" in model_class.__name__.lower():
+                    outputs_eager = outputs_eager["language_model_outputs"]
+                    outputs_sdpa = outputs_sdpa["language_model_outputs"]
+                    key = "hidden_states" if "hidden_states" in outputs_eager else "decoder_hidden_states"
                 else:
                     key = "hidden_states"
 
@@ -4002,14 +4008,14 @@ class ModelTesterMixin:
                 model = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
 
                 sub_models_supporting_fa2 = [
-                    module._supports_flash_attn_2
+                    (module._supports_flash_attn_2 or module._supports_attention_backend)
                     for name, module in model.named_modules()
                     if isinstance(module, PreTrainedModel) and name != ""
                 ]
                 supports_fa2_all_modules = (
                     all(sub_models_supporting_fa2)
                     if len(sub_models_supporting_fa2) > 0
-                    else model._supports_flash_attn_2
+                    else (model._supports_flash_attn_2 or model._supports_attention_backend)
                 )
                 if not supports_fa2_all_modules:
                     with self.assertRaises(ValueError):
@@ -4124,6 +4130,9 @@ class ModelTesterMixin:
             model = model_class(config)
             if "position_ids" not in inspect.signature(model.forward).parameters:
                 self.skipTest("Model does not support position_ids")
+
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                continue  # this model doesn't accept position ids as input
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -4263,7 +4272,16 @@ class ModelTesterMixin:
             dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
             dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
 
-            _ = fa2_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
+            if config.is_encoder_decoder:
+                _ = fa2_model(
+                    input_ids=dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    decoder_input_ids=dummy_input.clone(),
+                    decoder_attention_mask=dummy_attention_mask.clone(),
+                )
+            else:
+                _ = fa2_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
+
             with tempfile.TemporaryDirectory() as tmpdirname:
                 fa2_model.save_pretrained(tmpdirname)
                 model_from_pretrained = model_class.from_pretrained(tmpdirname)
@@ -4322,8 +4340,10 @@ class ModelTesterMixin:
             set_config_for_less_flaky_test(config)
             if getattr(config, "sliding_window", 0) is not None and getattr(config, "sliding_window", 0) > 0:
                 self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
-            model = model_class(config).to(device=torch_device, dtype=torch.float32)
+            model = model_class(config).to(device=torch_device, dtype=torch.float32).eval()
             set_model_for_less_flaky_test(model)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                continue  # model doesn't accept position ids and probably has special way to model positions
 
             if "position_ids" not in inspect.signature(model.forward).parameters:
                 continue  # this model doesn't accept position ids as input
@@ -4350,8 +4370,8 @@ class ModelTesterMixin:
             out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
 
             # comparing softmax-normalized logits:
-            normalized_0 = F.softmax(out_last_tokens)
-            normalized_1 = F.softmax(out_shared_prefix_last_tokens)
+            normalized_0 = F.softmax(out_last_tokens, dim=-1)
+            normalized_1 = F.softmax(out_shared_prefix_last_tokens, dim=-1)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
     @slow
@@ -4403,7 +4423,7 @@ class ModelTesterMixin:
                 self.skipTest(reason="This model does not support `logits_to_keep` argument.")
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-            batch_size, sequence_length = inputs["input_ids"].shape
+            batch_size, sequence_length = inputs["input_ids"].shape[:2]
             vocab_size = config.get_text_config().vocab_size
             model = model_class(config).to(device=torch_device).eval()
             # some models have labels but `logits_to_keep` should not be used in train mode
@@ -4489,7 +4509,8 @@ class ModelTesterMixin:
     @require_torch_gpu
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
-            if not model_class._supports_flex_attn:
+            # TODO: raushan, fix for composite models after making VLMs support new attn API
+            if not model_class._supports_flex_attn or self._is_composite:
                 self.skipTest(reason="This model does not support flex attention")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config._attn_implementation = "flex_attention"

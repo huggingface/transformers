@@ -64,6 +64,7 @@ from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.tensor_parallel import (
     SUPPORTED_TP_STYLES,
     shard_and_distribute_module,
+    verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
@@ -215,6 +216,25 @@ TORCH_INIT_FUNCTIONS = {
     "kaiming_uniform": nn.init.kaiming_uniform,
     "kaiming_normal": nn.init.kaiming_normal,
 }
+
+# DO NOT MODIFY, KEPT FOR BC ONLY
+VLMS = [
+    "aria",
+    "ayavision",
+    "emu3",
+    "fuyu",
+    "gotocr2",
+    "gemma3",
+    "internvl",
+    "llava",  # all llava prefixed models fall under this check
+    "mistral3",
+    "mllama",
+    "paligemma",
+    "qwen2vl",
+    "qwen2_5_vl",
+    "videollava",
+    "vipllava",
+]
 
 
 @contextmanager
@@ -1275,7 +1295,7 @@ def _get_device_map(
             )
 
         if device_map != "sequential":
-            max_memory = get_balanced_memory(
+            inferred_max_memory = get_balanced_memory(
                 model,
                 dtype=target_dtype,
                 low_zero=(device_map == "balanced_low_0"),
@@ -1283,20 +1303,23 @@ def _get_device_map(
                 **device_map_kwargs,
             )
         else:
-            max_memory = get_max_memory(max_memory)
+            inferred_max_memory = get_max_memory(max_memory)
         if hf_quantizer is not None:
-            max_memory = hf_quantizer.adjust_max_memory(max_memory)
+            inferred_max_memory = hf_quantizer.adjust_max_memory(inferred_max_memory)
 
-        # `max_memory` contains non-reserved memory. There may be *unused* reserved memory in the GPU, which we
-        # can use to allocate parameters.
-        for device_name in max_memory.keys():
+        # `inferred_max_memory` contains non-reserved memory. There may be *unused* reserved memory in the GPU,
+        # which we can use to allocate parameters.
+        for device_name in inferred_max_memory.keys():
             if isinstance(device_name, int):  # it's a GPU device
                 if is_torch_xpu_available():
                     unused_memory = torch.xpu.memory_reserved(device_name) - torch.xpu.memory_allocated(device_name)
                 else:
                     unused_memory = torch.cuda.memory_reserved(device_name) - torch.cuda.memory_allocated(device_name)
-                max_memory[device_name] += unused_memory
-        device_map_kwargs["max_memory"] = max_memory
+                inferred_max_memory[device_name] += unused_memory
+            # respect the `max_memory` passed by the user
+            if max_memory is not None and device_name in max_memory:
+                inferred_max_memory[device_name] = min(inferred_max_memory[device_name], max_memory[device_name])
+        device_map_kwargs["max_memory"] = inferred_max_memory
 
         device_map = infer_auto_device_map(model, dtype=target_dtype, **device_map_kwargs)
 
@@ -1774,6 +1797,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     base_model_prefix = ""
     main_input_name = "input_ids"
     model_tags = None
+
+    _checkpoint_conversion_mapping = {}  # used for BC support in VLMs, not meant to be used by new models
 
     _auto_class = None
     _no_split_modules = None
@@ -3403,9 +3428,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Attach architecture to the config
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
 
-        # Unset attn implementation so it can be set to another one when loading back
-        model_to_save.config._attn_implementation_autoset = False
-
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
         if self._auto_class is not None:
@@ -3480,6 +3502,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     for key in module_state_dict:
                         module_map[name + f".{key}"] = module
             state_dict = model_to_save.state_dict()
+
+        if any(allowed_name in self.__class__.__name__.lower() for allowed_name in VLMS):
+            reverse_key_mapping = {v: k for k, v in self._checkpoint_conversion_mapping.items()}
+
+            original_state_dict = {}
+            for key, value in state_dict.items():
+                for pattern, replacement in reverse_key_mapping.items():
+                    replacement = replacement.lstrip("^")  # strip off un-needed chars and patterns
+                    replacement = re.sub(r"\(.*?\)", "", pattern)
+                    key, n_replace = re.subn(pattern, replacement, key)
+                    # Early exit of the loop
+                    if n_replace > 0:
+                        break
+                original_state_dict[key] = value
+            state_dict = original_state_dict
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
         if IS_SAGEMAKER_MP_POST_1_10:
@@ -4068,10 +4105,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
-        key_mapping = kwargs.pop("key_mapping", None)
+        trust_remote_code = kwargs.pop("trust_remote_code", None)
+
+        # Load models with hardcoded key mapping on class for VLMs only,  to keep BC and standardize model
+        if any(allowed_name in cls.__name__.lower() for allowed_name in VLMS):
+            key_mapping = kwargs.pop("key_mapping", cls._checkpoint_conversion_mapping)
+        else:
+            key_mapping = kwargs.pop("key_mapping", None)
+
         # Not used anymore -- remove them from the kwargs
         _ = kwargs.pop("resume_download", None)
-        _ = kwargs.pop("trust_remote_code", None)
         _ = kwargs.pop("mirror", None)
         _ = kwargs.pop("_fast_init", True)
         _ = kwargs.pop("low_cpu_mem_usage", None)
@@ -4549,30 +4592,44 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Set model in evaluation mode to deactivate DropOut modules by default
         model.eval()
 
-        # If it is a model with generation capabilities, attempt to load the generation config
+        # If it is a model with generation capabilities, attempt to load generation files (generation config,
+        # custom generate function)
         if model.can_generate() and generation_config is not None:
             logger.info("The user-defined `generation_config` will be used to override the default generation config.")
             model.generation_config = model.generation_config.from_dict(generation_config.to_dict())
         elif model.can_generate() and pretrained_model_name_or_path is not None:
+            repo_loading_kwargs = {
+                "cache_dir": cache_dir,
+                "force_download": force_download,
+                "proxies": proxies,
+                "local_files_only": local_files_only,
+                "token": token,
+                "revision": revision,
+                "subfolder": subfolder,
+                **kwargs,
+            }
+            # Load generation config
             try:
                 model.generation_config = GenerationConfig.from_pretrained(
                     pretrained_model_name_or_path,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    local_files_only=local_files_only,
-                    token=token,
-                    revision=revision,
-                    subfolder=subfolder,
                     _from_auto=from_auto_class,
                     _from_pipeline=from_pipeline,
-                    **kwargs,
+                    **repo_loading_kwargs,
                 )
             except OSError:
                 logger.info(
                     "Generation config file not found, using a generation config created from the model config."
                 )
                 pass
+            # Load custom generate function if `pretrained_model_name_or_path` defines it (and override `generate`)
+            if hasattr(model, "load_custom_generate"):
+                try:
+                    custom_generate = model.load_custom_generate(
+                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **repo_loading_kwargs
+                    )
+                    model.generate = functools.partial(custom_generate, model=model)
+                except OSError:  # there is no custom generate function
+                    pass
 
         # Dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
         # harm performances)
@@ -4917,6 +4974,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         expected_keys = list(model_to_load.state_dict().keys())
         if hf_quantizer is not None:
             expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, checkpoint_keys)
+
+        if logger.level >= logging.WARNING:
+            verify_tp_plan(expected_keys, getattr(model_to_load, "_tp_plan", None))
 
         # Warmup cuda to load the weights much faster on devices
         if device_map is not None and not is_hqq_or_quark:
