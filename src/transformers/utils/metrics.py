@@ -232,6 +232,13 @@ class ContinuousBatchProcessorMetrics:
             unit="percent",
         )
 
+        # Create gauge for KV cache free memory
+        self.kv_cache_free_memory_gauge = self.meter.create_gauge(
+            name="kv_cache_free_memory_bytes",
+            description="Free memory of the PagedAttentionCache in bytes",
+            unit="bytes",
+        )
+
         # Create gauge for KV cache memory usage
         self.kv_cache_memory_gauge = self.meter.create_gauge(
             name="kv_cache_memory_bytes",
@@ -333,7 +340,18 @@ class ContinuousBatchProcessorMetrics:
                 * bytes_per_parameter
             )
 
+            free_memory_bytes = (
+                num_layers
+                * len(cache._free_blocks)
+                * cache.block_size
+                * cache.num_key_value_heads
+                * cache.head_dim
+                * 2  # For both key and value caches
+                * bytes_per_parameter
+            )
+
             self.kv_cache_memory_gauge.set(memory_bytes)
+            self.kv_cache_free_memory_gauge.set(free_memory_bytes)
             logger.debug(
                 f"KV Cache memory: {memory_bytes / (1024 * 1024):.2f}MB, "
                 f"Used blocks: {num_used_blocks}/{cache.num_blocks} "
