@@ -61,7 +61,7 @@ Then, most of the `torch.distributed` defined parallelization strategies can be 
 
 ### DTensor
 
-Abbrevation for Distributed Tensor, `DTensor` is a tensor subclass that handles the distributed logic on-top of the usual tensor operations. Most of the model weights in case of tensor parallelism are stored as `DTensor` (with some exceptions, more on that later).
+Abbreviation for Distributed Tensor, `DTensor` is a tensor subclass that handles the distributed logic on-top of the usual tensor operations. Most of the model weights in case of tensor parallelism are stored as `DTensor`s (with some exceptions, more on that later).
 The most important part of DTensor, that is crucial to understand, is the `placement` attribute. It's an attribute that tells PyTorch how is the tensor placed on the devices of the `DeviceMesh`.
 
 It can have the following values:
@@ -92,7 +92,7 @@ You can find definitions for all of the different partitioning schemes in [integ
 
 Transformers provides a simple interface to use for tensor parallelism. We provide multiple classes implementing different partitioning
 strategies and a simple entrypoint to parallelize `nn.Module` instance. You won't have to interact with this interface directly, everything is done in `PretrainedModel.from_pretrained` method for you. This section will first talk about the partitioning strategies
-we support, then the user interface you will be interacting with and finally it will teach you how to extend it with your own partitioning
+we support, then the user interface you will be interacting with, and finally it will teach you how to extend it with your own partitioning
 strategies.
 
 ### Partitioning strategies
@@ -115,9 +115,6 @@ class ParallelInterface(MutableMapping):
     with a call to `register()`. If a model needs to locally overwrite an existing attention function, say `sdpa`,
     it needs to declare a new instance of this class inside the `modeling_<model>.py`, and declare it on that instance.
     """
-
-    # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
-    # a new instance is created (in order to locally override a given function)
     _global_mapping = {
         "colwise": ColwiseParallel(),
         "rowwise": RowwiseParallel(),
@@ -134,9 +131,9 @@ class ParallelInterface(MutableMapping):
 ```
 
 ### PackedRowwiseParallel
-This class is a special case of `RowwiseParallel`, it's used to shard packed weights. Weight packing is a common technique used in models. It's a technique where we pack multiple linear layers into a single bigger one.
+This class is a special case of `RowwiseParallel`, it's used to shard packed weights. Weight packing is a common technique used in models. It's a technique where we pack multiple linear layers into a single, bigger one.
 
-For example in `Llama4` model, we pack `up_proj` and `gate_proj` into a single `Linear` module.
+For example in `Llama4` model, we pack `up_proj` and `gate_proj` into a single `gate_up_proj` module.
 ```python
 class Llama4TextExperts(nn.Module):
     ...
@@ -163,19 +160,21 @@ In this case, we need to use the `PackedRowwiseParallel` strategy to shard the `
 You could have noticed that there are `local*` strategies, which use the same layers as `*` strategy, but don't use `DTensor` at all.
 This is because `DTensor` is not supported for some of the operations: such as `torch.chunk`. Therefore, sometimes we need to use the `local*` strategies, which use vanilla `torch.Tensor` and do some of the distributed logic manually.
 
+<!---
+Readd this when I get the exact error message
 > [!TIP]
 > If you are using a custom partitioning strategy, and it's not working with `... is not supported` error, try using the `local*` strategies to see if they work better.
-
+-->
 
 ### Sharding a model
 
-We provide two ways to shard a model, first one is to use `auto` tensor parallelism plan, which will automatically shard the model based on our predefined configuration, you can see the list of the supported models.
+We provide two ways to shard a model, first one is to use `auto` tensor parallelism plan, which will automatically shard the model based on our predefined configuration. This requires the model to have predefined tensor parallel plan in transformers.
 
 ```python
 from transformers import AutoModelForCausalLM
 
-# model_id = "meta-llama/Meta-Llama-3-8B-Instruct" # uncomment for smaller number of GPUs
-model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct" # better to visualize all the options
+# model_id = "meta-llama/Meta-Llama-3-8B-Instruct" # better for smaller number of GPUs
+model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct" # better to visualize all the possible strategies
 
 model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan="auto")
 
@@ -204,12 +203,12 @@ print(model._tp_plan)
 ```
 
 > [!WARNING]
-> Manually specifying your own partitiong plan requires a good understanding of the model architecture and how the partitioning strategies interact together. If you are not sure about this, the resulting model can be very slow, even incorrect. Again, refer to the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) which can teach you everything required.
+> Manually specifying your own partitiong plan requires a good understanding of the model architecture and how the partitioning strategies interact together. If you are not sure about this, the resulting model can be very slow, even failing or incorrect. Again, refer to the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) which can teach you everything required.
 
 ### Extending the interface with your own partitioning strategies
 
-This is very advanced topic, and requires a good understanding of distributed collectives, such as the model architecture.
-Your custom partitioning strategy should inherit from `TensorParallelLayer` defined in [integrations/tensor_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py) and implement: `partition_tensor`, `prepare_inputs` and `prepare_outputs`. Then it should be registered in the `ParallelInterface` mapping, so our dispatching logic can find it when specified in the `tp_plan`.
+This is a very advanced topic, which requires a good understanding of distributed collectives and the model architecture.
+Your custom partitioning strategy should inherit from `TensorParallelLayer` defined in [integrations/tensor_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py) and implement: `partition_tensor`, `_prepare_input_fn` and `_prepare_output_fn`. Then it should be registered in the `ParallelInterface` mapping, so our dispatching logic can find it when specified in the `tp_plan`.
 
 Let's go through this workflow step by step, on an already existing example: `ColwiseParallel`.
 
@@ -251,8 +250,7 @@ def partition_tensor(
 ```
 
 This method is used to partition the tensor, and fill the `empty_param` with the partitioned tensor.
-We provide some utility functions to help you with this, such as `get_tensor_shard` which will get you the correct shard of the original parameter for this rank.
-
+We provide some utility functions to help you with this, such as `get_tensor_shard` which will get you the correct shard of the original parameter for this rank or `get_packed_weights` to help with packed weights.
 
 2b) Implement `_prepare_input_fn` and `_prepare_output_fn` methods
 
