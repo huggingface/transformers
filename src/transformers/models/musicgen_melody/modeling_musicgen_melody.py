@@ -194,7 +194,7 @@ def eager_attn_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->MusicgenMelody
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Attention with Wav2Vec2->MusicgenMelody
 class MusicgenMelodyAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -653,7 +653,6 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
             attentions=all_attentions,
         )
 
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, None],

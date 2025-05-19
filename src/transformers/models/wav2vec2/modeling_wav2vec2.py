@@ -499,7 +499,6 @@ def eager_attn_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Wav2Vec2
 class Wav2Vec2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -822,7 +821,7 @@ class Wav2Vec2Encoder(nn.Module):
             attentions=all_self_attentions,
         )
 
-    # Copied from transformers.models.bart.modeling_bart.BartEncoder._update_full_mask
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
     def _update_full_mask(
         self,
         attention_mask: Union[torch.Tensor, None],
@@ -935,7 +934,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             attentions=all_self_attentions,
         )
 
-    # Copied from transformers.models.bart.modeling_bart.BartEncoder._update_full_mask
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
     def _update_full_mask(
         self,
         attention_mask: Union[torch.Tensor, None],
