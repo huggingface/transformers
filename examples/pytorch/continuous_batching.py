@@ -11,7 +11,7 @@ model = AutoModelForCausalLM.from_pretrained(
 tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
 generation_config = GenerationConfig(
-    max_new_tokens=10,
+    max_new_tokens=512,
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
     use_cache=False,
@@ -28,10 +28,10 @@ def tokenize_function(examples):
     return tokenizer(examples["question"])
 
 tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
-simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets][:5]
+simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
 
 start_time_simple = time.time()
-# model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs", fullgraph=True)
+model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs", fullgraph=True)
 batch_outputs = model.generate_batch(
     inputs=simple_batch_inputs,
     generation_config=generation_config,

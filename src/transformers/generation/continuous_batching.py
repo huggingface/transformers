@@ -196,9 +196,6 @@ class PagedAttentionCache(Cache):
     def allocate_blocks(self, n_blocks: int, request_id: str) -> List[int]:
         """Allocates n_blocks for a given request_id."""
         if len(self._free_blocks) < n_blocks:
-            logger.warning(
-                f"Not enough free blocks for {request_id}. Requested: {n_blocks}, Available: {len(self._free_blocks)}, Allocated: {self._block_tables.get(request_id, [])}"
-            )
             return False
 
         allocated = []
@@ -650,6 +647,8 @@ class ContinuousBatchProcessor:
         self.waiting_requests = deque(
             [req for req in self.waiting_requests if req.request_id not in request_ids_to_remove_from_waiting]
         )
+        logger.warning(
+            f"Scheduled requests: {len(scheduled_requests)}, Waiting requests: {len(self.waiting_requests)}, Active requests: {len(self.active_requests)}")
         return scheduled_requests
 
     @traced
@@ -759,7 +758,7 @@ class ContinuousBatchProcessor:
     @traced
     def _maybe_send_output(self, state: RequestState, token: int):
         """Send output to the queue based on streaming mode and request state."""
-        if self.streaming or True:
+        if self.streaming:
             state.next_token = token
             self.output_queue.put(state.to_generation_output())
         elif state.status == RequestStatus.FINISHED:
@@ -1188,8 +1187,9 @@ class ContinuousMixin:
                     if result:
                         req_id = result.request_id
                         results[req_id] = result
-                        finished_count += 1
-                        pbar.update(1)
+                        if result.status == RequestStatus.FINISHED:
+                            finished_count += 1
+                            pbar.update(1)
                     else:
                         if not manager.is_running():
                             logger.error("Generation thread terminated unexpectedly.")
