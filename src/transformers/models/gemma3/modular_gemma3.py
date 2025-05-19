@@ -39,7 +39,6 @@ from ..gemma2.modeling_gemma2 import (
     Gemma2MLP,
     Gemma2Model,
     Gemma2PreTrainedModel,
-    Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -162,6 +161,9 @@ class Gemma3TextConfig(Gemma2Config):
             The base period of the RoPE embeddings for local attention.
         sliding_window_pattern (`int`, *optional*, defaults to 6):
             Pattern for the sliding window attention.
+        activation_scale (`float`, *optional*, defaults to 1.0):
+            Scaling factor for the main activations stream in the transformer.
+            This can be used to ensure activations stay within fp16 range.
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -190,6 +192,7 @@ class Gemma3TextConfig(Gemma2Config):
         max_position_embeddings=131_072,
         final_logit_softcapping=None,
         attn_logit_softcapping=None,
+        activation_scale=1.0,
         **super_kwargs,
     ):
         super().__init__(self, **super_kwargs)
@@ -199,6 +202,7 @@ class Gemma3TextConfig(Gemma2Config):
         self.sliding_window_pattern = sliding_window_pattern
         self.rope_scaling = rope_scaling
         rope_config_validation(self)
+        self.activation_scale = activation_scale
 
 
 class Gemma3Config(PretrainedConfig):
@@ -323,9 +327,25 @@ class Gemma3MLP(Gemma2MLP):
         super().__init__(config)
 
 
-class Gemma3RMSNorm(Gemma2RMSNorm):
-    def __init__(self, dim: int, eps: float = 1e-6):
+class Gemma3RMSNorm(nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-6, activation_scale: float = 1.0):
         super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.zeros(dim))
+        self.activation_scale = activation_scale
+
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
+    def forward(self, x):
+        output = self._norm(x.float())
+        # Llama does x.to(float16) * w whilst Gemma3 is (x * w).to(float16)
+        # See https://github.com/huggingface/transformers/pull/29402
+        output = output * ((1.0 + self.weight.float()) * self.activation_scale)
+        return output.type_as(x)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
 class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
@@ -420,9 +440,13 @@ class Gemma3DecoderLayer(nn.Module):
         self.self_attn = Gemma3Attention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma3MLP(config)
         self.input_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Gemma3RMSNorm(
+            self.hidden_size, eps=config.rms_norm_eps, activation_scale=config.activation_scale
+        )
         self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = Gemma3RMSNorm(
+            self.hidden_size, eps=config.rms_norm_eps, activation_scale=config.activation_scale
+        )
         self.is_sliding = self.self_attn.is_sliding
         self.sliding_window = config.sliding_window
 
@@ -542,7 +566,10 @@ class Gemma3TextModel(Gemma2Model):
 
         # Gemma3 downcasts the below to bfloat16, causing sqrt(3072)=55.4256 to become 55.5. See https://github.com/huggingface/transformers/pull/29402
         self.embed_tokens = Gemma3TextScaledWordEmbedding(
-            config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=self.config.hidden_size**0.5
+            config.vocab_size,
+            config.hidden_size,
+            self.padding_idx,
+            embed_scale=self.config.hidden_size**0.5 * self.config.activation_scale,
         )
 
         # TODO: raushan fix this after RoPE refactor. For now we hack it by reassigning thetas

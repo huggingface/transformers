@@ -161,10 +161,11 @@ class Gemma3MLP(nn.Module):
 
 
 class Gemma3RMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, dim: int, eps: float = 1e-6, activation_scale: float = 1.0):
         super().__init__()
         self.eps = eps
         self.weight = nn.Parameter(torch.zeros(dim))
+        self.activation_scale = activation_scale
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
@@ -173,7 +174,7 @@ class Gemma3RMSNorm(nn.Module):
         output = self._norm(x.float())
         # Llama does x.to(float16) * w whilst Gemma3 is (x * w).to(float16)
         # See https://github.com/huggingface/transformers/pull/29402
-        output = output * (1.0 + self.weight.float())
+        output = output * ((1.0 + self.weight.float()) * self.activation_scale)
         return output.type_as(x)
 
     def extra_repr(self):
@@ -403,9 +404,13 @@ class Gemma3DecoderLayer(nn.Module):
         self.self_attn = Gemma3Attention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma3MLP(config)
         self.input_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Gemma3RMSNorm(
+            self.hidden_size, eps=config.rms_norm_eps, activation_scale=config.activation_scale
+        )
         self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = Gemma3RMSNorm(
+            self.hidden_size, eps=config.rms_norm_eps, activation_scale=config.activation_scale
+        )
         self.is_sliding = self.self_attn.is_sliding
         self.sliding_window = config.sliding_window
 
@@ -536,7 +541,10 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
 
         # Gemma3 downcasts the below to bfloat16, causing sqrt(3072)=55.4256 to become 55.5. See https://github.com/huggingface/transformers/pull/29402
         self.embed_tokens = Gemma3TextScaledWordEmbedding(
-            config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=self.config.hidden_size**0.5
+            config.vocab_size,
+            config.hidden_size,
+            self.padding_idx,
+            embed_scale=self.config.hidden_size**0.5 * self.config.activation_scale,
         )
         self.layers = nn.ModuleList(
             [Gemma3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
