@@ -1213,11 +1213,14 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
 
-        causal_mask_mapping = {
-            k: self.model._update_causal_mask(v, token_type_ids, attention_mask)
-            for k, v in model_inputs["attention_mask"].items()
-        }
-        model_inputs["attention_mask"] = causal_mask_mapping
+        # If we are compiling, `generate` prepares the masks in advance, and it's a dict in this case - we simply need to
+        # update it with the `token_type_ids` if present
+        if isinstance(model_inputs["attention_mask"], dict):
+            causal_mask_mapping = {
+                k: self.model._update_causal_mask(v, token_type_ids, attention_mask)
+                for k, v in model_inputs["attention_mask"].items()
+            }
+            model_inputs["attention_mask"] = causal_mask_mapping
 
         return model_inputs
 
