@@ -21,6 +21,9 @@ on:
         required: false
         default: ""
 
+env:
+  prev_workflow_run_id: aaa
+  other_workflow_run_id: bbb
 
 jobs:
   model-ci:
