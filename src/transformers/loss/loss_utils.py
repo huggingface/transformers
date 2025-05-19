@@ -83,9 +83,6 @@ def ForMaskedLMLoss(
     labels = labels.view(-1)
     # Enable model parallelism
 
-    if num_items_in_batch is not None:
-        num_items_in_batch = num_items_in_batch.item()
-
     labels = labels.to(logits.device)
     loss = fixed_cross_entropy(logits, labels, num_items_in_batch, ignore_index, **kwargs)
     return loss
