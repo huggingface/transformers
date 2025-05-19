@@ -4,7 +4,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
 
-model_id = "meta-llama/Meta-Llama-3-8B"
+model_id = "meta-llama/Llama-3.2-3b-Instruct"
 model = AutoModelForCausalLM.from_pretrained(
     model_id, attn_implementation="eager_paged", torch_dtype=torch.bfloat16, device_map="auto"
 ).eval()
