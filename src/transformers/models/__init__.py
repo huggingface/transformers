@@ -107,6 +107,7 @@ if TYPE_CHECKING:
     from .fastspeech2_conformer import *
     from .flaubert import *
     from .flava import *
+    from .florence2 import *
     from .fnet import *
     from .focalnet import *
     from .fsmt import *
