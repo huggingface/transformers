@@ -35,7 +35,7 @@ def fixed_cross_entropy(
     reduction = "sum" if num_items_in_batch is not None else "mean"
     loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
     if reduction == "sum":
-        if num_items_in_batch.device != loss device:
+        if num_items_in_batch.device != loss.device:
             num_items_in_batch = num_items_in_batch.to(loss.device)
         loss = loss / num_items_in_batch
     return loss
