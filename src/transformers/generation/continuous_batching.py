@@ -638,16 +638,16 @@ class ContinuousBatchProcessor:
         for state in candidates:
             self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.prompt_ids)
+            if not self._allocate_blocks_if_needed(state, len(state.prompt_ids)): # don't schedule if we can't allocate blocks
+                continue
             scheduled_requests.append(state.request_id)
             logger.warning(f"Scheduling request {state.request_id} with length {request_len} and status {state.status}")
             token_budget -= request_len
+            if state in self.waiting_requests:
+                self.waiting_requests.remove(state)
             if token_budget == 0:
                 break
 
-        # Remove processed requests from waiting queue
-        self.waiting_requests = deque(
-            [req for req in self.waiting_requests if req.request_id not in request_ids_to_remove_from_waiting]
-        )
         logger.warning(
             f"Scheduled requests: {len(scheduled_requests)}, Waiting requests: {len(self.waiting_requests)}, Active requests: {len(self.active_requests)}")
         if len(scheduled_requests) == 0 and len(self.waiting_requests) == 0 and len(self.active_requests) == 0:
@@ -679,10 +679,6 @@ class ContinuousBatchProcessor:
         self.metrics.record_batch_metrics(self.requests_in_batch)
 
         for state in self.requests_in_batch:
-            if not self._allocate_blocks_if_needed(state, len(state.prompt_ids)):
-                state.waiting = True
-                continue
-            state.waiting = False
             next_input_ids = state.prompt_ids
             input_ids.extend(next_input_ids)
             past_length = state.position_offset
@@ -778,7 +774,7 @@ class ContinuousBatchProcessor:
         finished_request_ids = []
         for i, state in enumerate(self.requests_in_batch):
             req_id = state.request_id
-            if len(state.remaining_prompt_ids) == 0 and not state.waiting:
+            if len(state.remaining_prompt_ids) == 0:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
                 state.status = RequestStatus.DECODING
                 token = out_tokens[self.logits_indices[i]]
