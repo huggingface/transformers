@@ -415,7 +415,7 @@ class CsmGenerationMixin(GenerationMixin):
         >>> from transformers import CsmProcessor, CsmForConditionalGeneration
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = "eustlb/csm-1b"
+        >>> model_id = "sesame/csm-1b"
         >>> torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 
         >>> processor = AutoProcessor.from_pretrained(model_id)
