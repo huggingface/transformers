@@ -88,6 +88,14 @@ class Dots1Config(PretrainedConfig):
             `max_position_embeddings` to the expected new maximum.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        n_group (`int`, *optional*, defaults to 1):
+            Number of groups for routed experts.
+        topk_group (`int`, *optional*, defaults to 1):
+            Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
+        use_sliding_window (`bool`, *optional*, defaults to `False`):
+            Whether to use sliding window attention.
+        sliding_window (`int`, *optional*, defaults to 4096):
+            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
     ```python
@@ -101,7 +109,7 @@ class Dots1Config(PretrainedConfig):
     ```
     """
 
-    model_type = "dots.1"
+    model_type = "dots1"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {  # TODO: only replicate attention layers when > first_k_dense_replace
@@ -139,6 +147,8 @@ class Dots1Config(PretrainedConfig):
         num_key_value_heads=32,
         n_shared_experts=None,
         n_routed_experts=None,
+        n_group=1,
+        topk_group=1,
         num_experts_per_tok=None,
         moe_layer_freq=1,
         first_k_dense_replace=0,
@@ -163,6 +173,8 @@ class Dots1Config(PretrainedConfig):
         qk_layernorm=False,
         moe_gating_fp32=False,
         routed_scaling_factor=1.0,
+        use_sliding_window=False,
+        sliding_window=4096,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -184,7 +196,8 @@ class Dots1Config(PretrainedConfig):
         # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
-
+        self.n_group = n_group
+        self.topk_group = topk_group
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
@@ -198,6 +211,8 @@ class Dots1Config(PretrainedConfig):
         self.qk_layernorm = qk_layernorm
         self.moe_gating_fp32 = moe_gating_fp32
         self.routed_scaling_factor = routed_scaling_factor
+        self.use_sliding_window = use_sliding_window
+        self.sliding_window = sliding_window  # we check `use_sliding_window` in the modeling code
 
         super().__init__(
             pad_token_id=pad_token_id,
