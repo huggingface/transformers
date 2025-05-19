@@ -19,7 +19,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
@@ -251,35 +250,44 @@ class EncdecGemma2Config(PretrainedConfig):
         dropout_rate: float = 0.0,
         classifier_dropout_rate: float = 0.0,
         attention_dropout: float = 0.0,
+        tie_word_embeddings: bool = True,
         **kwargs,
     ):
-        if encoder_config is None:
-            encoder_config = EncdecGemma2StackConfig()
+        encoder = kwargs.pop("encoder", None)
+        decoder = kwargs.pop("decoder", None)
+        if encoder is not None and decoder is not None:
+            # From pretrained models
+            self.encoder = EncdecGemma2StackConfig(**encoder)
+            self.decoder = EncdecGemma2StackConfig(**decoder)
+        else:
+            # From configuration directly
+            if encoder_config is None:
+                encoder_config = EncdecGemma2StackConfig()
 
-        if decoder_config is None:
-            decoder_config = encoder_config
+            if decoder_config is None:
+                decoder_config = encoder_config
 
-        # Decouple encoder and decoder config in any case
-        encoder_config = copy.deepcopy(encoder_config)
-        decoder_config = copy.deepcopy(decoder_config)
+            # Decouple encoder and decoder config in any case
+            encoder_config = EncdecGemma2StackConfig(**encoder_config.to_dict())
+            decoder_config = EncdecGemma2StackConfig(**decoder_config.to_dict())
 
-        encoder_config.is_decoder = False
-        encoder_config.use_cache = False
-        encoder_config.dropout_rate = dropout_rate
-        encoder_config.attention_dropout = attention_dropout
-        encoder_config.classifier_dropout_rate = classifier_dropout_rate
-        encoder_config.cross_attention_hidden_size = None
-        encoder_config.cache_implementation = "static"
-        self.encoder = encoder_config
+            encoder_config.is_decoder = False
+            encoder_config.use_cache = False
+            encoder_config.dropout_rate = dropout_rate
+            encoder_config.attention_dropout = attention_dropout
+            encoder_config.classifier_dropout_rate = classifier_dropout_rate
+            encoder_config.cross_attention_hidden_size = None
+            encoder_config.cache_implementation = "static"
+            self.encoder = encoder_config
 
-        decoder_config.is_decoder = True
-        decoder_config.use_cache = True
-        decoder_config.dropout_rate = dropout_rate
-        decoder_config.attention_dropout = attention_dropout
-        decoder_config.classifier_dropout_rate = classifier_dropout_rate
-        decoder_config.cross_attention_hidden_size = encoder_config.hidden_size
-        decoder_config.cache_implementation = "static"
-        self.decoder = decoder_config
+            decoder_config.is_decoder = True
+            decoder_config.use_cache = True
+            decoder_config.dropout_rate = dropout_rate
+            decoder_config.attention_dropout = attention_dropout
+            decoder_config.classifier_dropout_rate = classifier_dropout_rate
+            decoder_config.cross_attention_hidden_size = encoder_config.hidden_size
+            decoder_config.cache_implementation = "static"
+            self.decoder = decoder_config
 
         super().__init__(**kwargs)
 
@@ -289,6 +297,7 @@ class EncdecGemma2Config(PretrainedConfig):
         self.pad_token_id = kwargs.get("pad_token_id", self.decoder.pad_token_id)
         self.dropout_rate = dropout_rate
         self.classifier_dropout_rate = classifier_dropout_rate
+        self.tie_word_embeddings = tie_word_embeddings
 
 
 __all__ = ["EncdecGemma2Config"]
