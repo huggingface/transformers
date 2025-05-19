@@ -1286,7 +1286,7 @@ if __name__ == "__main__":
     prev_workflow_run_id = None
     other_workflow_run_ids = []
 
-    if is_scheduled_ci_run:
+    if not is_scheduled_ci_run:
         # TODO: remove `if job_name == "run_models_gpu"`
         if job_name == "run_models_gpu":
             # This is the previous completed scheduled run
