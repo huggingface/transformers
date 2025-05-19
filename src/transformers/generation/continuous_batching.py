@@ -700,7 +700,7 @@ class ContinuousBatchProcessor:
             state.position_offset += query_length
 
         logger.warning(
-            f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.waiting_requests)}, Active: {len(self.active_requests)}. Q: {cumulative_seqlens_q[-1]}. KV: {cumulative_seqlens_k[-1]}")
+            f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.waiting_requests)}, Active: {len(self.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}")
         self._build_tensors(
             input_ids,
             position_ids,
