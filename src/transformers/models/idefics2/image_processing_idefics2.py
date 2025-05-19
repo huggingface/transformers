@@ -190,7 +190,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         self,
         do_convert_rgb: bool = True,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,

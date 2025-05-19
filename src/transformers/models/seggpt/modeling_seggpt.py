@@ -25,25 +25,11 @@ from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_seggpt import SegGptConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "SegGptConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "BAAI/seggpt-vit-large"
-_EXPECTED_OUTPUT_SHAPE = [3, 896, 448]
 
 
 @dataclass
@@ -62,7 +48,7 @@ class SegGptEncoderOutput(ModelOutput):
         intermediate_hidden_states (`Tuple[torch.FloatTensor]`, *optional*, returned when `config.intermediate_hidden_state_indices` is set):
             Tuple of `torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`.
             Each element in the Tuple corresponds to the output of the layer specified in `config.intermediate_hidden_state_indices`.
-            Additionaly, each feature passes through a LayerNorm.
+            Additionally, each feature passes through a LayerNorm.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -460,7 +446,7 @@ class SegGptEncoder(nn.Module):
     def __init__(self, config: SegGptConfig) -> None:
         super().__init__()
         self.config = config
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
         self.layers = nn.ModuleList([SegGptLayer(config, dpr[i]) for i in range(config.num_hidden_layers)])
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
@@ -613,12 +599,8 @@ class SegGptDecoder(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class SegGptPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = SegGptConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
@@ -666,58 +648,7 @@ class SegGptPreTrainedModel(PreTrainedModel):
             torch.nn.init.normal_(module.type_token_instance, std=std)
 
 
-SEGGPT_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`SegGptConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-SEGGPT_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`SegGptImageProcessor.__call__`]
-            for details.
-
-        prompt_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Prompt pixel values. Prompt pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`SegGptImageProcessor.__call__`] for details.
-
-        prompt_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Prompt mask. Prompt mask can be obtained using [`AutoImageProcessor`]. See [`SegGptImageProcessor.__call__`] for
-            details.
-
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
-        feature_ensemble (`bool`, *optional*):
-            Boolean indicating whether to use feature ensemble or not. If `True`, the model will use feature ensemble
-            if we have at least two prompts. If `False`, the model will not use feature ensemble. This argument should
-            be considered when doing few-shot inference on an input image i.e. more than one prompt for the same image.
-
-        embedding_type (`str`, *optional*):
-            Embedding type. Indicates whether the prompt is a semantic or instance embedding. Can be either
-            instance or semantic.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare SegGpt Model transformer outputting raw hidden-states without any specific head on top.",
-    SEGGPT_START_DOCSTRING,
-)
+@auto_docstring
 class SegGptModel(SegGptPreTrainedModel):
     def __init__(self, config: SegGptConfig):
         super().__init__(config)
@@ -740,8 +671,7 @@ class SegGptModel(SegGptPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(SEGGPT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SegGptEncoderOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -756,10 +686,23 @@ class SegGptModel(SegGptPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SegGptEncoderOutput]:
         r"""
+        prompt_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Prompt pixel values. Prompt pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`SegGptImageProcessor.__call__`] for details.
+        prompt_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Prompt mask. Prompt mask can be obtained using [`AutoImageProcessor`]. See [`SegGptImageProcessor.__call__`] for
+            details.
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+        feature_ensemble (`bool`, *optional*):
+            Boolean indicating whether to use feature ensemble or not. If `True`, the model will use feature ensemble
+            if we have at least two prompts. If `False`, the model will not use feature ensemble. This argument should
+            be considered when doing few-shot inference on an input image i.e. more than one prompt for the same image.
+        embedding_type (`str`, *optional*):
+            Embedding type. Indicates whether the prompt is a semantic or instance embedding. Can be either
+            instance or semantic.
         labels (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, `optional`):
             Ground truth mask for input images.
-
-        Returns:
 
         Examples:
 
@@ -908,9 +851,10 @@ class SegGptLoss(nn.Module):
         return loss
 
 
-@add_start_docstrings(
-    "SegGpt model with a decoder on top for one-shot image segmentation.",
-    SEGGPT_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    SegGpt model with a decoder on top for one-shot image segmentation.
+    """
 )
 class SegGptForImageSegmentation(SegGptPreTrainedModel):
     def __init__(self, config: SegGptConfig):
@@ -923,8 +867,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(SEGGPT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SegGptImageSegmentationOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -939,10 +882,23 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SegGptImageSegmentationOutput]:
         r"""
+        prompt_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Prompt pixel values. Prompt pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`SegGptImageProcessor.__call__`] for details.
+        prompt_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Prompt mask. Prompt mask can be obtained using [`AutoImageProcessor`]. See [`SegGptImageProcessor.__call__`] for
+            details.
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+        feature_ensemble (`bool`, *optional*):
+            Boolean indicating whether to use feature ensemble or not. If `True`, the model will use feature ensemble
+            if we have at least two prompts. If `False`, the model will not use feature ensemble. This argument should
+            be considered when doing few-shot inference on an input image i.e. more than one prompt for the same image.
+        embedding_type (`str`, *optional*):
+            Embedding type. Indicates whether the prompt is a semantic or instance embedding. Can be either
+            instance or semantic.
         labels (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, `optional`):
             Ground truth mask for input images.
-
-        Returns:
 
         Examples:
 

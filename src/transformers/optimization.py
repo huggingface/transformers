@@ -25,7 +25,6 @@ from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 from .trainer_pt_utils import LayerWiseDummyOptimizer, LayerWiseDummyScheduler
 from .trainer_utils import SchedulerType
 from .utils import logging
-from .utils.versions import require_version
 
 
 logger = logging.get_logger(__name__)
@@ -550,6 +549,7 @@ def get_scheduler(
                 optimizer=optimizer_dict[param],
                 num_warmup_steps=num_warmup_steps,
                 num_training_steps=num_training_steps,
+                scheduler_specific_kwargs=scheduler_specific_kwargs,
             )
 
         def scheduler_hook(param):
@@ -701,7 +701,6 @@ class Adafactor(Optimizer):
         relative_step=True,
         warmup_init=False,
     ):
-        require_version("torch>=1.5.0")  # add_ with alpha
         if lr is not None and relative_step:
             raise ValueError("Cannot combine manual `lr` and `relative_step=True` options")
         if warmup_init and not relative_step:

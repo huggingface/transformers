@@ -19,6 +19,7 @@ import gc
 import json
 import re
 from pathlib import Path
+from typing import Optional
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -58,7 +59,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # activation function weight
     r"transformer\.encoder\.layers\.(\d+)\.activation\.weight": r"encoder.layers.\1.activation_fn.weight",
     #########################################################################################################################################
-    # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms + activiation function weight
+    # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms + activation function weight
     r"transformer\.decoder\.layers\.(\d+)\.self_attn\.out_proj\.(bias|weight)": r"decoder.layers.\1.self_attn.self_attn.output_proj.\2",
     r"transformer\.decoder\.layers\.(\d+)\.cross_attn\.out_proj\.(bias|weight)": r"decoder.layers.\1.cross_attn.cross_attn.output_proj.\2",
     # FFNs
@@ -87,7 +88,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 
 
 # Copied from transformers.models.mllama.convert_mllama_weights_to_hf.convert_old_keys_to_new_keys
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -143,8 +144,8 @@ def write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_p
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
     # load original model from local path
-    loaded = torch.load(pretrained_model_weights_path, map_location=torch.device("cpu"))["model"]
-    # Renaming the original model state dictionary to HF compatibile
+    loaded = torch.load(pretrained_model_weights_path, map_location=torch.device("cpu"), weights_only=True)["model"]
+    # Renaming the original model state dictionary to HF compatible
     all_keys = list(loaded.keys())
     new_keys = convert_old_keys_to_new_keys(all_keys)
     state_dict = {}

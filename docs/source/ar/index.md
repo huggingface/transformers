@@ -213,6 +213,7 @@
 |                           [NAT](model_doc/nat)                           |       ✅        |         ❌         |      ❌      |
 |                      [Nemotron](model_doc/nemotron)                      |       ✅        |         ❌         |      ❌      |
 |                         [Nezha](model_doc/nezha)                         |       ✅        |         ❌         |      ❌      |
+|                          [NGPT](model_doc/ngpt)                          |       ✅        |         ❌         |      ❌      |
 |                          [NLLB](model_doc/nllb)                          |       ✅        |         ❌         |      ❌      |
 |                      [NLLB-MOE](model_doc/nllb-moe)                      |       ✅        |         ❌         |      ❌      |
 |                        [Nougat](model_doc/nougat)                        |       ✅        |         ✅         |      ✅      |

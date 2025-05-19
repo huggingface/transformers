@@ -25,16 +25,14 @@ from ...activations import ACT2CLS
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
-from ...utils import ModelOutput, add_start_docstrings, logging
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_patchtst import PatchTSTConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "PatchTSTConfig"
 
-
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PatchTST
+# Copied from transformers.models.hubert.modeling_hubert.HubertAttention with Hubert->PatchTST
 class PatchTSTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -218,7 +216,7 @@ class PatchTSTBatchNorm(nn.Module):
 def random_masking(
     inputs: torch.Tensor,
     mask_ratio: float,
-    unmasked_channel_indices: list = None,
+    unmasked_channel_indices: Optional[list] = None,
     channel_consistent_masking: bool = False,
     mask_value: int = 0,
 ):
@@ -276,7 +274,7 @@ def random_masking(
 def forecast_masking(
     inputs: torch.Tensor,
     num_forecast_mask_patches: Union[list, int],
-    unmasked_channel_indices: list = None,
+    unmasked_channel_indices: Optional[list] = None,
     mask_value: int = 0,
 ):
     """Forecast masking that masks the last K patches where K is from the num_forecast_mask_patches.
@@ -587,6 +585,7 @@ class PatchTSTEncoderLayer(nn.Module):
         return outputs
 
 
+@auto_docstring
 class PatchTSTPreTrainedModel(PreTrainedModel):
     config_class = PatchTSTConfig
     base_model_prefix = "model"
@@ -669,7 +668,7 @@ class PatchTSTPositionalEncoding(nn.Module):
             # cls_token: [1 x num_input_channels x 1 x d_model]
             self.cls_token = nn.Parameter(torch.zeros(1, 1, 1, config.d_model))
             num_patches += 1
-        # postional encoding: [num_patches x d_model]
+        # positional encoding: [num_patches x d_model]
         self.position_enc = self._init_pe(config, num_patches)
         # Positional dropout
         self.positional_dropout = (
@@ -772,23 +771,6 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
                 all_attentions = all_attentions + (layer_outputs[1],)
         # return past_values, hidden_states
         return BaseModelOutput(last_hidden_state=hidden_state, hidden_states=encoder_states, attentions=all_attentions)
-
-
-PATCHTST_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`PatchTSTConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
 
 
 @dataclass
@@ -1139,10 +1121,7 @@ class PatchTSTScaler(nn.Module):
         return data, loc, scale
 
 
-@add_start_docstrings(
-    "The bare PatchTST Model outputting raw hidden-states without any specific head.",
-    PATCHTST_START_DOCSTRING,
-)
+@auto_docstring
 class PatchTSTModel(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
@@ -1283,9 +1262,10 @@ class PatchTSTMaskPretrainHead(nn.Module):
         return embedding
 
 
-@add_start_docstrings(
-    "The PatchTST for pretrain model.",
-    PATCHTST_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The PatchTST for pretrain model.
+    """
 )
 class PatchTSTForPretraining(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
@@ -1435,9 +1415,10 @@ class PatchTSTClassificationHead(nn.Module):
         return output
 
 
-@add_start_docstrings(
-    "The PatchTST for classification model.",
-    PATCHTST_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The PatchTST for classification model.
+    """
 )
 class PatchTSTForClassification(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
@@ -1454,6 +1435,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1464,27 +1446,16 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, PatchTSTForClassificationOutput]:
         r"""
-        Parameters:
-            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
-                Input sequence to the model
-            target_values (`torch.Tensor`, *optional*):
-                Labels associates with the `past_values`
-            past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
-                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
-                in `[0, 1]`:
+        past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
+            Input sequence to the model
+        target_values (`torch.Tensor`, *optional*):
+            Labels associates with the `past_values`
+        past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
 
-                - 1 for values that are **observed**,
-                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the output attention of all layers
-            return_dict (`bool`, *optional*):
-                Whether or not to return a `ModelOutput` instead of a plain tuple.
-
-        Returns:
-            `PatchTSTForClassificationOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
-            `config.return_dict`=False)
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
         Examples:
 
@@ -1536,12 +1507,19 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "The PatchTST for regression Model.",
-    PATCHTST_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The PatchTST for regression Model.
+    """
 )
 class PatchTSTPredictionHead(nn.Module):
-    def __init__(self, config: PatchTSTConfig, num_patches, distribution_output=None):
+    def __init__(self, config: PatchTSTConfig, num_patches: int, distribution_output=None):
+        r"""
+        num_patches (`int`):
+            The number of patches in the input sequence.
+        distribution_output (`DistributionOutput`, *optional*):
+            The distribution output layer for probabilistic forecasting. If None, a linear output layer is used.
+        """
         super().__init__()
 
         self.share_projection = config.share_projection
@@ -1630,9 +1608,10 @@ class PatchTSTPredictionHead(nn.Module):
         return output
 
 
-@add_start_docstrings(
-    "The PatchTST for prediction model.",
-    PATCHTST_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The PatchTST for prediction model.
+    """
 )
 class PatchTSTForPrediction(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
@@ -1876,9 +1855,10 @@ class PatchTSTRegressionHead(nn.Module):
         return output
 
 
-@add_start_docstrings(
-    "The PatchTST for regression model.",
-    PATCHTST_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The PatchTST for regression model.
+    """
 )
 class PatchTSTForRegression(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
@@ -1907,6 +1887,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1917,27 +1898,17 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, PatchTSTForRegressionOutput]:
         r"""
-        Parameters:
-            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
-                Input sequence to the model
-            target_values (`torch.Tensor` of shape `(bs, num_input_channels)`):
-                Target values associates with the `past_values`
-            past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
-                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
-                in `[0, 1]`:
+        past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
+            Input sequence to the model
+        target_values (`torch.Tensor` of shape `(bs, num_input_channels)`):
+            Target values associates with the `past_values`
+        past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
 
-                - 1 for values that are **observed**,
-                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the output attention of all layers
-            return_dict (`bool`, *optional*):
-                Whether or not to return a `ModelOutput` instead of a plain tuple.
-
-        Returns:
-            `PatchTSTForRegressionOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
-            `config.return_dict`=False)
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+            Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Examples:
 

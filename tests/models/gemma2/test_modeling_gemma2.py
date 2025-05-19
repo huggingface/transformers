@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_read_token,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     tooslow,
@@ -142,20 +143,20 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
-    def test_sdpa_equivalence(self):
-        pass
-
     @unittest.skip(
         reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
-        " as in Dynamic Cache doesnt work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
+        " as in Dynamic Cache doesn't work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
     )
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    @unittest.skip("Gemma2 has HybridCache which auto-compiles. Compile and FA2 don't work together.")
+    def test_eager_matches_fa2_generate(self):
+        pass
+
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 class Gemma2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
@@ -332,6 +333,44 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
+    @slow
+    @require_read_token
+    def test_export_hybrid_cache(self):
+        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+        from transformers.pytorch_utils import is_torch_greater_or_equal
+
+        if not is_torch_greater_or_equal("2.6.0"):
+            self.skipTest(reason="This test requires torch >= 2.6 to run.")
+
+        model_id = "google/gemma-2-2b"
+        model = AutoModelForCausalLM.from_pretrained(model_id)
+        self.assertEqual(model.config.cache_implementation, "hybrid")
+
+        # Export + HybridCache
+        model.eval()
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        exported_program = exportable_module.export()
+
+        # Test generation with the exported model
+        prompt = "What is the capital of France?"
+        max_new_tokens_to_generate = 20
+        # Generate text with the exported model
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        export_generated_text = TorchExportableModuleForDecoderOnlyLM.generate(
+            exported_program, tokenizer, prompt, max_new_tokens=max_new_tokens_to_generate
+        )
+
+        input_text = tokenizer(prompt, return_tensors="pt")
+        with torch.no_grad():
+            eager_outputs = model.generate(
+                **input_text,
+                max_new_tokens=max_new_tokens_to_generate,
+                do_sample=False,  # Use greedy decoding to match the exported model
+            )
+
+        eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
+        self.assertEqual(export_generated_text, eager_generated_text)
+
     @require_read_token
     @tooslow
     def test_model_9b_bf16_flex_attention(self):
@@ -360,6 +399,10 @@ class Gemma2IntegrationTest(unittest.TestCase):
         we need to correctly slice the attention mask in all cases (because we use a HybridCache).
         Outputs for every attention functions should be coherent and identical.
         """
+
+        if torch_device == "xpu" and attn_implementation == "flash_attention_2":
+            self.skipTest(reason="Intel XPU doesn't support falsh_attention_2 as of now.")
+
         model_id = "google/gemma-2-2b"
         EXPECTED_COMPLETIONS = [
             " the people, the food, the culture, the history, the music, the art, the architecture",

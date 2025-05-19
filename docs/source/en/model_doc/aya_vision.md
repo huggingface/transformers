@@ -237,6 +237,10 @@ for i, output in enumerate(batch_outputs):
 
 [[autodoc]] AyaVisionConfig
 
+## AyaVisionModel
+
+[[autodoc]] AyaVisionModel
+
 ## AyaVisionForConditionalGeneration
 
 [[autodoc]] AyaVisionForConditionalGeneration

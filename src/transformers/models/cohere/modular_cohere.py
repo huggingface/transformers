@@ -30,6 +30,7 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -41,6 +42,7 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaMLP,
     LlamaModel,
+    LlamaPreTrainedModel,
     LlamaRotaryEmbedding,
     eager_attention_forward,
 )
@@ -48,8 +50,6 @@ from .configuration_cohere import CohereConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "CohereConfig"
 
 
 class CohereLayerNorm(nn.Module):
@@ -208,7 +208,7 @@ class CohereAttention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class CohereDecoderLayer(nn.Module):
+class CohereDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: CohereConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -277,6 +277,21 @@ class CohereDecoderLayer(nn.Module):
         return outputs
 
 
+class CoherePreTrainedModel(LlamaPreTrainedModel):
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, CohereLayerNorm):
+            module.weight.data.fill_(1.0)
+
+
 class CohereModel(LlamaModel):
     def __init__(self, config: CohereConfig):
         super().__init__(config)
@@ -313,19 +328,10 @@ class CohereForCausalLM(LlamaForCausalLM):
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> CausalLMOutputWithPast:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
