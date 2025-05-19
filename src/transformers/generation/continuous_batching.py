@@ -25,20 +25,24 @@ from typing import Deque, Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 from tqdm import tqdm
+import logging
 
 from ..cache_utils import Cache
 from ..configuration_utils import PretrainedConfig
 from ..generation.configuration_utils import GenerationConfig
 from ..generation.utils import GenerationMixin, RequestStatus
-from ..utils import (
-    logging,
-)
+
 from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from torch.profiler import profile, schedule, tensorboard_trace_handler
 from ..modeling_attn_mask_utils import AttentionMask
 
-logger = logging.get_logger(__name__)
-
+# Setup your logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 @dataclass
 class GenerationOutput:
@@ -57,6 +61,7 @@ class GenerationOutput:
     generated_tokens: List[int] = field(default_factory=list)
     logprobs: List[float] = field(default_factory=list)
     error: Optional[str] = None
+    status: RequestStatus = RequestStatus.PENDING
     created_time: float = field(default_factory=time.time)
 
 
@@ -121,6 +126,7 @@ class RequestState:
         return GenerationOutput(
             request_id=self.request_id,
             prompt_ids=self.full_prompt_ids,
+            status=self.status,
             generated_tokens=self.static_outputs,
             logprobs=[],
             error=self.error,
@@ -636,10 +642,8 @@ class ContinuousBatchProcessor:
         for state in candidates:
             self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.prompt_ids)
-            # maybe pre-allocate more blocks for full length?
-            if self._allocate_blocks_if_needed(state, request_len):
-                scheduled_requests.append(state.request_id)
-                token_budget -= request_len
+            scheduled_requests.append(state.request_id)
+            token_budget -= request_len
             if token_budget == 0:
                 break
 
@@ -647,8 +651,12 @@ class ContinuousBatchProcessor:
         self.waiting_requests = deque(
             [req for req in self.waiting_requests if req.request_id not in request_ids_to_remove_from_waiting]
         )
-        logger.warning(
-            f"Scheduled requests: {len(scheduled_requests)}, Waiting requests: {len(self.waiting_requests)}, Active requests: {len(self.active_requests)}")
+        if len(scheduled_requests) > 0:
+            logger.warning(
+                f"Scheduled requests: {len(scheduled_requests)}, Waiting requests: {len(self.waiting_requests)}, Active requests: {len(self.active_requests)}")
+        if len(scheduled_requests) == 0 and len(self.waiting_requests) == 0 and len(self.active_requests) == 0:
+            logger.warning("No requests to process. Exiting.")
+            exit(1)
         return scheduled_requests
 
     @traced
@@ -676,6 +684,10 @@ class ContinuousBatchProcessor:
         self.metrics.record_batch_metrics(self.requests_in_batch)
 
         for state in self.requests_in_batch:
+            if not self._allocate_blocks_if_needed(state, len(state.prompt_ids)):
+                state.waiting = True
+                continue
+            state.waiting = False
             next_input_ids = state.prompt_ids
             input_ids.extend(next_input_ids)
             past_length = state.position_offset
@@ -771,7 +783,7 @@ class ContinuousBatchProcessor:
         finished_request_ids = []
         for i, state in enumerate(self.requests_in_batch):
             req_id = state.request_id
-            if len(state.remaining_prompt_ids) == 0:
+            if len(state.remaining_prompt_ids) == 0 and not state.waiting:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
                 state.status = RequestStatus.DECODING
                 token = out_tokens[self.logits_indices[i]]
@@ -966,7 +978,7 @@ class ContinuousBatchingManager:
         while (
             self._generation_thread is not None and self._generation_thread.is_alive() or not self.output_queue.empty()
         ):
-            result = self.get_result(timeout=0.1)
+            result = self.get_result(timeout=10) # allow the model to run for 10 seconds
             if result is not None:
                 yield result
 
@@ -1175,25 +1187,27 @@ class ContinuousMixin:
         manager = self.init_continuous_batching(generation_config=generation_config)
         manager.start()
         results = {}
-        num_requests = len(inputs) * generation_config.max_new_tokens
+        num_requests = len(inputs)
         try:
-            with tqdm(
-                total=num_requests, disable=(not progress_bar), desc=f"Generating {num_requests} tokens", unit="token"
-            ) as pbar:
-                manager.add_requests(inputs, **kwargs)
-                finished_count = 0
-                while finished_count < num_requests:
-                    result = manager.get_result(timeout=0.1)
-                    if result:
-                        req_id = result.request_id
-                        results[req_id] = result
-                        if result.status == RequestStatus.FINISHED:
-                            finished_count += 1
-                            pbar.update(1)
-                    else:
-                        if not manager.is_running():
-                            logger.error("Generation thread terminated unexpectedly.")
-                            break
+            from tqdm.contrib.logging import logging_redirect_tqdm
+            with logging_redirect_tqdm([logger]):
+                with tqdm(
+                    total=num_requests, disable=(not progress_bar), desc=f"Generating {num_requests} tokens", unit="token"
+                ) as pbar:
+                    manager.add_requests(inputs, **kwargs)
+                    finished_count = 0
+                    while finished_count < num_requests:
+                        result = manager.get_result(timeout=1)
+                        if result:
+                            req_id = result.request_id
+                            results[req_id] = result
+                            if result.status == RequestStatus.FINISHED:
+                                finished_count += 1
+                                pbar.update(1)
+                        else:
+                            if not manager.is_running():
+                                logger.error("Generation thread terminated unexpectedly.")
+                                break
 
         except Exception as e:
             logger.error(f"Error during batch generation: {e}", exc_info=True)
