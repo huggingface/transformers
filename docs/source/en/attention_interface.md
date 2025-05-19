@@ -108,7 +108,7 @@ If in doubt about what args/kwargs a given model sends to the attention function
 ## Accessing current available implementations
 
 Most of the time, you will simply need to `register` a new function. If, however, you need to access an existing one,
-and/or perform a few checks, the prefered way is to use the global `ALL_ATTENTION_FUNCTIONS`. It behaves the same way you
+and/or perform a few checks, the preferred way is to use the global `ALL_ATTENTION_FUNCTIONS`. It behaves the same way you
 would expect from a usual Python dictionary:
 
 ```python

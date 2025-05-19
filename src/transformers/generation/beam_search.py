@@ -850,7 +850,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                     beam_hyp.add(final_tokens, final_score, beam_indices=beam_index, generated_len=generated_len)
                     ids_collect.append(beam_id)
 
-            # due to overly complex constraints or other factors, sometimes we can't gaurantee a successful
+            # due to overly complex constraints or other factors, sometimes we can't guarantee a successful
             # generation. In these cases we simply return the highest scoring outputs.
             if len(ids_collect) < self.num_beam_hyps_to_keep:
                 for beam_id in range(self.num_beams):

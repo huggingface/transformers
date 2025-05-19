@@ -110,4 +110,15 @@ class BitNetHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self) -> bool:
-        return False
+        return (
+            self.quantization_config.linear_class == "autobitlinear"
+            and self.quantization_config.quantization_mode == "online"
+        )
+
+    @property
+    def is_qat_trainable(self) -> bool:
+        """Flag indicating whether the quantized model can carry out quantization aware training"""
+        return (
+            self.quantization_config.linear_class == "autobitlinear"
+            and self.quantization_config.quantization_mode == "online"
+        )

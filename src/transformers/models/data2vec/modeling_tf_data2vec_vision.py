@@ -1666,7 +1666,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             features[i + 2] = ops[i + 2](features[i + 2])
 
         logits = self.decode_head(features)
-        # Tranpose the logits to maintain consistency in the output formats.
+        # Transpose the logits to maintain consistency in the output formats.
         transposed_logits = tf.transpose(logits, perm=[0, 3, 1, 2])
 
         auxiliary_logits = None

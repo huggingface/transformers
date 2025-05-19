@@ -592,7 +592,7 @@ class TFRobertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_causal_lm_base_model(self):
         """Test the base model of the causal LM model
 
-        is_deocder=True, no cross_attention, no encoder outputs
+        is_decoder=True, no cross_attention, no encoder outputs
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_causal_lm_base_model(*config_and_inputs)
@@ -600,7 +600,7 @@ class TFRobertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_model_as_decoder(self):
         """Test the base model as a decoder (of an encoder-decoder architecture)
 
-        is_deocder=True + cross_attention + pass encoder outputs
+        is_decoder=True + cross_attention + pass encoder outputs
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)

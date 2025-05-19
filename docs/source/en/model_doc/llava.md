@@ -256,6 +256,10 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] LlavaProcessor
 
+## LlavaModel
+
+[[autodoc]] LlavaModel
+
 ## LlavaForConditionalGeneration
 
 [[autodoc]] LlavaForConditionalGeneration

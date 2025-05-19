@@ -50,7 +50,7 @@ ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
 logger = logging.get_logger(__name__)
 
 
-# TODO: Move BatchFeature to be imported by both image_processing_utils and image_processing_utils
+# TODO: Move BatchFeature to be imported by both image_processing_utils and image_processing_utils_fast
 # We override the class string here, but logic is the same.
 class BatchFeature(BaseBatchFeature):
     r"""

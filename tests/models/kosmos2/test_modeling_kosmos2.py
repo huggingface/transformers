@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     IS_ROCM_SYSTEM,
     IS_XPU_SYSTEM,
     require_torch,
+    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -42,6 +43,7 @@ from transformers.utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     _config_zero_init,
     floats_tensor,
@@ -259,6 +261,7 @@ class Kosmos2ModelTester:
 @require_torch
 class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Kosmos2Model, Kosmos2ForConditionalGeneration) if is_torch_available() else ()
+    additional_model_inputs = ["input_ids", "image_embeds_position_mask"]
     pipeline_model_mapping = (
         {
             "feature-extraction": Kosmos2Model,
@@ -460,6 +463,14 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         "KOSMOS-2 doesn't support inputs embeds. The test isn't skipped by checking input args because KOSMOS-2 has `generate()` overwritten"
     )
     def test_generate_from_inputs_embeds(self):
+        pass
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @require_torch_sdpa
+    @unittest.skip("KOSMOS-2 doesn't support padding")
+    def test_eager_matches_sdpa_inference(
+        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
     @pytest.mark.generate

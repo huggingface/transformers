@@ -29,7 +29,7 @@ class RTDetrConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`RTDetrModel`]. It is used to instantiate a
     RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the RT-DETR
-    [checkpoing/todo](https://huggingface.co/checkpoing/todo) architecture.
+    [PekingU/rtdetr_r50vd](https://huggingface.co/PekingU/rtdetr_r50vd) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

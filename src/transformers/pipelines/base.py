@@ -555,7 +555,7 @@ class PipelineDataFormat:
 
         if input_path is not None:
             if not exists(abspath(self.input_path)):
-                raise OSError(f"{self.input_path} doesnt exist on disk")
+                raise OSError(f"{self.input_path} doesn't exist on disk")
 
     @abstractmethod
     def __iter__(self):
@@ -997,7 +997,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         else:
             self.device = device if device is not None else -1
 
-        if torch.distributed.is_initialized():
+        if is_torch_available() and torch.distributed.is_initialized():
             self.device = self.model.device
         logger.warning(f"Device set to use {self.device}")
 

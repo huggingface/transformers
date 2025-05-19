@@ -197,7 +197,7 @@ def fix_jukebox_keys(state_dict, model_state_dict, key_prefix, mapping):
         if f"{key_prefix}.{key}" not in model_state_dict or key is None:
             print(f"failed converting {original_key} to {key}, does not match")
 
-        # handle missmatched shape
+        # handle mismatched shape
         elif value.shape != model_state_dict[f"{key_prefix}.{key}"].shape:
             val = model_state_dict[f"{key_prefix}.{key}"]
             print(f"{original_key}-> {key} : \nshape {val.shape} and {value.shape}, do not match")

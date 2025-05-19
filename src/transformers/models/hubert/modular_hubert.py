@@ -5,14 +5,9 @@ import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Encoder,
     Wav2Vec2EncoderStableLayerNorm,
@@ -26,22 +21,6 @@ from .configuration_hubert import HubertConfig
 
 
 _HIDDEN_STATES_START_POSITION = 1
-
-# General docstring
-_CONFIG_FOR_DOC = "HubertConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/hubert-large-ls960-ft"
-_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
-
-
-_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
-_CTC_EXPECTED_LOSS = 22.68
-
-
-_SEQ_CLASS_CHECKPOINT = "superb/hubert-base-superb-ks"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
-_SEQ_CLASS_EXPECTED_LOSS = 8.53
 
 
 class HubertPositionalConvEmbedding(nn.Module):
@@ -128,12 +107,8 @@ class HubertEncoderStableLayerNorm(Wav2Vec2EncoderStableLayerNorm):
     pass
 
 
+@auto_docstring
 class HubertPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = HubertConfig
     base_model_prefix = "hubert"
     main_input_name = "input_values"
@@ -202,67 +177,6 @@ class HubertPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-HUBERT_START_DOCSTRING = r"""
-    Hubert was proposed in [HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden
-    Units](https://arxiv.org/abs/2106.07447) by Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia,
-    Ruslan Salakhutdinov, Abdelrahman Mohamed.
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving etc.).
-
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`HubertConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-HUBERT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-            1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            <Tip warning={true}>
-
-            `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-            True`. For all models whose processor has `config.return_attention_mask == False`, such as
-            [hubert-base](https://huggingface.co/facebook/hubert-base-ls960), `attention_mask` should **not** be passed
-            to avoid degraded performance when doing batched inference. For such models `input_values` should simply be
-            padded with 0 and passed without `attention_mask`. Be aware that these models also yield slightly different
-            results depending on whether `input_values` is padded or not.
-
-            </Tip>
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare Hubert Model transformer outputting raw hidden-states without any specific head on top.",
-    HUBERT_START_DOCSTRING,
-)
 class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
     def __init__(self, config: HubertConfig):
         super().__init__(config)
@@ -289,8 +203,6 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Hubert")
 
-    @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -300,9 +212,10 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-        """
-
-        Returns:
+        r"""
+        mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
+            masked extracted features in *config.proj_codevector_dim* space.
 
         Example:
 
@@ -363,46 +276,12 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """Hubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    HUBERT_START_DOCSTRING,
-)
 class HubertForCTC(Wav2Vec2ForCTC):
     pass
 
-    @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_CTC_EXPECTED_OUTPUT,
-        expected_loss=_CTC_EXPECTED_LOSS,
-    )
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
 
-
-@add_start_docstrings(
-    """
-    Hubert Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB Keyword Spotting.
-    """,
-    HUBERT_START_DOCSTRING,
-)
 class HubertForSequenceClassification(Wav2Vec2ForSequenceClassification):
     pass
-
-    @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
-    )
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
 
 
 __all__ = ["HubertForCTC", "HubertForSequenceClassification", "HubertModel", "HubertPreTrainedModel"]

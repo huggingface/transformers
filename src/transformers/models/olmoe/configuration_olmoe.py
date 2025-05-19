@@ -86,7 +86,7 @@ class OlmoeConfig(PretrainedConfig):
         num_experts (`int`, *optional*, defaults to 64):
             Number of routed experts.
         output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabeling this will also
+            Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.01):
             The aux loss factor for the total loss.

@@ -426,7 +426,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if isinstance(stride_length_s, (int, float)):
                 stride_length_s = [stride_length_s, stride_length_s]
 
-            # XXX: Carefuly, this variable will not exist in `seq2seq` setting.
+            # XXX: Carefully, this variable will not exist in `seq2seq` setting.
             # Currently chunking is not possible at this level for `seq2seq` so
             # it's ok.
             align_to = getattr(self.model.config, "inputs_to_logits_ratio", 1)

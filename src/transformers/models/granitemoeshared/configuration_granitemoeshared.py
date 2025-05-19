@@ -97,9 +97,9 @@ class GraniteMoeSharedConfig(PretrainedConfig):
         num_local_experts (`int`, *optional*, defaults to 8): total number of experts
         num_experts_per_tok (`int`, *optional*, defaults to 2): number of experts per token
         output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabeling this will also
+            Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxialiary loss coefficient
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxiliary loss coefficient
         shared_intermediate_size (`int`, *optional*, defaults to 0): intermediate size for shared experts. 0 implies
             no shared experts.
 
@@ -169,6 +169,8 @@ class GraniteMoeSharedConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
+        # this model has rope embedding type, hardcoded for BC
+        self.position_embedding_type = "rope"
 
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout

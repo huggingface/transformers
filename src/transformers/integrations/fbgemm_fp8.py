@@ -167,7 +167,7 @@ def _replace_with_fbgemm_fp8_linear(
     """
     Private method that wraps the recursion for module replacement.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
 
     import re
@@ -196,7 +196,7 @@ def _replace_with_fbgemm_fp8_linear(
 
                     # Force requires grad to False to avoid unexpected errors
                     model._modules[name].requires_grad_(False)
-                # set non persistant buffer outside of init_empty_weights
+                # set non persistent buffer outside of init_empty_weights
                 model._modules[name].input_scale_ub = torch.tensor(
                     [quantization_config.activation_scale_ub],
                     dtype=torch.float,

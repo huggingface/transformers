@@ -78,7 +78,7 @@ class LxmertConfig(PretrainedConfig):
             This represents the last dimension of the pooled-object features used as input for the model, representing
             the size of each object feature itself.
         visual_pos_dim (`int`, *optional*, defaults to 4):
-            This represents the number of spacial features that are mixed into the visual features. The default is set
+            This represents the number of spatial features that are mixed into the visual features. The default is set
             to 4 because most commonly this will represent the location of a bounding box. i.e., (x, y, width, height)
         visual_loss_normalizer (`float`, *optional*, defaults to 6.67):
             This represents the scaling factor in which each visual loss is multiplied by if during pretraining, one

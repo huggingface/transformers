@@ -25,29 +25,20 @@ from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import (
-    LossKwargs,
-    logging,
-)
+from ...utils import LossKwargs, logging
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaRMSNorm,
 )
-from ..mixtral.modeling_mixtral import (
-    MixtralForCausalLM,
-    MixtralModel,
-    load_balancing_loss_func,
-)
+from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, load_balancing_loss_func
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from .configuration_qwen3_moe import Qwen3MoeConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "Qwen/Qwen3-MoE-15B-A2B"
 
 
 class Qwen3MoeAttention(Qwen3Attention):  # This is the main diff with qwen2Moe!
@@ -131,9 +122,6 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer, nn.Module):
     def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
         nn.Module().__init__()
         self.hidden_size = config.hidden_size
-
-        self.self_attn = Qwen3MoeAttention(config, layer_idx)
-        self.mlp = Qwen3MoeMLP(config)
 
         self.self_attn = Qwen3MoeAttention(config, layer_idx)
 
@@ -259,19 +247,10 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> MoeCausalLMOutputWithPast:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 

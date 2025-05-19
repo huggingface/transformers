@@ -304,7 +304,7 @@ class Emu3Config(PretrainedConfig):
         self,
         vq_config: Union[Dict, Emu3VQVAEConfig] = None,
         text_config: Union[Dict, Emu3TextConfig] = None,
-        vocabulary_map: Dict[int, int] = None,
+        vocabulary_map: Optional[Dict[int, int]] = None,
         **kwargs,
     ):
         if vq_config is None:

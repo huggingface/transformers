@@ -368,7 +368,7 @@ class Qwen2MoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         padded_result = model(padded_input_ids, attention_mask=padded_attention_mask)
         torch.testing.assert_close(result.aux_loss.cpu(), padded_result.aux_loss.cpu(), rtol=1e-4, atol=1e-4)
 
-        # We make sure that the loss of includding padding tokens != the loss without padding tokens
+        # We make sure that the loss of including padding tokens != the loss without padding tokens
         # if attention_mask=None --> we don't exclude padding tokens
         include_padding_result = model(padded_input_ids, attention_mask=None)
 

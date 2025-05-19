@@ -58,7 +58,7 @@ class OwlViTProcessorKwargs(ProcessingKwargs, total=False):
 class OwlViTProcessor(ProcessorMixin):
     r"""
     Constructs an OWL-ViT processor which wraps [`OwlViTImageProcessor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]
-    into a single processor that interits both the image processor and tokenizer functionalities. See the
+    into a single processor that inherits both the image processor and tokenizer functionalities. See the
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
 
     Args:

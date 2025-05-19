@@ -17,8 +17,6 @@
 from typing import Optional, Union
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     BatchFeature,
     DefaultFastImageProcessorKwargs,
@@ -34,7 +32,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -55,15 +53,8 @@ if is_torchvision_available():
 
 
 class DonutFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    do_thumbnail: Optional[bool]
-    do_align_long_axis: Optional[bool]
-    do_pad: Optional[bool]
-
-
-@add_start_docstrings(
-    "Constructs a fast Donut image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
+    Args:
         do_thumbnail (`bool`, *optional*, defaults to `self.do_thumbnail`):
             Whether to resize the image using thumbnail method.
         do_align_long_axis (`bool`, *optional*, defaults to `self.do_align_long_axis`):
@@ -72,8 +63,14 @@ class DonutFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
             Whether to pad the image. If `random_padding` is set to `True`, each image is padded with a random
             amount of padding on each size, up to the largest image size in the batch. Otherwise, all images are
             padded to the largest image size in the batch.
-    """,
-)
+    """
+
+    do_thumbnail: Optional[bool]
+    do_align_long_axis: Optional[bool]
+    do_pad: Optional[bool]
+
+
+@auto_docstring
 class DonutImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
@@ -94,19 +91,7 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         kwargs["size"] = size
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            do_thumbnail (`bool`, *optional*, defaults to `self.do_thumbnail`):
-                Whether to resize the image using thumbnail method.
-            do_align_long_axis (`bool`, *optional*, defaults to `self.do_align_long_axis`):
-                Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
-            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
-                Whether to pad the image. If `random_padding` is set to `True`, each image is padded with a random
-                amount of padding on each size, up to the largest image size in the batch. Otherwise, all images are
-                padded to the largest image size in the batch.
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[DonutFastImageProcessorKwargs]) -> BatchFeature:
         if "size" in kwargs:
             size = kwargs.pop("size")

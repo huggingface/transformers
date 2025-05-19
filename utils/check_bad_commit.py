@@ -55,7 +55,7 @@ if len(result.stderr) > 0:
     else:
         print(f"pytest failed to run: {{result.stderr}}")
         exit(-1)
-elif f"{target_test} FAILED" in result.stdout:
+elif f"FAILED {target_test}" in result.stdout:
     print("test failed")
     exit(2)
 

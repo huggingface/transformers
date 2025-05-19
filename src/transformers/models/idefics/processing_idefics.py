@@ -318,7 +318,7 @@ class IdeficsProcessor(ProcessorMixin):
         and the two images will be massaged using [`IdeficsImageProcessor.__call__`] method and placed inside the
         `pixel_values` dict entry of the return value.
 
-        This example also examplifies that images can be passed as objects or as text urls. It can be seen that the
+        This example also exemplifies that images can be passed as objects or as text urls. It can be seen that the
         first image is passed as object and the second one as a url.
 
         To do training do:
@@ -377,7 +377,7 @@ class IdeficsProcessor(ProcessorMixin):
         add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
         add_end_of_utterance_token = output_kwargs["text_kwargs"].pop("add_end_of_utterance_token", None)
 
-        # if the value isn't overriden by the user, check if the tokenizer was trained with this token and then use it
+        # if the value isn't overridden by the user, check if the tokenizer was trained with this token and then use it
         if add_end_of_utterance_token is None:
             add_end_of_utterance_token = self.tokenizer_was_trained_with_end_of_utterance_token
         # turn non-batched prompts into batched

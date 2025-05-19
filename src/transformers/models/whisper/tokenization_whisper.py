@@ -515,7 +515,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     def normalize(self, text):
         """
-        Normalize a given string using the `EnglishTextNormalizer` class, which preforms commons transformation on
+        Normalize a given string using the `EnglishTextNormalizer` class, which performs commons transformation on
         english text.
         """
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
@@ -524,7 +524,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
     @staticmethod
     def basic_normalize(text, remove_diacritics=False):
         """
-        Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
+        Normalize a given string using the `BasicTextNormalizer` class, which performs commons transformation on
         multilingual text.
         """
         normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
@@ -1045,7 +1045,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
                         # as a stop where it should be a start.
                         # This is an issue in the underlying model output
                         # Let's just skip it so it becomes de-factor
-                        # a start agin
+                        # a start again
                         pass
                     else:
                         chunk["timestamp"][1] = time

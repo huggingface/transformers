@@ -127,10 +127,6 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @unittest.skip("Cohere2's eager attn/sdpa attn outputs are expected to be different")
-    def test_sdpa_equivalence(self):
-        pass
-
 
 @slow
 @require_read_token

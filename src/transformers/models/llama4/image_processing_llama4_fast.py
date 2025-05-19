@@ -21,22 +21,16 @@ from typing import List, Optional, Set, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-    SizeDict,
-)
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -55,7 +49,7 @@ if is_torchvision_available():
 
 def get_factors(dividend: int) -> Set[int]:
     """
-    Calculate all factors of a given number, i.e. a dividor that leaves
+    Calculate all factors of a given number, i.e. a divisor that leaves
     no remainder. For example, if dividend=12, it will return {1, 2, 3, 4, 6, 12}.
 
     Args:
@@ -107,11 +101,6 @@ def get_max_res_without_distortion(
         new_width = min(math.floor(original_width * scale_h), target_width)
 
     return new_height, new_width
-
-
-class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    max_patches: Optional[int]
-    resize_to_max_canvas: Optional[bool]
 
 
 def split_to_tiles(images: torch.Tensor, num_tiles_height: int, num_tiles_width: int) -> torch.Tensor:
@@ -327,23 +316,26 @@ def get_best_fit(
     else:
         optimal_canvas = chosen_canvas[0]
 
-    return tuple(optimal_canvas.tolist())
+    return optimal_canvas
 
 
-@add_start_docstrings(
-    "Constructs a fast Llama4 image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
-        max_patches (`int`, *optional*, defaults to 16):
-            The maximum number of patches to be extracted from the image.
-            Can be overridden by the `max_patches` parameter in the `preprocess` method.
-        resize_to_max_canvas (`bool`, *optional*, defaults to False):
-            Whether to resize the image to the maximum canvas size.
-            If True, picks the canvas the allows the largest resizing without distortion.
-            If False, downsample as little as possible, including no resizing at all,
-            but never upsample, unless the image is smaller than the patch size.
-    """,
-)
+    max_patches (`int`, *optional*, defaults to 16):
+        The maximum number of patches to be extracted from the image.
+        Can be overridden by the `max_patches` parameter in the `preprocess` method.
+    resize_to_max_canvas (`bool`, *optional*, defaults to False):
+        Whether to resize the image to the maximum canvas size.
+        If True, picks the canvas the allows the largest resizing without distortion.
+        If False, downsample as little as possible, including no resizing at all,
+        but never upsample, unless the image is smaller than the patch size.
+    """
+
+    max_patches: Optional[int]
+    resize_to_max_canvas: Optional[bool]
+
+
+@auto_docstring
 class Llama4ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = [0.5, 0.5, 0.5]
@@ -360,6 +352,8 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Llama4ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
+    # Disable compilation here as conversion to bfloat16 causes differences in the output of the compiled and non-compiled versions
+    @torch.compiler.disable
     def rescale_and_normalize(
         self,
         images: "torch.Tensor",
@@ -383,19 +377,7 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
 
         return images
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-        max_patches (`int`, *optional*, defaults to 16):
-            The maximum number of patches to be extracted from the image.
-            Can be overridden by the `max_patches` parameter in the `preprocess` method.
-        resize_to_max_canvas (`bool`, *optional*, defaults to False):
-            Whether to resize the image to the maximum canvas size.
-            If True, picks the canvas the allows the largest resizing without distortion.
-            If False, downsample as little as possible, including no resizing at all,
-            but never upsample, unless the image is smaller than the patch size.
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Llama4ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
@@ -415,7 +397,7 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> BatchFeature:
         possible_resolutions = find_supported_resolutions(max_num_chunks=max_patches, patch_size=size)
-        possible_resolutions = torch.tensor(possible_resolutions)
+        possible_resolutions = torch.tensor(possible_resolutions, device=images[0].device)
         # process images by batch, grouped by shape
         grouped_images, grouped_images_index = group_images_by_shape(images)
         grouped_processed_images = {}
@@ -454,7 +436,9 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
             # split into tiles
             processed_images = split_to_tiles(processed_images, ratio_h, ratio_w)
             grouped_processed_images[shape] = processed_images
-            grouped_aspect_ratios[shape] = torch.tensor([[ratio_h, ratio_w]] * stacked_images.shape[0])
+            grouped_aspect_ratios[shape] = torch.tensor(
+                [[ratio_h, ratio_w]] * stacked_images.shape[0], device=images[0].device
+            )
 
             # add a global tile to the processed tile if there are more than one tile
             if ratio_h * ratio_w > 1:

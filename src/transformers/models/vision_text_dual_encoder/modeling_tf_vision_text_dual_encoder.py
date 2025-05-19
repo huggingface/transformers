@@ -48,7 +48,7 @@ VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     should be fine-tuned on a downstream task, like contrastive image-text modeling.
 
     In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://arxiv.org/abs/2111.07991) it is shown how
-    leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvment
+    leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvement
     on new zero-shot vision tasks such as image classification or retrieval.
 
     After such a Vision-Text-Dual-Encoder model has been trained/fine-tuned, it can be saved/loaded just like any other
@@ -491,7 +491,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
                       should be set to `True` and a configuration object should be provided as `config` argument.
 
             model_args (remaining positional arguments, *optional*):
-                All remaning positional arguments will be passed to the underlying model's `__init__` method.
+                All remaining positional arguments will be passed to the underlying model's `__init__` method.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,

@@ -105,7 +105,7 @@ class ShieldGemma2Processor(Gemma3Processor):
             text: Not supported.
             videos: Not supported.
             audio: Not supported.
-            kwargs: An optional dictionary of keyword arguments to configre the
+            kwargs: An optional dictionary of keyword arguments to configure the
                 processor. Possible values include:
 
                 *   `custom_policies`: Additional policy definitions that augment the `self.policy_definitions` passed
@@ -116,7 +116,7 @@ class ShieldGemma2Processor(Gemma3Processor):
                     generated for every key in the joint dictionary.
 
         Returns:
-            A `BatchFeature` continaing `input_ids`, `pixel_values`, etc. where each Tensor is of shape
+            A `BatchFeature` containing `input_ids`, `pixel_values`, etc. where each Tensor is of shape
             `(len(images) * len(policies), )`, and the order within the batch will be
             img1_policy1, ... img1_policyN, ... imgM_policyN.
         """

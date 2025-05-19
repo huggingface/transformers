@@ -572,7 +572,7 @@ def cached_files(
         )
         raise EnvironmentError(
             f"{path_or_repo_id} does not appear to have {msg}. Checkout 'https://huggingface.co/{path_or_repo_id}/tree/{revision_}'"
-            "for available files."
+            " for available files."
         )
 
     # Remove potential missing entries (we can silently remove them at this point based on the flags)

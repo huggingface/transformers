@@ -1055,7 +1055,7 @@ class TFViTMAEDecoder(keras.layers.Layer):
 
     def interpolate_pos_encoding(self, embeddings) -> tf.Tensor:
         """
-        This method is a modified version of the interpolation function for ViT-mae model at the deocder, that
+        This method is a modified version of the interpolation function for ViT-mae model at the decoder, that
         allows to interpolate the pre-trained decoder position encodings, to be able to use the model on higher
         resolution images.
 

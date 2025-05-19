@@ -66,7 +66,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
     Args:
         clusters (`np.ndarray` or `List[List[int]]`, *optional*):
-            The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overriden by `clusters`
+            The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overridden by `clusters`
             in `preprocess`.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's dimensions to `(size["height"], size["width"])`. Can be overridden by
@@ -89,7 +89,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         # clusters is a first argument to maintain backwards compatibility with the old ImageGPTImageProcessor
         clusters: Optional[Union[List[List[int]], np.ndarray]] = None,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_normalize: bool = True,
         do_color_quantize: bool = True,
@@ -180,7 +180,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_normalize: Optional[bool] = None,
         do_color_quantize: Optional[bool] = None,

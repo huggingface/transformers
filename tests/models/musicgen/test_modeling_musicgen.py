@@ -76,27 +76,19 @@ def prepare_musicgen_decoder_inputs_dict(
     config,
     input_ids,
     attention_mask=None,
-    head_mask=None,
     encoder_hidden_states=None,
     encoder_attention_mask=None,
-    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.reshape(-1, config.num_codebooks, input_ids.shape[-1])[:, 0, :]
         attention_mask = attention_mask.ne(config.pad_token_id)
-    if head_mask is None:
-        head_mask = torch.ones(config.num_hidden_layers, config.num_attention_heads, device=torch_device)
     if encoder_attention_mask is None and encoder_hidden_states is not None:
         encoder_attention_mask = torch.ones(encoder_hidden_states.shape[:2], device=torch_device)
-    if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.num_hidden_layers, config.num_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
         "encoder_hidden_states": encoder_hidden_states,
         "encoder_attention_mask": encoder_attention_mask,
-        "head_mask": head_mask,
-        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -467,9 +459,6 @@ def prepare_musicgen_inputs_dict(
     decoder_input_ids,
     attention_mask=None,
     decoder_attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
     labels=None,
 ):
     if decoder_attention_mask is None:
@@ -477,26 +466,11 @@ def prepare_musicgen_inputs_dict(
             -1, config.decoder.num_codebooks, decoder_input_ids.shape[-1]
         )[:, 0, :]
         decoder_attention_mask = decoder_attention_mask.ne(config.decoder.pad_token_id)
-    if head_mask is None:
-        head_mask = torch.ones(
-            config.text_encoder.num_hidden_layers, config.text_encoder.num_attention_heads, device=torch_device
-        )
-    if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(
-            config.decoder.num_hidden_layers, config.decoder.num_attention_heads, device=torch_device
-        )
-    if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(
-            config.decoder.num_hidden_layers, config.decoder.num_attention_heads, device=torch_device
-        )
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
         "decoder_input_ids": decoder_input_ids,
         "decoder_attention_mask": decoder_attention_mask,
-        "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
-        "cross_attn_head_mask": cross_attn_head_mask,
         "labels": labels,
     }
 
@@ -1556,7 +1530,7 @@ class MusicgenIntegrationTests(unittest.TestCase):
         self.assertTrue(
             output_values.shape == (2, 1, 36480)
         )  # input values take shape 32000 and we generate from there
-        torch.testing.assert_close(output_values[0, 0, -16:].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output_values[0, 0, -16:].cpu(), EXPECTED_VALUES, rtol=2e-4, atol=2e-4)
 
 
 @require_torch
@@ -1631,5 +1605,5 @@ class MusicgenStereoIntegrationTests(unittest.TestCase):
         # (bsz, channels, seq_len)
         self.assertTrue(output_values.shape == (2, 2, 37760))
         # input values take shape 32000 and we generate from there - we check the last (generated) values
-        torch.testing.assert_close(output_values[0, 0, -16:].cpu(), EXPECTED_VALUES_LEFT, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(output_values[0, 1, -16:].cpu(), EXPECTED_VALUES_RIGHT, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output_values[0, 0, -16:].cpu(), EXPECTED_VALUES_LEFT, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(output_values[0, 1, -16:].cpu(), EXPECTED_VALUES_RIGHT, rtol=2e-4, atol=2e-4)

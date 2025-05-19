@@ -154,7 +154,7 @@ class Qwen2_5OmniAudioEncoderConfig(PretrainedConfig):
         n_window (`int`, *optional*, defaults to 100):
             The chunk for conv and flash attn in AudioEncoder.
         output_dim (`int`, *optional*, defaults to 3584):
-            The output dimention of AudioEncoder.
+            The output dimension of AudioEncoder.
 
     Example:
 
@@ -979,7 +979,7 @@ class Qwen2_5OmniConfig(PretrainedConfig):
         thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
         talker_config (`dict`, *optional*): Configuration of the underlying talker sub-model.
         token2wav_config (`dict`, *optional*): Configuration of the underlying codec sub-model.
-        enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enabel audio output and load talker and token2wav module.
+        enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enable audio output and load talker and token2wav module.
 
     Example:
 
@@ -1054,7 +1054,7 @@ class Qwen2_5OmniConfig(PretrainedConfig):
             decoder (`Optional[bool]`, *optional*, defaults to `False`):
                 If set to `True`, then only search for decoder config names.
         """
-        # Overriden for deeply nested config like Qwen2-Omni. We don't have any omni model
+        # Overridden for deeply nested config like Qwen2-Omni. We don't have any omni model
         # except for Qwen yet. This has to be generalized if more deeply nested configs are
         # added. NOTE: currently method used only by vLLM
         return self.thinker_config.get_text_config()

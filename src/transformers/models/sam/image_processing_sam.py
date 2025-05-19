@@ -118,8 +118,8 @@ class SamImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
-        mask_size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
+        mask_size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -294,7 +294,7 @@ class SamImageProcessor(BaseImageProcessor):
         self,
         image: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -349,7 +349,7 @@ class SamImageProcessor(BaseImageProcessor):
         self,
         segmentation_map: ImageInput,
         do_resize: Optional[bool] = None,
-        mask_size: Dict[str, int] = None,
+        mask_size: Optional[Dict[str, int]] = None,
         do_pad: Optional[bool] = None,
         mask_pad_size: Optional[Dict[str, int]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -827,7 +827,7 @@ class SamImageProcessor(BaseImageProcessor):
             iou_scores (`Union[torch.Tensor, tf.Tensor]`):
                 List of IoU scores.
             original_size (`Tuple[int,int]`):
-                Size of the orginal image.
+                Size of the original image.
             cropped_box_image (`np.array`):
                 The cropped image.
             pred_iou_thresh (`float`, *optional*, defaults to 0.88):
@@ -887,7 +887,7 @@ class SamImageProcessor(BaseImageProcessor):
             iou_scores (`torch.Tensor`):
                 List of IoU scores.
             original_size (`Tuple[int,int]`):
-                Size of the orginal image.
+                Size of the original image.
             cropped_box_image (`np.array`):
                 The cropped image.
             pred_iou_thresh (`float`, *optional*, defaults to 0.88):
@@ -939,7 +939,7 @@ class SamImageProcessor(BaseImageProcessor):
         converted_boxes = converted_boxes[keep_mask]
 
         masks = _pad_masks(masks, cropped_box_image, original_height, original_width)
-        # conversion to rle is necessary to run non-maximum suppresion
+        # conversion to rle is necessary to run non-maximum suppression
         masks = _mask_to_rle_pytorch(masks)
 
         return masks, scores, converted_boxes
@@ -967,7 +967,7 @@ class SamImageProcessor(BaseImageProcessor):
             iou_scores (`tf.Tensor`):
                 List of IoU scores.
             original_size (`Tuple[int,int]`):
-                Size of the orginal image.
+                Size of the original image.
             cropped_box_image (`np.array`):
                 The cropped image.
             pred_iou_thresh (`float`, *optional*, defaults to 0.88):
@@ -1016,7 +1016,7 @@ class SamImageProcessor(BaseImageProcessor):
         converted_boxes = converted_boxes[keep_mask]
 
         masks = _pad_masks_tf(masks, cropped_box_image, original_height, original_width)
-        # conversion to rle is necessary to run non-maximum suppresion
+        # conversion to rle is necessary to run non-maximum suppression
         masks = _mask_to_rle_tf(masks)
 
         return masks, scores, converted_boxes
@@ -1024,7 +1024,7 @@ class SamImageProcessor(BaseImageProcessor):
 
 def _compute_stability_score_pt(masks: "torch.Tensor", mask_threshold: float, stability_score_offset: int):
     # One mask is always contained inside the other.
-    # Save memory by preventing unnecesary cast to torch.int64
+    # Save memory by preventing unnecessary cast to torch.int64
     intersections = (
         (masks > (mask_threshold + stability_score_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
     )

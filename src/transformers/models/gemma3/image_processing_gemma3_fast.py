@@ -19,8 +19,6 @@ import math
 from typing import List, Optional, Union
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     BatchFeature,
     DefaultFastImageProcessorKwargs,
@@ -36,7 +34,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -61,26 +59,24 @@ logger = logging.get_logger(__name__)
 
 
 class Gemma3FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    do_pan_and_scan (`bool`, *optional*):
+        Whether to apply `pan_and_scan` to images.
+    pan_and_scan_min_crop_size (`int`, *optional*):
+        Minimum size of each crop in pan and scan.
+    pan_and_scan_max_num_crops (`int`, *optional*):
+        Maximum number of crops per image in pan and scan.
+    pan_and_scan_min_ratio_to_activate (`float`, *optional*):
+        Minimum aspect ratio to activate pan and scan.
+    """
+
     do_pan_and_scan: Optional[bool]
     pan_and_scan_min_crop_size: Optional[int]
     pan_and_scan_max_num_crops: Optional[int]
     pan_and_scan_min_ratio_to_activate: Optional[float]
 
 
-@add_start_docstrings(
-    "Constructs a fast ConvNeXT image processor. Based on [`SiglipImageProcessor`] with incorporation of Pan adn Scan cropping method.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        do_pan_and_scan (`bool`, *optional*):
-            Whether to apply `pan_and_scan` to images.
-        pan_and_scan_min_crop_size (`int`, *optional*):
-            Minimum size of each crop in pan and scan.
-        pan_and_scan_max_num_crops (`int`, *optional*):
-            Maximum number of crops per image in pan and scan.
-        pan_and_scan_min_ratio_to_activate (`float`, *optional*):
-            Minimum aspect ratio to activate pan and scan.
-    """,
-)
+@auto_docstring
 class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
@@ -108,7 +104,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     ):
         """
         Pan and Scan an image, by cropping into smaller images when the aspect ratio exceeds
-        minumum allowed ratio.
+        minimum allowed ratio.
 
         Args:
             image (`torch.Tensor`):
@@ -184,19 +180,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
         num_crops = [len(pas_images) for _ in images]
         return pas_images, num_crops
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            do_pan_and_scan (`bool`, *optional*):
-                Whether to apply `pan_and_scan` to images.
-            pan_and_scan_min_crop_size (`int`, *optional*):
-                Minimum size of each crop in pan and scan.
-            pan_and_scan_max_num_crops (`int`, *optional*):
-                Maximum number of crops per image in pan and scan.
-            pan_and_scan_min_ratio_to_activate (`float`, *optional*):
-                Minimum aspect ratio to activate pan and scan.
-        """,
-    )
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,

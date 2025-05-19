@@ -29,7 +29,7 @@ jobs:
   run_models_gpu:
     name: " "
     runs-on:
-      group: aws-g4dn-2xlarge-cache
+      group: aws-g4dn-4xlarge-cache
     container:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/

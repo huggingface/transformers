@@ -244,7 +244,7 @@ def _tokenize_prompts_with_image_and_batch(
     - pad all the sequences to this length so we can convert them into a 3D tensor.
     """
 
-    # If not tool use, tranform the coordinates while tokenizing
+    # If not tool use, transform the coordinates while tokenizing
     if scale_factors is not None:
         transformed_prompt_tokens = []
         for prompt_seq, scale_factor_seq in zip(prompts, scale_factors):

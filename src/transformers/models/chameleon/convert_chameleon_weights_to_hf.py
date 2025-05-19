@@ -384,7 +384,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         tokenizer_file=os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), legacy=False
     )
     tokenizer.sep_token_id = 8710  # assign <reserved08706> to sep so that we can append it after input text
-    tokenizer.pad_token_id = 1  # assing <pad> to special pad_token
+    tokenizer.pad_token_id = 1  # assign <pad> to special pad_token
     image_processor = ChameleonImageProcessor()
     processor = ChameleonProcessor(image_processor=image_processor, tokenizer=tokenizer)
     processor.save_pretrained(model_path)

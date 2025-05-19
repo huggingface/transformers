@@ -21,6 +21,7 @@ import numpy
 
 from .utils import (
     ExplicitEnum,
+    check_torch_load_is_safe,
     expand_dims,
     is_numpy_array,
     is_safetensors_available,
@@ -198,6 +199,7 @@ def load_pytorch_checkpoint_in_tf2_model(
         if pt_path.endswith(".safetensors"):
             state_dict = safe_load_file(pt_path)
         else:
+            check_torch_load_is_safe()
             state_dict = torch.load(pt_path, map_location="cpu", weights_only=True)
 
         pt_state_dict.update(state_dict)
@@ -583,8 +585,8 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
     loaded_pt_weights_data_ptr = {}
     missing_keys_pt = []
     for pt_weight_name, pt_weight in current_pt_params_dict.items():
-        # Handle PyTorch shared weight ()not duplicated in TF 2.0
-        if pt_weight.data_ptr() in loaded_pt_weights_data_ptr:
+        # Handle PyTorch shared weight not duplicated in TF 2.0
+        if pt_weight.data_ptr() in loaded_pt_weights_data_ptr and pt_weight.data_ptr() != 0:
             new_pt_params_dict[pt_weight_name] = loaded_pt_weights_data_ptr[pt_weight.data_ptr()]
             continue
 

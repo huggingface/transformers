@@ -127,7 +127,7 @@ def get_resize_output_image_size(
     ratio = max(height / max_height, width / max_width)
 
     if ratio > 1:
-        # Orgiginal implementation uses `round` which utilises bankers rounding, which can lead to surprising results
+        # Original implementation uses `round` which utilises bankers rounding, which can lead to surprising results
         # Here we use floor to ensure the image is always smaller than the given "longest_edge"
         height = int(math.floor(height / ratio))
         width = int(math.floor(width / ratio))
@@ -175,8 +175,8 @@ class PixtralImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
-        patch_size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
+        patch_size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -320,8 +320,8 @@ class PixtralImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
-        patch_size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
+        patch_size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,

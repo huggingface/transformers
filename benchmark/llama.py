@@ -293,7 +293,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
                 max_cache_len=seq_length + 128,
             )
 
-            # 3nd call
+            # 3rd call
             start = perf_counter()
             output = model.generate(**inputs, past_key_values=past_key_values)
             end = perf_counter()

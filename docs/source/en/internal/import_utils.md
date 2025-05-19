@@ -84,6 +84,19 @@ class Trainer:
 
 Backends that can be added here are all the backends that are available in the `import_utils.py` module.
 
+Additionally, specific versions can be specified in each backend. For example, this is how you would specify
+a requirement on torch>=2.6 on the `Trainer` class:
+
+```python
+from .utils.import_utils import requires
+
+@requires(backends=("torch>=2.6", "accelerate"))
+class Trainer:
+    ...
+```
+
+You can specify the following operators: `==`, `>`, `>=`, `<`, `<=`, `!=`.
+
 ## Methods
 
 [[autodoc]] utils.import_utils.define_import_structure

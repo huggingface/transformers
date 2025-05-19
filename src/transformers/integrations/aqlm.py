@@ -30,7 +30,7 @@ def replace_with_aqlm_linear(
     """
     Public method that recursively replaces the Linear layers of the given model with AQLM quantized layers.
     `accelerate` is needed to use this method. Returns the converted model and a boolean that indicates if the
-    conversion has been successfull or not.
+    conversion has been successful or not.
 
     Args:
         model (`torch.nn.Module`):

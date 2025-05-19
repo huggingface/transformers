@@ -14,12 +14,17 @@
 # limitations under the License.
 """Image processor class for LLaVa-Onevision."""
 
-import math
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict, select_best_resolution
+from ...image_processing_utils import (
+    BaseImageProcessor,
+    BatchFeature,
+    get_patch_output_size,
+    get_size_dict,
+    select_best_resolution,
+)
 from ...image_transforms import (
     PaddingMode,
     convert_to_rgb,
@@ -99,24 +104,6 @@ def expand_to_square(image: np.array, background_color, input_data_format) -> np
         return result
 
 
-# Copied from transformers.models.llava_next.image_processing_llava_next._get_patch_output_size
-def _get_patch_output_size(image, target_resolution, input_data_format):
-    original_height, original_width = get_image_size(image, channel_dim=input_data_format)
-    target_height, target_width = target_resolution
-
-    scale_w = target_width / original_width
-    scale_h = target_height / original_height
-
-    if scale_w < scale_h:
-        new_width = target_width
-        new_height = min(math.ceil(original_height * scale_w), target_height)
-    else:
-        new_height = target_height
-        new_width = min(math.ceil(original_width * scale_h), target_width)
-
-    return new_height, new_width
-
-
 class LlavaOnevisionImageProcessor(BaseImageProcessor):
     r"""
     Constructs a LLaVa-Onevision image processor. Based on [`SiglipImageProcessor`] with incorporation of processing each video frame.
@@ -132,7 +119,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         image_grid_pinpoints (`List` *optional*, defaults to `[[672, 336], [336, 672], [672, 672], [336, 1008], [1008, 336]]`):
             A list of possible resolutions to use for processing high resolution images. The best resolution is selected
             based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
-            method. Not used for processinf videos.
+            method. Not used for processing videos.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -151,8 +138,8 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
-                Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-                number of patches in the batch. Padding will be applied to the bottom and right with zeros.
+            Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
+            number of patches in the batch. Padding will be applied to the bottom and right with zeros.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
     """
@@ -162,8 +149,8 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
-        image_grid_pinpoints: List = None,
+        size: Optional[Dict[str, int]] = None,
+        image_grid_pinpoints: Optional[List] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -321,7 +308,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         Returns:
             np.array: The resized and padded image.
         """
-        new_height, new_width = _get_patch_output_size(image, target_resolution, input_data_format)
+        new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
 
         # Resize the image
         resized_image = resize(image, (new_height, new_width), resample=resample, input_data_format=input_data_format)
@@ -336,12 +323,12 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         Pad an image to a target resolution while maintaining aspect ratio.
         """
         target_height, target_width = target_resolution
-        new_height, new_width = _get_patch_output_size(image, target_resolution, input_data_format)
+        new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
 
-        paste_x = (target_width - new_width) // 2
-        paste_y = (target_height - new_height) // 2
+        paste_x, r_x = divmod(target_width - new_width, 2)
+        paste_y, r_y = divmod(target_height - new_height, 2)
 
-        padded_image = self.pad(image, padding=((paste_y, paste_y), (paste_x, paste_x)))
+        padded_image = self.pad(image, padding=((paste_y, paste_y + r_y), (paste_x, paste_x + r_x)))
 
         return padded_image
 
@@ -454,7 +441,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -529,8 +516,8 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
-        image_grid_pinpoints: List = None,
+        size: Optional[Dict[str, int]] = None,
+        image_grid_pinpoints: Optional[List] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -647,7 +634,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
         for image in images:
             # convert image into a list of patches
-            # we intentially use the same data format as the input data format
+            # we intentionally use the same data format as the input data format
             size_tuple = (
                 (size["height"], size["width"])
                 if "height" in size and "width" in size
@@ -657,7 +644,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
                 image,
                 image_grid_pinpoints,
                 size=size_tuple,
-                patch_size=size["height"],
+                patch_size=size_tuple[0],
                 resample=resample,
                 data_format=input_data_format,
                 input_data_format=input_data_format,

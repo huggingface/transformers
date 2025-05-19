@@ -88,7 +88,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image = self.prepare_image_inputs()
 
-        # If text has no image tokens, iamge should be `None`
+        # If text has no image tokens, image should be `None`
         with self.assertRaises(ValueError):
             _ = processor(text=text_no_image, images=image, return_tensors="np")
 

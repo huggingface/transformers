@@ -23,8 +23,9 @@ from parameterized import parameterized
 from transformers import AutoTokenizer, GPT2TokenizerFast
 from transformers.testing_utils import (
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_torchaudio,
+    torch_device,
 )
 from transformers.utils import is_torchaudio_available
 
@@ -33,14 +34,12 @@ if is_torchaudio_available():
     from transformers import GraniteSpeechFeatureExtractor, GraniteSpeechProcessor
 
 
-@pytest.skip("Public models not yet available", allow_module_level=True)
 @require_torch
 @require_torchaudio
 class GraniteSpeechProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        # TODO - use the actual model path on HF hub after release.
-        self.checkpoint = "ibm-granite/granite-speech"
+        self.checkpoint = "ibm-granite/granite-speech-3.3-8b"
         processor = GraniteSpeechProcessor.from_pretrained(self.checkpoint)
         processor.save_pretrained(self.tmpdirname)
 
@@ -197,7 +196,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         assert num_calculated_features == [90, 171]
         assert sum(num_expected_features) == num_audio_tokens
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_device_override(self):
         """Ensure that we regardless of the processing device, the tensors
         produced are on the CPU.
@@ -216,7 +215,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
             text=f"{processor.audio_token} Can you transcribe this audio?",
             audio=wav,
             return_tensors="pt",
-            device="cuda",
+            device=torch_device,
         )
 
         assert inputs["input_features"].device.type == "cpu"

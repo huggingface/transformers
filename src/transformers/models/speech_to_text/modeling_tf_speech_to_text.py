@@ -815,7 +815,7 @@ class TFSpeech2TextEncoder(keras.layers.Layer):
 
     def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
         # generate creates 3D attention mask, because of the shape of input_features
-        # convert it to 2D if thats the case
+        # convert it to 2D if that's the case
         if len(attention_mask.shape) > 2:
             attention_mask = attention_mask[:, :, -1]
 

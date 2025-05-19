@@ -19,6 +19,7 @@ allow to make our dependency on SentencePiece optional.
 """
 
 import warnings
+from typing import Optional
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -326,7 +327,9 @@ class OpenAIGPTConverter(Converter):
 
 
 class GPT2Converter(Converter):
-    def converted(self, vocab: dict[str, int] = None, merges: list[tuple[str, str]] = None) -> Tokenizer:
+    def converted(
+        self, vocab: Optional[dict[str, int]] = None, merges: Optional[list[tuple[str, str]]] = None
+    ) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -395,7 +398,9 @@ class HerbertConverter(Converter):
 
 
 class Qwen2Converter(Converter):
-    def converted(self, vocab: dict[str, int] = None, merges: list[tuple[str, str]] = None) -> Tokenizer:
+    def converted(
+        self, vocab: Optional[dict[str, int]] = None, merges: Optional[list[tuple[str, str]]] = None
+    ) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -1579,7 +1584,9 @@ class TikTokenConverter:
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
         self.additional_special_tokens = (
-            additional_special_tokens.keys() if type(additional_special_tokens) is dict else additional_special_tokens
+            additional_special_tokens.keys()
+            if isinstance(additional_special_tokens, dict)
+            else additional_special_tokens
         )
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):

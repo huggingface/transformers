@@ -194,9 +194,9 @@ def convert_efficientformer_checkpoint(
     # Save Checkpoints
     Path(pytorch_dump_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_path)
-    print(f"Checkpoint successfuly converted. Model saved at {pytorch_dump_path}")
+    print(f"Checkpoint successfully converted. Model saved at {pytorch_dump_path}")
     processor.save_pretrained(pytorch_dump_path)
-    print(f"Processor successfuly saved at {pytorch_dump_path}")
+    print(f"Processor successfully saved at {pytorch_dump_path}")
 
     if push_to_hub:
         print("Pushing model to the hub...")

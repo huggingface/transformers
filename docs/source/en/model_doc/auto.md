@@ -74,6 +74,10 @@ Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its
 
 [[autodoc]] AutoImageProcessor
 
+## AutoVideoProcessor
+
+[[autodoc]] AutoVideoProcessor
+
 ## AutoProcessor
 
 [[autodoc]] AutoProcessor

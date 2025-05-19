@@ -73,7 +73,7 @@ class TFBlipForConditionalGenerationModelOutput(ModelOutput):
 
     Args:
         loss (`tf.Tensor`, *optional*, returned when `labels` is provided, `tf.Tensor` of shape `(1,)`):
-            Languge modeling loss from the text decoder.
+            Language modeling loss from the text decoder.
         logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`, *optional*):
             Prediction scores of the language modeling head of the text decoder model.
         image_embeds (`tf.Tensor` of shape `(batch_size, output_dim)`, *optional*):
@@ -118,7 +118,7 @@ class TFBlipTextVisionModelOutput(ModelOutput):
 
     Args:
         loss (`tf.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Languge modeling loss from the text decoder.
+            Language modeling loss from the text decoder.
         image_embeds (`tf.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
             The image embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -154,7 +154,7 @@ class TFBlipImageTextMatchingModelOutput(ModelOutput):
         itm_score (`tf.Tensor`):
             The image-text similarity scores.
         loss (`tf.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Languge modeling loss from the text decoder.
+            Language modeling loss from the text decoder.
         image_embeds (`tf.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
             The image embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):

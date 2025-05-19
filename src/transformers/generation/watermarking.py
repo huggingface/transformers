@@ -538,7 +538,7 @@ class SynthIDTextWatermarkDetector:
         context_repetition_mask = self.logits_processor.compute_context_repetition_mask(
             input_ids=tokenized_outputs,
         )
-        # context repitition mask shape [batch_size, output_len - (ngram_len - 1)]
+        # context repetition mask shape [batch_size, output_len - (ngram_len - 1)]
 
         combined_mask = context_repetition_mask * eos_token_mask
 

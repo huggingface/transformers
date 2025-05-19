@@ -543,7 +543,7 @@ class TopKLogitsWarper(LogitsProcessor):
 class MinPLogitsWarper(LogitsProcessor):
     """
     [`LogitsProcessor`] that performs min-p, i.e. keeps all tokens that are above a minimum probability, scaled by the
-    probability of the most likely token. As a result, the filter becomes more agressive in the presence of
+    probability of the most likely token. As a result, the filter becomes more aggressive in the presence of
     high-probability tokens, which is a sign of a confident output that we shouldn't deviate from.
 
     Often used together with [`TemperatureLogitsWarper`]. Used as an alternative to [`TopPLogitsWarper`] and
@@ -738,7 +738,7 @@ class EpsilonLogitsWarper(LogitsProcessor):
 
     >>> # With epsilon sampling, the output gets restricted to high-probability tokens. Note that this is similar to
     >>> # Top P sampling, which restricts tokens based on their cumulative probability.
-    >>> # Pro tip: The paper recomends using `epsilon_cutoff` values between 3e-4 and 9e-4
+    >>> # Pro tip: The paper recommends using `epsilon_cutoff` values between 3e-4 and 9e-4
     >>> outputs = model.generate(**inputs, do_sample=True, epsilon_cutoff=0.1)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
     A sequence: 1, 2, 3, 4, 5, 6, 7, 8, 9
@@ -819,7 +819,7 @@ class EtaLogitsWarper(LogitsProcessor):
 
     >>> # With eta sampling, the output gets restricted to high-probability tokens. You can see it as a dynamic form of
     >>> # epsilon sampling that adapts its cutoff probability based on the entropy (high entropy = lower cutoff).
-    >>> # Pro tip: The paper recomends using `eta_cutoff` values between 3e-4 to 4e-3
+    >>> # Pro tip: The paper recommends using `eta_cutoff` values between 3e-4 to 4e-3
     >>> outputs = model.generate(**inputs, do_sample=True, eta_cutoff=0.1)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
     A sequence: 1, 2, 3, 4, 5, 6, 7, 8, 9
@@ -1348,7 +1348,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
     Alice and Bob are friends
 
-    >>> # We can contrain it with `prefix_allowed_tokens_fn` to force a certain behavior based on a prefix.
+    >>> # We can constrain it with `prefix_allowed_tokens_fn` to force a certain behavior based on a prefix.
     >>> # For instance, we can force an entire entity to be generated when its beginning is detected.
     >>> entity = tokenizer(" Bob Marley", return_tensors="pt").input_ids[0]  # 3 tokens
     >>> def prefix_allowed_tokens_fn(batch_id, input_ids):
@@ -1791,7 +1791,7 @@ class LogitNormalization(LogitsProcessor):
 
 class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     r"""
-    [`SuppressTokensAtBeginLogitsProcessor`] supresses a list of tokens as soon as the `generate` function starts
+    [`SuppressTokensAtBeginLogitsProcessor`] suppresses a list of tokens as soon as the `generate` function starts
     generating using `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` are
     not generated at the beginning. Originally created for
     [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper).
@@ -2642,7 +2642,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         We assume that the scores are in the log space.
         Args:
             scores (`torch.FloatTensor`): Scores (batch_size, vocab_size).
-            g_values (`torch.FloatTensor`): G valus (batch_size, vocab_size, depth).
+            g_values (`torch.FloatTensor`): G values (batch_size, vocab_size, depth).
 
         Returns:
             Updated scores (batch_size, vocab_size).
@@ -2668,7 +2668,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         if self.debug_mode:
             scores = torch.ones_like(scores)
 
-        # Currently indices is just a arange to compute watermarking on the desnse logits.
+        # Currently indices is just a arange to compute watermarking on the dense logits.
         all_indices = torch.stack([torch.arange(vocab_size, device=self.device) for _ in range(batch_size)])
 
         if self.state is None:

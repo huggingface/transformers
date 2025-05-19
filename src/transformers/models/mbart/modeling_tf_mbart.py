@@ -1430,7 +1430,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
         decoder_head_mask: tf.Tensor | None = None,
         cross_attn_head_mask: tf.Tensor | None = None,
         encoder_outputs: Optional[TFBaseModelOutput] = None,
-        past_key_values: Tuple[Tuple[tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         inputs_embeds: tf.Tensor | None = None,
         decoder_inputs_embeds: tf.Tensor | None = None,
         use_cache: Optional[bool] = None,

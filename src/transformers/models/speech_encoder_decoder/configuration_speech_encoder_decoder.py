@@ -78,7 +78,7 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
         super().__init__(**kwargs)
         if "encoder" not in kwargs or "decoder" not in kwargs:
             raise ValueError(
-                f"A configuraton of type {self.model_type} cannot be instantiated because not both `encoder` and"
+                f"A configuration of type {self.model_type} cannot be instantiated because not both `encoder` and"
                 f" `decoder` sub-configurations are passed, but only {kwargs}"
             )
 

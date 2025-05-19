@@ -54,7 +54,11 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import InstructBlipVideoForConditionalGeneration, InstructBlipVideoVisionModel
+    from transformers import (
+        InstructBlipVideoForConditionalGeneration,
+        InstructBlipVideoModel,
+        InstructBlipVideoVisionModel,
+    )
 
 
 class InstructBlipVideoVisionModelTester:
@@ -477,7 +481,6 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester:
             "attention_mask": attention_mask,
             "qformer_input_ids": qformer_input_ids,
             "qformer_attention_mask": qformer_attention_mask,
-            "labels": input_ids,
         }
         return config, inputs_dict
 
@@ -486,7 +489,10 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester:
 class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 ):
-    all_model_classes = (InstructBlipVideoForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (InstructBlipVideoForConditionalGeneration, InstructBlipVideoModel) if is_torch_available() else ()
+    )
+    additional_model_inputs = ["qformer_input_ids", "input_ids"]
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -697,15 +703,11 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
-                vision_attn = "sdpa" if model.vision_model._supports_sdpa else "eager"
-                qformer_attn = "sdpa" if model.qformer._supports_sdpa else "eager"
-
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model.language_model.config._attn_implementation == text_attn)
-                self.assertTrue(model.vision_model.config._attn_implementation == vision_attn)
-                self.assertTrue(model.qformer.config._attn_implementation == qformer_attn)
+                self.assertTrue(model.language_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model.vision_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model.qformer.config._attn_implementation == "eager")
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
@@ -716,19 +718,12 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    if (
+                        class_name.endswith("Attention")
+                        and getattr(submodule, "config", None)
+                        and submodule.config._attn_implementation == "sdpa"
+                    ):
                         raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa and any(
-                    module_attn == "sdpa" for module_attn in [text_attn, vision_attn, qformer_attn]
-                ):
-                    raise ValueError("The SDPA model should have SDPA attention layers")
 
 
 # We will verify our results on an image of cute cats

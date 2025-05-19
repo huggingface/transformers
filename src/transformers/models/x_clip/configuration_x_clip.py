@@ -252,7 +252,7 @@ class XCLIPConfig(PretrainedConfig):
         prompt_projection_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for the projection layers in the video specific prompt generator.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* parameter. Default is used as per the original XCLIP implementation.
+            The initial value of the *logit_scale* parameter. Default is used as per the original XCLIP implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
     """

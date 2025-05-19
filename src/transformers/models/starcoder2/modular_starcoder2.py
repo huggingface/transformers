@@ -28,12 +28,10 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import add_start_docstrings_to_model_forward, can_return_tuple, logging
+from ...utils import logging
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralDecoderLayer,
@@ -50,9 +48,6 @@ from .configuration_starcoder2 import Starcoder2Config
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "Starcoder2Config"
-_CHECKPOINT_FOR_DOC = "bigcode/starcoder2-7b"
 
 
 class Starcoder2MLP(nn.Module):
@@ -165,9 +160,6 @@ class Starcoder2PreTrainedModel(MistralPreTrainedModel):
             module.bias.data.zero_()
 
 
-STARCODER2_INPUTS_DOCSTRING = None  # will be automatically redefined
-
-
 class Starcoder2Model(MistralModel):
     def __init__(self, config: Starcoder2Config):
         super().__init__(config)
@@ -177,8 +169,6 @@ class Starcoder2Model(MistralModel):
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.embedding_dropout = config.embedding_dropout
 
-    @can_return_tuple
-    @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

@@ -20,8 +20,6 @@ from functools import lru_cache
 from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     BatchFeature,
     DefaultFastImageProcessorKwargs,
@@ -32,7 +30,7 @@ from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -66,7 +64,7 @@ class FlavaMaskingGenerator:
         mask_group_max_patches: Optional[int] = None,
         mask_group_min_patches: int = 16,
         mask_group_min_aspect_ratio: Optional[float] = 0.3,
-        mask_group_max_aspect_ratio: float = None,
+        mask_group_max_aspect_ratio: Optional[float] = None,
     ):
         if not isinstance(input_size, tuple):
             input_size = (input_size,) * 2
@@ -135,33 +133,8 @@ class FlavaMaskingGenerator:
 
 
 class FlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    # Mask related params
-    return_image_mask: Optional[bool]
-    input_size_patches: Optional[int]
-    total_mask_patches: Optional[int]
-    mask_group_min_patches: Optional[int]
-    mask_group_max_patches: Optional[int]
-    mask_group_min_aspect_ratio: Optional[float]
-    mask_group_max_aspect_ratio: Optional[float]
-    # Codebook related params
-    return_codebook_pixels: Optional[bool]
-    codebook_do_resize: Optional[bool]
-    codebook_size: Optional[bool]
-    codebook_resample: Optional[int]
-    codebook_do_center_crop: Optional[bool]
-    codebook_crop_size: Optional[int]
-    codebook_do_rescale: Optional[bool]
-    codebook_rescale_factor: Optional[Union[int, float]]
-    codebook_do_map_pixels: Optional[bool]
-    codebook_do_normalize: Optional[bool]
-    codebook_image_mean: Optional[Union[float, Iterable[float]]]
-    codebook_image_std: Optional[Union[float, Iterable[float]]]
-
-
-@add_start_docstrings(
-    "Constructs a fast Flava image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
+    Args:
         return_image_mask (`bool`, *optional*, defaults to `False`):
             Whether to return the image mask. Can be overridden by the `return_image_mask` parameter in `preprocess`.
         input_size_patches (`int`, *optional*, defaults to 14):
@@ -182,6 +155,8 @@ class FlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         mask_group_max_aspect_ratio (`float`, *optional*):
             Maximum aspect ratio of the mask window. Can be overridden by the `mask_group_max_aspect_ratio` parameter
             in `preprocess`.
+        return_codebook_pixels (`bool`, *optional*, defaults to `False`):
+            Whether to return the codebook pixel values.
         codebook_do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the input for codebook to a certain. Can be overridden by the `codebook_do_resize`
             parameter in `preprocess`. `codebook_size`.
@@ -216,8 +191,32 @@ class FlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         codebook_image_std (`Optional[Union[float, Iterable[float]]]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
             The sequence of standard deviations for each channel, to be used when normalizing images for codebook. Can
             be overridden by the `codebook_image_std` parameter in `preprocess`.
-    """,
-)
+    """
+
+    # Mask related params
+    return_image_mask: Optional[bool]
+    input_size_patches: Optional[int]
+    total_mask_patches: Optional[int]
+    mask_group_min_patches: Optional[int]
+    mask_group_max_patches: Optional[int]
+    mask_group_min_aspect_ratio: Optional[float]
+    mask_group_max_aspect_ratio: Optional[float]
+    # Codebook related params
+    return_codebook_pixels: Optional[bool]
+    codebook_do_resize: Optional[bool]
+    codebook_size: Optional[bool]
+    codebook_resample: Optional[int]
+    codebook_do_center_crop: Optional[bool]
+    codebook_crop_size: Optional[int]
+    codebook_do_rescale: Optional[bool]
+    codebook_rescale_factor: Optional[Union[int, float]]
+    codebook_do_map_pixels: Optional[bool]
+    codebook_do_normalize: Optional[bool]
+    codebook_image_mean: Optional[Union[float, Iterable[float]]]
+    codebook_image_std: Optional[Union[float, Iterable[float]]]
+
+
+@auto_docstring
 class FlavaImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = FLAVA_IMAGE_MEAN
@@ -256,65 +255,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[FlavaFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            return_image_mask (`bool`, *optional*, defaults to `False`):
-                Whether to return the image mask. Can be overridden by the `return_image_mask` parameter in `preprocess`.
-            input_size_patches (`int`, *optional*, defaults to 14):
-                Number of patches in the image in height and width direction. 14x14 = 196 total patches. Can be overridden
-                by the `input_size_patches` parameter in `preprocess`.
-            total_mask_patches (`int`, *optional*, defaults to 75):
-                Total number of patches that should be masked. Can be overridden by the `total_mask_patches` parameter in
-                `preprocess`.
-            mask_group_min_patches (`int`, *optional*, defaults to 16):
-                Minimum number of patches that should be masked. Can be overridden by the `mask_group_min_patches`
-                parameter in `preprocess`.
-            mask_group_max_patches (`int`, *optional*):
-                Maximum number of patches that should be masked. Can be overridden by the `mask_group_max_patches`
-                parameter in `preprocess`.
-            mask_group_min_aspect_ratio (`float`, *optional*, defaults to 0.3):
-                Minimum aspect ratio of the mask window. Can be overridden by the `mask_group_min_aspect_ratio` parameter
-                in `preprocess`.
-            mask_group_max_aspect_ratio (`float`, *optional*):
-                Maximum aspect ratio of the mask window. Can be overridden by the `mask_group_max_aspect_ratio` parameter
-                in `preprocess`.
-            codebook_do_resize (`bool`, *optional*, defaults to `True`):
-                Whether to resize the input for codebook to a certain. Can be overridden by the `codebook_do_resize`
-                parameter in `preprocess`. `codebook_size`.
-            codebook_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
-                Resize the input for codebook to the given size. Can be overridden by the `codebook_size` parameter in
-                `preprocess`.
-            codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
-                Resampling filter to use if resizing the codebook image. Can be overridden by the `codebook_resample`
-                parameter in `preprocess`.
-            codebook_do_center_crop (`bool`, *optional*, defaults to `True`):
-                Whether to crop the input for codebook at the center. If the input size is smaller than
-                `codebook_crop_size` along any edge, the image is padded with 0's and then center cropped. Can be
-                overridden by the `codebook_do_center_crop` parameter in `preprocess`.
-            codebook_crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
-                Desired output size for codebook input when applying center-cropping. Can be overridden by the
-                `codebook_crop_size` parameter in `preprocess`.
-            codebook_do_rescale (`bool`, *optional*, defaults to `True`):
-                Whether to rescale the input for codebook by the specified scale `codebook_rescale_factor`. Can be
-                overridden by the `codebook_do_rescale` parameter in `preprocess`.
-            codebook_rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-                Defines the scale factor to use if rescaling the codebook image. Can be overridden by the
-                `codebook_rescale_factor` parameter in `preprocess`.
-            codebook_do_map_pixels (`bool`, *optional*, defaults to `True`):
-                Whether to map the pixel values of the codebook input to (1 - 2e)x + e. Can be overridden by the
-                `codebook_do_map_pixels` parameter in `preprocess`.
-            codebook_do_normalize (`bool`, *optional*, defaults to `True`):
-                Whether or not to normalize the input for codebook with `codebook_image_mean` and `codebook_image_std`. Can
-                be overridden by the `codebook_do_normalize` parameter in `preprocess`.
-            codebook_image_mean (`Optional[Union[float, Iterable[float]]]`, *optional*, defaults to `[0, 0, 0]`):
-                The sequence of means for each channel, to be used when normalizing images for codebook. Can be overridden
-                by the `codebook_image_mean` parameter in `preprocess`.
-            codebook_image_std (`Optional[Union[float, Iterable[float]]]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-                The sequence of standard deviations for each channel, to be used when normalizing images for codebook. Can
-                be overridden by the `codebook_image_std` parameter in `preprocess`.
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 

@@ -438,7 +438,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if self.has_attentions:
             self.assertIsNotNone(attentions.grad)
 
-    # override as the `logit_scale` parameter initilization is different for BRIDGE TOWER
+    # override as the `logit_scale` parameter initialization is different for BRIDGE TOWER
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

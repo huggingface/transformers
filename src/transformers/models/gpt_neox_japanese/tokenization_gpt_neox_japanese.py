@@ -195,7 +195,7 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
 
 class SubWordJapaneseTokenizer:
     """
-    https://github.com/tanreinama/Japanese-BPEEncoder_V2 This tokenizer class is under MIT Lisence according to the
+    https://github.com/tanreinama/Japanese-BPEEncoder_V2 This tokenizer class is under MIT License according to the
     original repository.
 
     MIT License
