@@ -17,6 +17,7 @@ import enum
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 from typing import Dict, List, Optional, Union
 
+from ..generation import GenerationConfig
 from ..processing_utils import ProcessingKwargs, Unpack
 from ..utils import (
     add_end_docstrings,
@@ -120,6 +121,10 @@ class ImageTextToTextPipeline(Pipeline):
     in which case the pipeline will operate in chat mode and will continue the chat(s) by adding its response(s).
     Each chat takes the form of a list of dicts, where each dict contains "role" and "content" keys.
 
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+
     Example:
 
     ```python
@@ -175,6 +180,12 @@ class ImageTextToTextPipeline(Pipeline):
     _load_image_processor = False
     _load_feature_extractor = False
     _load_tokenizer = False
+
+    _pipeline_calls_generate = True
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
