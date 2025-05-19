@@ -347,6 +347,24 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
             assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
+    def test_out_of_vocab_llm_image_token(self):
+        """
+        Test that we can run inference without crashing if the image token is not
+        in range for the LLM's embedding.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # The new image token is out of bounds for the LLM embedding
+            old_image_token = config.image_token_index
+            config.image_token_index = config.text_config.vocab_size
+            model = model_class(config).to(torch_device)
+            is_image_token = input_dict["input_ids"] == old_image_token
+            input_dict["input_ids"][is_image_token] = config.image_token_index
+
+            with torch.no_grad():
+                model(**input_dict)
+
     @unittest.skip(
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
