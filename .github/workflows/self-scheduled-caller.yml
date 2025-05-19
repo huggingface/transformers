@@ -56,17 +56,17 @@ jobs:
       ci_event: Daily CI
     secrets: inherit
 
-#  torch-pipeline:
-#    name: Torch pipeline CI
-#    uses: ./.github/workflows/self-scheduled.yml
-#    with:
-#      job: run_pipelines_torch_gpu
-#      slack_report_channel: "#transformers-ci-daily-pipeline-torch"
-#      runner: daily-ci
-#      docker: huggingface/transformers-pytorch-gpu
-#      ci_event: Daily CI
-#    secrets: inherit
-#
+  torch-pipeline:
+    name: Torch pipeline CI
+    uses: ./.github/workflows/self-scheduled.yml
+    with:
+      job: run_pipelines_torch_gpu
+      slack_report_channel: "#transformers-ci-daily-pipeline-torch"
+      runner: daily-ci
+      docker: huggingface/transformers-pytorch-gpu
+      ci_event: Daily CI
+    secrets: inherit
+
 #  tf-pipeline:
 #    name: TF pipeline CI
 #    uses: ./.github/workflows/self-scheduled.yml
@@ -101,13 +101,13 @@ jobs:
 #      working-directory-prefix: /workspace
 #    secrets: inherit
 #
-#  quantization-ci:
-#    name: Quantization CI
-#    uses: ./.github/workflows/self-scheduled.yml
-#    with:
-#      job: run_quantization_torch_gpu
-#      slack_report_channel: "#transformers-ci-daily-quantization"
-#      runner: daily-ci
-#      docker: huggingface/transformers-quantization-latest-gpu
-#      ci_event: Daily CI
-#    secrets: inherit
+  quantization-ci:
+    name: Quantization CI
+    uses: ./.github/workflows/self-scheduled.yml
+    with:
+      job: run_quantization_torch_gpu
+      slack_report_channel: "#transformers-ci-daily-quantization"
+      runner: daily-ci
+      docker: huggingface/transformers-quantization-latest-gpu
+      ci_event: Daily CI
+    secrets: inherit
