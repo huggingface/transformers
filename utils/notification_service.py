@@ -1238,8 +1238,10 @@ if __name__ == "__main__":
     if not os.path.isdir(os.path.join(os.getcwd(), f"ci_results_{job_name}")):
         os.makedirs(os.path.join(os.getcwd(), f"ci_results_{job_name}"))
 
-    target_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml@refs/heads/main"
-    is_scheduled_ci_run = os.environ.get("GITHUB_WORKFLOW_REF") == target_workflow
+    nvidia_daily_ci_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml"
+    is_nvidia_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(nvidia_daily_ci_workflow)
+    is_scheduled_ci_run = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+    # TODO: remove this one
     is_scheduled_ci_run = True
 
     # Only the model testing job is concerned: this condition is to avoid other jobs to upload the empty list as
@@ -1291,7 +1293,7 @@ if __name__ == "__main__":
             # This is the previous completed scheduled run
             prev_workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"])
             # For a scheduled run that is not the Nvidia's scheduled daily CI, let's add Nvidia's scheduled daily CI as a target to compare.
-            if not os.environ.get("GITHUB_WORKFLOW_REF").startswith("huggingface/transformers/.github/workflows/self-scheduled-caller.yml"):
+            if not is_nvidia_daily_ci_workflow:
                 # The id of the workflow `.github/workflows/self-scheduled-caller.yml` (not of a workflow run of it).
                 other_workflow_id = "90575235"
                 # We need to get the Nvidia's scheduled daily CI run that match the current run (i.e. run with the same commit SHA)
