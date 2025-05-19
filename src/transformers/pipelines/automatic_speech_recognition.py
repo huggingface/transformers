@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, Optional, Union
 
@@ -326,6 +325,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         postprocess_params = {}
         if decoder_kwargs is not None:
             postprocess_params["decoder_kwargs"] = decoder_kwargs
+
+        # in some models like whisper, the generation config has a `return_timestamps` key
+        if hasattr(self, "generation_config") and hasattr(self.generation_config, "return_timestamps"):
+            return_timestamps = return_timestamps or self.generation_config.return_timestamps
+
         if return_timestamps is not None:
             # Check whether we have a valid setting for return_timestamps and throw an error before we perform a forward pass
             if self.type == "seq2seq" and return_timestamps:
@@ -501,6 +505,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 )
 
             # custom processing for Whisper timestamps and word-level timestamps
+            return_timestamps = return_timestamps or getattr(self.generation_config, "return_timestamps", False)
             if return_timestamps and self.type == "seq2seq_whisper":
                 generate_kwargs["return_timestamps"] = return_timestamps
                 if return_timestamps == "word":

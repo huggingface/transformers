@@ -557,6 +557,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             chunk_length_s=8,
             stride_length_s=1,
             return_timestamps=True,
+            max_new_tokens=1,
         )
 
         _ = pipe(dummy_speech)
@@ -570,6 +571,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             chunk_length_s=8,
             stride_length_s=1,
             return_timestamps="word",
+            max_new_tokens=1,
         )
 
         _ = pipe(dummy_speech)
@@ -588,6 +590,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 chunk_length_s=8,
                 stride_length_s=1,
                 return_timestamps="char",
+                max_new_tokens=1,
             )
 
             _ = pipe(dummy_speech)
@@ -891,13 +894,12 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
-    @unittest.skip("TODO (joao, eustache): this test is failing, find the breaking PR and fix the cause or the test")
     def test_whisper_large_timestamp_prediction(self):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         array = np.concatenate(
             [ds[40]["audio"]["array"], ds[41]["audio"]["array"], ds[42]["audio"]["array"], ds[43]["audio"]["array"]]
         )
-        pipe = pipeline(model="openai/whisper-large-v3", return_timestamps=True)
+        pipe = pipeline(model="openai/whisper-large-v3", return_timestamps=True, num_beams=1)
 
         output = pipe(ds[40]["audio"])
         self.assertDictEqual(

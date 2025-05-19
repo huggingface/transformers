@@ -1039,6 +1039,16 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                         generation_config=default_pipeline_generation_config, use_model_defaults=True, **kwargs
                     )
                     self.generation_config = prepared_generation_config
+                    # if the `max_new_tokens` is set to the pipeline default, but `max_length` is set to a non-default
+                    # value: let's honor `max_length`. E.g. we want Whisper's default `max_length=448` take precedence
+                    # over over the pipeline's length default.
+                    if (
+                        default_pipeline_generation_config.max_new_tokens is not None  # there's a pipeline default
+                        and self.generation_config.max_new_tokens == default_pipeline_generation_config.max_new_tokens
+                        and self.generation_config.max_length is not None
+                        and self.generation_config.max_length != 20  # global default
+                    ):
+                        self.generation_config.max_new_tokens = None
                 else:
                     # TODO (joao): no PT model should reach this line. However, some audio models with complex
                     # inheritance patterns do. Streamline those models such that this line is no longer needed.
