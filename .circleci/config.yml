@@ -43,8 +43,6 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: git branch
-            - run: git log -n 1
             - run: python3 utils/extract_pr_number_from_circleci.py > pr_number.txt
             - run: echo $(cat pr_number.txt)
             - run: if [[ "$(cat pr_number.txt)" == "" && "$CIRCLE_BRANCH" != "main" && "$CIRCLE_BRANCH" != *-release ]]; then echo "Not a PR, not the main branch and not a release branch, skip test!"; circleci-agent step halt; fi
