@@ -9,15 +9,7 @@ on:
     branches:
       - ci_with_torch_version_base
   workflow_dispatch:
-    inputs:
-      report_repo_subfolder:
-        description: 'Type of runner to test (a10 or t4)'
-        required: false
-        default: 'bonbon'
-        type: string
 
-env:
-  REPORT_REPO_SUBFOLDER: 'bonbon'
 
 jobs:
   model-ci:
@@ -29,7 +21,6 @@ jobs:
       runner: daily-ci
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
-      report_repo_subfolder: ${{ inputs.report_repo_subfolder }}
     secrets: inherit
 
 #  torch-pipeline:

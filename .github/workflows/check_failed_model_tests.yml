@@ -9,10 +9,6 @@ on:
       start_sha:
         required: true
         type: string
-      report_repo_subfolder:
-        default: ''
-        required: false
-        type: string
 
 
 env:
@@ -99,7 +95,6 @@ jobs:
         working-directory: /transformers
         env:
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
-          REPORT_REPO_SUBFOLDER: ${{ inputs.report_repo_subfolder }}
         run: |
           apt-get install -y curl
           python3 utils/process_bad_commit_report.py
@@ -109,7 +104,6 @@ jobs:
         working-directory: /transformers
         env:
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
-          REPORT_REPO_SUBFOLDER: ${{ inputs.report_repo_subfolder }}
         run: |
           apt-get install -y curl
           {

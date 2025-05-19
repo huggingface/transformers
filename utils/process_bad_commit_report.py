@@ -68,12 +68,11 @@ if __name__ == "__main__":
         new_data_full[author] = {k: v for k, v in _data.items() if len(v) > 0}
 
     # Upload to Hub and get the url
-    report_repo_subfolder = os.getenv("REPORT_REPO_SUBFOLDER", "")
-    if report_repo_subfolder == "":
-        if os.getenv("GITHUB_EVENT_NAME") != "schedule":
-            # use workflow run id (if it is not a scheduled run)
-            report_repo_subfolder = f"{os.getenv('GITHUB_RUN_NUMBER')}-{os.getenv('GITHUB_RUN_ID')}"
-            report_repo_subfolder = f"runs/{report_repo_subfolder}"
+    report_repo_subfolder = ""
+    if os.getenv("GITHUB_EVENT_NAME") != "schedule":
+        # use workflow run id (if it is not a scheduled run)
+        report_repo_subfolder = f"{os.getenv('GITHUB_RUN_NUMBER')}-{os.getenv('GITHUB_RUN_ID')}"
+        report_repo_subfolder = f"runs/{report_repo_subfolder}"
 
     # TODO: better way
     os.system(f"curl https://api.github.com/repos/huggingface/transformers/actions/runs/{os.getenv('GITHUB_RUN_ID')} > workflow_run.json")

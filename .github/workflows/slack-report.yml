@@ -21,10 +21,6 @@ on:
       ci_event:
         required: true
         type: string
-      report_repo_subfolder:
-        default: ''
-        required: false
-        type: string
 
 env:
   TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
@@ -57,7 +53,6 @@ jobs:
           CI_WORKFLOW_REF: ${{ github.workflow_ref }}
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
-          REPORT_REPO_SUBFOLDER: ${{ inputs.report_repo_subfolder }}
           OTHER_WORKFLOW_ID: "90575235"
           PREV_WORKFLOW_RUN_ID: "14277576462"
           OTHER_WORKFLOW_RUN_ID: "14277576462"
@@ -91,7 +86,6 @@ jobs:
           CI_SHA: ${{ github.sha }}
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
-          REPORT_REPO_SUBFOLDER: ${{ inputs.report_repo_subfolder }}
           PREV_WORKFLOW_RUN_ID: "14277576462"
           OTHER_WORKFLOW_ID: "90575235"
         # We pass `needs.setup.outputs.quantization_matrix` as the argument. A processing in `notification_service_quantization.py` to change
