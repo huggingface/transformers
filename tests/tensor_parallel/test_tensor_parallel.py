@@ -22,6 +22,7 @@ from transformers.integrations.tensor_parallel import get_packed_weights, repack
 from transformers.testing_utils import (
     TestCasePlus,
     get_torch_dist_unique_port,
+    require_huggingface_hub_greater_or_equal,
     require_torch_multi_gpu,
 )
 
@@ -122,6 +123,7 @@ class TestTensorParallel(TestCasePlus):
         )
         self.torchrun(script_to_run)
 
+    @require_huggingface_hub_greater_or_equal("0.31.4")
     def test_model_save(self):
         from safetensors import safe_open
 
