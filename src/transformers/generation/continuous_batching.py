@@ -83,6 +83,8 @@ class RequestState:
     eos_token_id: int = -1
     created_time: float = field(default_factory=time.time)
     error: Optional[str] = None
+    def __hash__(self):
+        return hash(self.request_id)
 
     def current_len(self) -> int:
         """Get the current length of the sequence (prompt + generated tokens)."""
@@ -1181,7 +1183,7 @@ class ContinuousMixin:
             from tqdm.contrib.logging import logging_redirect_tqdm
             with logging_redirect_tqdm([logger]):
                 with tqdm(
-                    total=num_requests, disable=(not progress_bar), desc=f"Generating {num_requests} tokens", unit="token"
+                    total=num_requests, disable=(not progress_bar), desc=f"Solving {num_requests} requests", unit="request"
                 ) as pbar:
                     manager.add_requests(inputs, **kwargs)
                     finished_count = 0

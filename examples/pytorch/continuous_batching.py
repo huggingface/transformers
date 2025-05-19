@@ -3,6 +3,7 @@ import datasets
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
+torch.set_float32_matmul_precision('high')
 
 model_id = "meta-llama/Llama-3.2-3b-Instruct"
 model = AutoModelForCausalLM.from_pretrained(
@@ -12,7 +13,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
 generation_config = GenerationConfig(
     max_new_tokens=32,
-    eos_token_id=tokenizer.eos_token_id,
+    eos_token_id=model.config.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
     use_cache=False,
     num_blocks=2048,
@@ -38,7 +39,6 @@ batch_outputs = model.generate_batch(
 )
 end_time_simple = time.time()
 
-print(f"CB generation took: {end_time_simple - start_time_simple:.2f} seconds")
 for request in batch_outputs:
     input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=False)
     try:
@@ -56,6 +56,7 @@ print("-" * 20)
 print("--- Finished CB Generation Example ---\n\n")
 
 
+print(f"CB generation took: {end_time_simple - start_time_simple:.2f} seconds")
 
 
 
