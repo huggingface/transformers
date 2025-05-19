@@ -476,13 +476,11 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n"
         )
         images_nested = [[self.image, image]]
-        inputs = self.processor(text=prompt, images=images_nested, return_tensors="pt").to(
-            torch_device, torch.float16
-        )
+        inputs = self.processor(text=prompt, images=images_nested, return_tensors="pt").to(torch_device, torch.float16)
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=40)
-        EXPECTED_DECODED_TEXT = "user\n\nWhat is the difference between these images?\nassistant\nThe first image is a radar chart showing the performance of different models in a specific task, while the second image is a street scene with a stop sign in the foreground."    # fmt: skip
+        EXPECTED_DECODED_TEXT = "user\n\nWhat is the difference between these images?\nassistant\nThe first image is a radar chart showing the performance of different models in a specific task, while the second image is a street scene with a stop sign in the foreground."  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),

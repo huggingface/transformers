@@ -442,7 +442,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
 
         return pixel_values
 
-    # Copied from transformers.models.llava.modeling_llava.pad_to_square
+    # Copied from transformers.models.llava.image_processing_llava.LlavaImageProcessor.pad_to_square
     def pad_to_square(
         self,
         image: np.ndarray,

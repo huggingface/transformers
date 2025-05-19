@@ -222,7 +222,7 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             len_image_1 = length * scale_single
             image_inputs_1 = prepare_image_inputs(
                 batch_size=1,
-                min_resolution=0,   # not used
+                min_resolution=0,  # not used
                 max_resolution=len_image_1,
                 num_channels=3,
                 equal_resolution=True,
@@ -230,7 +230,7 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             len_image_2 = length * scale_multi
             image_inputs_2 = prepare_image_inputs(
                 batch_size=7,
-                min_resolution=0,   # not used
+                min_resolution=0,  # not used
                 max_resolution=len_image_2,
                 num_channels=3,
                 equal_resolution=True,
