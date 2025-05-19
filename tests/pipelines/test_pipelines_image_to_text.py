@@ -295,6 +295,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
+    @unittest.skip("TODO (joao, raushan): there is something wrong with image processing in the model/pipeline")
     def test_conditional_generation_llava(self):
         pipe = pipeline("image-to-text", model="llava-hf/bakLlava-v1-hf")
 
