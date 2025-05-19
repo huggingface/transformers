@@ -1,7 +1,6 @@
 from typing import Callable, Optional, Tuple
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import Cache
