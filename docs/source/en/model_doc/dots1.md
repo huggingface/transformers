@@ -14,15 +14,16 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# dots.1
+# dots.llm1
 
 ## Overview
 
-To be released with the official model launch.
+The `dots.llm1` model was proposed in dots.llm1 technical report by rednote-hilab team.
 
-## Usage tips
+The abstract from the report is the following:
 
-To be released with the official model launch.
+*Mixture of Experts (MoE) models have emerged as a promising paradigm for scaling language models efficiently by activating only a subset of parameters for each input token. In this report, we present dots.llm1, a large-scale MoE model that activates 14B parameters out of a total of 142B parameters, delivering performance on par with state-of-the-art models while reducing training and inference costs. Leveraging our meticulously crafted and efficient data processing pipeline, dots.llm1 achieves performance comparable to Qwen2.5-72B after pretraining on 11.2T high-quality tokens and post-training to fully unlock its capabilities. Notably, no synthetic data is used during pretraining. To foster further research, we open-source intermediate training checkpoints at every one trillion tokens, providing valuable insights into the learning dynamics of large language models.*
+
 
 ## Dots1Config
 
