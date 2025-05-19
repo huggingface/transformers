@@ -53,7 +53,6 @@ jobs:
           CI_WORKFLOW_REF: ${{ github.workflow_ref }}
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
-          OTHER_WORKFLOW_ID: "90575235"
           PREV_WORKFLOW_RUN_ID: "14277576462"
           OTHER_WORKFLOW_RUN_ID: "14277576462"
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
@@ -87,7 +86,6 @@ jobs:
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
           PREV_WORKFLOW_RUN_ID: "14277576462"
-          OTHER_WORKFLOW_ID: "90575235"
         # We pass `needs.setup.outputs.quantization_matrix` as the argument. A processing in `notification_service_quantization.py` to change
         # `quantization/bnb` to `quantization_bnb` is required, as the artifact names use `_` instead of `/`.
         run: |
