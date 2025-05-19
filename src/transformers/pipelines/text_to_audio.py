@@ -203,9 +203,9 @@ class TextToAudioPipeline(Pipeline):
         forward_params=None,
         generate_kwargs=None,
     ):
-        if self.assistant_model is not None:
+        if getattr(self, "assistant_model", None) is not None:
             generate_kwargs["assistant_model"] = self.assistant_model
-        if self.assistant_tokenizer is not None:
+        if getattr(self, "assistant_tokenizer", None) is not None:
             generate_kwargs["tokenizer"] = self.tokenizer
             generate_kwargs["assistant_tokenizer"] = self.assistant_tokenizer
 
