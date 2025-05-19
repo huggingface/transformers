@@ -39,10 +39,6 @@ from ..modeling_attn_mask_utils import AttentionMask
 # Setup your logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
-handler = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
 
 @dataclass
 class GenerationOutput:
@@ -643,6 +639,7 @@ class ContinuousBatchProcessor:
             self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.prompt_ids)
             scheduled_requests.append(state.request_id)
+            logger.warning(f"Scheduling request {state.request_id} with length {request_len} and status {state.status}")
             token_budget -= request_len
             if token_budget == 0:
                 break
@@ -651,12 +648,10 @@ class ContinuousBatchProcessor:
         self.waiting_requests = deque(
             [req for req in self.waiting_requests if req.request_id not in request_ids_to_remove_from_waiting]
         )
-        if len(scheduled_requests) > 0:
-            logger.warning(
-                f"Scheduled requests: {len(scheduled_requests)}, Waiting requests: {len(self.waiting_requests)}, Active requests: {len(self.active_requests)}")
+        logger.warning(
+            f"Scheduled requests: {len(scheduled_requests)}, Waiting requests: {len(self.waiting_requests)}, Active requests: {len(self.active_requests)}")
         if len(scheduled_requests) == 0 and len(self.waiting_requests) == 0 and len(self.active_requests) == 0:
-            logger.warning("No requests to process. Exiting.")
-            exit(1)
+            logger.warning("No requests to process. Should exit.")
         return scheduled_requests
 
     @traced
@@ -978,7 +973,7 @@ class ContinuousBatchingManager:
         while (
             self._generation_thread is not None and self._generation_thread.is_alive() or not self.output_queue.empty()
         ):
-            result = self.get_result(timeout=10) # allow the model to run for 10 seconds
+            result = self.get_result(timeout=0.1) # allow the model to run for 10 seconds
             if result is not None:
                 yield result
 
@@ -1200,8 +1195,8 @@ class ContinuousMixin:
                         result = manager.get_result(timeout=1)
                         if result:
                             req_id = result.request_id
-                            results[req_id] = result
                             if result.status == RequestStatus.FINISHED:
+                                results[req_id] = result
                                 finished_count += 1
                                 pbar.update(1)
                         else:
