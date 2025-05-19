@@ -1472,10 +1472,10 @@ class BigBirdPegasusDecoderLayer(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
-        cache_position: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -1494,6 +1494,9 @@ class BigBirdPegasusDecoderLayer(nn.Module):
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
+                cache in the correct position and to infer the complete sequence length.
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -1523,7 +1526,6 @@ class BigBirdPegasusDecoderLayer(nn.Module):
                 layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states

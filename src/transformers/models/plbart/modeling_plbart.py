@@ -1038,9 +1038,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
                 past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
             )
 
-        # TODO: update mask creation with new interface
-        _unsupported_features = output_attentions is True or cross_attn_head_mask is not None or head_mask is not None
-
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
             mask_seq_length = past_key_values_length + seq_length
@@ -1051,6 +1048,9 @@ class PLBartDecoder(PLBartPreTrainedModel):
             if isinstance(past_key_values, EncoderDecoderCache)
             else past_key_values
         )
+
+        # TODO: update mask creation with new interface
+        _unsupported_features = output_attentions is True or cross_attn_head_mask is not None or head_mask is not None
         attention_mask = self._update_causal_mask(
             attention_mask,
             inputs_embeds,

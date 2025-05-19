@@ -737,7 +737,6 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
 
         return attention_mask
 
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_cross_attn_mask
     def _update_cross_attn_mask(
         self,
         encoder_hidden_states: Union[torch.Tensor, None],

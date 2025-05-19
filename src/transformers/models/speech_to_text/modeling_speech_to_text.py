@@ -737,7 +737,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
-    # Copied from transformers.models.bart.modeling_bart.BartEncoder._update_full_mask
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
     def _update_full_mask(
         self,
         attention_mask: Union[torch.Tensor, None],
@@ -1020,7 +1020,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
             cross_attentions=all_cross_attentions,
         )
 
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._update_causal_mask
+    # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenDecoder._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, None],
@@ -1065,7 +1065,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
         return attention_mask
 
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._update_cross_attn_mask
+    # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenDecoder._update_cross_attn_mask
     def _update_cross_attn_mask(
         self,
         encoder_hidden_states: Union[torch.Tensor, None],

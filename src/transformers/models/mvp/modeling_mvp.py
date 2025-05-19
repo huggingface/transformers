@@ -61,7 +61,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
 
 
 # Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->MVP
-class MvpLearnedPositionalEmbedding(nn.Embedding):
+class MVPLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
@@ -72,15 +72,18 @@ class MvpLearnedPositionalEmbedding(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
+    def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0, position_ids: torch.Tensor = None):
         """`input_ids' shape is expected to be [bsz x seqlen]."""
 
-        bsz, seq_len = input_ids.shape[:2]
-        positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-        ).expand(bsz, -1)
+        if position_ids is None:
+            bsz, seq_len = input_ids.shape[:2]
+            position_ids = torch.arange(
+                past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+            ).expand(bsz, -1)
+        else:
+            position_ids = position_ids.unsqueeze(0)
 
-        return super().forward(positions + self.offset)
+        return super().forward(position_ids + self.offset)
 
 
 class MvpAttention(nn.Module):
