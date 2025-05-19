@@ -300,7 +300,6 @@ class ImageTextToTextPipeline(Pipeline):
                 ids of the generated text.
             - **input_text** (`str`) -- The input text.
         """
-        breakpoint()
         if images is None and text is None:
             raise ValueError("You must at least provide either text or images.")
         if images is not None and text is None and not valid_images(images):
