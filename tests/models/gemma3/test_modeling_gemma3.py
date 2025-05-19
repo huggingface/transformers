@@ -50,6 +50,7 @@ if is_torch_available():
     from transformers import (
         Gemma3ForCausalLM,
         Gemma3ForConditionalGeneration,
+        Gemma3Model,
         Gemma3Processor,
         Gemma3TextModel,
     )
@@ -148,9 +149,9 @@ class Gemma3Vision2TextModelTester:
         self,
         parent,
         mm_tokens_per_image=2,
-        image_token_index=1,
-        boi_token_index=2,
-        eoi_token_index=3,
+        image_token_index=4,
+        boi_token_index=5,
+        eoi_token_index=6,
         seq_length=25,
         is_training=True,
         vision_config={
@@ -242,7 +243,14 @@ class Gemma3Vision2TextModelTester:
 
 @require_torch
 class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Gemma3Model,
+            Gemma3ForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
