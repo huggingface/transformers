@@ -591,38 +591,6 @@ class ContinuousBatchProcessor:
 
         self.output_queue.put(state.to_generation_output())
 
-  
-    @traced
-    def _schedule_batch(self) -> List[str]:
-        priority_states = []
-        second_priority_states = []
-        scheduled_requests = []
-        token_budget = self.max_batch_tokens
-
-        for state in self.active_requests.values():
-            if state.status == "decoding":
-                priority_states.append(state)
-            if state.status == "split_pending_remainder":
-                second_priority_states.append(state)
-        second_priority_states.extend(list(self.waiting_requests))
-        candidates = priority_states + second_priority_states
-        request_ids_to_remove_from_waiting = set()
-
-        for state in candidates:
-            self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
-            request_len = len(state.prompt_ids)
-            # maybe pre-allocate more blocks for full length?
-            # if self._allocate_blocks_if_needed(state, request_len):
-            scheduled_requests.append(state.request_id)
-            token_budget -= request_len
-            if token_budget == 0:
-                break
-
-        # Remove processed requests from waiting queue
-        self.waiting_requests = deque(
-            [req for req in self.waiting_requests if req.request_id not in request_ids_to_remove_from_waiting]
-        )
-        return scheduled_requests
 
     @traced(span_name="prepare_request")
     def _prepare_request_for_processing(self, state: RequestState, token_budget, request_ids_to_remove_from_waiting):

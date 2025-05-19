@@ -12,7 +12,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
 generation_config = GenerationConfig(
     max_new_tokens=512,
-    eos_token_id=tokenizer.eos_token_id,
+    eos_token_id=model.config.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
     do_sample=True,
     use_cache=False,
