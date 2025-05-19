@@ -31,6 +31,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 from ...activations import ACT2FN
+
 # from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -40,10 +41,14 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from timm.models.pe import PE
+from timm.models.eva import (
+    vit_pe_core_large_patch14_336,
+    vit_pe_core_gigantic_patch14_448,
+)
+
 from ..auto import AutoModelForCausalLM
 
-from .configuration_perception_lm import PerceptionLMConfig, PerceptionEncoderConfig
+from .configuration_perception_lm import PerceptionEncoderConfig, PerceptionLMConfig
 
 logger = logging.get_logger(__name__)
 
@@ -53,34 +58,44 @@ _CONFIG_FOR_DOC = "PerceptionLMConfig"
 _CHECKPOINT_FOR_DOC = "facebook/Perception-LM-1B"
 
 
-class PerceptionEncoder(PE):
+class PerceptionEncoder(nn.Module):
     def __init__(self, config: PerceptionEncoderConfig):
+        super().__init__()
         assert config.pool_type == "none"
         self.use_cls_token = config.use_cls_token
-        # Converting configs to timm PE args
-        super().__init__(
-            img_size=config.image_size,
-            patch_size=config.patch_size,
-            width=config.width,
-            layers=config.layers,
-            heads=config.heads,
-            mlp_ratio=config.mlp_ratio,
-            use_cls_token=config.use_cls_token,
-            use_abs_posemb=config.use_abs_posemb,
-            use_ln_post=config.use_ln_post,
-            ls_init_value=config.ls_init_value,
-            drop_path=config.drop_path,
-            output_dim=config.width,
-            use_attn_pool=False,
-            use_proj=False,
-        )
+        kwargs = {
+            "img_size": (config.image_size, config.image_size),
+            "depth": config.layers,
+            "num_classes": 0,
+            "global_pool": "",
+            "use_post_transformer_norm": config.use_ln_post,
+            "init_values": config.ls_init_value,
+        }
+        if config.layers == 23 and config.width == 1024:
+            self.eva_pe = vit_pe_core_large_patch14_336(
+                **kwargs,
+            )
+        elif config.layers == 47 and config.width == 1536:
+            self.eva_pe = vit_pe_core_gigantic_patch14_448(
+                **kwargs,
+            )
+        else:
+            raise ValueError(
+                f"Unsupported PE config: {config.layers} layers and {config.width} width"
+            )
+        self.eva_pe._initialize_weights = (
+            lambda x: x
+        )  # disable weight initialization
 
     def forward(self, x):
-        x = super().forward(x)
+        x = self.eva_pe(x)
         if self.use_cls_token:
             return x[:, 1:, :]
         else:
             return x
+        
+    def _initialize_weights(self):
+        pass
 
 
 @dataclass
@@ -122,7 +137,6 @@ class PerceptionLMCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
-
 
 
 class AdaptiveAvgPooling(nn.Module):
@@ -296,6 +310,8 @@ PERCEPTION_LM_INPUTS_DOCSTRING = r"""
             this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
             the complete sequence length.
 """
+
+
 @add_start_docstrings(
     """The PERCEPTION_LM model which consists of a vision backbone and a language model.""",
     PERCEPTION_LM_START_DOCSTRING,
@@ -303,6 +319,7 @@ PERCEPTION_LM_INPUTS_DOCSTRING = r"""
 class PerceptionLMModel(LLaVaModel):
     def __init__(self, config: PerceptionLMConfig):
         super().__init__(config)
+        del self.vision_tower
         self.vision_tower = PerceptionEncoder(config.vision_config)
         self.multi_modal_projector = PerceptionLMMultiModalProjector(config)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
@@ -344,7 +361,6 @@ class PerceptionLMModel(LLaVaModel):
         print("image_outputs shape: ", image_outputs.shape)
         image_features = self.multi_modal_projector(image_outputs)
         return image_features
-
 
     @add_start_docstrings_to_model_forward(PERCEPTION_LM_INPUTS_DOCSTRING)
     @replace_return_docstrings(
@@ -470,7 +486,9 @@ class PerceptionLMModel(LLaVaModel):
     """The PERCEPTION_LM model which consists of a vision backbone and a language model.""",
     PERCEPTION_LM_START_DOCSTRING,
 )
-class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, GenerationMixin):
+class PerceptionLMForConditionalGeneration(
+    PerceptionLMPreTrainedModel, GenerationMixin
+):
 
     def __init__(self, config: PerceptionLMConfig, **super_kwargs):
         super().__init__(config, **super_kwargs)
@@ -510,7 +528,7 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             model_inputs["pixel_values"] = pixel_values
             model_inputs["pixel_values_videos"] = pixel_values_videos
         return model_inputs
-    
+
     @add_start_docstrings_to_model_forward(PERCEPTION_LM_INPUTS_DOCSTRING)
     @replace_return_docstrings(
         output_type=PerceptionLMCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
