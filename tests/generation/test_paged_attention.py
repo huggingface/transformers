@@ -1,7 +1,10 @@
-import unittest
 import time
+import unittest
+
 from parameterized import parameterized
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+
 
 _TEST_PROMPTS = [
     "A man is a walking his dog down the street, and a the turn he sees",
@@ -19,19 +22,15 @@ _EXPECTED_OUTPUTS = [
     "track. The train is stopped for 30 minutes. The train is moving at a speed of 60 km/h. How many kilometers does the train travel in 30 minutes?\n## Step 1: Convert the speed from km/h to km/min",
 ]
 
+
 class TestBatchGeneration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.model = AutoModelForCausalLM.from_pretrained(
-            "meta-llama/Llama-3.2-3b-Instruct",
-            torch_dtype="bfloat16",
-            device_map="auto"
+            "meta-llama/Llama-3.2-3b-Instruct", torch_dtype="bfloat16", device_map="auto"
         ).eval()
 
-        cls.tokenizer = AutoTokenizer.from_pretrained(
-            "meta-llama/Llama-3.2-3b-Instruct",
-            padding_side="left"
-        )
+        cls.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", padding_side="left")
 
         if cls.tokenizer.pad_token is None:
             cls.tokenizer.pad_token = cls.tokenizer.eos_token
@@ -39,12 +38,14 @@ class TestBatchGeneration(unittest.TestCase):
 
         cls.model.use_cache = False
 
-    @parameterized.expand([
-        ("eager_paged", 64, 128, 64),
-        ("sdpa_paged", 32, 256, 128),
-        ("paged_attention", 16, 512, 256),
-        ("flex_paged", 64, 128, 64),
-    ])
+    @parameterized.expand(
+        [
+            ("eager_paged", 64, 128, 64),
+            ("sdpa_paged", 32, 256, 128),
+            ("paged_attention", 16, 512, 256),
+            ("flex_paged", 64, 128, 64),
+        ]
+    )
     def test_generate_batch_consistency(self, attn_impl, num_blocks, block_size, max_batch_tokens):
         self.model.config.attn_implementation = attn_impl
 
@@ -68,12 +69,14 @@ class TestBatchGeneration(unittest.TestCase):
             generation_config=generation_config,
         )
         end = time.time()
-        print(f"\n[{attn_impl}] Batch took {end - start:.2f}s with config: blocks={num_blocks}, block_size={block_size}, max_batch_tokens={max_batch_tokens}")
+        print(
+            f"\n[{attn_impl}] Batch took {end - start:.2f}s with config: blocks={num_blocks}, block_size={block_size}, max_batch_tokens={max_batch_tokens}"
+        )
 
         for i, req_id in enumerate(batch_outputs):
             generated = self.tokenizer.decode(batch_outputs[req_id].static_outputs, skip_special_tokens=False).strip()
             expected = _EXPECTED_OUTPUTS[i].strip()
             self.assertTrue(
                 generated.startswith(expected),
-                msg=f"[{attn_impl}] Mismatch in request {i}:\nExpected start: {expected}\nGot: {generated}"
+                msg=f"[{attn_impl}] Mismatch in request {i}:\nExpected start: {expected}\nGot: {generated}",
             )

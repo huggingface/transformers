@@ -104,6 +104,6 @@ deps = {
     "libcst": "libcst",
     "rich": "rich",
     "opentelemetry-api": "opentelemetry-api",
-    "opentelemetry-sdk": "opentelemetry-sdk",
     "opentelemetry-exporter-otlp": "opentelemetry-exporter-otlp",
+    "opentelemetry-sdk": "opentelemetry-sdk",
 }

@@ -11,22 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import itertools
 from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
+import torch.nn.functional as F
 
 from .utils.import_utils import is_torchdynamo_compiling
 
-import torch
-import torch.nn.functional as F
-import itertools
-from typing import Optional
 
 # Terminal styles and visual elements
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
 RESET = "\033[0m"
+
 
 def get_style(style):
     if style == "majong":
@@ -107,6 +106,7 @@ def tensor_to_mask_visual(original_tensor: torch.Tensor, grid_size=(20, 40), sty
         result.append(f"\n{WHITE_SQUARE} × {downsample_ratio} original columns per cell")
 
     return "\n".join(result)
+
 
 class AttentionMask(torch.Tensor):
     def __new__(cls, data, style="long"):

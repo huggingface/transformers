@@ -1,9 +1,13 @@
 import time
+
 import datasets
 import torch
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
-torch.set_float32_matmul_precision('high')
+
+
+torch.set_float32_matmul_precision("high")
 
 model_id = "meta-llama/Llama-3.2-3b-Instruct"
 model = AutoModelForCausalLM.from_pretrained(
@@ -26,8 +30,11 @@ train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
 
 # --- Example 1: Simple Version using generate_batch ---
 print("--- Running CB Generation Example ---")
+
+
 def tokenize_function(examples):
     return tokenizer(examples["question"])
+
 
 tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
 simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
@@ -58,15 +65,6 @@ print("--- Finished CB Generation Example ---\n\n")
 
 
 print(f"CB generation took: {end_time_simple - start_time_simple:.2f} seconds")
-
-
-
-
-
-
-
-
-
 
 
 # train_dataset = train_dataset.select(range(5))  # Use only 5 examples for the simple version

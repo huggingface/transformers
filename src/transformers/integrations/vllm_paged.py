@@ -2,16 +2,18 @@ import torch
 
 from ..generation.continuous_batching import PagedAttentionCache
 from ..utils import is_kernels_available
+
+
 if is_kernels_available():
     from kernels import get_kernel
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 
+
 repo_id = "kernels-community/paged-attention"
 kernel_name = "vllm_kernel"
 paged_attention = get_kernel(repo_id)
-ALL_ATTENTION_FUNCTIONS.register(
-        f"kernel_{repo_id.replace('/', '_')}", getattr(paged_attention, kernel_name)
-)
+ALL_ATTENTION_FUNCTIONS.register(f"kernel_{repo_id.replace('/', '_')}", getattr(paged_attention, kernel_name))
+
 
 def kernel_attention_forward(
     module: torch.nn.Module,
@@ -19,7 +21,7 @@ def kernel_attention_forward(
     k: torch.Tensor,
     v: torch.Tensor,
     attention_mask: torch.Tensor,
-    cache: PagedAttentionCache=None,
+    cache: PagedAttentionCache = None,
     cumulative_seqlens_q=None,
     cumulative_seqlens_k=None,
     max_seqlen_q=None,
@@ -66,20 +68,24 @@ def kernel_attention_forward(
     )
 
     return attn_output, None
+
+
 import torch
 
 from ..generation.continuous_batching import PagedAttentionCache
 from ..utils import is_kernels_available
+
+
 if is_kernels_available():
     from kernels import get_kernel
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 
+
 repo_id = "kernels-community/paged-attention"
 kernel_name = "vllm_kernel"
 paged_attention = get_kernel(repo_id)
-ALL_ATTENTION_FUNCTIONS.register(
-        f"kernel_{repo_id.replace('/', '_')}", getattr(paged_attention, kernel_name)
-)
+ALL_ATTENTION_FUNCTIONS.register(f"kernel_{repo_id.replace('/', '_')}", getattr(paged_attention, kernel_name))
+
 
 def kernel_attention_forward(
     module: torch.nn.Module,
@@ -87,7 +93,7 @@ def kernel_attention_forward(
     k: torch.Tensor,
     v: torch.Tensor,
     attention_mask: torch.Tensor,
-    cache: PagedAttentionCache=None,
+    cache: PagedAttentionCache = None,
     cumulative_seqlens_q=None,
     cumulative_seqlens_k=None,
     max_seqlen_q=None,

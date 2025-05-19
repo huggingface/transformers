@@ -13,32 +13,33 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from functools import partial
+import logging
 import queue
 import statistics
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Deque, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+from torch.profiler import profile, schedule, tensorboard_trace_handler
 from tqdm import tqdm
-import logging
 
 from ..cache_utils import Cache
 from ..configuration_utils import PretrainedConfig
 from ..generation.configuration_utils import GenerationConfig
 from ..generation.utils import GenerationMixin, RequestStatus
-
-from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
-from torch.profiler import profile, schedule, tensorboard_trace_handler
 from ..modeling_attn_mask_utils import AttentionMask
+from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
+
 
 # Setup your logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
+
 
 @dataclass
 class GenerationOutput:
@@ -66,7 +67,7 @@ class RequestState:
     """Tracks the state of a generation request through its lifecycle.
 
     Attributes:
-        status (RequestStatus): can be one of PENDING, PREFILLING, PREFILLING_SPLIT, 
+        status (RequestStatus): can be one of PENDING, PREFILLING, PREFILLING_SPLIT,
                                 SPLIT_PENDING_REMAINDER, DECODING, FINISHED, FAILED
     """
 
@@ -83,6 +84,7 @@ class RequestState:
     eos_token_id: int = -1
     created_time: float = field(default_factory=time.time)
     error: Optional[str] = None
+
     def __hash__(self):
         return hash(self.request_id)
 
@@ -129,6 +131,7 @@ class RequestState:
             logprobs=[],
             error=self.error,
         )
+
 
 @attach_tracer()
 class PagedAttentionCache(Cache):
@@ -257,8 +260,10 @@ class PagedAttentionCache(Cache):
             block_offset = idx % block_size
 
             if block_idx >= len(block_table):
-                raise IndexError(f"Logical index {idx} maps to block index {block_idx} which is out of bounds "
-                                f"for request {request_id}")
+                raise IndexError(
+                    f"Logical index {idx} maps to block index {block_idx} which is out of bounds "
+                    f"for request {request_id}"
+                )
 
             physical_block_num = block_table[block_idx]
             physical_index = physical_block_num * block_size + block_offset
@@ -486,10 +491,10 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_k = torch.zeros((T + 1,), **tensor_metadata)
         self.write_index = torch.zeros((T,), **tensor_metadata)
         self.read_index = torch.zeros((max_token_budget,), **tensor_metadata)
-        self.logits_indices = torch.full((T, ), -1 , **tensor_metadata) 
+        self.logits_indices = torch.full((T,), -1, **tensor_metadata)
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
-        self.output_ids = torch.full((1, T), -1 , **tensor_metadata) 
+        self.output_ids = torch.full((1, T), -1, **tensor_metadata)
 
     @traced
     def reset_static_tensors(self):
@@ -585,7 +590,9 @@ class ContinuousBatchProcessor:
     @traced(span_name="prepare_request")
     def _prepare_request_for_processing(self, state: RequestState, token_budget, request_ids_to_remove_from_waiting):
         """Prepare a request for processing in the current batch."""
-        request_tokens = state.remaining_prompt_ids if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else state.prompt_ids
+        request_tokens = (
+            state.remaining_prompt_ids if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else state.prompt_ids
+        )
         if len(request_tokens) < token_budget:
             # Can process the entire prompt/remainder
             if state.status == RequestStatus.PENDING:
@@ -614,7 +621,7 @@ class ContinuousBatchProcessor:
         current_len = state.current_len()
         occupency = len(state.allocated_blocks) * self.cache.block_size - current_len
         if occupency < len_next_tokens or (len(state.allocated_blocks) == 0):
-            blocks_needed = ((len_next_tokens-occupency+1) // self.cache.block_size) + 1
+            blocks_needed = ((len_next_tokens - occupency + 1) // self.cache.block_size) + 1
             allocated = self.cache.allocate_blocks(blocks_needed, state.request_id)
             if not allocated:
                 return False
@@ -640,12 +647,14 @@ class ContinuousBatchProcessor:
         for state in candidates:
             self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.prompt_ids)
-            if not self._allocate_blocks_if_needed(state, len(state.prompt_ids)): # don't schedule if we can't allocate blocks
+            if not self._allocate_blocks_if_needed(
+                state, len(state.prompt_ids)
+            ):  # don't schedule if we can't allocate blocks
                 continue
             scheduled_requests.append(state.request_id)
             token_budget -= request_len
-            if state in self.waiting_requests:      # TODO this is most probably slow, hash should be re-implemented
-                self.waiting_requests.remove(state) # same here
+            if state in self.waiting_requests:  # TODO this is most probably slow, hash should be re-implemented
+                self.waiting_requests.remove(state)  # same here
             if token_budget == 0:
                 break
         if len(scheduled_requests) == 0 and len(self.waiting_requests) == 0 and len(self.active_requests) == 0:
@@ -694,13 +703,14 @@ class ContinuousBatchProcessor:
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
             cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + key_length)
             if len(state.remaining_prompt_ids) == 0:
-                logits_indices.append(cumulative_seqlens_q[-1]-1)
+                logits_indices.append(cumulative_seqlens_q[-1] - 1)
             self.max_seqlen_q = max(self.max_seqlen_q, query_length)
             self.max_seqlen_k = max(self.max_seqlen_k, key_length)
             state.position_offset += query_length
 
         logger.warning(
-            f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.waiting_requests)}, Active: {len(self.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}")
+            f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.waiting_requests)}, Active: {len(self.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
+        )
         self._build_tensors(
             input_ids,
             position_ids,
@@ -723,22 +733,24 @@ class ContinuousBatchProcessor:
         logits_indices,
     ):
         to_tensor = partial(torch.tensor, **self.tensor_metadata)
-        self.input_ids[:, :len(input_ids)] = to_tensor(input_ids)
-        self.position_ids[:, :len(position_ids)] = to_tensor(position_ids)
-        self.write_index[:len(write_index)] = to_tensor(write_index)
-        self.read_index[:len(read_index)] = to_tensor(read_index)
-        self.cumulative_seqlens_q[:len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
-        self.cumulative_seqlens_k[:len(cumulative_seqlens_k)] = to_tensor(cumulative_seqlens_k)
-        self.logits_indices[:len(logits_indices)] = to_tensor(logits_indices)
+        self.input_ids[:, : len(input_ids)] = to_tensor(input_ids)
+        self.position_ids[:, : len(position_ids)] = to_tensor(position_ids)
+        self.write_index[: len(write_index)] = to_tensor(write_index)
+        self.read_index[: len(read_index)] = to_tensor(read_index)
+        self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
+        self.cumulative_seqlens_k[: len(cumulative_seqlens_k)] = to_tensor(cumulative_seqlens_k)
+        self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
         min_value = torch.finfo(self.model_dtype).min
-        if self.config._attn_implementation != "paged_attention": # we set `is_causal` to True in paged call`
+        if self.config._attn_implementation != "paged_attention":  # we set `is_causal` to True in paged call`
             for i in range(len(cumulative_seqlens_q) - 1):
                 if (
                     cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
                     < cumulative_seqlens_k[i + 1] - cumulative_seqlens_k[i]
                     and cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] >= 1
                 ):
-                    diagonal = cumulative_seqlens_k[i + 1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
+                    diagonal = (
+                        cumulative_seqlens_k[i + 1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
+                    )
                     diagonal = diagonal - cumulative_seqlens_k[i]
                 else:
                     diagonal = 1
@@ -747,7 +759,10 @@ class ContinuousBatchProcessor:
 
                 mask = torch.triu(
                     torch.full(
-                        self.attention_mask[..., query_range, key_range].shape, min_value, dtype=self.model_dtype, device=self.model_device
+                        self.attention_mask[..., query_range, key_range].shape,
+                        min_value,
+                        dtype=self.model_dtype,
+                        device=self.model_device,
                     ),
                     diagonal=diagonal,
                 )
@@ -969,7 +984,7 @@ class ContinuousBatchingManager:
         while (
             self._generation_thread is not None and self._generation_thread.is_alive() or not self.output_queue.empty()
         ):
-            result = self.get_result(timeout=0.1) # allow the model to run for 10 seconds
+            result = self.get_result(timeout=0.1)  # allow the model to run for 10 seconds
             if result is not None:
                 yield result
 
@@ -1041,18 +1056,20 @@ class ContinuousBatchingManager:
 
             if self.profile:
                 tracing_schedule = schedule(skip_first=2, warmup=3, active=200, repeat=100, wait=1)
-                trace_handler = tensorboard_trace_handler(dir_name="/fsx/arthur/transformers", use_gzip=True, worker_name="paged_compile")
-                activities=[
+                trace_handler = tensorboard_trace_handler(
+                    dir_name="/fsx/arthur/transformers", use_gzip=True, worker_name="paged_compile"
+                )
+                activities = [
                     torch.profiler.ProfilerActivity.CPU,
                     torch.profiler.ProfilerActivity.CUDA,
                 ]
                 with profile(
-                    activities = activities,
-                    schedule = tracing_schedule,
-                    on_trace_ready = trace_handler,
-                    record_shapes = False,
-                    with_stack = True
-                ) as prof:                    
+                    activities=activities,
+                    schedule=tracing_schedule,
+                    on_trace_ready=trace_handler,
+                    record_shapes=False,
+                    with_stack=True,
+                ) as prof:
                     while not self.stop_event.is_set() or batch_processor.has_pending_requests():
                         self._inner_generation_loop(batch_processor, is_first)
                         if is_first:
@@ -1063,8 +1080,6 @@ class ContinuousBatchingManager:
                     self._inner_generation_loop(batch_processor, is_first)
                     if is_first:
                         is_first = False
-
-
 
         except Exception as e:
             logger.error(f"Error in generation loop: {e}", exc_info=True)
@@ -1096,7 +1111,7 @@ class ContinuousBatchingManager:
 
     @traced(span_name="graph_replay")
     def _graph_replay(self):
-        self.graph.replay()        
+        self.graph.replay()
 
     @traced
     def _handle_critical_error(self, error, batch_processor: Optional[ContinuousBatchProcessor]):
@@ -1181,9 +1196,13 @@ class ContinuousMixin:
         num_requests = len(inputs)
         try:
             from tqdm.contrib.logging import logging_redirect_tqdm
+
             with logging_redirect_tqdm([logger]):
                 with tqdm(
-                    total=num_requests, disable=(not progress_bar), desc=f"Solving {num_requests} requests", unit="request"
+                    total=num_requests,
+                    disable=(not progress_bar),
+                    desc=f"Solving {num_requests} requests",
+                    unit="request",
                 ) as pbar:
                     manager.add_requests(inputs, **kwargs)
                     finished_count = 0

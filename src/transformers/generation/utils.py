@@ -5285,6 +5285,7 @@ def _dola_select_contrast(
 
 class RequestStatus(Enum):
     """Status of a generation request through its lifecycle."""
+
     PENDING = "pending"
     PREFILLING = "prefilling"
     PREFILLING_SPLIT = "prefilling_split"

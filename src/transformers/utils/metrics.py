@@ -5,6 +5,7 @@ from typing import Any, Callable, List, Optional, Tuple, Union
 
 from ..generation.utils import RequestStatus
 
+
 try:
     from opentelemetry import metrics, trace
     from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
@@ -291,4 +292,3 @@ class ContinuousBatchProcessorMetrics:
             )
         except Exception as e:
             logger.warning(f"Failed to record batch metrics: {e}")
-
