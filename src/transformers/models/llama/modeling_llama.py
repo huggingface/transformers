@@ -421,7 +421,7 @@ class LlamaModel(LlamaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if False and past_key_values is None:
+        if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
 
         if cache_position is None:
