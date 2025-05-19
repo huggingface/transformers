@@ -804,9 +804,11 @@ def create_masks_for_generate(
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
     """
+    # The attribute reside in the text config for composite models
+    effective_config = config.get_text_config()
     # Prepare the mask args
     mask_kwargs = {
-        "config": config,
+        "config": effective_config,
         "input_embeds": input_embeds,
         "attention_mask": attention_mask,
         "cache_position": cache_position,
@@ -815,16 +817,16 @@ def create_masks_for_generate(
     }
 
     # If the attribute exist, we need several masks
-    if hasattr(config, "layer_types"):
+    if hasattr(effective_config, "layer_types"):
         causal_masks = {}
-        for layer_pattern in set(config.layer_types):
+        for layer_pattern in set(effective_config.layer_types):
             causal_masks[layer_pattern] = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern](**mask_kwargs)
         return causal_masks
     # In this case, all layers are sliding
-    elif getattr(config, "sliding_window", None) is not None:
+    elif getattr(effective_config, "sliding_window", None) is not None:
         return create_sliding_window_causal_mask(**mask_kwargs)
     # In this case, all layxers are chunked
-    elif getattr(config, "attention_chunk_size", None) is not None:
+    elif getattr(effective_config, "attention_chunk_size", None) is not None:
         return create_chunked_causal_mask(**mask_kwargs)
     # All layers use standard causal attention
     return create_causal_mask(**mask_kwargs)
