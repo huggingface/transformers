@@ -52,6 +52,7 @@ class PerceptionEncoder(nn.Module):
             "num_classes": 0,
             "global_pool": "",
             "use_post_transformer_norm": config.use_ln_post,
+            "init_values": config.ls_init_value,
         }
         if config.layers == 23 and config.width == 1024:
             self.eva_pe = vit_pe_core_large_patch14_336(
