@@ -97,6 +97,7 @@ from .utils import (
     is_grokadamw_available,
     is_hadamard_available,
     is_hqq_available,
+    is_huggingface_hub_greater_or_equal,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -538,6 +539,21 @@ def require_torch_greater_or_equal(version: str):
         return unittest.skipUnless(is_torch_greater_or_equal(version), f"test requires PyTorch version >= {version}")(
             test_case
         )
+
+    return decorator
+
+
+def require_huggingface_hub_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires huggingface_hub version >= `version`.
+
+    These tests are skipped when huggingface_hub version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(
+            is_huggingface_hub_greater_or_equal(version), f"test requires huggingface_hub version >= {version}"
+        )(test_case)
 
     return decorator
 
