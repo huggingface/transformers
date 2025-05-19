@@ -641,15 +641,11 @@ class ContinuousBatchProcessor:
             if not self._allocate_blocks_if_needed(state, len(state.prompt_ids)): # don't schedule if we can't allocate blocks
                 continue
             scheduled_requests.append(state.request_id)
-            logger.warning(f"Scheduling request {state.request_id} with length {request_len} and status {state.status}")
             token_budget -= request_len
-            if state in self.waiting_requests:
-                self.waiting_requests.remove(state)
+            if state in self.waiting_requests:      # TODO this is most probably slow, hash should be re-implemented
+                self.waiting_requests.remove(state) # same here
             if token_budget == 0:
                 break
-
-        logger.warning(
-            f"Scheduled requests: {len(scheduled_requests)}, Waiting requests: {len(self.waiting_requests)}, Active requests: {len(self.active_requests)}")
         if len(scheduled_requests) == 0 and len(self.waiting_requests) == 0 and len(self.active_requests) == 0:
             logger.warning("No requests to process. Should exit.")
         return scheduled_requests
@@ -701,6 +697,8 @@ class ContinuousBatchProcessor:
             self.max_seqlen_k = max(self.max_seqlen_k, key_length)
             state.position_offset += query_length
 
+        logger.warning(
+            f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.waiting_requests)}, Active: {len(self.active_requests)}. Q: {cumulative_seqlens_q[-1]}. KV: {cumulative_seqlens_k[-1]}")
         self._build_tensors(
             input_ids,
             position_ids,
