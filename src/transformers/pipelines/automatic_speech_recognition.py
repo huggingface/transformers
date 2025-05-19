@@ -304,7 +304,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         return_timestamps=None,
         return_language=None,
         generate_kwargs=None,
-        max_new_tokens=None,
     ):
         # No parameters on this pipeline right now
         preprocess_params = {}
@@ -321,18 +320,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             preprocess_params["stride_length_s"] = stride_length_s
 
         forward_params = defaultdict(dict)
-        if max_new_tokens is not None:
-            warnings.warn(
-                "`max_new_tokens` is deprecated and will be removed in version 4.49 of Transformers. To remove this warning, pass `max_new_tokens` as a key inside `generate_kwargs` instead.",
-                FutureWarning,
-            )
-            forward_params["max_new_tokens"] = max_new_tokens
         if generate_kwargs is not None:
-            if max_new_tokens is not None and "max_new_tokens" in generate_kwargs:
-                raise ValueError(
-                    "`max_new_tokens` is defined both as an argument and inside `generate_kwargs` argument, please use"
-                    " only 1 version"
-                )
             forward_params.update(generate_kwargs)
 
         postprocess_params = {}

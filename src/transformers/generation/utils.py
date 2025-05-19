@@ -1753,11 +1753,12 @@ class GenerationMixin:
             ):
                 modified_values = {}
                 default_generation_config = GenerationConfig()
-                for key, default_value in default_generation_config.__dict__.items():
+                # we iterate over the model's generation config: it may hold custom keys, which we'll want to copy
+                for key, model_gen_config_value in self.generation_config.__dict__.items():
                     if key.startswith("_") or key == "transformers_version":  # metadata
                         continue
-                    custom_gen_config_value = getattr(generation_config, key)
-                    model_gen_config_value = getattr(self.generation_config, key)
+                    default_value = getattr(default_generation_config, key, None)
+                    custom_gen_config_value = getattr(generation_config, key, None)
                     if custom_gen_config_value == default_value and model_gen_config_value != default_value:
                         modified_values[key] = model_gen_config_value
                         setattr(generation_config, key, model_gen_config_value)

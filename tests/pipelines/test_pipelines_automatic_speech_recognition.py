@@ -599,6 +599,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
             framework="pt",
+            num_beams=1,
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         audio = ds[40]["audio"]
@@ -615,6 +616,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
             framework="pt",
+            num_beams=1,
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:2]")
         EXPECTED_OUTPUT = [
