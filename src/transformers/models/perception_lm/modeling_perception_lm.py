@@ -25,7 +25,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
-from timm.models.pe import PE
+from timm.models.eva import vit_pe_core_gigantic_patch14_448, vit_pe_core_large_patch14_336
 from torch import nn
 
 from transformers.generation.utils import GenerationMixin
@@ -41,34 +41,39 @@ from .configuration_perception_lm import PerceptionEncoderConfig, PerceptionLMCo
 _CONFIG_FOR_DOC = "PerceptionLMConfig"
 
 
-class PerceptionEncoder(PE):
+class PerceptionEncoder(nn.Module):
     def __init__(self, config: PerceptionEncoderConfig):
+        super().__init__()
         assert config.pool_type == "none"
         self.use_cls_token = config.use_cls_token
-        # Converting configs to timm PE args
-        super().__init__(
-            img_size=config.image_size,
-            patch_size=config.patch_size,
-            width=config.width,
-            layers=config.layers,
-            heads=config.heads,
-            mlp_ratio=config.mlp_ratio,
-            use_cls_token=config.use_cls_token,
-            use_abs_posemb=config.use_abs_posemb,
-            use_ln_post=config.use_ln_post,
-            ls_init_value=config.ls_init_value,
-            drop_path=config.drop_path,
-            output_dim=config.width,
-            use_attn_pool=False,
-            use_proj=False,
-        )
+        kwargs = {
+            "img_size": (config.image_size, config.image_size),
+            "depth": config.layers,
+            "num_classes": 0,
+            "global_pool": "",
+            "use_post_transformer_norm": config.use_ln_post,
+        }
+        if config.layers == 23 and config.width == 1024:
+            self.eva_pe = vit_pe_core_large_patch14_336(
+                **kwargs,
+            )
+        elif config.layers == 47 and config.width == 1536:
+            self.eva_pe = vit_pe_core_gigantic_patch14_448(
+                **kwargs,
+            )
+        else:
+            raise ValueError(f"Unsupported PE config: {config.layers} layers and {config.width} width")
+        self.eva_pe._initialize_weights = lambda x: x  # disable weight initialization
 
     def forward(self, x):
-        x = super().forward(x)
+        x = self.eva_pe(x)
         if self.use_cls_token:
             return x[:, 1:, :]
         else:
             return x
+
+    def _initialize_weights(self):
+        pass
 
 
 @dataclass
@@ -292,9 +297,9 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
 
     def __init__(self, config: PerceptionLMConfig):
         super().__init__(config)
-        self.vision_tower = PerceptionEncoder(config.vision_config)
         self.multi_modal_projector = PerceptionLMMultiModalProjector(config)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        self.vision_tower = PerceptionEncoder(config.vision_config)
         self.post_init()
 
     def get_input_embeddings(self):
