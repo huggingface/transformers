@@ -745,13 +745,10 @@ class Gemma3Model(PaliGemmaModel):
         return image_features
 
     def _update_causal_mask(self, causal_mask, token_type_ids, attention_mask):
-        # Apply bidirectional mask on images if token type ids are provided
-        if causal_mask is not None:
-            sequence_length = causal_mask.shape[2]
-        else:
-            sequence_length = attention_mask.shape[-1]
+        sequence_length = causal_mask.shape[2]
 
         if token_type_ids is not None and sequence_length != 1:
+            # Apply bidirectional mask on images if token type ids are provided
             token_type_mask = token_type_ids.unsqueeze(1) == token_type_ids.unsqueeze(2)
             token_type_mask[token_type_ids == 0] = False  # if text token do not change anything
 
@@ -863,6 +860,7 @@ class Gemma3Model(PaliGemmaModel):
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "output_attentions": output_attentions,
+                "allow_is_causal_skip": not (token_type_ids is not None and inputs_embeds.shape[1] != 1)
             }
             # Create the masks
             causal_mask_mapping = {
@@ -1056,15 +1054,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
-
-        # If we are compiling, `generate` prepares the masks in advance, and it's a dict in this case - we simply need to
-        # update it with the `token_type_ids` if present
-        if isinstance(model_inputs["attention_mask"], dict):
-            causal_mask_mapping = {
-                k: self.model._update_causal_mask(v, token_type_ids, attention_mask)
-                for k, v in model_inputs["attention_mask"].items()
-            }
-            model_inputs["attention_mask"] = causal_mask_mapping
 
         return model_inputs
 

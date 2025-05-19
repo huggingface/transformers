@@ -534,6 +534,7 @@ def create_causal_mask(
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     output_attentions: bool = False,
+    allow_is_causal_skip: Optional[bool] = None,
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
     """
     Create a standard causal mask based on the attention implementation used (stored in the config). If `past_key_values`
@@ -555,6 +556,9 @@ def create_causal_mask(
             The past key values, if we use a cache.
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
+        allow_is_causal_skip (`bool`, optional):
+            Whether to allow sdpa to avoid creating a mask under specific conditions. Some models should always create the mask
+            even if sdpa can technically avoid it (e.g. see Gemma3, when token_type_ids is passed)
     """
     # If we have an HybridCache structure, here we want to create the mask for the full layers
     try:
@@ -574,7 +578,7 @@ def create_causal_mask(
 
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
-    allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+    allow_is_causal_skip = allow_is_causal_skip or (not past_key_values.is_compileable if past_key_values is not None else True)
 
     # We now create the mask
     return mask_interface(
@@ -597,6 +601,7 @@ def create_sliding_window_causal_mask(
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     output_attentions: bool = False,
+    allow_is_causal_skip: Optional[bool] = None,
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
@@ -619,6 +624,9 @@ def create_sliding_window_causal_mask(
             The past key values, if we use a cache.
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
+        allow_is_causal_skip (`bool`, optional):
+            Whether to allow sdpa to avoid creating a mask under specific conditions. Some models should always create the mask
+            even if sdpa can technically avoid it (e.g. see Gemma3, when token_type_ids is passed)
     """
     # If we have an HybridCache structure, here we want to create the mask for the sliding layers
     try:
@@ -642,7 +650,7 @@ def create_sliding_window_causal_mask(
 
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
-    allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+    allow_is_causal_skip = allow_is_causal_skip or (not past_key_values.is_compileable if past_key_values is not None else True)
 
     # We now create the mask
     return mask_interface(
@@ -666,6 +674,7 @@ def create_chunked_causal_mask(
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     output_attentions: bool = False,
+    allow_is_causal_skip: Optional[bool] = None,
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
     """
     Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
@@ -688,6 +697,9 @@ def create_chunked_causal_mask(
             The past key values, if we use a cache.
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
+        allow_is_causal_skip (`bool`, optional):
+            Whether to allow sdpa to avoid creating a mask under specific conditions. Some models should always create the mask
+            even if sdpa can technically avoid it (e.g. see Gemma3, when token_type_ids is passed)
     """
     # If we have an HybridCache structure, here we want to create the mask for the sliding layers
     try:
@@ -718,7 +730,7 @@ def create_chunked_causal_mask(
 
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
-    allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+    allow_is_causal_skip = allow_is_causal_skip or (not past_key_values.is_compileable if past_key_values is not None else True)
 
     # We now create the mask
     return mask_interface(
