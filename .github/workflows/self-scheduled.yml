@@ -67,7 +67,7 @@ jobs:
           echo ${{ env.prev_workflow_run_id }}
           echo ${{ env.other_workflow_run_id }}
           echo $prev_workflow_run_id
-          echo other_workflow_run_id
+          echo $other_workflow_run_id
           git fetch && git checkout ${{ github.sha }}
 
       - name: Cleanup
