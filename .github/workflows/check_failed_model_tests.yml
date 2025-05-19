@@ -49,16 +49,12 @@ jobs:
         run: git fetch && git checkout ${{ github.sha }}
 
       - name: Prepare some setup values
-        # How to use these value
         run: |
-          ls -la setup_values
           cat setup_values/prev_workflow_run_id.txt
-          cat setup_values/other_workflow_run_id.txt
+          echo "PREV_WORKFLOW_RUN_ID=$(cat setup_values/prev_workflow_run_id.txt)" >> $GITHUB_ENV
 
       - name: Get target commit
         working-directory: /transformers/utils
-        env:
-          PREV_WORKFLOW_RUN_ID: ${{ inputs.prev_workflow_run_id || '14277576462' }}
         # how to get the commit, especially in multiple files? This only makes sense if it's the same workflow id.
         run: |
           # how to get the good last commit
