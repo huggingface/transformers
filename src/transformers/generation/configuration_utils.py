@@ -619,9 +619,6 @@ class GenerationConfig(PushToHubMixin):
                 "generating, if there is padding. Please set `pad_token_id` explicitly as "
                 "`model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation"
             )
-        if self.num_beams is None:
-            minor_issues["num_beams"] = "`num_beams` is set to `None` - defaulting to `1`."
-            self.num_beams = 1
         # 1.2. Cache attributes
         if self.cache_implementation is not None and self.cache_implementation not in ALL_CACHE_IMPLEMENTATIONS:
             raise ValueError(
@@ -652,8 +649,8 @@ class GenerationConfig(PushToHubMixin):
                 or isinstance(self.watermarking_config, SynthIDTextWatermarkingConfig)
             ):
                 minor_issues["watermarking_config"] = (
-                    "`watermarking_config` as a dict is deprecated. Please construct `watermarking_config` object "
-                    "with `WatermarkingConfig` or `SynthIDTextWatermarkingConfig` class."
+                    "`watermarking_config` as a dict is deprecated and will be removed in v4.54.0. Please construct "
+                    "`watermarking_config` object with `WatermarkingConfig` or `SynthIDTextWatermarkingConfig` class."
                 )
                 self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
             self.watermarking_config.validate()
@@ -716,6 +713,13 @@ class GenerationConfig(PushToHubMixin):
                 minor_issues["constraints"] = single_beam_wrong_parameter_msg.format(
                     flag_name="constraints", flag_value=self.constraints
                 )
+            # DoLa generation needs num_beams == 1
+            if self.dola_layers is not None and (self.repetition_penalty is None or self.repetition_penalty < 1.2):
+                minor_issues["repetition_penalty"] = (
+                    "`dola_layers` is set to trigger DoLa decoding, but `repetition_penalty` is set to a value of "
+                    f"{self.repetition_penalty}, which could induce unwanted repetition. The recommended value for "
+                    "DoLa decoding is `repetition_penalty>=1.2`.",
+                )
 
         # 2.3. detect incorrect parameterization specific to advanced beam modes
         else:
@@ -751,13 +755,6 @@ class GenerationConfig(PushToHubMixin):
                         group_error_prefix
                         + "`diversity_penalty` should be greater than `0.0`, otherwise your groups will be identical."
                     )
-            # DoLa generation
-            elif self.dola_layers is not None and (self.repetition_penalty is None or self.repetition_penalty < 1.2):
-                minor_issues["repetition_penalty"] = (
-                    "`dola_layers` is set to trigger DoLa decoding, but `repetition_penalty` is set to a value of "
-                    f"{self.repetition_penalty}, which could induce unwanted repetition. The recommended value for "
-                    "DoLa decoding is `repetition_penalty>=1.2`.",
-                )
 
         # 2.4. check `num_return_sequences`
         if self.num_return_sequences != 1:
