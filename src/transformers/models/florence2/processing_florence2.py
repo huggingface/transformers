@@ -159,7 +159,7 @@ class Florence2Processor(ProcessorMixin):
             "<REGION_TO_OCR>": "What text is in the region {input}?",
         }
 
-        self.post_processor = Florence2PostProcesser(tokenizer=tokenizer)
+        self.post_processor = Florence2PostProcessor(tokenizer=tokenizer)
 
         super().__init__(image_processor, tokenizer)
 
@@ -513,7 +513,7 @@ class CoordinatesQuantizer(object):
         return dequantized_coordinates
 
 
-class Florence2PostProcesser(object):
+class Florence2PostProcessor(object):
     r"""
     Florence-2 post process for converting text prediction to various tasks results.
 
@@ -1220,3 +1220,6 @@ class Florence2PostProcesser(object):
                 raise ValueError("task {} is not supported".format(task))
 
         return parsed_dict
+
+
+__all__ = ["Florence2Processor"]

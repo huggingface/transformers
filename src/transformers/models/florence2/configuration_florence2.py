@@ -322,3 +322,6 @@ class Florence2Config(PretrainedConfig):
             self.text_config = Florence2LanguageConfig(**text_config)
 
         super().__init__(**kwargs)
+
+
+__all__ = ["Florence2Config"]

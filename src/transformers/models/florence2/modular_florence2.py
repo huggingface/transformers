@@ -28,7 +28,7 @@ from ...utils import (  # noqa: F401
     logging,
     replace_return_docstrings,
 )
-from ..bart.modeling_bart import BartForConditionalGeneration
+from ..bart.modeling_bart import BartForConditionalGeneration, BartPreTrainedModel
 from .configuration_florence2 import Florence2Config, Florence2LanguageConfig, Florence2VisionConfig  # noqa: F401
 
 
@@ -984,6 +984,14 @@ class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
         return x
 
 
+class Florence2LanguagePreTrainedModel(BartPreTrainedModel):
+    pass
+
+
+class Florence2LanguageModel(Florence2LanguagePreTrainedModel):
+    pass
+
+
 class Florence2LanguageForConditionalGeneration(BartForConditionalGeneration):
     pass
 
@@ -1296,3 +1304,15 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
 
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)
+
+
+__all__ = [
+    "Florence2ForConditionalGeneration",
+    "Florence2LanguageForConditionalGeneration",
+    "Florence2LanguageModel",
+    "Florence2LanguagePreTrainedModel",
+    "Florence2PreTrainedModel",
+    "Florence2Vision",
+    "Florence2VisionModel",
+    "Florence2VisionModelWithProjection",
+]
