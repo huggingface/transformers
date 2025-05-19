@@ -98,7 +98,6 @@ class CausalLMModelTester:
         shared_expert_gate=True,
         num_experts_per_tok=2,
         num_experts=8,
-
     ):
         self._verify_model_attributes()
         self.parent = parent
