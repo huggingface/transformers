@@ -41,12 +41,12 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForSequenceClassification,
+        BartTokenizer,
         Florence2ForCausalLM,
         Florence2ForConditionalGeneration,
         Florence2ForQuestionAnswering,
         Florence2ForSequenceClassification,
         Florence2Model,
-        BartTokenizer,
         pipeline,
     )
     from transformers.models.florence2.modeling_florence2 import Florence2Decoder, Florence2Encoder, shift_tokens_right
@@ -401,7 +401,12 @@ class Florence2HeadTests(unittest.TestCase):
 @require_torch
 class Florence2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Florence2Model, Florence2ForConditionalGeneration, Florence2ForSequenceClassification, Florence2ForQuestionAnswering)
+        (
+            Florence2Model,
+            Florence2ForConditionalGeneration,
+            Florence2ForSequenceClassification,
+            Florence2ForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -1218,7 +1223,9 @@ class Florence2ModelIntegrationTests(unittest.TestCase):
             " up to four years in prison.  Her next court appearance is scheduled for May 18."
         )
         florence2_tokenizer = BartTokenizer.from_pretrained("facebook/florence2-large-cnn")
-        florence2_model = Florence2ForConditionalGeneration.from_pretrained("facebook/florence2-large-cnn").to(torch_device)
+        florence2_model = Florence2ForConditionalGeneration.from_pretrained("facebook/florence2-large-cnn").to(
+            torch_device
+        )
         input_ids = florence2_tokenizer(
             article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
         ).input_ids.to(torch_device)
@@ -1238,9 +1245,9 @@ class Florence2ModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_decoder_attention_mask(self):
-        model = Florence2ForConditionalGeneration.from_pretrained("facebook/florence2-large", forced_bos_token_id=0).to(
-            torch_device
-        )
+        model = Florence2ForConditionalGeneration.from_pretrained(
+            "facebook/florence2-large", forced_bos_token_id=0
+        ).to(torch_device)
         tokenizer = self.default_tokenizer
         sentence = "UN Chief Says There Is No <mask> in Syria"
         input_ids = tokenizer(sentence, return_tensors="pt").input_ids.to(torch_device)

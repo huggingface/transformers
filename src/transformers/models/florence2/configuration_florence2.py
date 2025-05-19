@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
-#
+# Copyright 2025 Microsoft and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -15,34 +14,125 @@
 """FLORENCE2 model configuration"""
 
 import warnings
-from collections import OrderedDict
-from typing import Any, Mapping, Optional
 
-from ... import PreTrainedTokenizer
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
-from ...onnx.utils import compute_effective_axis_dimension
-from ...utils import TensorType, is_torch_available, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Florence2Config(PretrainedConfig):
+class Florence2VisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Florence2Model`]. It is used to instantiate a FLORENCE2
+    This is the configuration class to store the configuration of a [`Florence2VisionModel`]. It is used to instantiate a Florence2VisionModel
+    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the Florence2VisionModel architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        drop_path_rate (`float`, *optional*, defaults to 0.1):
+            The dropout rate of the drop path layer.
+        patch_size (`List[int]`, *optional*, defaults to [7, 3, 3, 3]):
+            The patch size of the image.
+        patch_stride (`List[int]`, *optional*, defaults to [4, 2, 2, 2]):
+            The patch stride of the image.
+        patch_padding (`List[int]`, *optional*, defaults to [3, 1, 1, 1]):
+            The patch padding of the image.
+        patch_prenorm (`List[bool]`, *optional*, defaults to [false, true, true, true]):
+            Whether to apply layer normalization before the patch embedding layer.
+        enable_checkpoint (`bool`, *optional*, defaults to False):
+            Whether to enable checkpointing.
+        dim_embed (`List[int]`, *optional*, defaults to [256, 512, 1024, 2048]):
+            The dimension of the embedding layer.
+        num_heads (`List[int]`, *optional*, defaults to [8, 16, 32, 64]):
+            The number of attention heads.
+        num_groups (`List[int]`, *optional*, defaults to [8, 16, 32, 64]):
+            The number of groups.
+        depths (`List[int]`, *optional*, defaults to [1, 1, 9, 1]):
+            The depth of the model.
+        window_size (`int`, *optional*, defaults to 12):
+            The window size of the model.
+        projection_dim (`int`, *optional*, defaults to 1024):
+            The dimension of the projection layer.
+        visual_temporal_embedding (`dict`, *optional*):
+            The configuration of the visual temporal embedding.
+        image_pos_embed (`dict`, *optional*):
+            The configuration of the image position embedding.
+        image_feature_source (`List[str]`, *optional*, defaults to ["spatial_avg_pool", "temporal_avg_pool"]):
+            The source of the image feature.
+    Example:
+
+    ```python
+    >>> from transformers import Florence2VisionConfig, Florence2VisionModel
+
+    >>> # Initializing a Florence2 Vision style configuration
+    >>> configuration = Florence2VisionConfig()
+
+    >>> # Initializing a model (with random weights)
+    >>> model = Florence2VisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "florence2_vision"
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    def __init__(
+        self,
+        drop_path_rate=0.1,
+        patch_size=[7, 3, 3, 3],
+        patch_stride=[4, 2, 2, 2],
+        patch_padding=[3, 1, 1, 1],
+        patch_prenorm=[False, True, True, True],
+        enable_checkpoint=False,
+        dim_embed=[256, 512, 1024, 2048],
+        num_heads=[8, 16, 32, 64],
+        num_groups=[8, 16, 32, 64],
+        depths=[1, 1, 9, 1],
+        window_size=12,
+        projection_dim=1024,
+        visual_temporal_embedding=None,
+        image_pos_embed=None,
+        image_feature_source=["spatial_avg_pool", "temporal_avg_pool"],
+        **kwargs,
+    ):
+        self.drop_path_rate = drop_path_rate
+        self.patch_size = patch_size
+        self.patch_stride = patch_stride
+        self.patch_padding = patch_padding
+        self.patch_prenorm = patch_prenorm
+        self.enable_checkpoint = enable_checkpoint
+        self.dim_embed = dim_embed
+        self.num_heads = num_heads
+        self.num_groups = num_groups
+        self.depths = depths
+        self.window_size = window_size
+        self.projection_dim = projection_dim
+        self.visual_temporal_embedding = visual_temporal_embedding
+        self.image_pos_embed = image_pos_embed
+        self.image_feature_source = image_feature_source
+
+        super().__init__(**kwargs)
+
+
+class Florence2LanguageConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Florence2LanguagePreTrainedModel`]. It is used to instantiate a BART
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the FLORENCE2
-    [facebook/florence2-large](https://huggingface.co/facebook/florence2-large) architecture.
+    defaults will yield a similar configuration to that of the BART
+    [facebook/bart-large](https://huggingface.co/facebook/bart-large) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50265):
-            Vocabulary size of the FLORENCE2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Florence2Model`] or [`TFFlorence2Model`].
+        vocab_size (`int`, *optional*, defaults to 51289):
+            Vocabulary size of the Florence2Language model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`Florence2LanguageModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (`int`, *optional*, defaults to 12):
@@ -84,7 +174,7 @@ class Florence2Config(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         num_labels (`int`, *optional*, defaults to 3):
-            The number of labels to use in [`Florence2ForSequenceClassification`].
+            The number of labels to use in [`Florence2LanguageForSequenceClassification`].
         forced_eos_token_id (`int`, *optional*, defaults to 2):
             The id of the token to force as the last generated token when `max_length` is reached. Usually set to
             `eos_token_id`.
@@ -92,25 +182,25 @@ class Florence2Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Florence2Config, Florence2Model
+    >>> from transformers import Florence2LanguageConfig, Florence2LanguageModel
 
-    >>> # Initializing a FLORENCE2 facebook/florence2-large style configuration
-    >>> configuration = Florence2Config()
+    >>> # Initializing a Florence2 Language style configuration
+    >>> configuration = Florence2LanguageConfig()
 
-    >>> # Initializing a model (with random weights) from the facebook/florence2-large style configuration
-    >>> model = Florence2Model(configuration)
+    >>> # Initializing a model (with random weights)
+    >>> model = Florence2LangaugeModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "florence2"
+    model_type = "florence2_language"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
     def __init__(
         self,
-        vocab_size=50265,
+        vocab_size=51289,
         max_position_embeddings=1024,
         encoder_layers=12,
         encoder_ffn_dim=4096,
@@ -170,7 +260,7 @@ class Florence2Config(PretrainedConfig):
             **kwargs,
         )
 
-        # ensure backward compatibility for FLORENCE2 CNN models
+        # ensure backward compatibility for BART CNN models
         if self.forced_bos_token_id is None and kwargs.get("force_bos_token_to_be_generated", False):
             self.forced_bos_token_id = self.bos_token_id
             warnings.warn(
@@ -179,226 +269,70 @@ class Florence2Config(PretrainedConfig):
             )
 
 
-class Florence2OnnxConfig(OnnxSeq2SeqConfigWithPast):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task in ["default", "seq2seq-lm"]:
-            common_inputs = OrderedDict(
-                [
-                    ("input_ids", {0: "batch", 1: "encoder_sequence"}),
-                    ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
-                ]
-            )
+class Florence2Config(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Florence2ForConditionalGeneration`]. It is used to instantiate an
+    Florence-2 model according to the specified arguments, defining the model architecture.
 
-            if self.use_past:
-                common_inputs["decoder_input_ids"] = {0: "batch"}
-                common_inputs["decoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
-            else:
-                common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
-                common_inputs["decoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
-            if self.use_past:
-                self.fill_with_past_key_values_(common_inputs, direction="inputs")
-        elif self.task == "causal-lm":
-            # TODO: figure this case out.
-            common_inputs = OrderedDict(
-                [
-                    ("input_ids", {0: "batch", 1: "encoder_sequence"}),
-                    ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
-                ]
-            )
-            if self.use_past:
-                num_encoder_layers, _ = self.num_layers
-                for i in range(num_encoder_layers):
-                    common_inputs[f"past_key_values.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
-                    common_inputs[f"past_key_values.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
-        else:
-            common_inputs = OrderedDict(
-                [
-                    ("input_ids", {0: "batch", 1: "encoder_sequence"}),
-                    ("attention_mask", {0: "batch", 1: "encoder_sequence"}),
-                    ("decoder_input_ids", {0: "batch", 1: "decoder_sequence"}),
-                    ("decoder_attention_mask", {0: "batch", 1: "decoder_sequence"}),
-                ]
-            )
+    Args:
+        vision_config (`Florence2VisionConfig`,  *optional*):
+            Custom vision config or dict
+        text_config (`Union[AutoConfig, dict]`, *optional*):
+            The config object of the text backbone.
+        ignore_index (`int`, *optional*, defaults to -100):
+            The ignore index for the loss function.
+        vocab_size (`int`, *optional*, defaults to 51289):
+            Vocabulary size of the Florence2model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`~Florence2ForConditionalGeneration`]
+        projection_dim (`int`, *optional*, defaults to 1024):
+            Dimension of the multimodal projection space.
 
-        return common_inputs
+    Example:
 
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task in ["default", "seq2seq-lm"]:
-            common_outputs = super().outputs
-        else:
-            common_outputs = super(OnnxConfigWithPast, self).outputs
-            if self.use_past:
-                num_encoder_layers, _ = self.num_layers
-                for i in range(num_encoder_layers):
-                    common_outputs[f"present.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
-                    common_outputs[f"present.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
-        return common_outputs
+    ```python
+    >>> from transformers import Florence2ForConditionalGeneration, Florence2Config, CLIPVisionConfig, BartConfig
 
-    def _generate_dummy_inputs_for_default_and_seq2seq_lm(
+    >>> # Initializing a clip-like vision config
+    >>> vision_config = CLIPVisionConfig()
+
+    >>> # Initializing a Bart config
+    >>> text_config = BartConfig()
+
+    >>> # Initializing a Florence-2 configuration
+    >>> configuration = Florence2Config(vision_config, text_config)
+
+    >>> # Initializing a model from the florence-2 configuration
+    >>> model = Florence2ForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "florence2"
+    is_composition = False
+
+    def __init__(
         self,
-        tokenizer: PreTrainedTokenizer,
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        framework: Optional[TensorType] = None,
-    ) -> Mapping[str, Any]:
-        encoder_inputs = self._generate_dummy_inputs_for_sequence_classification_and_question_answering(
-            tokenizer, batch_size, seq_length, is_pair, framework
-        )
+        vision_config=None,
+        text_config=None,
+        ignore_index=-100,
+        vocab_size=51289,
+        projection_dim=1024,
+        **kwargs,
+    ):
+        self.ignore_index = ignore_index
+        self.vocab_size = vocab_size
+        self.projection_dim = projection_dim
+        if vision_config is not None:
+            vision_config = PretrainedConfig(**vision_config)
+        self.vision_config = vision_config
+        self.vocab_size = self.vocab_size
 
-        # Generate decoder inputs
-        decoder_seq_length = seq_length if not self.use_past else 1
-        decoder_inputs = self._generate_dummy_inputs_for_sequence_classification_and_question_answering(
-            tokenizer, batch_size, decoder_seq_length, is_pair, framework
-        )
-        decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
-        common_inputs = dict(**encoder_inputs, **decoder_inputs)
+        self.text_config = text_config
+        if text_config is not None:
+            self.text_config = Florence2LanguageConfig(**text_config)
 
-        if self.use_past:
-            if not is_torch_available():
-                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
-            else:
-                import torch
-            batch, encoder_seq_length = common_inputs["input_ids"].shape
-            decoder_seq_length = common_inputs["decoder_input_ids"].shape[1]
-            num_encoder_attention_heads, num_decoder_attention_heads = self.num_attention_heads
-            encoder_shape = (
-                batch,
-                num_encoder_attention_heads,
-                encoder_seq_length,
-                self._config.hidden_size // num_encoder_attention_heads,
-            )
-            decoder_past_length = decoder_seq_length + 3
-            decoder_shape = (
-                batch,
-                num_decoder_attention_heads,
-                decoder_past_length,
-                self._config.hidden_size // num_decoder_attention_heads,
-            )
-
-            common_inputs["decoder_attention_mask"] = torch.cat(
-                [common_inputs["decoder_attention_mask"], torch.ones(batch, decoder_past_length)], dim=1
-            )
-
-            common_inputs["past_key_values"] = []
-            # If the number of encoder and decoder layers are present in the model configuration, both are considered
-            num_encoder_layers, num_decoder_layers = self.num_layers
-            min_num_layers = min(num_encoder_layers, num_decoder_layers)
-            max_num_layers = max(num_encoder_layers, num_decoder_layers) - min_num_layers
-            remaining_side_name = "encoder" if num_encoder_layers > num_decoder_layers else "decoder"
-
-            for _ in range(min_num_layers):
-                common_inputs["past_key_values"].append(
-                    (
-                        torch.zeros(decoder_shape),
-                        torch.zeros(decoder_shape),
-                        torch.zeros(encoder_shape),
-                        torch.zeros(encoder_shape),
-                    )
-                )
-            # TODO: test this.
-            shape = encoder_shape if remaining_side_name == "encoder" else decoder_shape
-            for _ in range(min_num_layers, max_num_layers):
-                common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))
-        return common_inputs
-
-    def _generate_dummy_inputs_for_causal_lm(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        framework: Optional[TensorType] = None,
-    ) -> Mapping[str, Any]:
-        common_inputs = self._generate_dummy_inputs_for_sequence_classification_and_question_answering(
-            tokenizer, batch_size, seq_length, is_pair, framework
-        )
-
-        if self.use_past:
-            if not is_torch_available():
-                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
-            else:
-                import torch
-            batch, seqlen = common_inputs["input_ids"].shape
-            # Not using the same length for past_key_values
-            past_key_values_length = seqlen + 2
-            num_encoder_layers, _ = self.num_layers
-            num_encoder_attention_heads, _ = self.num_attention_heads
-            past_shape = (
-                batch,
-                num_encoder_attention_heads,
-                past_key_values_length,
-                self._config.hidden_size // num_encoder_attention_heads,
-            )
-
-            mask_dtype = common_inputs["attention_mask"].dtype
-            common_inputs["attention_mask"] = torch.cat(
-                [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)], dim=1
-            )
-            common_inputs["past_key_values"] = [
-                (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(num_encoder_layers)
-            ]
-        return common_inputs
-
-    def _generate_dummy_inputs_for_sequence_classification_and_question_answering(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        framework: Optional[TensorType] = None,
-    ) -> Mapping[str, Any]:
-        # Did not use super(OnnxConfigWithPast, self).generate_dummy_inputs for code clarity.
-        # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
-        batch_size = compute_effective_axis_dimension(
-            batch_size, fixed_dimension=OnnxConfig.default_fixed_batch, num_token_to_add=0
-        )
-
-        # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
-        token_to_add = tokenizer.num_special_tokens_to_add(is_pair)
-        seq_length = compute_effective_axis_dimension(
-            seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
-        )
-
-        # Generate dummy inputs according to compute batch and sequence
-        dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
-        common_inputs = dict(tokenizer(dummy_input, return_tensors=framework))
-        return common_inputs
-
-    def generate_dummy_inputs(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        framework: Optional[TensorType] = None,
-    ) -> Mapping[str, Any]:
-        if self.task in ["default", "seq2seq-lm"]:
-            common_inputs = self._generate_dummy_inputs_for_default_and_seq2seq_lm(
-                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
-            )
-
-        elif self.task == "causal-lm":
-            common_inputs = self._generate_dummy_inputs_for_causal_lm(
-                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
-            )
-        else:
-            common_inputs = self._generate_dummy_inputs_for_sequence_classification_and_question_answering(
-                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
-            )
-
-        return common_inputs
-
-    def _flatten_past_key_values_(self, flattened_output, name, idx, t):
-        if self.task in ["default", "seq2seq-lm"]:
-            flattened_output = super()._flatten_past_key_values_(flattened_output, name, idx, t)
-        else:
-            flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
-                flattened_output, name, idx, t
-            )
-
-
-__all__ = ["Florence2Config", "Florence2OnnxConfig"]
+        super().__init__(**kwargs)

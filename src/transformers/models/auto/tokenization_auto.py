@@ -72,7 +72,6 @@ else:
             ("aya_vision", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
             ("bark", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
-            ("florence2", ("BartTokenizer", "BartTokenizerFast")),
             (
                 "barthez",
                 (
@@ -207,6 +206,7 @@ else:
                 ("FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None, None),
             ),
             ("flaubert", ("FlaubertTokenizer", None)),
+            ("florence2", ("BartTokenizer", "BartTokenizerFast")),
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("fsmt", ("FSMTTokenizer", None)),
             ("funnel", ("FunnelTokenizer", "FunnelTokenizerFast" if is_tokenizers_available() else None)),
