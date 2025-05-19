@@ -1286,7 +1286,7 @@ if __name__ == "__main__":
     prev_workflow_run_id = None
     other_workflow_run_ids = []
 
-    if not is_scheduled_ci_run:
+    if is_scheduled_ci_run:
         # TODO: remove `if job_name == "run_models_gpu"`
         if job_name == "run_models_gpu":
             # This is the previous completed scheduled run
@@ -1296,6 +1296,7 @@ if __name__ == "__main__":
             target_workflow_run_id = get_last_daily_ci_runs(token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=target_workflow_id)
             other_workflow_run_ids.append(target_workflow_run_id)
     else:
+        # TODO: we still want to push the `prev_ci_artifacts` in some cases
         target_workflow_run_id = os.environ["LAST_WORKFLOW_RUN_ID"]
         # TODO: remove this one
         prev_workflow_run_id = target_workflow_run_id
