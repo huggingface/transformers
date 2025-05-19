@@ -6,17 +6,17 @@ from transformers.generation import GenerationConfig
 
 model_id = "meta-llama/Llama-3.2-3b-Instruct"
 model = AutoModelForCausalLM.from_pretrained(
-    model_id, attn_implementation="eager_paged", torch_dtype=torch.bfloat16, device_map="auto"
+    model_id, attn_implementation="paged_attention", torch_dtype=torch.bfloat16, device_map="auto"
 ).eval()
 tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
 generation_config = GenerationConfig(
-    max_new_tokens=512,
+    max_new_tokens=32,
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
     use_cache=False,
-    num_blocks=16,
-    block_size=512,
+    num_blocks=2048,
+    block_size=128,
     max_batch_tokens=512,  # Maximum number of tokens to process in a single batch
 )
 
