@@ -186,7 +186,6 @@ class ContinuousBatchProcessorMetrics:
         """
         self.max_batch_tokens = max_batch_tokens
 
-        # Initialize OpenTelemetry metrics if available
         self._setup_metrics()
 
     def _setup_metrics(self):
@@ -198,21 +197,36 @@ class ContinuousBatchProcessorMetrics:
 
         self.meter = metrics.get_meter("transformers.generation.continuous_batch_processor")
 
-        # Create histogram for time to first token
         self.ttft_histogram = self.meter.create_histogram(
             name="ttft_milliseconds",
             description="Time to first token in milliseconds",
             unit="ms",
         )
 
-        # Create histogram for decode/prefill ratio
+        self.active_requests_gauge = self.meter.create_gauge(
+            name="active_requests_count",
+            description="Number of active requests currently being processed",
+            unit="requests",
+        )
+
+        self.waiting_requests_gauge = self.meter.create_gauge(
+            name="waiting_requests_count",
+            description="Number of requests waiting to be processed",
+            unit="requests",
+        )
+
+        self.request_latency_histogram = self.meter.create_histogram(
+            name="request_latency_milliseconds",
+            description="End-to-end latency for completed requests in milliseconds",
+            unit="ms",
+        )
+
         self.decode_prefill_ratio_gauge = self.meter.create_gauge(
             name="decode_prefill_ratio",
             description="Ratio of decode tokens to prefill tokens in a batch",
             unit="ratio",
         )
 
-        # Create counters for decode and prefill tokens
         self.prefill_tokens_counter = self.meter.create_counter(
             name="prefill_tokens_processed",
             description="Number of prefill tokens processed",
@@ -225,21 +239,18 @@ class ContinuousBatchProcessorMetrics:
             unit="tokens",
         )
 
-        # Create histogram for batch fill percentage
         self.batch_fill_percentage_histogram = self.meter.create_histogram(
             name="batch_fill_percentage",
             description="Percentage of max_batch_tokens utilized in each batch",
             unit="percent",
         )
 
-        # Create gauge for KV cache free memory
         self.kv_cache_free_memory_gauge = self.meter.create_gauge(
             name="kv_cache_free_memory_bytes",
             description="Free memory of the PagedAttentionCache in bytes",
             unit="bytes",
         )
 
-        # Create gauge for KV cache memory usage
         self.kv_cache_memory_gauge = self.meter.create_gauge(
             name="kv_cache_memory_bytes",
             description="Memory usage of the PagedAttentionCache in bytes",
@@ -359,3 +370,43 @@ class ContinuousBatchProcessorMetrics:
             )
         except Exception as e:
             logger.warning(f"Failed to record KV cache memory metrics: {e}")
+
+    @traced
+    def record_queue_metrics(self, active_requests: int, waiting_requests: int) -> None:
+        """Record metrics about active and waiting requests.
+
+        Args:
+            active_requests: Number of active requests
+            waiting_requests: Number of waiting requests
+        """
+        if not _has_opentelemetry:
+            return
+
+        try:
+            self.active_requests_gauge.set(active_requests)
+            self.waiting_requests_gauge.set(waiting_requests)
+            logger.debug(
+                f"Queue metrics: {active_requests} active requests, {waiting_requests} waiting requests"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record queue metrics: {e}")
+
+    @traced
+    def record_request_completion(self, created_time: float, request_id: str) -> None:
+        """Record metrics about a completed request.
+
+        Args:
+            created_time: The time the request was created
+            request_id: The ID of the request
+        """
+        if not _has_opentelemetry:
+            return
+
+        latency_ms = (time.time() - created_time) * 1000.0
+
+        try:
+            self.request_latency_histogram.record(latency_ms)
+            
+            logger.debug(f"Recorded request completion for {request_id}: {latency_ms:.2f}ms")
+        except Exception as e:
+            logger.warning(f"Failed to record request completion metric: {e}")

@@ -585,6 +585,7 @@ class ContinuousBatchProcessor:
         else:
             state.static_outputs = []
 
+        self.metrics.record_request_completion(state.created_time, state.request_id)
         self.output_queue.put(state.to_generation_output())
 
     @traced(span_name="prepare_request")
@@ -668,6 +669,8 @@ class ContinuousBatchProcessor:
         self._get_new_requests()
         if not self.active_requests and not self.waiting_requests:
             return None
+
+        self.metrics.record_queue_metrics(len(self.active_requests), len(self.waiting_requests))
 
         self.requests_to_process_next = self._schedule_batch()
         if not self.requests_to_process_next:
@@ -798,6 +801,7 @@ class ContinuousBatchProcessor:
                 state.static_outputs.extend([token])
                 state.prompt_ids = [token]
                 if state.update_with_token(token):
+                    self.metrics.record_request_completion(state.created_time, state.request_id)
                     finished_request_ids.append(req_id)
                 self._maybe_send_output(state, token)
             elif state.status == RequestStatus.PREFILLING_SPLIT:
