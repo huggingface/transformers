@@ -1304,13 +1304,12 @@ if __name__ == "__main__":
         other_workflow_run_id = os.environ["OTHER_WORKFLOW_RUN_ID"]
         other_workflow_run_ids.append(other_workflow_run_id)
 
-    prev_ci_artifacts = None
+    prev_ci_artifacts = (None, None)
     other_ci_artifacts = []
 
     for idx, target_workflow_run_id in enumerate([prev_workflow_run_id] + other_workflow_run_ids):
-            if target_workflow_run_id is None:
-                assert idx == 0
-                prev_ci_artifacts = (None, None)
+            if target_workflow_run_id is None or target_workflow_run_id == "":
+                continue
             else:
                 # Get the last previously completed CI's failure tables
                 artifact_names = [f"ci_results_{job_name}"]
