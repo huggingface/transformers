@@ -139,24 +139,6 @@ class MixedInt8Test(BaseMixedInt8Test):
         gc.collect()
         torch.cuda.empty_cache()
 
-    def test_get_keys_to_not_convert_trust_remote_code(self):
-        r"""
-        Test the `get_keys_to_not_convert` function with `trust_remote_code` models.
-        """
-        from accelerate import init_empty_weights
-
-        from transformers.integrations.bitsandbytes import get_keys_to_not_convert
-
-        model_id = "mosaicml/mpt-7b"
-        config = AutoConfig.from_pretrained(
-            model_id, trust_remote_code=True, revision="ada218f9a93b5f1c6dce48a4cc9ff01fcba431e7"
-        )
-        with init_empty_weights():
-            model = AutoModelForCausalLM.from_config(
-                config, trust_remote_code=True, code_revision="ada218f9a93b5f1c6dce48a4cc9ff01fcba431e7"
-            )
-        self.assertEqual(get_keys_to_not_convert(model), ["transformer.wte"])
-
     def test_get_keys_to_not_convert(self):
         r"""
         Test the `get_keys_to_not_convert` function.

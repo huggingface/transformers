@@ -904,6 +904,12 @@ class ChameleonModel(ChameleonPreTrainedModel):
         self.embed_tokens = value
 
     def get_image_tokens(self, pixel_values: torch.FloatTensor):
+        logger.warning(
+            "`model.get_image_tokens()` is deprecated and will be removed in v4.58. To obtain discrete token use `model.get_image_features()`"
+        )
+        return self.get_image_featues(pixel_values)
+
+    def get_image_features(self, pixel_values: torch.FloatTensor):
         """
         Tokenizes images into discrete tokens with VQGAN module. Converts
         obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
@@ -957,7 +963,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
             )
 
         if pixel_values is not None:
-            image_tokens = self.get_image_tokens(pixel_values)
+            image_tokens = self.get_image_features(pixel_values)
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
             if not is_torchdynamo_compiling() and input_ids[special_image_mask].numel() != image_tokens.numel():
                 n_image_tokens_in_text = (input_ids == self.vocabulary_mapping.image_token_id).sum()

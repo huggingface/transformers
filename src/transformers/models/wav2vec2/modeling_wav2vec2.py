@@ -465,7 +465,7 @@ class Wav2Vec2FeatureProjection(nn.Module):
         return hidden_states, norm_hidden_states
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Wav2Vec2
+# Copied from transformers.models.hubert.modeling_hubert.HubertAttention with Hubert->Wav2Vec2
 class Wav2Vec2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -624,7 +624,7 @@ class Wav2Vec2Attention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.bart.modeling_bart.BartFlashAttention2 with Bart->Wav2Vec2
+# Copied from transformers.models.hubert.modeling_hubert.HubertFlashAttention2 with Hubert->Wav2Vec2
 class Wav2Vec2FlashAttention2(Wav2Vec2Attention):
     """
     Wav2Vec2 flash attention module. This module inherits from `Wav2Vec2Attention` as the weights of the module stays
@@ -652,10 +652,6 @@ class Wav2Vec2FlashAttention2(Wav2Vec2Attention):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # Wav2Vec2FlashAttention2 attention does not support output_attentions
-        if output_attentions:
-            raise ValueError("Wav2Vec2FlashAttention2 attention does not support output_attentions")
-
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
@@ -752,7 +748,7 @@ class Wav2Vec2FlashAttention2(Wav2Vec2Attention):
 
 
 class Wav2Vec2SdpaAttention(Wav2Vec2Attention):
-    # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention.forward with Bart->Wav2Vec2
+    # Copied from transformers.models.hubert.modeling_hubert.HubertSdpaAttention.forward with Hubert->Wav2Vec2
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -763,10 +759,10 @@ class Wav2Vec2SdpaAttention(Wav2Vec2Attention):
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-        if output_attentions or layer_head_mask is not None:
+        if output_attentions:
             # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "Wav2Vec2Model is using Wav2Vec2SdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention"
+                "Wav2Vec2Model is using Wav2Vec2SdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` . Falling back to the manual attention"
                 ' implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -774,7 +770,6 @@ class Wav2Vec2SdpaAttention(Wav2Vec2Attention):
                 key_value_states=key_value_states,
                 past_key_value=past_key_value,
                 attention_mask=attention_mask,
-                layer_head_mask=layer_head_mask,
                 output_attentions=output_attentions,
             )
 
