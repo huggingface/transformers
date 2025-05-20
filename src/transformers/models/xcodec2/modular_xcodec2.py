@@ -1477,3 +1477,6 @@ class XCodec2Model(PreTrainedModel):
             # 8) Finally decode into waveform
             recon_audio = self.generator(vq_post_emb.transpose(1, 2), vq=False)[0]  # [batch, time]
             return recon_audio
+
+
+__all__ = ["XCodec2Model"]
