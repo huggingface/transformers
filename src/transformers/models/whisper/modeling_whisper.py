@@ -365,20 +365,14 @@ class WhisperAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-WHISPER_ATTENTION_CLASSES = {
-    "eager": WhisperAttention,
-    "flash_attention_2": WhisperAttention,
-    "sdpa": WhisperAttention,
-}
-
-
-# Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Whisper, MBART->WHISPER
+# copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Whisper, MBART->WHISPER
+# TODO: fix copies
 class WhisperEncoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = WHISPER_ATTENTION_CLASSES[config._attn_implementation](
+        self.self_attn = WhisperAttention(
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -446,7 +440,7 @@ class WhisperDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = WHISPER_ATTENTION_CLASSES[config._attn_implementation](
+        self.self_attn = WhisperAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -460,7 +454,7 @@ class WhisperDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = WHISPER_ATTENTION_CLASSES[config._attn_implementation](
+        self.encoder_attn = WhisperAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
