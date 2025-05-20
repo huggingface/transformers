@@ -1010,8 +1010,8 @@ class ContinuousBatchingManager:
             logits = self._model_forward(batch_data)
             if self.log_prob_generation:
                 batch_processor.output_probs.copy_(logits)  # TODO
-            # probs = self._process_logit(batch_data, logits)
-            self._sample(batch_processor, logits)
+            probs = self._process_logit(batch_data, logits)
+            self._sample(batch_processor, probs)
 
     @traced(span_name="model_forward")
     def _model_forward(self, batch_data):
