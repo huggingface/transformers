@@ -4056,6 +4056,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         generation_config = kwargs.pop("generation_config", None)
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
+        # `tp_size` specifies the size of tensor parallelism. It is used to divide the model's computation
+        # across multiple devices for parallel execution. This parameter must be used in conjunction with
+        # `tp_plan`, which defines the specific tensor parallelism strategy. Currently, only "auto" is supported
+        # for `tp_plan`.
         tp_size = kwargs.pop("tp_size", None)
         key_mapping = kwargs.pop("key_mapping", None)
         # Not used anymore -- remove them from the kwargs
