@@ -5,17 +5,17 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
     DeepseekV3MLP,
     DeepseekV3MoE,
+    DeepseekV3PreTrainedModel,
     DeepseekV3TopkRouter,
-    DeepseekV3PreTrainedModel
 )
 from ..llama.modeling_llama import (
+    KwargsForCausalLM,
     LlamaForCausalLM,
     LlamaModel,
     LlamaRMSNorm,
-    KwargsForCausalLM,
 )
 from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3RotaryEmbedding
-from .configuration_dots1 import Dots1Config
+
 
 logger = logging.get_logger(__name__)
 

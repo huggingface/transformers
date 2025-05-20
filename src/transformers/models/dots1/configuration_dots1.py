@@ -1,6 +1,7 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -15,80 +16,80 @@ class Dots1Config(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 102400):
+        vocab_size (`int`, *optional*, defaults to 152064):
             Vocabulary size of the model. Defines the number of different tokens that can be represented by the
             `input_ids` passed when calling [`Dots1Model`].
-        hidden_size (`int`, *optional*, defaults to 4096):
+        hidden_size (`int`, *optional*, defaults to 4608):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
+        intermediate_size (`int`, *optional*, defaults to 10944):
             Dimension of the MLP representations.
-        moe_intermediate_size (`int`, *optional*, defaults to 1407):
+        moe_intermediate_size (`int`, *optional*, defaults to 1408):
             Dimension of the MoE representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
+        num_hidden_layers (`int`, *optional*, defaults to 62):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*, defaults to 32):
+            Number of key/value heads for Grouped Query Attention. If `num_key_value_heads=num_attention_heads`, Multi
+            Head Attention (MHA) is used. If `num_key_value_heads=1`, Multi Query Attention (MQA) is used. Otherwise,
+            Grouped Query Attention (GQA) is used. If not specified, defaults to `num_attention_heads`.
         n_shared_experts (`int`, *optional*, default=None):
             Number of shared experts. None means dense model.
         n_routed_experts (`int`, *optional*, default=None):
             Number of routed experts. None means dense model.
+        n_group (`int`, *optional*, defaults to 1):
+            Number of groups for routed experts.
+        topk_group (`int`, *optional*, defaults to 1):
+            Number of selected groups for each token (selected experts only within `topk_group` groups).
         num_experts_per_tok (`int`, *optional*, default=None):
             Number of selected experts. None means dense model.
         moe_layer_freq (`int`, *optional*, defaults to 1):
             The frequency of the MoE layer: one expert layer for every `moe_layer_freq - 1` dense layers.
         first_k_dense_replace (`int`, *optional*, defaults to 0):
             Number of dense layers at the beginning of the model before the first MoE layer.
-        norm_topk_prob (`bool`, *optional*, defaults to False):
+        norm_topk_prob (`bool`, *optional*, defaults to `False`):
             Whether to normalize the weights of the routed experts.
-        scoring_func (`str`, *optional*, defaults to 'softmax'):
+        scoring_func (`str`, *optional*, defaults to `"softmax"`):
             Method for computing expert weights.
         aux_loss_alpha (`float`, *optional*, defaults to 0.001):
             Auxiliary loss weight coefficient.
-        seq_aux (`bool`, *optional*, defaults to True):
+        seq_aux (`bool`, *optional*, defaults to `True`):
             Whether to compute auxiliary loss for each individual sample.
-        num_key_value_heads (`int`, *optional*):
-            Number of key/value heads for Grouped Query Attention. If `num_key_value_heads=num_attention_heads`, Multi
-            Head Attention (MHA) is used. If `num_key_value_heads=1`, Multi Query Attention (MQA) is used. Otherwise,
-            Grouped Query Attention (GQA) is used. If not specified, defaults to `num_attention_heads`.
-        hidden_act (`str` or `function`, *optional*, defaults to "silu"):
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string).
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             Maximum sequence length the model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             Standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             Epsilon used by the RMS normalization layers.
-        use_cache (`bool`, *optional*, defaults to True):
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions. Only relevant if `config.is_decoder=True`.
         pad_token_id (`int`, *optional*):
             Padding token id.
-        bos_token_id (`int`, *optional*, defaults to None):
+        bos_token_id (`int`, *optional*):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 151643):
             End of stream token id.
         pretraining_tp (`int`, *optional*, defaults to 1):
             Experimental: tensor parallelism rank used during pretraining. This is necessary for exact reproducibility
             of pretraining results.
-        tie_word_embeddings (`bool`, *optional*, defaults to False):
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie the input and output word embeddings.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`dict`, *optional*):
             Dictionary for scaling RoPE embeddings. Supports `{"type": strategy name, "factor": scaling factor}`.
-        attention_bias (`bool`, *optional*, defaults to False):
+        attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the self-attention projections.
-        n_group (`int`, *optional*, defaults to 1):
-            Number of groups for routed experts.
-        topk_group (`int`, *optional*, defaults to 1):
-            Number of selected groups for each token (selected experts only within `topk_group` groups).
-        use_sliding_window (`bool`, *optional*, defaults to False):
-            Whether to use sliding window attention.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Size of the sliding window for attention. If not specified, defaults to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             Dropout ratio for the attention probabilities.
         routed_scaling_factor (`float`, *optional*, defaults to 1.0):
             Scaling factor for routed experts.
+        use_sliding_window (`bool`, *optional*, defaults to `False`):
+            Whether to use sliding window attention.
+        sliding_window (`int`, *optional*, defaults to 4096):
+            Size of the sliding window for attention. If not specified, defaults to `4096`.
 
     Examples:
         ```python

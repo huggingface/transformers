@@ -16,17 +16,12 @@
 import gc
 import unittest
 
-from packaging import version
-from parameterized import parameterized
-
-from transformers import AutoTokenizer, Dots1Config, is_torch_available, set_seed
+from transformers import AutoTokenizer, Dots1Config, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -205,7 +200,7 @@ class Dots1ModelTester:
             use_sliding_window=self.use_sliding_window,
             sliding_window=self.sliding_window,
         )
-    
+
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -270,10 +265,6 @@ class Dots1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skip(reason="TODO")
-    def test_past_key_values_format(self):
-        pass
 
 
 @require_torch_accelerator
