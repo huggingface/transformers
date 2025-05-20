@@ -149,6 +149,7 @@ class Florence2VisionText2TextModelTester:
         return Florence2Config(
             text_config=self.text_config,
             vision_config=self.vision_config,
+            is_encoder_decoder=True,
         )
 
     def prepare_config_and_inputs(self):
@@ -267,74 +268,6 @@ class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="0.00023532799968961626 not found in [0.0, 1.0] : Parameter image_projection")
-    def test_initialization(self):
-        pass
-
-    @unittest.skip(reason="no attribute 'hidden_states'")
-    def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip(reason="no attribute 'hidden_states'")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="flaky")
-    def test_batching_equivalence(self):
-        pass
-
-    @unittest.skip(reason="Not supported")
-    def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Not supported")
-    def test_tied_weights_keys(self):
-        pass
-
-    @unittest.skip(reason="Not supported")
-    def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="Not supported")
-    def test_can_use_safetensors(self):
-        pass
-
-    @unittest.skip(reason="Not supported")
-    def test_model_outputs_equivalence(self):
-        pass
-
-    @unittest.skip(reason="Not supported")
-    def test_eager_matches_sdpa_inference_0_float16(self):
-        pass
-
-    @unittest.skip(reason="Not supported")
-    def test_eager_matches_sdpa_inference_1_bfloat16(self):
-        pass
-
-    @unittest.skip(reason="Not supported")
-    def test_load_save_without_tied_weights(self):
-        pass
-
-    @unittest.skip(reason="Not supported")
-    def test_save_load(self):
-        pass
-
-    @unittest.skip(reason="Not supported")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
-    @unittest.skip(reason="Not supported")
-    def test_sdpa_can_dispatch_non_composite_models(self):
-        pass
-
-    @unittest.skip(reason="Not supported")
-    def test_eager_matches_sdpa_inference_2_float32(self):
-        pass
-
-    @unittest.skip(reason="Not supported yet")
-    def test_determinism(self):
         pass
 
 
