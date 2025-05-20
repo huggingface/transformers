@@ -85,9 +85,6 @@ class RequestState:
     created_time: float = field(default_factory=time.time)
     error: Optional[str] = None
 
-    def __hash__(self):
-        return hash(self.request_id)
-
     def current_len(self) -> int:
         """Get the current length of the sequence (prompt + generated tokens)."""
         return self.position_offset
@@ -465,7 +462,8 @@ class ContinuousBatchProcessor:
         self.streaming = streaming
 
         self.active_requests: Dict[str, RequestState] = {}
-        self.waiting_requests: Deque[RequestState] = deque()
+        self.waiting_requests_dict: Dict[str, RequestState] = {}
+        self.waiting_requests_order: Deque[str] = deque()
         self.requests_to_process_next: List[str] = []
 
         # Get batch size parameters from generation config
@@ -532,7 +530,7 @@ class ContinuousBatchProcessor:
 
     def __repr__(self):
         return (
-            f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.active_requests}, waiting_requests={self.waiting_requests})"
+            f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.active_requests}, waiting_requests={self.waiting_requests_dict})"
             + self.get_model_kwargs().__repr__()
         )
 
@@ -563,7 +561,8 @@ class ContinuousBatchProcessor:
                 state = self.input_queue.get_nowait()
                 if state is None:  # Sentinel value
                     continue
-                self.waiting_requests.append(state)
+                self.waiting_requests_dict[state.request_id] = state
+                self.waiting_requests_order.append(state.request_id)
 
             except queue.Empty:
                 break
@@ -641,7 +640,11 @@ class ContinuousBatchProcessor:
                 priority_states.append(state)
             if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
                 second_priority_states.append(state)
-        second_priority_states.extend(list(self.waiting_requests))
+
+        # Add waiting requests to second priority
+        for req_id in self.waiting_requests_order:
+            second_priority_states.append(self.waiting_requests_dict[req_id])
+
         candidates = priority_states + second_priority_states
         request_ids_to_remove_from_waiting = set()
 
@@ -654,11 +657,21 @@ class ContinuousBatchProcessor:
                 continue
             scheduled_requests.append(state.request_id)
             token_budget -= request_len
-            if state in self.waiting_requests:  # TODO this is most probably slow, hash should be re-implemented
-                self.waiting_requests.remove(state)  # same here
+
+            req_id = state.request_id
+            if req_id in self.waiting_requests_dict:
+                del self.waiting_requests_dict[req_id]
+                request_ids_to_remove_from_waiting.add(req_id)
+
             if token_budget == 0:
                 break
-        if len(scheduled_requests) == 0 and len(self.waiting_requests) == 0 and len(self.active_requests) == 0:
+
+        if request_ids_to_remove_from_waiting:
+            self.waiting_requests_order = deque(
+                [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
+            )
+
+        if len(scheduled_requests) == 0 and len(self.waiting_requests_dict) == 0 and len(self.active_requests) == 0:
             logger.warning("No requests to process. Should exit.")
         return scheduled_requests
 
@@ -667,10 +680,10 @@ class ContinuousBatchProcessor:
         """Prepare tensors and metadata for the next model forward pass."""
         # Get new requests from the queue
         self._get_new_requests()
-        if not self.active_requests and not self.waiting_requests:
+        if not self.active_requests and not self.waiting_requests_dict:
             return None
 
-        self.metrics.record_queue_metrics(len(self.active_requests), len(self.waiting_requests))
+        self.metrics.record_queue_metrics(len(self.active_requests), len(self.waiting_requests_dict))
 
         self.requests_to_process_next = self._schedule_batch()
         if not self.requests_to_process_next:
@@ -712,7 +725,7 @@ class ContinuousBatchProcessor:
             state.position_offset += query_length
 
         logger.warning(
-            f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.waiting_requests)}, Active: {len(self.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
+            f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.waiting_requests_dict)}, Active: {len(self.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
         )
         self._build_tensors(
             input_ids,
@@ -814,7 +827,7 @@ class ContinuousBatchProcessor:
     @traced
     def has_pending_requests(self) -> bool:
         """Check if there are any active or waiting requests."""
-        return bool(self.active_requests or self.waiting_requests)
+        return bool(self.active_requests or self.waiting_requests_dict)
 
     @traced
     def handle_batch_error(self, error):
@@ -839,9 +852,12 @@ class ContinuousBatchProcessor:
             del self.active_requests[req_id]
 
         # Also fail any requests in the waiting queue
-        while self.waiting_requests:
-            state = self.waiting_requests.popleft()
+        for req_id in list(self.waiting_requests_dict.keys()):
+            state = self.waiting_requests_dict.pop(req_id)
             self._handle_request_error(error, state)
+
+        # Clear the ordering queue
+        self.waiting_requests_order.clear()
 
 
 # Manager Class (User Interface)
