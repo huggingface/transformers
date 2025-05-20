@@ -36,10 +36,7 @@ from ..utils.import_utils import _torch_version
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask, flex_attention
-    from torch.nn.attention.flex_attention import (
-        create_block_mask as create_block_causal_mask_flex,
-    )
+    from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
 
 
 class WrappedFlexAttention:
@@ -82,17 +79,19 @@ class WrappedFlexAttention:
 Offset = Union[torch.Tensor, int]
 
 
+# TODO: rename to make_flex_block_mask for clarity as it's not only causal anymore
 def make_flex_block_causal_mask(
     attention_mask_2d: torch.Tensor,
     attention_chunk_size: Optional[int] = None,
     query_length=None,
     key_length=None,
     offsets: Optional[Tuple[Offset, Offset]] = None,
+    is_causal: Optional[bool] = True,
 ) -> "BlockMask":
     """
-    Create a block causal document mask for a batch of sequences, both packed and unpacked.
-    Create Block causal logic and passing it into :func:`torch.nn.attention.flex_attention.create_block_mask`.
-    The resultant BlockMask is a compressed representation of the full block causal
+    Create a block (causal) document mask for a batch of sequences, both packed and unpacked.
+    Create Block (causal) logic and passing it into :func:`torch.nn.attention.flex_attention.create_block_mask`.
+    The resultant BlockMask is a compressed representation of the full block (causal)
     mask. BlockMask is essential for performant computation of flex attention.
     See: https://pytorch.org/blog/flexattention/
 
@@ -151,7 +150,21 @@ def make_flex_block_causal_mask(
         causal_doc_mask = causal_mask_mod(batch_idx, head_idx, q_idx, kv_idx)
         return chunk_mask & causal_doc_mask
 
-    mask_mod_maybe_combined = causal_mask_mod if attention_chunk_size is None else chunk_causal_mask_mod
+    def default_mask_mod(batch_idx, head_idx, q_idx, kv_idx):
+        """
+        Utilizes default attention mask to enable encoder and encoder-decoder
+        attention masks.
+        """
+        document_mask = document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
+        # kv indexing is crucial in order to work correctly
+        padding_mask = attention_mask_2d[batch_idx, kv_idx] > 0
+        final_mask = padding_mask & document_mask
+        return final_mask
+
+    if not is_causal:
+        mask_mod_maybe_combined = default_mask_mod
+    else:
+        mask_mod_maybe_combined = causal_mask_mod if attention_chunk_size is None else chunk_causal_mask_mod
 
     if offsets is not None:
         q_offset = offsets[0]
@@ -163,7 +176,8 @@ def make_flex_block_causal_mask(
             return mask_mod_maybe_combined(batch_idx, head_idx, offset_q, offset_kv)
     else:
         mask_mod = mask_mod_maybe_combined
-    return create_block_causal_mask_flex(
+
+    return create_block_mask(
         mask_mod=mask_mod,
         B=batch_size,
         H=None,  # attention head
@@ -216,20 +230,20 @@ def flex_attention_forward(
     **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     block_mask = None
-    causal_mask = None
+    score_mask = None
     if isinstance(attention_mask, BlockMask):
         block_mask = attention_mask
     else:
-        causal_mask = attention_mask
+        score_mask = attention_mask
 
-    if causal_mask is not None:
-        causal_mask = causal_mask[:, :, :, : key.shape[-2]]
+    if score_mask is not None:
+        score_mask = score_mask[:, :, :, : key.shape[-2]]
 
     def score_mod(score, batch_idx, head_idx, q_idx, kv_idx):
         if softcap is not None:
             score = softcap * torch.tanh(score / softcap)
-        if causal_mask is not None:
-            score = score + causal_mask[batch_idx][0][q_idx][kv_idx]
+        if score_mask is not None:
+            score = score + score_mask[batch_idx][0][q_idx][kv_idx]
         if head_mask is not None:
             score = score + head_mask[batch_idx][head_idx][0][0]
         return score
