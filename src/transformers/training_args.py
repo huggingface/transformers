@@ -1646,10 +1646,11 @@ class TrainingArguments:
                             "--load_best_model_at_end requires the saving steps to be a multiple of the evaluation "
                             f"steps, but found {self.save_steps}, which is not a multiple of {self.eval_steps}."
                         )
-                raise ValueError(
-                    "--load_best_model_at_end requires the saving steps to be a round multiple of the evaluation "
-                    f"steps, but found {self.save_steps}, which is not a round multiple of {self.eval_steps}."
-                )
+                else:
+                    raise ValueError(
+                        "--load_best_model_at_end requires the saving steps to be a round multiple of the evaluation "
+                        f"steps, but found {self.save_steps}, which is not a round multiple of {self.eval_steps}."
+                    )
 
         safetensors_available = is_safetensors_available()
         if self.save_safetensors and not safetensors_available:
