@@ -1404,23 +1404,20 @@ class WhisperGenerationMixin(GenerationMixin):
         language = getattr(generation_config, "language", None)
         init_tokens = [generation_config.decoder_start_token_id]
 
-        # TL;DR we silently ignore `forced_decoder_ids` (old flag) when `task` or `language` (new flags) are set OR
-        # when `forced_decoder_ids` contains the default values (= transcribe).
+        # TL;DR we silently ignore `forced_decoder_ids` (old flag) when `task` or `language` (new flags).
         # `forced_decoder_ids` is an old generation config attribute that is now deprecated in favor of `task` and
         # `language` (see https://github.com/huggingface/transformers/pull/28687). Nevertheless, keep in mind that
         # the original checkpoints all contain this attribute, and thus we should maintain backwards compatibility.
         if task is None and language is None:
-            default_forced_decoder_ids = [[1, None], [2, generation_config.task_to_id["transcribe"]]]
-            forced_decoder_ids = generation_config.forced_decoder_ids
+            forced_decoder_ids = getattr(generation_config, "forced_decoder_ids", None)
             # fallback: check the model config for forced_decoder_ids
             if forced_decoder_ids is None and getattr(config, "forced_decoder_ids", None) is not None:
                 forced_decoder_ids = config.forced_decoder_ids
 
-            # `forced_decoder_ids` is not the default value -> process it
-            if forced_decoder_ids != default_forced_decoder_ids:
+            if forced_decoder_ids is not None:
                 logger.warning_once(
                     "Using custom `forced_decoder_ids` from the (generation) config. This is deprecated in favor of "
-                    "`task` and `language`."
+                    "the `task` and `language` flags/config options."
                 )
 
                 if forced_decoder_ids is not None and forced_decoder_ids[0][1] is None:
