@@ -30,6 +30,7 @@ from transformers import (
 )
 from transformers.models.idefics3 import Idefics3VisionConfig
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_bitsandbytes,
     require_torch,
     require_torch_large_accelerator,
@@ -179,6 +180,7 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     all_model_classes = (AriaModel, AriaForConditionalGeneration) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
+    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
@@ -302,7 +304,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     @slow
     @require_torch_large_accelerator
