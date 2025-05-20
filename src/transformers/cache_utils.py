@@ -470,7 +470,9 @@ class DynamicCache(Cache):
         ```
     """
 
-    def __init__(self, _distributed_cache_data: Optional[Iterable] = None, num_layers: Optional[int] = None) -> None:
+    def __init__(
+        self, _distributed_cache_data: Optional[Iterable] = None, config: Optional[PretrainedConfig] = None
+    ) -> None:
         super().__init__()
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         self.key_cache: list[torch.Tensor] = []
