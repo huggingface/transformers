@@ -32,7 +32,6 @@ from transformers import WhisperConfig
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
-    require_non_xpu,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -42,7 +41,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_torchaudio_available
+from transformers.utils import cached_property, is_torch_available, is_torch_xpu_available, is_torchaudio_available
 from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -2431,11 +2430,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             " How many different species are there in the chilli? How many different species are there in the chilli?",
         )
 
-    @require_non_xpu
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_speculative_decoding_distil(self):
-        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        torch_dtype = torch.float16 if (torch.cuda.is_available() or is_torch_xpu_available()) else torch.float32
         model_id = "openai/whisper-large-v2"
         model = WhisperForConditionalGeneration.from_pretrained(
             model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True

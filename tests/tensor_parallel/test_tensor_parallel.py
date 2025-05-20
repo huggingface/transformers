@@ -21,9 +21,11 @@ from transformers import is_torch_available
 from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
 from transformers.testing_utils import (
     TestCasePlus,
+    backend_device_count,
     get_torch_dist_unique_port,
     require_huggingface_hub_greater_or_equal,
     require_torch_multi_gpu,
+    torch_device,
 )
 
 
@@ -168,4 +170,4 @@ class TestTensorParallel(TestCasePlus):
 
 @require_torch_multi_gpu
 class TestTensorParallelCuda(TestTensorParallel):
-    nproc_per_node = torch.cuda.device_count()
+    nproc_per_node = backend_device_count(torch_device)
