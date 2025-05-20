@@ -15,7 +15,7 @@
 # limitations under the License.
 """PyTorch Time Series Transformer model."""
 
-from typing import Callable, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
