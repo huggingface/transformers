@@ -17,6 +17,7 @@ import enum
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 from typing import Dict, List, Optional, Union
 
+from ..generation import GenerationConfig
 from ..processing_utils import ProcessingKwargs, Unpack
 from ..utils import (
     add_end_docstrings,
@@ -54,7 +55,9 @@ class Chat:
     to this format because the rest of the pipeline code tends to assume that lists of messages are
     actually a batch of samples rather than messages in the same conversation."""
 
-    def __init__(self, messages: Dict, images: Union[str, List[str], "Image.Image", List["Image.Image"]]):
+    def __init__(
+        self, messages: Dict, images: Optional[Union[str, List[str], "Image.Image", List["Image.Image"]]] = None
+    ):
         for message in messages:
             if not ("role" in message and "content" in message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
@@ -118,6 +121,10 @@ class ImageTextToTextPipeline(Pipeline):
     in which case the pipeline will operate in chat mode and will continue the chat(s) by adding its response(s).
     Each chat takes the form of a list of dicts, where each dict contains "role" and "content" keys.
 
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+
     Example:
 
     ```python
@@ -173,6 +180,12 @@ class ImageTextToTextPipeline(Pipeline):
     _load_image_processor = False
     _load_feature_extractor = False
     _load_tokenizer = False
+
+    _pipeline_calls_generate = True
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -241,7 +254,15 @@ class ImageTextToTextPipeline(Pipeline):
     def __call__(
         self,
         images: Optional[
-            Union[str, List[str], List[List[str]], "Image.Image", List["Image.Image"], List[List["Image.Image"]]]
+            Union[
+                str,
+                List[str],
+                List[List[str]],
+                "Image.Image",
+                List["Image.Image"],
+                List[List["Image.Image"]],
+                List[dict],
+            ]
         ] = None,
         text: Optional[Union[str, List[str], List[dict]]] = None,
         **kwargs,
@@ -250,21 +271,22 @@ class ImageTextToTextPipeline(Pipeline):
         Generate a text given text and the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image or `List[PIL.Image]`):
+            images (`str`, `List[str]`, `PIL.Image, `List[PIL.Image]`, `List[Dict[str, Union[str, PIL.Image]]]`):
                 The pipeline handles three types of images:
 
                 - A string containing a HTTP(s) link pointing to an image
                 - A string containing a local path to an image
                 - An image loaded in PIL directly
 
-                The pipeline accepts either a single image or a batch of images.
+                The pipeline accepts either a single image or a batch of images. Finally, this pipeline also supports
+                the chat format (see `text`) containing images and text in this argument.
             text (str, List[str], `List[Dict[str, Union[str, PIL.Image]]]`):
-                The text to be used for generation. If a list of strings is passed, the length of the list should be the
-                same as the number of images. Text can also follow the chat format: a list of dictionaries where each
-                dictionary represents a message in a conversation. Each dictionary should have two keys: 'role' and
-                'content'. 'role' should be one of 'user', 'system' or 'assistant'. 'content' should be a list of dictionary
-                containing the text of the message and the type of the message. The type of the message can be either
-                'text' or 'image'. If the type is 'image', no text is needed.
+                The text to be used for generation. If a list of strings is passed, the length of the list should be
+                the same as the number of images. Text can also follow the chat format: a list of dictionaries where
+                each dictionary represents a message in a conversation. Each dictionary should have two keys: 'role'
+                and 'content'. 'role' should be one of 'user', 'system' or 'assistant'. 'content' should be a list of
+                dictionary containing the text of the message and the type of the message. The type of the message
+                can be either 'text' or 'image'. If the type is 'image', no text is needed.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Returns the tensors of predictions (as token indices) in the outputs. If set to
                 `True`, the decoded text is not returned.
@@ -281,8 +303,8 @@ class ImageTextToTextPipeline(Pipeline):
                 `False` otherwise, but you can manually override that behaviour by setting this flag.
 
         Return:
-            A list or a list of list of `dict`: Each result comes as a dictionary with the following key (cannot return a combination
-            of both `generated_text` and `generated_token_ids`):
+            A list or a list of list of `dict`: Each result comes as a dictionary with the following key (cannot
+            return a combination of both `generated_text` and `generated_token_ids`):
 
             - **generated_text** (`str`, present when `return_text=True`) -- The generated text.
             - **generated_token_ids** (`torch.Tensor`, present when `return_tensors=True`) -- The token
@@ -291,17 +313,11 @@ class ImageTextToTextPipeline(Pipeline):
         """
         if images is None and text is None:
             raise ValueError("You must at least provide either text or images.")
-        if images is not None and text is None and not valid_images(images):
-            """
-            Supports the following format
-            - {"image": image, "text": text}
-            - [{"image": image, "text": text}]
-            - Generator and datasets
-            This is a common pattern in other multimodal pipelines, so we support it here as well.
-            """
-            return super().__call__(images, **kwargs)
 
-        if isinstance(text, (list, tuple, KeyDataset)) and isinstance(text[0], (list, tuple, dict)):
+        def _is_chat(arg):
+            return isinstance(arg, (list, tuple, KeyDataset)) and isinstance(arg[0], (list, tuple, dict))
+
+        if _is_chat(text):
             # We have one or more prompts in list-of-dicts format, so this is chat mode
             if isinstance(text[0], dict):
                 return super().__call__(Chat(text, images), **kwargs)
@@ -311,11 +327,32 @@ class ImageTextToTextPipeline(Pipeline):
                 chats = [Chat(chat, image) for chat, image in zip(text, images)]  # 🐈 🐈 🐈
                 return super().__call__(chats, **kwargs)
 
+        # Same as above, but the `images` argument contains the chat. This can happen e.g. is the user only passes a
+        # chat as a positional argument.
+        elif text is None and _is_chat(images):
+            # We have one or more prompts in list-of-dicts format, so this is chat mode
+            if isinstance(images[0], dict):
+                return super().__call__(Chat(images), **kwargs)
+            else:
+                chats = [Chat(image) for image in images]  # 🐈 🐈 🐈
+                return super().__call__(chats, **kwargs)
+
+        elif images is not None and text is None and not valid_images(images):
+            """
+            Supports the following format
+            - {"image": image, "text": text}
+            - [{"image": image, "text": text}]
+            - Generator and datasets
+            This is a common pattern in other multimodal pipelines, so we support it here as well.
+            """
+            return super().__call__(images, **kwargs)
+
         # encourage the user to use the chat format if supported
         if getattr(self.processor, "chat_template", None) is not None:
             logger.warning_once(
-                "The input data was not formatted as a chat with dicts containing 'role' and 'content' keys, even though this model supports chat. "
-                "Consider using the chat format for better results. For more information, see https://huggingface.co/docs/transformers/en/chat_templating"
+                "The input data was not formatted as a chat with dicts containing 'role' and 'content' keys, even "
+                "though this model supports chat. Consider using the chat format for better results. For more "
+                "information, see https://huggingface.co/docs/transformers/en/chat_templating"
             )
 
         # support text only generation

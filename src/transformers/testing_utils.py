@@ -97,6 +97,7 @@ from .utils import (
     is_grokadamw_available,
     is_hadamard_available,
     is_hqq_available,
+    is_huggingface_hub_greater_or_equal,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -538,6 +539,21 @@ def require_torch_greater_or_equal(version: str):
         return unittest.skipUnless(is_torch_greater_or_equal(version), f"test requires PyTorch version >= {version}")(
             test_case
         )
+
+    return decorator
+
+
+def require_huggingface_hub_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires huggingface_hub version >= `version`.
+
+    These tests are skipped when huggingface_hub version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(
+            is_huggingface_hub_greater_or_equal(version), f"test requires huggingface_hub version >= {version}"
+        )(test_case)
 
     return decorator
 
@@ -3008,6 +3024,11 @@ if is_torch_available():
         "cpu": 0,
         "default": 0,
     }
+    BACKEND_RESET_PEAK_MEMORY_STATS = {
+        "cuda": torch.cuda.reset_peak_memory_stats,
+        "cpu": None,
+        "default": None,
+    }
     BACKEND_MEMORY_ALLOCATED = {
         "cuda": torch.cuda.memory_allocated,
         "cpu": 0,
@@ -3028,6 +3049,7 @@ else:
     BACKEND_EMPTY_CACHE = {"default": None}
     BACKEND_DEVICE_COUNT = {"default": lambda: 0}
     BACKEND_RESET_MAX_MEMORY_ALLOCATED = {"default": None}
+    BACKEND_RESET_PEAK_MEMORY_STATS = {"default": None}
     BACKEND_MAX_MEMORY_ALLOCATED = {"default": 0}
     BACKEND_MEMORY_ALLOCATED = {"default": 0}
     BACKEND_SYNCHRONIZE = {"default": None}
@@ -3056,6 +3078,7 @@ if is_torch_xpu_available():
     BACKEND_MANUAL_SEED["xpu"] = torch.xpu.manual_seed
     BACKEND_DEVICE_COUNT["xpu"] = torch.xpu.device_count
     BACKEND_RESET_MAX_MEMORY_ALLOCATED["xpu"] = torch.xpu.reset_peak_memory_stats
+    BACKEND_RESET_PEAK_MEMORY_STATS["xpu"] = torch.xpu.reset_peak_memory_stats
     BACKEND_MAX_MEMORY_ALLOCATED["xpu"] = torch.xpu.max_memory_allocated
     BACKEND_MEMORY_ALLOCATED["xpu"] = torch.xpu.memory_allocated
     BACKEND_SYNCHRONIZE["xpu"] = torch.xpu.synchronize
@@ -3082,6 +3105,10 @@ def backend_device_count(device: str):
 
 def backend_reset_max_memory_allocated(device: str):
     return _device_agnostic_dispatch(device, BACKEND_RESET_MAX_MEMORY_ALLOCATED)
+
+
+def backend_reset_peak_memory_stats(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_RESET_PEAK_MEMORY_STATS)
 
 
 def backend_max_memory_allocated(device: str):

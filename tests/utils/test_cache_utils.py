@@ -21,6 +21,7 @@ from transformers import set_seed
 from transformers.generation.configuration_utils import ALL_CACHE_IMPLEMENTATIONS
 from transformers.testing_utils import (
     CaptureStderr,
+    backend_device_count,
     cleanup,
     get_gpu_count,
     is_torch_available,
@@ -202,8 +203,8 @@ def _skip_on_failed_cache_prerequisites(test, cache_implementation):
         if not has_accelerator:
             test.skipTest("Offloaded caches require an accelerator")
         if cache_implementation in ["offloaded_static", "offloaded_hybrid_chunked"]:
-            if torch.cuda.device_count() != 1:
-                test.skipTest("Offloaded static caches require exactly 1 GPU")
+            if backend_device_count(torch_device) != 1:
+                test.skipTest("Offloaded static caches require exactly 1 accelerator")
 
 
 class CacheIntegrationTest(unittest.TestCase):
