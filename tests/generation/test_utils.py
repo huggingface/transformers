@@ -41,7 +41,6 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_greater_or_equal,
     require_torch_multi_accelerator,
-    require_torch_multi_gpu,
     require_torch_sdpa,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
@@ -1415,6 +1414,7 @@ class GenerationTesterMixin:
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            config._attn_implementation = "eager"  # head mask works only in eager mode and will be removed soon
             text_config = config.get_text_config()
             if self.has_attentions:
                 config._attn_implementation = "eager"  # can't output attentions otherwise
@@ -2144,6 +2144,7 @@ class GenerationTesterMixin:
             compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
 
             generation_kwargs = {
+                "use_cache": True,
                 "do_sample": False,
                 "max_new_tokens": 5,
                 "return_dict_in_generate": True,
@@ -2954,7 +2955,7 @@ class GenerationIntegrationTests(unittest.TestCase):
     def test_stop_sequence_stopping_criteria(self):
         prompt = """Hello I believe in"""
         generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-bart")
-        output = generator(prompt)
+        output = generator(prompt, max_new_tokens=10)
         self.assertEqual(
             output,
             [{"generated_text": ("Hello I believe in we we we we we we we we we")}],
@@ -3860,7 +3861,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @slow
     @require_torch_multi_accelerator
-    def test_assisted_decoding_in_different_gpu(self):
+    def test_assisted_decoding_in_different_accelerator(self):
         device_0 = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
         device_1 = f"{torch_device}:1" if torch_device != "cpu" else "cpu"
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(device_0)
@@ -3885,7 +3886,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    def test_assisted_decoding_model_in_gpu_assistant_in_cpu(self):
+    def test_assisted_decoding_model_in_accelerator_assistant_in_cpu(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(
             torch_device
         )
@@ -3970,10 +3971,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue((expected_out == predicted_out).all().item())
 
     @pytest.mark.generate
-    @require_torch_multi_gpu
-    def test_generate_with_static_cache_multi_gpu(self):
+    @require_torch_multi_accelerator
+    def test_generate_with_static_cache_multi_accelerator(self):
         """
-        Tests if the static cache has been set correctly and if generate works correctly when we are using multi-gpus.
+        Tests if the static cache has been set correctly and if generate works correctly when we are using multi-acceleratorss.
         """
         # need to split manually as auto doesn't work well with unbalanced model
         device_map = {"model.embed_tokens": 0, "model.layers.0": 0, "model.layers.1": 1, "model.norm": 1, "lm_head": 0}
@@ -4005,10 +4006,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(key_cache_1.device == value_cache_1.device == torch.device(1))
 
     @pytest.mark.generate
-    @require_torch_multi_gpu
-    def test_generate_multi_gpu_causal_mask(self):
+    @require_torch_multi_accelerator
+    def test_generate_multi_accelerator_causal_mask(self):
         """
-        Tests that cache position device doesn't clash with causal mask device when we are using multi-gpus.
+        Tests that cache position device doesn't clash with causal mask device when we are using multi-accelerators.
         In real life happens only when multimodal encoder size is big, so `embed_tokens` gets allocated to the next device.
         The error will be triggered whenever a bacthed input is used, so that `causal_mask` is actually prepared instead of
         being `None`.
@@ -4033,10 +4034,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         _ = model.generate(**inputs, max_new_tokens=20)
 
     @pytest.mark.generate
-    @require_torch_multi_gpu
-    def test_init_static_cache_multi_gpu(self):
+    @require_torch_multi_accelerator
+    def test_init_static_cache_multi_accelerator(self):
         """
-        Tests if the static cache has been set correctly when we initialize it manually in a multi-gpu setup.
+        Tests if the static cache has been set correctly when we initialize it manually in a multi-accelerator setup.
         """
         # need to split manually as auto doesn't work well with unbalanced model
         device_map = {"model.embed_tokens": 0, "model.layers.0": 0, "model.layers.1": 1, "model.norm": 1, "lm_head": 0}
@@ -4870,7 +4871,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @require_read_token
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_cache_device_map_with_vision_layer_device_map(self):
         """
         Test that the cache device map is correctly set when the vision layer has a device map. Regression test for
@@ -4953,6 +4954,68 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = tokenized_inputs.input_ids.to(model_cpu.device)
         _ = model_cpu.generate(input_ids, **generate_kwargs)
         self.assertFalse(hasattr(model_cpu, "_compiled_call"))
+
+    def test_custom_generate_from_argument_in_generate(self):
+        """Tests that the `custom_generate` argument is used when passed to `generate`"""
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+        # Note: `transformers-community/custom_generate_example` has a custom decoding method with a `left_padding`
+        # argument (int), which prepends as many pad tokens.
+        gen_out = model.generate(
+            **model_inputs,
+            left_padding=5,
+            max_new_tokens=5,
+            custom_generate="transformers-community/custom_generate_example",
+            trust_remote_code=True,
+        )
+        text_output = tokenizer.decode(gen_out[0])
+        self.assertTrue(text_output.startswith("<unk><unk><unk><unk><unk>"))  # <unk> is the pad token
+
+    def test_custom_generate_from_model_repo_with_custom_generate_code(self):
+        """
+        Tests that models from model repos containing custom generation code override `generate` with the custom code
+        """
+        model = AutoModelForCausalLM.from_pretrained(
+            "transformers-community/custom_generate_example", device_map="auto", trust_remote_code=True
+        )
+        generate_signature = inspect.signature(model.generate)
+        # `left_padding` is a custom argument, doesn't exist in the base `generate` method
+        self.assertTrue(generate_signature.parameters.get("left_padding"))
+
+    def test_custom_generate_bad_requirements(self):
+        """Tests that we check the `requirements.txt` file from custom generation repos"""
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+        with self.assertRaises(ImportError):
+            # Note: `transformers-community/custom_generate_bad_requirements` has a `requirements.txt` with
+            # impossible requirements
+            model.generate(
+                **model_inputs,
+                custom_generate="transformers-community/custom_generate_bad_requirements",
+                trust_remote_code=True,
+            )
+
+    def test_custom_generate_requires_trust_remote_code(self):
+        """Tests that `trust_remote_code` is required when using `custom_generate`"""
+        # Case 1: A model from a repo containing custom generation code must be loaded with `trust_remote_code`
+        with self.assertRaises(ValueError):
+            AutoModelForCausalLM.from_pretrained("transformers-community/custom_generate_example", device_map="auto")
+
+        # Case 2: Using the `custom_generate` argument in `generate` requires `trust_remote_code` if the code is not
+        # local
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+        with self.assertRaises(ValueError):
+            model.generate(**model_inputs, custom_generate="transformers-community/custom_generate_example")
 
 
 @require_torch

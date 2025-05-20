@@ -49,8 +49,6 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers.models.llava_onevision.modeling_llava_onevision import unpad_image
-
 
 if is_vision_available():
     from PIL import Image
@@ -268,18 +266,27 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
-    def test_unpad_image(self):
-        original_size = (400, 400)
+    def test_odd_sized_image(self):
+        # prepare model configuration
+        config = self.model_tester.get_config()
 
-        # Test case width is padded
-        pixel_values = floats_tensor([3, 400, 601])
-        unpadded_tensor = unpad_image(pixel_values, original_size)
-        self.assertEqual(unpadded_tensor.shape[1:], original_size)
+        # prepare input
+        num_image_tokens = 10
+        pixel_values = floats_tensor([1, 2, 3, config.vision_config.image_size, config.vision_config.image_size])
+        input_ids = ids_tensor([1, 64], config.text_config.vocab_size - 2) + 2
+        input_ids[:, :num_image_tokens] = config.image_token_index
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "image_sizes": torch.tensor([[13, 16]]),  # odd-sized image
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
 
-        # Test case height is padded
-        pixel_values = floats_tensor([3, 503, 400])
-        unpadded_tensor = unpad_image(pixel_values, original_size)
-        self.assertEqual(unpadded_tensor.shape[1:], original_size)
+        # forward with odd-sized image input
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model(**inputs_dict)
 
     @parameterized.expand(
         [
