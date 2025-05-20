@@ -1111,8 +1111,8 @@ class ContinuousBatchingManager:
                 self._generation_step(batch_processor)
         else:
             self._generation_step(batch_processor)
-
-        torch.cuda.synchronize()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         batch_processor.update_batch()
 
     @traced(span_name="graph_replay")
@@ -1130,7 +1130,7 @@ class ContinuousBatchingManager:
             while True:
                 req_data = self.input_queue.get_nowait()
                 if batch_processor is not None:
-                    batch_processor._handle_request_error(error, getattr(req_data, "request_id", None))
+                    batch_processor._handle_request_error(error, req_data)
         except queue.Empty:
             pass
 
