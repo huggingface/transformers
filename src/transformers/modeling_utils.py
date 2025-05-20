@@ -741,30 +741,25 @@ def _load_state_dict_into_meta_model(
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
-    for param_name, _ in model.named_parameters(remove_duplicate=False):
-        empty_param = state_dict.get(param_name)
+    for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:
             continue
 
-        if empty_param is None:
-            # tied weights case such as lm_head
-            pass
+        # we need to use serialized_param_name as file pointer is untouched
+        if is_meta_state_dict:
+            # This is the name of the parameter as it appears on disk file
+            serialized_param_name = reverse_renaming_mapping[param_name]
+            param = file_pointer.get_slice(serialized_param_name)
         else:
-            # we need to use serialized_param_name as file pointer is untouched
-            if is_meta_state_dict:
-                # This is the name of the parameter as it appears on disk file
-                serialized_param_name = reverse_renaming_mapping[param_name]
-                param = file_pointer.get_slice(serialized_param_name)
-            else:
-                param = empty_param.to(tensor_device)  # It is actually not empty!
+            param = empty_param.to(tensor_device)  # It is actually not empty!
 
-            to_contiguous, casting_dtype = _infer_parameter_dtype(
-                model,
-                param_name,
-                empty_param,
-                keep_in_fp32_regex,
-                hf_quantizer,
-            )
+        to_contiguous, casting_dtype = _infer_parameter_dtype(
+            model,
+            param_name,
+            empty_param,
+            keep_in_fp32_regex,
+            hf_quantizer,
+        )
 
         if device_mesh is not None:  # In this case, the param is already on the correct device!
             shard_and_distribute_module(

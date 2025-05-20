@@ -31,6 +31,8 @@ from datasets import load_dataset
 from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_dict
 from torch.distributed.checkpoint.stateful import Stateful
 from torch.distributed.device_mesh import DeviceMesh
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import ShardingStrategy
 from torch.distributed.tensor import DTensor
 from torch.distributed.tensor.experimental import context_parallel
 from torch.nn.attention import SDPBackend, sdpa_kernel
@@ -39,13 +41,6 @@ from torch.utils.data.distributed import DistributedSampler
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from torch.utils.data import default_collate
-from torch.nn.attention import sdpa_kernel, SDPBackend
-from typing import Iterable
-import math
-from contextlib import contextmanager, nullcontext
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.distributed.fsdp import ShardingStrategy
 
 # torch.use_deterministic_algorithms(True)
 torch.backends.cudnn.deterministic = True
@@ -67,7 +62,7 @@ def main():
     tp_size = int(os.environ.get("TP_SIZE", 1))
     dp_size = int(os.environ.get("DP_SIZE", 1))
     cp_size = int(os.environ.get("CP_SIZE", 1))  # Add CP size configuration
-    sdpa_backend = SDPBackend.FLASH_ATTENTION # For CP
+    sdpa_backend = SDPBackend.FLASH_ATTENTION  # For CP
     # sdpa_backend = SDPBackend.MATH # For CP
     global_batch_size = 8  # Desired global batch size
     seq_len = 1024  # Sequence length
@@ -291,15 +286,11 @@ def main():
                 all_reduce_grads(model, world_mesh, use_ddp=use_ddp)
 
                 if hasattr(model, "clip_grad_norm_"):
-                    gradnorm = model.clip_grad_norm_(max_norm=1.0, norm_type=2.0) # TODO: fix reported gradnorm
+                    gradnorm = model.clip_grad_norm_(max_norm=1.0, norm_type=2.0)  # TODO: fix reported gradnorm
                 else:
                     # only works with FSDP's NO_SHARD otherwise we should use FSDP's clip_grad_norm_
-                    assert len(list(model.parameters()))>5, "No parameters found in model. Probably DDP bug.."
-                    gradnorm = clip_grad_norm_(
-                        model.parameters(),
-                        max_norm=1.0,
-                        norm_type=2.0,
-                        foreach=True)
+                    assert len(list(model.parameters())) > 5, "No parameters found in model. Probably DDP bug.."
+                    gradnorm = clip_grad_norm_(model.parameters(), max_norm=1.0, norm_type=2.0, foreach=True)
 
                 optimizer.step()
                 # allreduce loss across cp_dp before logging
@@ -351,7 +342,6 @@ def main():
 
 def all_reduce_grads(model, world_mesh, use_ddp):
     """All reduce gradients across dp_cp if applicable."""
-    dp_mesh = world_mesh["dp"]
     cp_mesh = world_mesh["cp"]
     if use_ddp:
         # DDP/FSDP takes care of syncing grads
