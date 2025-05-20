@@ -658,15 +658,14 @@ class GenerationMixin:
                 token_type_ids = getattr(model_input, "token_type_ids", None)
                 causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
                 attention_mask = causal_mask_creation_function(
-                    self.config,
-                    torch.empty(
-                        (batch_size, sequence_length), dtype=self.dtype
-                    ),  # we only need batch size, seq_length and dtype here - we don't care about the values
-                    attention_mask,
-                    cache_position,
-                    past_key_values,
-                    output_attentions,
-                    token_type_ids,
+                    config=self.config,
+                    # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
+                    input_embeds=torch.empty((batch_size, sequence_length), dtype=self.dtype),
+                    attention_mask=attention_mask,
+                    cache_position=cache_position,
+                    past_key_values=past_key_values,
+                    output_attentions=output_attentions,
+                    token_type_ids=token_type_ids,
                 )
             else:
                 attention_mask = causal_mask_creation_function(
