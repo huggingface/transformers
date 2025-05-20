@@ -25,6 +25,7 @@ from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_o
 
 
 if is_torch_flex_attn_available():
+    from torch._dynamo._trace_wrapped_higher_order_op import TransformGetItemToIndex
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 
 
@@ -43,6 +44,20 @@ def and_masks(*mask_functions: list[Callable]) -> Callable:
         return result
 
     return and_mask
+
+
+def or_masks(*mask_functions: list[Callable]) -> Callable:
+    """Returns a mask function that is the union of provided mask functions"""
+    if not all(callable(arg) for arg in mask_functions):
+        raise RuntimeError(f"All inputs should be callable mask_functions: {mask_functions}")
+
+    def or_mask(batch_idx, head_idx, q_idx, kv_idx):
+        result = q_idx.new_zeros((), dtype=torch.bool)
+        for mask in mask_functions:
+            result = result | mask(batch_idx, head_idx, q_idx, kv_idx)
+        return result
+
+    return or_mask
 
 
 def causal_mask_function(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
@@ -112,24 +127,27 @@ def add_offsets_to_mask_function(mask_function: Callable, q_offset: int, kv_offs
     return inner_mask
 
 
-def _vmap_for_q_idx_kv_idx(mask_function: Callable) -> Callable:
+def _vmap_for_bhqkv(mask_function: Callable, bh_indices: bool = True) -> Callable:
     """
-    Used to vmap our mask_functions over the q_idx and kv_idx dimensions of the inputs.
+    Used to vmap our mask_functions over the q_idx and kv_idx dimensions of the inputs. Optionally, vmap over
+    the batch and head indices as well if `bh_indices=True`.
     Using vmap here allows us to keep the performance of vectorized ops, while having a single set of primitive
     functions between attention interfaces (i.e. between flex and sdpa/eager, FA2 being a bit different).
 
     Args:
         mask_function (`Callable`):
             The mask_function to vmap.
+        bh_indices (`bool`, optional):
+            Whether to vmap over the batch and head indices as well, or only q and kv indices.
 
     Returns:
         Callable: The vmapped function.
     """
-    # We vmap the function 3 times, broadcasting the [q_idx, kv_idx] dimensions
-    dimensions = [
-        (None, None, None, 0),
-        (None, None, 0, None),
-    ]
+    # We vmap the function 2 times, broadcasting the [q_idx, kv_idx] dimensions
+    dimensions = [(None, None, None, 0), (None, None, 0, None)]
+    if bh_indices:
+        # We extend broadcasting over the [batch_idx, head_idx] dimensions
+        dimensions.extend([(None, 0, None, None), (0, None, None, None)])
 
     for dims in dimensions:
         mask_function = torch.vmap(mask_function, in_dims=dims, out_dims=0)
@@ -158,7 +176,46 @@ def prepare_padding_mask(
     return local_padding_mask
 
 
-def sdpa_mask(
+def sdpa_mask_new(
+    batch_size: int,
+    cache_position: torch.Tensor,
+    kv_length: int,
+    kv_offset: int = 0,
+    mask_function: Callable = causal_mask_function,
+    attention_mask: Optional[torch.Tensor] = None,
+    local_size: Optional[int] = None,
+    allow_is_causal_skip: bool = True,
+    **kwargs,
+) -> Optional[torch.Tensor]:
+    q_length = cache_position.shape[0]
+    # Potentially pad the 2D mask, and slice it correctly
+    padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset, _slice=False)
+
+    # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
+    if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, kv_offset, local_size):
+        return None
+
+    # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
+    # but without data-dependent slicing (i.e. torch.compile friendly)
+    kv_arange = torch.arange(kv_length, device=cache_position.device)
+    kv_arange += kv_offset
+
+    # Potentially add the padding 2D mask
+    if padding_mask is not None:
+        mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
+
+    batch_arange = torch.arange(batch_size, device=cache_position.device)
+    head_arange = torch.arange(1, device=cache_position.device)
+    # This creates the 4D mask easily. Note that we need this context manager as vmap cannot handle slicing a tensor from
+    # scalar tensor (it internally calls `.item()` which vmap does not allow, but this context works around it
+    # We don't need to add an offset to the mask_function either, as we vmap directly the correct indices for k and kv indices
+    with TransformGetItemToIndex():
+        causal_mask = _vmap_for_bhqkv(mask_function)(batch_arange, head_arange, cache_position, kv_arange)
+
+    return causal_mask
+
+
+def sdpa_mask_old(
     batch_size: int,
     cache_position: torch.Tensor,
     kv_length: int,
@@ -270,7 +327,7 @@ def sdpa_mask(
     padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
 
     # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
-    if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, local_size):
+    if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, kv_offset, local_size):
         return None
 
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
@@ -283,16 +340,19 @@ def sdpa_mask(
     # However, in more recent version of Pytorch, a trick was introduced to handle it, so the code below could be
     # replaced by a simpler call to `torch.nn.attention.flex_attention.create_mask` in the future (it would just mean
     # adding the padding_mask_function, and adding the correct offsets before calling the function)
-    causal_mask = _vmap_for_q_idx_kv_idx(mask_function)(None, None, cache_position, kv_arange)
+    causal_mask = _vmap_for_bhqkv(mask_function, bh_indices=False)(None, None, cache_position, kv_arange)
     causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
     if padding_mask is not None:
         causal_mask = causal_mask * padding_mask[:, None, None, :]
 
-    # Due to a bug in some older torch version, we need to update the mask in case a query is not attending to any
+    # Due to a bug in versions of torch<2.5, we need to update the mask in case a query is not attending to any
     # tokens (due to padding). See details in https://github.com/pytorch/pytorch/issues/110213
-    if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix:
+    if allow_torch_fix:
         causal_mask |= torch.all(~causal_mask, dim=-1, keepdim=True)
     return causal_mask
+
+
+sdpa_mask = sdpa_mask_new if is_torch_flex_attn_available() else sdpa_mask_old
 
 
 def eager_mask(
@@ -534,7 +594,8 @@ def create_causal_mask(
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     output_attentions: bool = False,
-    allow_is_causal_skip: Optional[bool] = None,
+    or_mask_function: Optional[Callable] = None,
+    and_mask_function: Optional[Callable] = None,
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
     """
     Create a standard causal mask based on the attention implementation used (stored in the config). If `past_key_values`
@@ -556,9 +617,12 @@ def create_causal_mask(
             The past key values, if we use a cache.
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
-        allow_is_causal_skip (`bool`, optional):
-            Whether to allow sdpa to avoid creating a mask under specific conditions. Some models should always create the mask
-            even if sdpa can technically avoid it (e.g. see Gemma3, when token_type_ids is passed)
+        or_mask_function (`Callable`, optional):
+            An optional mask function to combine with the causal mask function (by doing the union of both). This is
+            useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
+        and_mask_function (`Callable`, optional):
+            An optional mask function to combine with the causal mask function (by doing the intersection of both). This is
+            useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
     """
     # If we have an HybridCache structure, here we want to create the mask for the full layers
     try:
@@ -578,7 +642,19 @@ def create_causal_mask(
 
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
-    allow_is_causal_skip = allow_is_causal_skip or (not past_key_values.is_compileable if past_key_values is not None else True)
+    allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+
+    # Allow slight deviations from causal mask
+    if or_mask_function is not None:
+        if not _is_torch_greater_or_equal_than_2_5:
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.5")
+        mask_factory_function = or_masks(mask_factory_function, or_mask_function)
+        allow_is_causal_skip = False
+    if and_mask_function is not None:
+        if not _is_torch_greater_or_equal_than_2_5:
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.5")
+        mask_factory_function = and_masks(mask_factory_function, and_mask_function)
+        allow_is_causal_skip = False
 
     # We now create the mask
     return mask_interface(
@@ -601,7 +677,8 @@ def create_sliding_window_causal_mask(
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     output_attentions: bool = False,
-    allow_is_causal_skip: Optional[bool] = None,
+    or_mask_function: Optional[Callable] = None,
+    and_mask_function: Optional[Callable] = None,
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
@@ -624,9 +701,12 @@ def create_sliding_window_causal_mask(
             The past key values, if we use a cache.
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
-        allow_is_causal_skip (`bool`, optional):
-            Whether to allow sdpa to avoid creating a mask under specific conditions. Some models should always create the mask
-            even if sdpa can technically avoid it (e.g. see Gemma3, when token_type_ids is passed)
+        or_mask_function (`Callable`, optional):
+            An optional mask function to combine with the sliding causal mask function (by doing the union of both). This is
+            useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
+        and_mask_function (`Callable`, optional):
+            An optional mask function to combine with the sliding causal mask function (by doing the intersection of both). This is
+            useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
     """
     # If we have an HybridCache structure, here we want to create the mask for the sliding layers
     try:
@@ -650,7 +730,19 @@ def create_sliding_window_causal_mask(
 
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
-    allow_is_causal_skip = allow_is_causal_skip or (not past_key_values.is_compileable if past_key_values is not None else True)
+    allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+
+    # Allow slight deviations from sliding causal mask
+    if or_mask_function is not None:
+        if not _is_torch_greater_or_equal_than_2_5:
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.5")
+        mask_factory_function = or_masks(mask_factory_function, or_mask_function)
+        allow_is_causal_skip = False
+    if and_mask_function is not None:
+        if not _is_torch_greater_or_equal_than_2_5:
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.5")
+        mask_factory_function = and_masks(mask_factory_function, and_mask_function)
+        allow_is_causal_skip = False
 
     # We now create the mask
     return mask_interface(
@@ -674,7 +766,8 @@ def create_chunked_causal_mask(
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     output_attentions: bool = False,
-    allow_is_causal_skip: Optional[bool] = None,
+    or_mask_function: Optional[Callable] = None,
+    and_mask_function: Optional[Callable] = None,
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
     """
     Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
@@ -697,9 +790,12 @@ def create_chunked_causal_mask(
             The past key values, if we use a cache.
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
-        allow_is_causal_skip (`bool`, optional):
-            Whether to allow sdpa to avoid creating a mask under specific conditions. Some models should always create the mask
-            even if sdpa can technically avoid it (e.g. see Gemma3, when token_type_ids is passed)
+        or_mask_function (`Callable`, optional):
+            An optional mask function to combine with the chunked causal mask function (by doing the union of both). This is
+            useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
+        and_mask_function (`Callable`, optional):
+            An optional mask function to combine with the chunked causal mask function (by doing the intersection of both). This is
+            useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
     """
     # If we have an HybridCache structure, here we want to create the mask for the sliding layers
     try:
@@ -730,7 +826,19 @@ def create_chunked_causal_mask(
 
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
-    allow_is_causal_skip = allow_is_causal_skip or (not past_key_values.is_compileable if past_key_values is not None else True)
+    allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+
+    # Allow slight deviations from chunked causal mask
+    if or_mask_function is not None:
+        if not _is_torch_greater_or_equal_than_2_5:
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.5")
+        mask_factory_function = or_masks(mask_factory_function, or_mask_function)
+        allow_is_causal_skip = False
+    if and_mask_function is not None:
+        if not _is_torch_greater_or_equal_than_2_5:
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.5")
+        mask_factory_function = and_masks(mask_factory_function, and_mask_function)
+        allow_is_causal_skip = False
 
     # We now create the mask
     return mask_interface(
@@ -751,6 +859,7 @@ def _ignore_causal_mask_sdpa(
     padding_mask: Optional[torch.Tensor],
     query_length: int,
     kv_length: int,
+    kv_offset: int,
     local_attention_size: Optional[int] = None,
 ) -> bool:
     """
@@ -762,6 +871,10 @@ def _ignore_causal_mask_sdpa(
     passed).
     """
     is_tracing = torch.jit.is_tracing() or isinstance(padding_mask, torch.fx.Proxy) or is_torchdynamo_compiling()
+    if padding_mask is not None and padding_mask.shape[-1] > kv_length:
+        mask_indices = torch.arange(kv_length, device=padding_mask.device)
+        mask_indices += kv_offset
+        padding_mask = padding_mask[:, mask_indices]
 
     # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
     # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
