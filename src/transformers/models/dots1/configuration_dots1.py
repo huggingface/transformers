@@ -43,18 +43,10 @@ class Dots1Config(PretrainedConfig):
             Number of selected groups for each token (selected experts only within `topk_group` groups).
         num_experts_per_tok (`int`, *optional*, default=None):
             Number of selected experts. None means dense model.
-        moe_layer_freq (`int`, *optional*, defaults to 1):
-            The frequency of the MoE layer: one expert layer for every `moe_layer_freq - 1` dense layers.
         first_k_dense_replace (`int`, *optional*, defaults to 0):
             Number of dense layers at the beginning of the model before the first MoE layer.
         norm_topk_prob (`bool`, *optional*, defaults to `False`):
             Whether to normalize the weights of the routed experts.
-        scoring_func (`str`, *optional*, defaults to `"softmax"`):
-            Method for computing expert weights.
-        aux_loss_alpha (`float`, *optional*, defaults to 0.001):
-            Auxiliary loss weight coefficient.
-        seq_aux (`bool`, *optional*, defaults to `True`):
-            Whether to compute auxiliary loss for each individual sample.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string).
         max_position_embeddings (`int`, *optional*, defaults to 2048):
@@ -145,12 +137,8 @@ class Dots1Config(PretrainedConfig):
         n_group=1,
         topk_group=1,
         num_experts_per_tok=None,
-        moe_layer_freq=1,
         first_k_dense_replace=0,
         norm_topk_prob=False,
-        scoring_func="softmax",
-        aux_loss_alpha=0.001,
-        seq_aux=True,
         hidden_act="silu",
         max_position_embeddings=2048,
         initializer_range=0.02,
@@ -180,12 +168,8 @@ class Dots1Config(PretrainedConfig):
         self.n_shared_experts = n_shared_experts
         self.n_routed_experts = n_routed_experts
         self.num_experts_per_tok = num_experts_per_tok
-        self.moe_layer_freq = moe_layer_freq
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
-        self.scoring_func = scoring_func
-        self.aux_loss_alpha = aux_loss_alpha
-        self.seq_aux = seq_aux
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
         self.n_group = n_group
