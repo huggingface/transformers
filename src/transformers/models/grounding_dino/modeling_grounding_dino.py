@@ -2453,7 +2453,6 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         self.model = GroundingDinoModel(config)
         _class_embed = GroundingDinoContrastiveEmbedding(config)
 
-      
         if config.decoder_bbox_embed_share:
             # une seule instance partagée
             shared_head = GroundingDinoMLPPredictionHead(
