@@ -781,7 +781,6 @@ class Gemma3Model(PaliGemmaModel):
         if token_type_ids is not None and sequence_length != 1:
             token_type_mask = token_type_ids.unsqueeze(1) == token_type_ids.unsqueeze(2)
             token_type_mask[token_type_ids == 0] = False  # if text token do not change anything
-            token_type_mask = token_type_mask.unsqueeze(1).to(causal_mask.device, dtype=torch.bool)
 
             # Find where a new image block starts: 1 if image and previous not image
             # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
