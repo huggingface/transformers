@@ -4688,16 +4688,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Prepare the full device map
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_regex)
-                    
+
         # check if using kernels
         if use_kernels:
-            from kernels import kernelize, Device
+            from kernels import Device, kernelize
+
             if torch.cuda.is_available():
                 kernelize(model, device=Device(type="cuda"))
             # only cuda supported for now
             else:
                 kernelize(model, device=Device(type="cpu"))
-        
+
         # Finalize model weight initialization
         if from_tf:
             model, loading_info = cls._load_from_tf(model, config, checkpoint_files)
