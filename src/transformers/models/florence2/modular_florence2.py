@@ -22,13 +22,24 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import (  # noqa: F401
     ModelOutput,
+    auto_docstring,
     logging,
     replace_return_docstrings,
 )
-from ..bart.modeling_bart import BartForConditionalGeneration, BartPreTrainedModel
+from ..bart.modeling_bart import (
+    BartDecoder,
+    BartDecoderLayer,
+    BartEncoder,
+    BartEncoderLayer,
+    BartForConditionalGeneration,
+    BartModel,
+    BartPreTrainedModel,
+    BartScaledWordEmbedding,
+)
 from .configuration_florence2 import Florence2Config, Florence2LanguageConfig, Florence2VisionConfig  # noqa: F401
 
 
@@ -529,7 +540,6 @@ class Florence2VisionBlock(nn.Module):
         x, size = self.channel_block(x, size)
         return x, size
 
-
 class Florence2Vision(PreTrainedModel):
     """DaViT: Dual-Attention Transformer
 
@@ -707,6 +717,47 @@ class Florence2Vision(PreTrainedModel):
             window_size=config.window_size,
             config=config,
         )
+
+
+class Florence2LanguageScaledWordEmbedding(BartScaledWordEmbedding):
+    pass
+
+
+class Florence2LanguageEncoderLayer(BartEncoderLayer):
+    pass
+
+
+class Florence2LanguageDecoderLayer(BartDecoderLayer):
+    pass
+
+
+class Florence2LanguagePreTrainedModel(BartPreTrainedModel):
+    config_class = Florence2LanguageConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _keys_to_ignore_on_load_unexpected = ["encoder.version", "decoder.version"]
+    _no_split_modules = [r"Florence2LanguageEncoderLayer", r"Florence2LanguageDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_cache_class = True
+    _supports_static_cache = True
+
+
+class Florence2LanguageEncoder(BartEncoder):
+    pass
+
+
+class Florence2LanguageDecoder(BartDecoder):
+    pass
+
+
+class Florence2LanguageModel(BartModel):
+    pass
+
+
+class Florence2LanguageForConditionalGeneration(BartForConditionalGeneration, GenerationMixin):
+    pass
 
 
 @dataclass
@@ -982,18 +1033,6 @@ class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
         x = self.image_proj_norm(x)
 
         return x
-
-
-class Florence2LanguagePreTrainedModel(BartPreTrainedModel):
-    pass
-
-
-class Florence2LanguageModel(Florence2LanguagePreTrainedModel):
-    pass
-
-
-class Florence2LanguageForConditionalGeneration(BartForConditionalGeneration):
-    pass
 
 
 class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
