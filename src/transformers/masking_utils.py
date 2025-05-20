@@ -657,7 +657,7 @@ def create_causal_mask(
         allow_is_causal_skip = False
 
     # We now create the mask
-    return mask_interface(
+    causal_mask = mask_interface(
         batch_size=batch_size,
         cache_position=cache_position,
         kv_length=kv_length,
@@ -668,6 +668,7 @@ def create_causal_mask(
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
     )
+    return causal_mask
 
 
 def create_sliding_window_causal_mask(
@@ -745,7 +746,7 @@ def create_sliding_window_causal_mask(
         allow_is_causal_skip = False
 
     # We now create the mask
-    return mask_interface(
+    causal_mask = mask_interface(
         batch_size=batch_size,
         cache_position=cache_position,
         kv_length=kv_length,
@@ -757,6 +758,7 @@ def create_sliding_window_causal_mask(
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
     )
+    return causal_mask
 
 
 def create_chunked_causal_mask(
@@ -841,7 +843,7 @@ def create_chunked_causal_mask(
         allow_is_causal_skip = False
 
     # We now create the mask
-    return mask_interface(
+    causal_mask = mask_interface(
         batch_size=batch_size,
         cache_position=cache_position,
         kv_length=kv_length,
@@ -853,6 +855,7 @@ def create_chunked_causal_mask(
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
     )
+    return causal_mask
 
 
 def _ignore_causal_mask_sdpa(
