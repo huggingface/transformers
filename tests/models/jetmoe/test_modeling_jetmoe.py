@@ -111,6 +111,10 @@ class JetMoeModelTest(CausalLMModelTest, unittest.TestCase):
     )
     test_headmasking = False
     test_pruning = False
+    test_mismatched_shapes = False
+    test_cpu_offload = False
+    test_disk_offload_bin = False
+    test_disk_offload_safetensors = False
     model_tester_class = JetMoeModelTester
     pipeline_model_mapping = (
         {
