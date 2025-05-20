@@ -28,7 +28,6 @@ from accelerate.utils import write_basic_config
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
-    is_flaky,
     run_command,
     slow,
     torch_device,
