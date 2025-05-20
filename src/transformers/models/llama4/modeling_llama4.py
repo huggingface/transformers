@@ -258,6 +258,33 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+# Adapted from transformers.models.llama.modeling_llama.eager_attention_forward -> llama4 doesn't cast attn weights to fp32
+def vision_eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * module.head_dim**-0.5
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class Llama4TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -534,10 +561,10 @@ class Llama4TextModel(Llama4PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids.to(self.embed_tokens.weight.device))
 
         if use_cache and past_key_values is None:
-            if self.config.get_text_config().get("attention_chunk_size") is not None:
+            if self.config.get_text_config().attention_chunk_size is not None:
                 past_key_values = HybridChunkedCache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
             else:
-                past_key_values = DynamicCache(self.config, inputs_embeds.shape[0], inputs_embeds.shape[1])
+                past_key_values = DynamicCache()
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -730,7 +757,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
         if self.config._attn_implementation == "sdpa" and chunked_attention_mask is not None:
             chunked_attention_mask = chunked_attention_mask.bool()
-            causal_mask = causal_mask.bool()
+            causal_mask = causal_mask != torch.finfo(dtype).min
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -1099,7 +1126,7 @@ class Llama4VisionAttention(nn.Module):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
+        attention_interface: Callable = vision_eager_attention_forward
         # flex disable because breaks on TP 8, embed is 88 not power of 2
         if self.config._attn_implementation not in ["eager", "flex_attention"]:
             if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
@@ -1117,7 +1144,7 @@ class Llama4VisionAttention(nn.Module):
             value_states,
             None,
             dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=None,
+            scaling=None,  # TODO Might be enforced here for TP compatibility as scaling is not just sqrt(head_dim)
             is_causal=False,  # HAS TO BE ENFORCED
             **kwargs,
         )
