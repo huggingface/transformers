@@ -76,7 +76,6 @@ jobs:
           echo "$OTHER_WORKFLOW_RUN_ID"
           echo "$prev_workflow_run_id"
           echo "$other_workflow_run_id"
-          sudo apt-get install -y curl
           pip install huggingface_hub
           pip install slack_sdk
           pip show slack_sdk
@@ -104,7 +103,6 @@ jobs:
         # We pass `needs.setup.outputs.quantization_matrix` as the argument. A processing in `notification_service_quantization.py` to change
         # `quantization/bnb` to `quantization_bnb` is required, as the artifact names use `_` instead of `/`.
         run: |
-          sudo apt-get install -y curl
           pip install huggingface_hub
           pip install slack_sdk
           pip show slack_sdk

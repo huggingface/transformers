@@ -18,6 +18,7 @@ import os
 from collections import Counter
 from copy import deepcopy
 
+from get_previous_daily_ci import get_last_daily_ci_run
 from huggingface_hub import HfApi
 
 
@@ -74,11 +75,8 @@ if __name__ == "__main__":
         report_repo_subfolder = f"{os.getenv('GITHUB_RUN_NUMBER')}-{os.getenv('GITHUB_RUN_ID')}"
         report_repo_subfolder = f"runs/{report_repo_subfolder}"
 
-    # TODO: better way
-    os.system(f"curl https://api.github.com/repos/huggingface/transformers/actions/runs/{os.getenv('GITHUB_RUN_ID')} > workflow_run.json")
-    with open("workflow_run.json") as fp:
-        workflow_run = json.load(fp)
-        workflow_run_created_time = workflow_run["created_at"]
+    workflow_run = get_last_daily_ci_run(token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_run_id=os.getenv('GITHUB_RUN_ID'))
+    workflow_run_created_time = workflow_run["created_at"]
 
     report_repo_folder = workflow_run_created_time.split("T")[0]
 

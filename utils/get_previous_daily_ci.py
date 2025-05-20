@@ -22,12 +22,8 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
     # workflow_id = "90575235"
     if not workflow_id:
         workflow_run_id =  os.environ['GITHUB_RUN_ID']
-
-        # TODO: better way
-        os.system(f"curl https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id} > workflow_run.json")
-        with open("workflow_run.json") as fp:
-            workflow_run = json.load(fp)
-            workflow_id = workflow_run["workflow_id"]
+        workflow_run = requests.get(f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}", headers=headers).json()
+        workflow_id = workflow_run["workflow_id"]
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/workflows/{workflow_id}/runs"
     # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results
@@ -38,40 +34,56 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
     return result["workflow_runs"]
 
 
-def get_last_daily_ci_runs(token, workflow_run_id=None, workflow_id=None, commit_sha=None):
+def get_last_daily_ci_run(token, workflow_run_id=None, workflow_id=None, commit_sha=None):
+    """Get the last completed workflow run id of the scheduled (daily) CI."""
+    headers = None
+    if token is not None:
+        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
+
+    workflow_run = None
+    if workflow_run_id is not None and workflow_run_id != "":
+        workflow_run = requests.get(f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}", headers=headers).json()
+        return workflow_run
+
+    workflow_runs = get_daily_ci_runs(token, workflow_id=workflow_id)
+    for run in workflow_runs:
+        if commit_sha in [None, ""] and workflow_run["status"] == "completed":
+            workflow_run = run
+            break
+        # if `commit_sha` is specified, and `workflow_run["head_sha"]` matches it, return it.
+        elif commit_sha not in [None, ""] and workflow_run["head_sha"] == commit_sha:
+            workflow_run = run
+            break
+
+    return workflow_run
+
+
+def get_last_daily_ci_workflow_run_id(token, workflow_run_id=None, workflow_id=None, commit_sha=None):
     """Get the last completed workflow run id of the scheduled (daily) CI."""
     if workflow_run_id is not None and workflow_run_id != "":
         return workflow_run_id
 
-    workflow_runs = get_daily_ci_runs(token, workflow_id=workflow_id)
+    workflow_run = get_last_daily_ci_run(token, workflow_id=workflow_id, commit_sha=commit_sha)
     workflow_run_id = None
-    for workflow_run in workflow_runs:
-        if commit_sha in [None, ""] and workflow_run["status"] == "completed":
-            workflow_run_id = workflow_run["id"]
-            break
-        # if `commit_sha` is specified, and `workflow_run["head_sha"]` matches it, return it.
-        elif commit_sha not in [None, ""] and workflow_run["head_sha"] == commit_sha:
-            workflow_run_id = workflow_run["id"]
-            break
+    if workflow_run is not None:
+        workflow_run_id = workflow_run["id"]
 
     return workflow_run_id
 
 
-def get_last_daily_ci_run_commit(token, workflow_run_id=None):
+def get_last_daily_ci_run_commit(token, workflow_run_id=None, workflow_id=None, commit_sha=None):
     """Get the commit sha of the last completed scheduled daily CI workflow run."""
-    workflow_run_id = get_last_daily_ci_runs(token, workflow_run_id=workflow_run_id)
-
-    os.system(f"curl https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id} > last_workflow_run.json")
-    with open("last_workflow_run.json") as fp:
-        workflow_run = json.load(fp)
+    workflow_run = get_last_daily_ci_run(token, workflow_run_id=workflow_run_id, workflow_id=workflow_id, commit_sha=commit_sha)
+    workflow_run_head_sha = None
+    if workflow_run is not None:
         workflow_run_head_sha = workflow_run["head_sha"]
 
     return workflow_run_head_sha
 
 
-def get_last_daily_ci_artifacts(artifact_names, output_dir, token, workflow_run_id=None):
+def get_last_daily_ci_artifacts(artifact_names, output_dir, token, workflow_run_id=None, workflow_id=None, commit_sha=None):
     """Get the artifacts of last completed workflow run id of the scheduled (daily) CI."""
-    workflow_run_id = get_last_daily_ci_runs(token, workflow_run_id=workflow_run_id)
+    workflow_run_id = get_last_daily_ci_workflow_run_id(token, workflow_run_id=workflow_run_id, workflow_id=workflow_id, commit_sha=commit_sha)
     if workflow_run_id is not None:
         artifacts_links = get_artifacts_links(worflow_run_id=workflow_run_id, token=token)
         for artifact_name in artifact_names:
@@ -82,9 +94,9 @@ def get_last_daily_ci_artifacts(artifact_names, output_dir, token, workflow_run_
                 )
 
 
-def get_last_daily_ci_reports(artifact_names, output_dir, token, workflow_run_id=None):
+def get_last_daily_ci_reports(artifact_names, output_dir, token, workflow_run_id=None, workflow_id=None, commit_sha=None):
     """Get the artifacts' content of the last completed workflow run id of the scheduled (daily) CI."""
-    get_last_daily_ci_artifacts(artifact_names, output_dir, token, workflow_run_id=workflow_run_id)
+    get_last_daily_ci_artifacts(artifact_names, output_dir, token, workflow_run_id=workflow_run_id, workflow_id=workflow_id, commit_sha=commit_sha)
 
     results = {}
     for artifact_name in artifact_names:

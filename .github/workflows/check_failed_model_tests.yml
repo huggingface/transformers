@@ -67,7 +67,6 @@ jobs:
         working-directory: /transformers/utils
         # how to get the commit, especially in multiple files? This only makes sense if it's the same workflow id.
         run: |
-          apt-get install -y curl
           echo "END_SHA=$(TOKEN=${{ secrets.ACCESS_REPO_INFO_TOKEN }} python3 -c 'import os; from get_previous_daily_ci import get_last_daily_ci_run_commit; commit=get_last_daily_ci_run_commit(token=os.environ["TOKEN"], workflow_run_id=os.environ["PREV_WORKFLOW_RUN_ID"]); print(commit)')" >> $GITHUB_ENV
 
       - name: Checkout to `start_sha`
@@ -113,7 +112,6 @@ jobs:
         env:
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
         run: |
-          apt-get install -y curl
           python3 utils/process_bad_commit_report.py
 
       - name: Process report
@@ -122,7 +120,6 @@ jobs:
         env:
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
         run: |
-          apt-get install -y curl
           {
             echo 'REPORT_TEXT<<EOF'
             python3 utils/process_bad_commit_report.py
