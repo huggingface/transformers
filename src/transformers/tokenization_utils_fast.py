@@ -229,11 +229,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         `bool`: Whether or not the slow tokenizer can be saved. For a sentencepiece based slow tokenizer, this
         can only be `True` if the original `"sentencepiece.model"` was not deleted.
         """
-        return (
-            os.path.isfile(self.vocab_file)
-            if (hasattr(self, "vocab_file") and self.vocab_file and self.vocab_file.endswith(".model"))
-            else False
-        )
+        if getattr(self, "vocab_file", "") and self.vocab_file.endswith(".model"):
+            return os.path.isfile(self.vocab_file)
+        else:
+            return False
 
     @property
     def vocab_size(self) -> int:
