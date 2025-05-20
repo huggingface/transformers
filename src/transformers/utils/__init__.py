@@ -167,6 +167,7 @@ from .import_utils import (
     is_habana_gaudi1,
     is_hadamard_available,
     is_hqq_available,
+    is_huggingface_hub_greater_or_equal,
     is_in_notebook,
     is_ipex_available,
     is_jieba_available,
