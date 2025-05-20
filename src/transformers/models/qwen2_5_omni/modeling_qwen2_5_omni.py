@@ -127,8 +127,10 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            if module.weight is not None:
+                module.weight.data.fill_(1.0)
+            if module.bias is not None:
+                module.bias.data.zero_()
         elif isinstance(module, Qwen2RMSNorm):
             module.weight.data.fill_(1.0)
 
@@ -2126,12 +2128,13 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
             diagonal_attend_mask = torch.arange(target_length, device=cache_position.device) > cache_position.reshape(
                 -1, 1
             )
-            if config.get_text_config().sliding_window is not None:
+            text_config = config.get_text_config()
+            if getattr(text_config, "use_sliding_window", True) and text_config.sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
                     sliding_attend_mask = torch.arange(target_length, device=cache_position.device) <= (
-                        cache_position.reshape(-1, 1) - config.get_text_config().sliding_window
+                        cache_position.reshape(-1, 1) - text_config.sliding_window
                     )
                     diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask
@@ -2831,12 +2834,13 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
             diagonal_attend_mask = torch.arange(target_length, device=cache_position.device) > cache_position.reshape(
                 -1, 1
             )
-            if config.get_text_config().sliding_window is not None:
+            text_config = config.get_text_config()
+            if getattr(text_config, "use_sliding_window", True) and text_config.sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
                     sliding_attend_mask = torch.arange(target_length, device=cache_position.device) <= (
-                        cache_position.reshape(-1, 1) - config.get_text_config().sliding_window
+                        cache_position.reshape(-1, 1) - text_config.sliding_window
                     )
                     diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask

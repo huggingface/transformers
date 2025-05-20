@@ -77,16 +77,16 @@ class ParallelInterface(MutableMapping):
     }
 ```
 
-We support following strategies:
+We support the following strategies:
 
-1) `ColwiseParallel` - A simple column-wise partitioning, being able to handle both weights and biases, does exactly what we've discussed before.
-2) `RowwiseParallel` - Again, row-wise partitioning as dicussed before, supports weights and biases, on top of that it also supports `nn.Embedding` modules.
-3) `SequenceParallel` - Sequence parallel implementation, for support of `LayerNorm` and `Dropout` layers. Also supports Python implementation of `RMSNorm` (see [this](https://github.com/facebookresearch/llama/blob/main/llama/model.py#L34))
-4) `PackedColwiseParallel` - A variant of column-wise partitioning, however it works on packed weights (i.e. `up_proj` and `gate_proj` being packed together). For more details, see [this comment](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108)
-5) `PackedRowwiseParallel` - A variant of row-wise partitioning, works on packed weights, for more details check the comment linked above.
-6) `GatherParallel` - A very simple class, that only makes the outputs of the module to be gathered across devices.
-7) `IsolatedParallel` - This is a special case, where we want to *isolate* the module from the rest of the devices (world). This is used for Experts in MoE layers, basically creating Expert parallelism of sorts.
-8) `ReplicateParallel` - Many `torch.distributed` APIs break if model is partially sharded, so this class is used to replicate the module across all devices.
+- `ColwiseParallel` - A simple column-wise partitioning, being able to handle both weights and biases, does exactly what we've discussed before.
+- `RowwiseParallel` - Again, row-wise partitioning as dicussed before, supports weights and biases, on top of that it also supports `nn.Embedding` modules.
+- `SequenceParallel` - Sequence parallel implementation, for support of `LayerNorm` and `Dropout` layers. Also supports Python implementation of `RMSNorm` (see [this](https://github.com/facebookresearch/llama/blob/main/llama/model.py#L34))
+- `PackedColwiseParallel` - A variant of column-wise partitioning, however it works on packed weights (i.e. `up_proj` and `gate_proj` being packed together). For more details, see [this comment](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108)
+- `PackedRowwiseParallel` - A variant of row-wise partitioning, works on packed weights, for more details check the comment linked above.
+- `GatherParallel` - A very simple class, that only makes the outputs of the module to be gathered across devices.
+- `IsolatedParallel` - This is a special case, where we want to *isolate* the module from the rest of the devices (world). This is used for Experts in MoE layers, basically creating Expert parallelism of sorts.
+- `ReplicateParallel` - Many `torch.distributed` APIs break if model is partially sharded, so this class is used to replicate the module across all devices.
 
 ### Sharding a model
 
@@ -162,8 +162,6 @@ Readd this when I get the exact error message
 > If you are using a custom partitioning strategy, and it's not working with `... is not supported` error, try using the `local*` strategies to see if they work better.
 -->
 
-
-
 > [!WARNING]
 > Manually specifying your own partitiong plan requires a good understanding of the model architecture and how the partitioning strategies interact together. If you are not sure about this, the resulting model can be very slow, even failing or incorrect. Again, refer to the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) which can teach you everything required.
 
@@ -174,7 +172,7 @@ Your custom partitioning strategy should inherit from `TensorParallelLayer` defi
 
 Let's go through this workflow step by step, on an already existing example: `ColwiseParallel`.
 
-1) Inherit from `TensorParallelLayer` and initialization
+1. Inherit from `TensorParallelLayer` and initialization
 
 ```python
 class ColwiseParallel(TensorParallelLayer):
@@ -195,7 +193,7 @@ class ColwiseParallel(TensorParallelLayer):
 
 In the `__init__` method, we define these attributes, where `input_layouts` and `output_layouts` describing, how the input and output tensors should be placed on the devices. `desired_input_layouts` is used to specify, how the input *SHOULD* be placed on the devices.
 
-2a) Implement `partition_tensor` method
+2a. Implement `partition_tensor` method
 
 ```python
 def partition_tensor(
@@ -214,7 +212,7 @@ def partition_tensor(
 This method is used to partition the tensor, and fill the `empty_param` with the partitioned tensor.
 We provide some utility functions to help you with this, such as `get_tensor_shard` which will get you the correct shard of the original parameter for this rank or `get_packed_weights` to help with packed weights.
 
-2b) Implement `_prepare_input_fn` and `_prepare_output_fn` methods
+2b. Implement `_prepare_input_fn` and `_prepare_output_fn` methods
 
 These methods are used as [`pre-forward`](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_pre_hook.html) and [`forward`](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_hook.html) hooks respectively. Their purpose is to re-distribute the inputs and outputs to the desired layout, passed in the `__init__` method.
 
@@ -232,7 +230,7 @@ def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_me
     return outputs.redistribute(placements=output_layouts, device_mesh=device_mesh)
 ```
 
-3) Register the strategy
+3. Register the strategy
 Congratulations! You've implemented your own partitioning strategy. Now, to use it with your own `tp_plan`, you need to register it in the `ParallelInterface` mapping.
 
 ```python
@@ -288,8 +286,8 @@ You can benefit from considerable speed ups for inference, especially for inputs
 For a single forward pass on [Llama](./model_doc/llama) with a sequence length of 512 and various batch sizes, you can expect the following speed ups.
 
 <div style="text-align: center">
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Meta-Llama-3-8B-Instruct%2C%20seqlen%20%3D%20512%2C%20python%2C%20w_%20compile.png">
-
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Meta-Llama-3-8B-Instruct%2C%20seqlen%20%3D%20512%2C%20python%2C%20w_%20compile.png">
+</div>
 
 ## Tensor parallelism in-depth
 Our implementation of tensor parallelism is framework-agnostic in design, but the specific implementations we've developed rely on the torch.distributed package. We heavily utilize abstractions such as `DeviceMesh` or `DTensor` to provide a simple and extensible interface to the user.
@@ -311,7 +309,7 @@ The most important part of DTensor, that is crucial to understand, is the `place
 
 It can have the following values:
 
-1) `Shard(dimension)` - Annotates that this `DTensor` is sharded across a given dimension, over the `DeviceMesh` it was constructed under. For example, if we would like to shard weights for column-wise partitioning, we would do:
+- `Shard(dimension)` - Annotates that this `DTensor` is sharded across a given dimension, over the `DeviceMesh` it was constructed under. For example, if we would like to shard weights for column-wise partitioning, we would do:
 ```python
 weight = ...
 weight = DTensor.from_local(weight, device_mesh["tp"], placements=[Shard(0)]) # Shard across the 1st (column-wise) dimension
@@ -327,8 +325,5 @@ bias = ...
 bias = DTensor.from_local(bias, device_mesh["tp"], placements=[Replicate()]) # Replicate bias across all GPUs
 ```
 
-2) `Replicate()` - Annotates that this `DTensor` is replicated across the `DeviceMesh`. Very straight-forward, only creates a full copy of the tensor on each device.
-3) `Partial()` - This placement is mostly of no interest to us, it's used to annotate that this tensor is pending a reduction operation.
-
-You can find definitions for all of the different partitioning schemes in [integrations/tensor_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py).
-</div>
+- `Replicate()` - Annotates that this `DTensor` is replicated across the `DeviceMesh`. Very straight-forward, only creates a full copy of the tensor on each device.
+- `Partial()` - This placement is mostly of no interest to us, it's used to annotate that this tensor is pending a reduction operation.
