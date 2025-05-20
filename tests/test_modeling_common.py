@@ -4349,6 +4349,7 @@ class ModelTesterMixin:
         sliding_mask = sliding_mask.to(torch_device)
 
         config.sliding_window = sliding_window
+        config.get_text_config().sliding_window = sliding_window
         inputs["attention_mask"] = torch.ones(batch_size, seq_len).to(torch.int64).to(torch_device)
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
