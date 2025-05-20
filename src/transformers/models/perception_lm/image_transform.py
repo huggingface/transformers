@@ -426,6 +426,7 @@ class VariableSizeImageTransform(object):
         image = _resize(
             image,
             (ar[1] * self.size, ar[0] * self.size),  # (h, w)
+            use_pil_resize=True,
         )
         image = self._pad(image, ar[0] * self.size, ar[1] * self.size)
 
