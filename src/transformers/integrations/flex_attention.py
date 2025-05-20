@@ -115,15 +115,19 @@ def make_flex_block_causal_mask(
     The resultant BlockMask is a compressed representation of the full block causal
     mask. BlockMask is essential for performant computation of flex attention.
     See: https://pytorch.org/blog/flexattention/
+
     Args:
         attention_mask_2d (torch.Tensor): Attention mask for packed and padded sequences
         of shape (batch_size, total_seq_len). e.g.
+
         For unpacked sequence:
         [[1, 1, 1, 1, 0, 0, 0],
          [1, 1, 1, 1, 1, 0, 0]]
+
         For packed sequence:
         [[1, 1, 1, 2, 2, 2, 0],
          [1, 1, 2, 2, 2, 3, 3]]
+
     Returns:
         BlockMask
     """
