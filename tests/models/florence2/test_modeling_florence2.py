@@ -46,6 +46,7 @@ else:
 if is_vision_available():
     from PIL import Image
 
+
 class Florence2VisionText2TextModelTester:
     def __init__(
         self,
@@ -148,7 +149,7 @@ class Florence2VisionText2TextModelTester:
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         config = self.get_config()
 
-        inputs_dict =   {
+        inputs_dict = {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
             "decoder_input_ids": decoder_input_ids,
