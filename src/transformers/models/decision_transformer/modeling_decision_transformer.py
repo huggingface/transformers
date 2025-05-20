@@ -268,6 +268,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
         output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
+        input_shape = hidden_states.shape[:-1]
         is_cross_attention = encoder_hidden_states is not None
         if is_cross_attention:
             if not hasattr(self, "q_attn"):
@@ -334,7 +335,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
                 **kwargs,
             )
 
-        attn_output = attn_output.reshape(*attn_output.shape[:-2], -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
