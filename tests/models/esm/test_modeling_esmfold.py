@@ -487,7 +487,6 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
 
-
 @require_torch
 class EsmModelIntegrationTest(TestCasePlus):
     @slow
