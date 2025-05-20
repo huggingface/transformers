@@ -110,6 +110,7 @@ jobs:
         shell: bash
         working-directory: /transformers
         env:
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
         run: |
           python3 utils/process_bad_commit_report.py
@@ -118,6 +119,7 @@ jobs:
         shell: bash
         working-directory: /transformers
         env:
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
         run: |
           {

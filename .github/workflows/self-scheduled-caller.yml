@@ -101,13 +101,13 @@ jobs:
 #      working-directory-prefix: /workspace
 #    secrets: inherit
 #
-  quantization-ci:
-    name: Quantization CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_quantization_torch_gpu
-      slack_report_channel: "#transformers-ci-daily-quantization"
-      runner: daily-ci
-      docker: huggingface/transformers-quantization-latest-gpu
-      ci_event: Daily CI
-    secrets: inherit
+#  quantization-ci:
+#    name: Quantization CI
+#    uses: ./.github/workflows/self-scheduled.yml
+#    with:
+#      job: run_quantization_torch_gpu
+#      slack_report_channel: "#transformers-ci-daily-quantization"
+#      runner: daily-ci
+#      docker: huggingface/transformers-quantization-latest-gpu
+#      ci_event: Daily CI
+#    secrets: inherit
