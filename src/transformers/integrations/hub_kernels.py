@@ -45,9 +45,9 @@ try:
         },
         "RMSNorm": {
             "cuda": LayerRepository(
-                repo_id="kernels-community/triton-layer-norm",
-                layer_name="LlamaRMSNorm",
-                revision="pure-layer-test",
+                repo_id="kernels-community/liger_kernels",
+                layer_name="LigerRMSNorm",
+                # revision="pure-layer-test",
             )
         },
         "MLP": {
@@ -80,14 +80,14 @@ try:
             # Replaces the kernel forward with a compile-friendly version
             kernel_forward = cls.forward
 
-            def forward_with_compile_path(*forward_args, **forward_kwargs):
-                disable_custom_kernels = hasattr(cls, "config") and getattr(cls.config, "disable_custom_kernels", None)
-                if is_torchdynamo_compiling() or disable_custom_kernels:
-                    return original_forward(*forward_args, **forward_kwargs)
-                else:
-                    return kernel_forward(*forward_args, **forward_kwargs)
+            # def forward_with_compile_path(*forward_args, **forward_kwargs):
+            #     disable_custom_kernels = hasattr(cls, "config") and getattr(cls.config, "disable_custom_kernels", None)
+            #     if is_torchdynamo_compiling() or disable_custom_kernels:
+            #         return original_forward(*forward_args, **forward_kwargs)
+            #     else:
+            #         return kernel_forward(*forward_args, **forward_kwargs)
 
-            cls.forward = forward_with_compile_path
+            # cls.forward = forward_with_compile_path
 
             return cls
 
