@@ -15,7 +15,7 @@ from typing import Callable, Optional
 
 import torch
 
-from ..cache_utils import HybridCache, StaticCache
+from ..cache_utils import DynamicCache, HybridCache, StaticCache
 from ..generation.configuration_utils import GenerationConfig
 from ..masking_utils import (
     ALL_MASK_CREATION_FUNCTIONS,
@@ -697,6 +697,45 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                     break
 
             return generated_ids
+
+
+def export_with_dynamic_cache(
+    model: PreTrainedModel,
+    example_input_ids: Optional[torch.Tensor] = None,
+    example_attention_mask: Optional[torch.Tensor] = None,
+):
+    """
+    Export a model with DynamicCache using `torch.export`, ensuring the exported model is compatible with `ExecuTorch`.
+
+    Args:
+        model (`PreTrainedModel`): The pretrained model to be exported.
+        example_input_ids (`Optional[torch.Tensor]`): Example input token id used by `torch.export`.
+        example_attention_mask (`Optional[torch.Tensor]`): Example attention mask used by `torch.export`.
+
+    Returns:
+        Exported program (`torch.export.ExportedProgram`): The exported program generated via `torch.export`.
+    """
+    if not is_torch_greater_or_equal_than_2_3:
+        raise ImportError("torch >= 2.3 is required.")
+
+    # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
+    ALL_MASK_CREATION_FUNCTIONS["sdpa_without_vmap"] = sdpa_mask_without_vmap
+    ALL_ATTENTION_FUNCTIONS["sdpa_without_vmap"] = ALL_ATTENTION_FUNCTIONS["sdpa"]
+    model.config._attn_implementation = "sdpa_without_vmap"
+
+    with torch.no_grad():
+        exported_program = torch.export.export(
+            model,
+            (),
+            {
+                "input_ids": example_input_ids,
+                "attention_mask": example_attention_mask,
+                "past_key_values": DynamicCache(),
+                "use_cache": True,
+            },
+            strict=False,
+        )
+        return exported_program
 
 
 def sdpa_mask_without_vmap(
