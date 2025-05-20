@@ -36,13 +36,13 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring
 class TimesFmOutput(BaseModelOutput):
-    """
-    Args:
-        loc (`torch.Tensor` of shape `(batch_size, )`):
-            The mean of the time series inputs.
-        scale (`torch.Tensor` of shape `(batch_size,)`):
-            The scale of the time series inputs.
+    r"""
+    loc (`torch.Tensor` of shape `(batch_size, )`):
+        The mean of the time series inputs.
+    scale (`torch.Tensor` of shape `(batch_size,)`):
+        The scale of the time series inputs.
     """
 
     loc: Optional[torch.Tensor] = None
@@ -50,15 +50,15 @@ class TimesFmOutput(BaseModelOutput):
 
 
 @dataclass
+@auto_docstring
 class TimesFmOutputForPrediction(BaseModelOutput):
-    """
-    Args:
-        mean_predictions (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-            The mean predictions of the time series.
-        full_predictions (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-            The full predictions of the time series including the mean and the quantiles.
-        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `future_values` is provided):
-            The loss of the TimesFM model.
+    r"""
+    mean_predictions (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+        The mean predictions of the time series.
+    full_predictions (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+        The full predictions of the time series including the mean and the quantiles.
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `future_values` is provided):
+        The loss of the TimesFM model.
     """
 
     mean_predictions: Optional[torch.Tensor] = None

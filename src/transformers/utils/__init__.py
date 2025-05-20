@@ -26,6 +26,7 @@ from .args_doc import (
     ClassDocstring,
     ImageProcessorArgs,
     ModelArgs,
+    ModelOutputArgs,
     auto_class_docstring,
     auto_docstring,
     parse_docstring,

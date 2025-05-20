@@ -14,8 +14,8 @@
 # limitations under the License.
 """PyTorch PEGASUS-X model."""
 
-import dataclasses
 import math
+from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -27,10 +27,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import (
-    AttentionMaskConverter,
-    _prepare_4d_attention_mask,
-)
+from ...modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -38,12 +35,7 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    is_torch_flex_attn_available,
-    is_torchdynamo_compiling,
-    logging,
-)
+from ...utils import auto_docstring, is_torch_flex_attn_available, is_torchdynamo_compiling, logging
 from .configuration_pegasus_x import PegasusXConfig
 
 
@@ -56,7 +48,7 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-@dataclasses.dataclass
+@dataclass
 class DimensionInfo:
     """Wrapper for dimension info."""
 

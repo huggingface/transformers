@@ -31,18 +31,22 @@ if is_timm_available():
 
 
 @dataclass
-class TimmWrapperModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output class for models TimmWrapperModel, containing the last hidden states, an optional pooled output,
     and optional hidden states.
+    """
+)
+class TimmWrapperModelOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor`):
+        The last hidden state of the model, output before applying the classification head.
+    pooler_output (`torch.FloatTensor`, *optional*):
+        The pooled output derived from the last hidden state, if applicable.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        A tuple containing the intermediate hidden states of the model at the output of each layer or specified layers.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor`):
-            The last hidden state of the model, output before applying the classification head.
-        pooler_output (`torch.FloatTensor`, *optional*):
-            The pooled output derived from the last hidden state, if applicable.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            A tuple containing the intermediate hidden states of the model at the output of each layer or specified layers.
+
             Returned if `output_hidden_states=True` is set or if `config.output_hidden_states=True`.
         attentions (`tuple(torch.FloatTensor)`, *optional*):
             A tuple containing the intermediate attention weights of the model at the output of each layer.

@@ -408,26 +408,27 @@ class JanusPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class JanusVQVAEOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Janus VQ-VAE mode model outputs.
-    Args:
-        decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            Reconstructed pixel values after encoding and decoding the input.
-        embedding_loss (`torch.FloatTensor`):
-            Embedding loss.
+    """
+)
+class JanusVQVAEOutput(ModelOutput):
+    r"""
+    decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        Reconstructed pixel values after encoding and decoding the input.
+    embedding_loss (`torch.FloatTensor`):
+        Embedding loss.
     """
 
     decoded_pixel_values: Optional[torch.FloatTensor] = None
     embedding_loss: torch.FloatTensor = None
 
 
-@dataclass
 class JanusBaseModelOutputWithPast(IdeficsBaseModelOutputWithPast):
     pass
 
 
-@dataclass
 class JanusCausalLMOutputWithPast(IdeficsCausalLMOutputWithPast):
     pass
 

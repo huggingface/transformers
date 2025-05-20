@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
@@ -109,9 +108,12 @@ class SamHQConfig(SamConfig):
     pass
 
 
-@dataclass
 class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
-    """
+    r"""
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the model.
     intermediate_embeddings (`list(torch.FloatTensor)`, *optional*):
         A list of intermediate embeddings collected from certain blocks within the model, typically those without
         windowed attention. Each element in the list is of shape `(batch_size, sequence_length, hidden_size)`.
@@ -121,7 +123,6 @@ class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
     intermediate_embeddings: Optional[List[torch.FloatTensor]] = None
 
 
-@dataclass
 class SamHQImageSegmentationOutput(SamImageSegmentationOutput):
     pass
 

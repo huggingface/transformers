@@ -1099,15 +1099,17 @@ class PatchTSMixerNOPScaler(nn.Module):
 
 
 @dataclass
-class PatchTSMixerEncoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for `PatchTSMixerEncoderOutput`, with potential hidden states.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, d_model)`):
-            Hidden-state at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Hidden-states of the model at the output of each layer.
+    """
+)
+class PatchTSMixerEncoderOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, d_model)`):
+        Hidden-state at the output of the last layer of the model.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Hidden-states of the model at the output of each layer.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -1184,25 +1186,27 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
 
 
 @dataclass
-class PatchTSMixerModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for model's outputs, with potential hidden states.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor`  of shape `(batch_size, num_channels, num_patches, d_model)`):
-            Hidden-state at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Hidden-states of the model at the output of each layer.
-        patch_input (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
-            Patched input data to the model.
-        mask: (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches)`,*optional*):
-            Bool Tensor indicating True in masked patches and False otherwise.
-        loc: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*):
-            Gives the mean of the context window per channel. Used for revin denorm outside the model, if revin
-            enabled.
-        scale: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*):
-            Gives the std dev of the context window per channel. Used for revin denorm outside the model, if revin
-            enabled.
+    """
+)
+class PatchTSMixerModelOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor`  of shape `(batch_size, num_channels, num_patches, d_model)`):
+        Hidden-state at the output of the last layer of the model.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Hidden-states of the model at the output of each layer.
+    patch_input (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
+        Patched input data to the model.
+    mask: (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches)`,*optional*):
+        Bool Tensor indicating True in masked patches and False otherwise.
+    loc: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*):
+        Gives the mean of the context window per channel. Used for revin denorm outside the model, if revin
+        enabled.
+    scale: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*):
+        Gives the std dev of the context window per channel. Used for revin denorm outside the model, if revin
+        enabled.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -1316,19 +1320,21 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
 
 
 @dataclass
-class PatchTSMixerForPreTrainingOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`PatchTSMixerForPreTrainingOutput`].
-
-    Args:
-        prediction_outputs (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, patch_length)`):
-            Prediction output from the pretrain head.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Hidden-states of the model at the output of each layer.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
-            Backbone embeddings before passing through the head.
-        loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
-            Total loss
+    """
+)
+class PatchTSMixerForPreTrainingOutput(ModelOutput):
+    r"""
+    prediction_outputs (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, patch_length)`):
+        Prediction output from the pretrain head.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Hidden-states of the model at the output of each layer.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
+        Backbone embeddings before passing through the head.
+    loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
+        Total loss
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1433,24 +1439,25 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
 
 
 @dataclass
-class PatchTSMixerForPredictionOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`PatchTSMixerForPredictionOutput`].
-
-    Args:
-        prediction_outputs (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_input_channels)`):
-            Prediction output from the forecast head.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
-            Backbone embeddings before passing through the head.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
-            Total loss.
-        loc (`torch.FloatTensor`, *optional* of shape `(batch_size, 1, num_input_channels)`):
-            Input mean
-        scale (`torch.FloatTensor`, *optional* of shape `(batch_size, 1, num_input_channels)`):
-            Input std dev
-
+    """
+)
+class PatchTSMixerForPredictionOutput(ModelOutput):
+    r"""
+    prediction_outputs (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_input_channels)`):
+        Prediction output from the forecast head.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
+        Backbone embeddings before passing through the head.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+    loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
+        Total loss.
+    loc (`torch.FloatTensor`, *optional* of shape `(batch_size, 1, num_input_channels)`):
+        Input mean
+    scale (`torch.FloatTensor`, *optional* of shape `(batch_size, 1, num_input_channels)`):
+        Input std dev
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1462,20 +1469,27 @@ class PatchTSMixerForPredictionOutput(ModelOutput):
 
 
 @dataclass
-class SamplePatchTSMixerPredictionOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for time series model's predictions outputs that contains the sampled values from the chosen
     distribution.
-
-    Args:
-        sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length, number_channels)`):
-            Sampled values from the chosen distribution.
+    """
+)
+class SamplePatchTSMixerPredictionOutput(ModelOutput):
+    r"""
+    sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length, number_channels)`):
+        Sampled values from the chosen distribution.
     """
 
     sequences: Optional[torch.FloatTensor] = None
 
 
-@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for time series model's predictions outputs that contains the sampled values from the chosen
+    distribution.
+    """
+)
 class SamplePatchTSMixerRegressionOutput(ModelOutput):
     """
     Base class for time series model's predictions outputs that contains the sampled values from the chosen
@@ -1737,19 +1751,21 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
 
 
 @dataclass
-class PatchTSMixerForTimeSeriesClassificationOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`PatchTSMixerForTimeSeriesClassificationOutput`].
-
-    Args:
-        prediction_outputs (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
-            Prediction output from the classification head.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
-            Backbone embeddings before passing through the head.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
-            Total loss.
+    """
+)
+class PatchTSMixerForTimeSeriesClassificationOutput(ModelOutput):
+    r"""
+    prediction_outputs (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
+        Prediction output from the classification head.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
+        Backbone embeddings before passing through the head.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+    loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
+        Total loss.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1869,19 +1885,21 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
 
 
 @dataclass
-class PatchTSMixerForRegressionOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`PatchTSMixerForRegressionOutput`].
-
-    Args:
-        regression_outputs (`torch.FloatTensor` of shape `(batch_size, num_targets)`):
-            Prediction output from the regression head.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
-            Backbone embeddings before passing through the head.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
-            Total loss.
+    """
+)
+class PatchTSMixerForRegressionOutput(ModelOutput):
+    r"""
+    regression_outputs (`torch.FloatTensor` of shape `(batch_size, num_targets)`):
+        Prediction output from the regression head.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
+        Backbone embeddings before passing through the head.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+    loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
+        Total loss.
     """
 
     loss: Optional[torch.FloatTensor] = None
