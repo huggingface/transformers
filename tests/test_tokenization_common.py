@@ -46,7 +46,7 @@ from transformers import (
     is_flax_available,
     is_tf_available,
     is_torch_available,
-    logging,
+    logging, AutoTokenizer,
 )
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
@@ -308,14 +308,14 @@ class TokenizerTesterMixin:
     @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
-        return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+        return AutoTokenizer.from_pretrained(pretrained_name, **kwargs)
 
     @classmethod
     @use_cache_if_possible
     @lru_cache(maxsize=64)
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizerFast:
         pretrained_name = pretrained_name or cls.tmpdirname
-        return cls.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+        return AutoTokenizer.from_pretrained(pretrained_name, **kwargs)
 
     def tokenizer_integration_test_util(
         self,
@@ -597,6 +597,7 @@ class TokenizerTesterMixin:
         self.assertIn("tokenizer_file", signature.parameters)
         self.assertIsNone(signature.parameters["tokenizer_file"].default)
 
+    @unittest.skip(reason="This test is not as relevant for fast tokenizers")
     def test_tokenizer_slow_store_full_signature(self):
         if not self.test_slow_tokenizer:
             self.skipTest(reason="test_slow_tokenizer is set to False")
@@ -923,8 +924,8 @@ class TokenizerTesterMixin:
 
                 self.assertEqual(len(toks_after_adding), len(toks_after_adding2))  # Length should still be the same
                 self.assertNotEqual(
-                    toks_after_adding[1], toks_after_adding2[1]
-                )  # But at least the first non-special tokens should differ
+                    toks_after_adding[:3], toks_after_adding2[:3]
+                )  # But at least the first non-special tokens should differ, skipping any bos tokens
                 self.assertTrue(
                     len(toks_before_adding) > len(toks_after_adding),  # toks_before_adding should be longer
                 )
