@@ -565,6 +565,9 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = sum([self.embed_tokens[codebook](input[:, codebook]) for codebook in range(num_codebooks)])
 
+        # Efficient attention implementations are not able to interact with certain features,
+        # e.g. outputting the attention weights, applying a head mask, and dropout (flex attention).
+        # In these cases, we fall back to the eager attention to enable the requested feature(s).
         _unsupported_features = output_attentions is True or cross_attn_head_mask is not None or head_mask is not None
         attention_mask = self._update_causal_mask(
             attention_mask,

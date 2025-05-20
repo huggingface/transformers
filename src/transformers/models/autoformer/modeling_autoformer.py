@@ -1018,6 +1018,9 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
         hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
+        # Efficient attention implementations are not able to interact with certain features,
+        # e.g. outputting the attention weights, applying a head mask, and dropout (flex attention).
+        # In these cases, we fall back to the eager attention to enable the requested feature(s).
         _unsupported_features = output_attentions is True or head_mask is not None
         attention_mask = self._update_full_mask(
             attention_mask,

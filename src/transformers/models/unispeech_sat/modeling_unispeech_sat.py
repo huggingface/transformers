@@ -517,6 +517,9 @@ class UniSpeechSatEncoder(nn.Module):
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
 
+        # Efficient attention implementations are not able to interact with certain features,
+        # e.g. outputting the attention weights, applying a head mask, and dropout (flex attention).
+        # In these cases, we fall back to the eager attention to enable the requested feature(s).
         _unsupported_features = output_attentions is True
         attention_mask = self._update_full_mask(
             attention_mask,
@@ -698,6 +701,9 @@ class UniSpeechSatEncoderStableLayerNorm(nn.Module):
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
 
+        # Efficient attention implementations are not able to interact with certain features,
+        # e.g. outputting the attention weights, applying a head mask, and dropout (flex attention).
+        # In these cases, we fall back to the eager attention to enable the requested feature(s).
         _unsupported_features = output_attentions is True
         attention_mask = self._update_full_mask(
             attention_mask,

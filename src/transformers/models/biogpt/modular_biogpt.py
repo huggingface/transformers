@@ -441,12 +441,16 @@ class BioGptModel(BioGptPreTrainedModel):
             else past_key_values
         )
 
+        # Efficient attention implementations are not able to interact with certain features,
+        # e.g. outputting the attention weights, applying a head mask, and dropout (flex attention).
+        # In these cases, we fall back to the eager attention to enable the requested feature(s).
         causal_mask = self._update_causal_mask(
             attention_mask,
             inputs_embeds,
             cache_position,
             self_attn_cache,
             output_attentions,
+            self.config.attention_probs_dropout_prob,
         )
 
         # embed positions
