@@ -886,7 +886,10 @@ def shard_and_distribute_module(
     if current_module_plan is None:
         current_module_plan = "replicate"
         if dist.get_rank() == 0:
-            logger.warning(f"Tensor parallel plan for {param_name} not found, using default 'replicate' plan.")
+            logger.info(f"Tensor parallel plan for {param_name} not found, using default 'replicate' plan.")
+    else:
+        if dist.get_rank() == 0:
+            logger.info(f"Tensor parallel plan for {param_name}: {current_module_plan}")
 
     # Add hooks to the module if not done yet
     # add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
