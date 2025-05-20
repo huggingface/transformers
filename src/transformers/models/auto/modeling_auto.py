@@ -177,6 +177,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("lilt", "LiltModel"),
         ("llama", "LlamaModel"),
         ("llama4", "Llama4ForConditionalGeneration"),
+        ("llama4_text", "Llama4TextModel"),
         ("llava", "LlavaModel"),
         ("llava_next", "LlavaNextModel"),
         ("llava_next_video", "LlavaNextVideoModel"),

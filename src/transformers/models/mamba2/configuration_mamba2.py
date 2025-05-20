@@ -140,6 +140,13 @@ class Mamba2Config(PretrainedConfig):
         tie_word_embeddings=False,
         **kwargs,
     ):
+        if (hidden_size * expand) != (num_heads * head_dim):
+            raise ValueError(
+                "Inconsistent configuration: hidden_size * expand "
+                f"({hidden_size * expand}) must equal num_heads * head_dim "
+                f"({num_heads * head_dim})."
+            )
+
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.state_size = state_size

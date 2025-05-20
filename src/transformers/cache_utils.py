@@ -21,7 +21,105 @@ if is_hqq_available():
 logger = logging.get_logger(__name__)
 
 
-# Utility functions for static/sliding cache update
+# Utility functions for static/sliding cache update logic
+def _static_cache_update(
+    k_cache: torch.Tensor,
+    v_cache: torch.Tensor,
+    key_states: torch.Tensor,
+    value_states: torch.Tensor,
+    cache_position: Optional[torch.LongTensor],
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Updates the static cache tensors in place.
+
+    Args:
+        k_cache (`torch.Tensor`): The key cache tensor to update.
+        v_cache (`torch.Tensor`): The value cache tensor to update.
+        key_states (`torch.Tensor`): The new key states to add.
+        value_states (`torch.Tensor`): The new value states to add.
+        cache_position (`Optional[torch.LongTensor]`): The position indices where the new states should be inserted.
+                                                       If None, the entire cache is overwritten (prefill).
+
+    Returns:
+        Tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value cache tensors (modified in-place).
+    """
+    if cache_position is None:
+        # Prefill phase where seq_len potentially equals max_cache_len. Directly copy.
+        k_cache.copy_(key_states)
+        v_cache.copy_(value_states)
+    else:
+        # Generation phase. Update specific positions.
+        # Use index_copy_ for in-place update (compile-friendly).
+        try:
+            k_cache.index_copy_(2, cache_position, key_states)
+            v_cache.index_copy_(2, cache_position, value_states)
+        except NotImplementedError:
+            # Fallback for devices like MPS where index_copy_ might not be supported.
+            k_cache[:, :, cache_position] = key_states
+            v_cache[:, :, cache_position] = value_states
+    return k_cache, v_cache
+
+
+def _sliding_cache_update(
+    k_cache: torch.Tensor,
+    v_cache: torch.Tensor,
+    key_states: torch.Tensor,
+    value_states: torch.Tensor,
+    cache_position: torch.LongTensor,
+    max_cache_len: int,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Updates the sliding window cache tensors, returning the potentially modified tensors.
+
+    Args:
+        k_cache (`torch.Tensor`): The key cache tensor to update.
+        v_cache (`torch.Tensor`): The value cache tensor to update.
+        key_states (`torch.Tensor`): The new key states to add.
+        value_states (`torch.Tensor`): The new value states to add.
+        cache_position (`torch.LongTensor`): The position indices where the new states should be inserted.
+        max_cache_len (`int`): The maximum length of the sliding window cache.
+
+    Returns:
+        Tuple[`torch.Tensor`, `torch.Tensor`]: The key and value tensors representing the cache state after the update.
+                                               For prefill > window, these are the full input states.
+                                               Otherwise, they are the updated cache tensors.
+    """
+    # Handle prefill phase when prompt length > sliding_window_size
+    if cache_position.shape[0] > max_cache_len:
+        new_k = key_states[:, :, -max_cache_len:, :]
+        new_v = value_states[:, :, -max_cache_len:, :]
+        k_cache.copy_(new_k)
+        v_cache.copy_(new_v)
+        return key_states, value_states
+
+    # Sliding window logic for generation phase or prefill < window
+    slicing = torch.arange(max_cache_len, device=value_states.device)
+    current_seq_len = cache_position[-1] + 1  # Use last position to determine current length
+    to_shift = current_seq_len > max_cache_len
+    indices = (slicing + to_shift.sum()) % max_cache_len
+
+    k_out_shifted = k_cache[:, :, indices]
+    v_out_shifted = v_cache[:, :, indices]
+
+    # Clamp cache_position to determine the *target index* within the shifted cache view
+    update_position = cache_position.clamp(min=0, max=max_cache_len - 1)
+
+    try:
+        k_out_updated = k_out_shifted.index_copy(2, update_position, key_states)
+        v_out_updated = v_out_shifted.index_copy(2, update_position, value_states)
+    except NotImplementedError:
+        # Fallback for MPS: clone and modify the clone
+        k_out_updated = k_out_shifted.clone()
+        v_out_updated = v_out_shifted.clone()
+        k_out_updated[:, :, update_position] = key_states
+        v_out_updated[:, :, update_position] = value_states
+
+    k_cache.copy_(k_out_updated)
+    v_cache.copy_(v_out_updated)
+    return k_out_updated, v_out_updated
+
+
+# Utility functions for static/sliding cache update logic
 def _static_cache_update(
     k_cache: torch.Tensor,
     v_cache: torch.Tensor,
@@ -1666,8 +1764,8 @@ class EncoderDecoderCache(Cache):
         """
         return len(self.self_attention_cache)
 
-    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-        """Converts the `EncoderDecoderCache` instance into  its equivalent in the legacy cache format."""
+    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor]]:
+        """Converts the `EncoderDecoderCache` instance into its equivalent in the legacy cache format."""
         legacy_cache = ()
         if len(self.cross_attention_cache) > 0:
             for self_attn, cross_attn in zip(
@@ -1854,7 +1952,9 @@ class HybridCache(Cache):
 
         self._dtype = dtype
         self.num_key_value_heads = (
-            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
+            config.num_attention_heads
+            if getattr(config, "num_key_value_heads", None) is None
+            else config.num_key_value_heads
         )
 
         layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2  # 2 is for BC
@@ -2155,7 +2255,7 @@ class OffloadedHybridCache(HybridChunkedCache):
 
         # TODO (joao): to enable this cache on multiple devicesuse the pattern from `OffloadedCache`, which keeps
         # track of the original device of each layer
-        unique_devices = set(layer_device_map.values())
+        unique_devices = set(layer_device_map.values()) if layer_device_map else set()
         if len(unique_devices) > 1:
             raise ValueError(f"OffloadedHybridCache does not support multiple devices. Got devices: {unique_devices}")
 
@@ -2314,7 +2414,7 @@ class OffloadedStaticCache(StaticCache):
 
         # TODO (joao): to enable this cache on multiple devicesuse the pattern from `OffloadedCache`, which keeps
         # track of the original device of each layer
-        unique_devices = set(layer_device_map.values())
+        unique_devices = set(layer_device_map.values()) if layer_device_map else set()
         if len(unique_devices) > 1:
             raise ValueError(f"OffloadedStaticCache does not support multiple devices. Got devices: {unique_devices}")
 
@@ -2390,6 +2490,9 @@ class OffloadedStaticCache(StaticCache):
         Return:
             A tuple containing the updated key and value states.
         """
+
+        key_states = key_states.to(self.key_cache[layer_idx].dtype)
+        value_states = value_states.to(self.value_cache[layer_idx].dtype)
 
         if layer_idx == 0:
             # Update seen tokens.

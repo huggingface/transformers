@@ -279,7 +279,7 @@ class ImageProcessingTestMixin:
                 saved_file = image_processor_first.save_pretrained(tmpdirname)[0]
                 check_json_file_has_correct_format(saved_file)
 
-                use_fast = i == 1
+                use_fast = i == 1 or not self.test_slow_image_processor
                 image_processor_second = AutoImageProcessor.from_pretrained(tmpdirname, use_fast=use_fast)
 
             self.assertEqual(image_processor_second.to_dict(), image_processor_first.to_dict())
