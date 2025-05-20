@@ -16,6 +16,7 @@
 Processor class for Idefics3.
 """
 
+import math
 import re
 from itertools import accumulate
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
@@ -390,12 +391,21 @@ class Idefics3Processor(ProcessorMixin):
             images_kwargs = Idefics3ProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
 
-            num_tokens_and_patches = [
-                self.image_processor.get_number_of_image_tokens(*image_size, images_kwargs)
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
                 for image_size in image_sizes
             ]
-            num_image_tokens = [num_tokens for num_tokens, _ in num_tokens_and_patches]
-            num_image_patches = [num_patches for _, num_patches in num_tokens_and_patches]
+
+            base_image_length = self.image_seq_len + 3
+            col_length = self.image_seq_len + 2
+            num_image_tokens = []
+
+            for num_patches in num_image_patches:
+                num_cols = num_rows = int(math.sqrt(num_patches - 1))
+                row_length = col_length * num_cols + 1
+                num_patches = num_rows * num_cols + 1
+                num_image_tokens.append(base_image_length + (row_length * num_rows))
+
             multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**multimodal_data)

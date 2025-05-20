@@ -82,7 +82,13 @@ class Emu3Processor(ProcessorMixin):
         self.image_start_token = tokenizer.boi_token  # "<|image start|>" fixed tokens for start and end of image
         self.image_end_token = tokenizer.eoi_token  # "<|image end|>"
         self.fake_token_around_image = tokenizer.image_wrapper_token  # "<|image token|>"  every image starts with it
-        self.image_token_id = tokenizer.image_token_id
+        self.image_ids = [
+            tokenizer.image_token_id,
+            tokenizer.image_wrapper_token_id,
+            tokenizer.boi_token_id,
+            tokenizer.eoi_token_id,
+            tokenizer.eof_token_id,
+        ]
         self.eof_token = tokenizer.eof_token  # "<|extra_201|>"
         self.bos_token = tokenizer.bos_token
         self.downsample_ratio = 8
@@ -190,7 +196,7 @@ class Emu3Processor(ProcessorMixin):
         if return_mm_token_type_ids:
             array_ids = np.array(text_inputs["input_ids"])
             mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         return BatchFeature(data={**text_inputs, **image_features}, tensor_type=return_tensors)
@@ -210,12 +216,20 @@ class Emu3Processor(ProcessorMixin):
         """
 
         multimodal_data = {}
+        batch_num_image_tokens = []
         if image_sizes is not None:
-            # add 2 for BOI and EOI tokens
-            num_image_tokens = [self.image_seq_length + 2] * len(image_sizes)
-            num_image_patches = [1] * len(image_sizes)
+            for height, width in image_sizes:
+                height = height // self.downsample_ratio
+                width = width // self.downsample_ratio
+                image_seq_length = height * (width + 1)  # +1 for extra row when converting to BPE in modeling code
+                batch_num_image_tokens.append(
+                    image_seq_length + 3 + 3
+                )  # TODO: check with vLLM, rn OOM even with 8B model :(
 
-            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+            num_image_patches = [1] * len(image_sizes)
+            multimodal_data.update(
+                {"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches}
+            )
 
         return MultiModalData(**multimodal_data)
 

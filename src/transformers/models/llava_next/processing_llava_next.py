@@ -235,7 +235,7 @@ class LlavaNextProcessor(ProcessorMixin):
         newline_features = current_height
         return (unpadded_features, newline_features)
 
-    def _get_num_mm_tokens_from_sizes(self, image_sizes=None, **kwargs):
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for each multimodal input type
         (image, video, and audio) with the given input sizes.
@@ -274,7 +274,9 @@ class LlavaNextProcessor(ProcessorMixin):
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1
                 batch_num_image_tokens.append(num_image_tokens)
-            multimodal_data({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+            multimodal_data.update(
+                {"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches}
+            )
 
         return MultiModalData(**multimodal_data)
 

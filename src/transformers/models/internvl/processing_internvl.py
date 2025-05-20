@@ -296,12 +296,12 @@ class InternVLProcessor(ProcessorMixin):
             images_kwargs = InternVLProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
 
-            num_tokens_and_patches = [
+            num_image_patches = [
                 self.image_processor.get_number_of_image_tokens(*image_size, images_kwargs)
                 for image_size in image_sizes
             ]
-            num_image_tokens = [num_tokens for num_tokens, _ in num_tokens_and_patches]
-            num_image_patches = [num_patches for _, num_patches in num_tokens_and_patches]
+            # Add 2 for BOI and EOI tokens
+            num_image_tokens = [2 + (self.image_seq_length * num_patches) for num_patches in num_image_patches]
             multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**multimodal_data)

@@ -326,7 +326,7 @@ class PaliGemmaProcessor(ProcessorMixin):
 
         return BatchFeature(data=return_data, tensor_type=return_tensors)
 
-    def _get_num_mm_tokens_from_sizes(self, image_sizes=None, **kwargs):
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for each multimodal input type
         (image, video, and audio) with the given input sizes.

@@ -22,7 +22,13 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import (
+    MultiModalData,
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+    _validate_images_text_input_order,
+)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 from .image_processing_pixtral import get_resize_output_image_size
@@ -234,42 +240,43 @@ class PixtralProcessor(ProcessorMixin):
 
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
-    def _get_num_mm_tokens_from_sizes(
-        self, image_sizes=None, video_sizes=None, audio_lengths=None, **mm_processor_kwargs
-    ):
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for each multimodal input type
         (image, video, and audio) with the given input sizes.
+
         Args:
-            image_sizes (List[List[str]], *optional*):
+            image_sizes (`List[List[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
-            video_sizes (List[List[str]], *optional*):
-                The input sizes formatted as (num_frames, height, width) per each video.
-            audio_lengths (List[int], *optional*):
-                The input length formatted as per each audio.
+
         Returns:
-            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
-            to a list containing the number of placeholder tokens required. If the model doesn't accept
-            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
         """
-        size = mm_processor_kwargs.get("size", None) or self.image_processor.size
-        patch_size = mm_processor_kwargs.get("patch_size", None) or self.image_processor.patch_size
-        patch_height, patch_width = patch_size["height"], patch_size["width"]
+        multimodal_data = {}
+        if image_sizes is not None:
+            images_kwargs = PixtralProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
 
-        batch_num_image_tokens = []
-        for height, width in image_sizes:
-            resized_height, resized_width = get_resize_output_image_size(
-                height,
-                width,
-                size=(size["longest_edge"], size["longest_edge"]),
-                patch_size=(patch_height, patch_width),
-            )
-            num_height_tokens = resized_height // patch_height
-            num_width_tokens = resized_width // patch_width
-            num_image_tokens = (num_width_tokens + 1) * num_height_tokens
-            batch_num_image_tokens.append(num_image_tokens)
+            size = images_kwargs.get("size", None) or self.image_processor.size
+            patch_size = self.patch_size * self.spatial_merge_size
 
-        return {"image": batch_num_image_tokens, "video": [], "audio": []}
+            num_image_tokens = []
+            for height, width in image_sizes:
+                resized_height, resized_width = get_resize_output_image_size(
+                    height,
+                    width,
+                    size=(size["longest_edge"], size["longest_edge"]),
+                    patch_size=(patch_size, patch_size),
+                )
+                num_height_tokens = resized_height // patch_size
+                num_width_tokens = resized_width // patch_size
+                num_image_tokens.append((num_width_tokens + 1) * num_height_tokens)
+
+            num_image_patches = [1] * len(image_sizes)
+            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**multimodal_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

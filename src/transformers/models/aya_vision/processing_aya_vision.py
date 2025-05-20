@@ -123,7 +123,6 @@ class AyaVisionProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         self.image_token = image_token
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.patch_size = patch_size * downsample_factor
         self.img_size = img_size
 
@@ -133,6 +132,11 @@ class AyaVisionProcessor(ProcessorMixin):
         self.img_line_break_token = img_line_break_token
         self.tile_token = tile_token
         self.tile_global_token = tile_global_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.img_patch_token)
+        self.image_ids = [
+            tokenizer.convert_tokens_to_ids(tok)
+            for tok in [img_patch_token, tile_token, tile_global_token, start_of_img_token, end_of_img_token]
+        ]
 
     def _prompt_split_image(self, num_patches):
         """
@@ -230,12 +234,11 @@ class AyaVisionProcessor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
             array_ids = np.array(text_inputs["input_ids"])
             mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
@@ -259,12 +262,16 @@ class AyaVisionProcessor(ProcessorMixin):
             images_kwargs = AyaVisionProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
 
-            num_tokens_and_patches = [
-                self.image_processor.get_number_of_image_tokens(*image_size, images_kwargs)
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
                 for image_size in image_sizes
             ]
-            num_image_tokens = [num_tokens for num_tokens, _ in num_tokens_and_patches]
-            num_image_patches = [num_patches for _, num_patches in num_tokens_and_patches]
+
+            token_per_patch = (self.img_size // self.patch_size) ** 2
+            num_image_tokens = [
+                token_per_patch + 3 + sum(token_per_patch + 1 for _ in range(1, num_patches))
+                for num_patches in num_image_patches
+            ]
             multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**multimodal_data)

@@ -206,22 +206,23 @@ class Qwen2VLProcessor(ProcessorMixin):
         if image_sizes is not None:
             images_kwargs = Qwen2VLProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
-            num_tokens_and_patches = [
-                self.image_processor.get_number_of_image_tokens(*image_size, images_kwargs)
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
                 for image_size in image_sizes
             ]
-            num_image_tokens = [num_tokens for num_tokens, _ in num_tokens_and_patches]
-            num_image_patches = [num_patches for _, num_patches in num_tokens_and_patches]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
             multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
             videos_kwargs = Qwen2VLProcessorKwargs._defaults.get("videos_kwargs", {})
             videos_kwargs.update(kwargs)
-            num_video_tokens = [
-                self.video_processor.get_number_of_video_tokens(*video_size, videos_kwargs)
+            num_video_patches = [
+                self.video_processor.get_number_of_video_patches(*video_size, videos_kwargs)
                 for video_size in video_sizes
             ]
+            num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
             multimodal_data["num_video_tokens"] = num_video_tokens
 
         return MultiModalData(**multimodal_data)

@@ -284,7 +284,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
 
         return (unpadded_features, newline_features)
 
-    def _get_num_mm_tokens_from_sizes(self, image_sizes=None, video_sizes=None, **kwargs):
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for each multimodal input type
         (image, video, and audio) with the given input sizes.
@@ -323,8 +323,11 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1
                 batch_num_image_tokens.append(num_image_tokens)
-            multimodal_data({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+            multimodal_data.update(
+                {"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches}
+            )
 
+        print("batch_num_image_tokens", batch_num_image_tokens)
         return MultiModalData(**multimodal_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama

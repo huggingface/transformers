@@ -230,10 +230,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
 
     def get_number_of_image_tokens(self, height: int, width: int, images_kwargs=None):
         """
-        A utility that returns number of image embeddings and number of patches for a given image size. The
-        number of embeddings are calculated is equal to the number of image placeholder tokens
-        needed for the input. Note, that placeholder tokens include BOI/EOI and other special tokens
-        used to denote each image row or column.
+        A utility that returns number patches for a given image size.
 
         Args:
             height (`int`):
@@ -243,11 +240,11 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
             images_kwargs (`dict`, *optional*)
                 Any kwargs to override defaults of the image processor.
         Returns:
-            `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
+            `int`: Number of patches per image.
         """
         min_patches = images_kwargs.get("min_patches", None) or self.min_patches
         max_patches = images_kwargs.get("max_patches", None) or self.max_patches
-        patch_size = images_kwargs.get("patch_size", None) or self.patch_size
+        patch_size = images_kwargs.get("size", None) or self.size
         crop_to_patches = images_kwargs.get("crop_to_patches", None) or self.crop_to_patches
 
         num_patches = 1
@@ -257,11 +254,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
             )
             num_patches += num_columns * num_rows
 
-        token_per_patch = (self.img_size // self.patch_size) ** 2
-        num_image_tokens = token_per_patch + 3
-        num_image_tokens += sum(token_per_patch + 1 for idx in range(1, num_patches))
-
-        return num_image_tokens, num_patches
+        return num_patches
 
 
 __all__ = ["GotOcr2ImageProcessorFast"]

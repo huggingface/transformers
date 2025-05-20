@@ -167,12 +167,12 @@ class AriaProcessor(ProcessorMixin):
             images_kwargs = AriaProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
 
-            num_tokens_and_patches = [
-                self.image_processor.get_number_of_image_tokens(*image_size, images_kwargs)
+            max_size = images_kwargs.get("max_image_size", None) or self.image_processor.max_image_size
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
                 for image_size in image_sizes
             ]
-            num_image_tokens = [num_tokens for num_tokens, _ in num_tokens_and_patches]
-            num_image_patches = [num_patches for _, num_patches in num_tokens_and_patches]
+            num_image_tokens = [self.size_conversion[max_size] * num_patches for num_patches in num_image_patches]
             multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**multimodal_data)

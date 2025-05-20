@@ -402,12 +402,9 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def get_number_of_image_tokens(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
         """
-        A utility that returns number of image embeddings and number of patches for a given image size. The
-        number of embeddings are calculated is equal to the number of image placeholder tokens
-        needed for the input. Note, that placeholder tokens include BOI/EOI and other special tokens
-        used to denote each image row or column.
+        A utility that returns number of image patches for a given image size.
 
         Args:
             height (`int`):
@@ -417,7 +414,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
             images_kwargs (`dict`, *optional*)
                 Any kwargs to override defaults of the image processor.
         Returns:
-            `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
+            `int`: Number of image patches per image.
         """
         min_pixels = images_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
         max_pixels = images_kwargs.get("max_pixels", None) or self.size["longest_edge"]
@@ -429,8 +426,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
             height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        image_tokens = (grid_h * grid_w) // merge_size**2
-        return image_tokens, grid_h * grid_w
+        return grid_h * grid_w
 
 
 __all__ = ["Qwen2VLImageProcessorFast"]

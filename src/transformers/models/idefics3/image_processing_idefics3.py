@@ -850,12 +850,9 @@ class Idefics3ImageProcessor(BaseImageProcessor):
 
         return encoding
 
-    def get_number_of_image_tokens(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
         """
-        A utility that returns number of image embeddings and number of patches for a given image size. The
-        number of embeddings are calculated is equal to the number of image placeholder tokens
-        needed for the input. Note, that placeholder tokens include BOI/EOI and other special tokens
-        used to denote each image row or column.
+        A utility that returns number of image patches for a given image size.
 
         Args:
             height (`int`):
@@ -865,13 +862,11 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             images_kwargs (`dict`, *optional*)
                 Any kwargs to override defaults of the image processor.
         Returns:
-            `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
+            `int`: Number of patches per image.
         """
         do_image_splitting = images_kwargs.get("do_image_splitting", None) or self.do_image_splitting
         max_image_size = images_kwargs.get("max_image_size", None) or self.max_image_size
         size = images_kwargs.get("size", None) or self.size
-
-        base_image_length = self.image_seq_len + 3
 
         if do_image_splitting:
             height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=size["longest_edge"])
@@ -892,14 +887,9 @@ class Idefics3ImageProcessor(BaseImageProcessor):
                 # Calculate the number of splits
                 num_rows = math.ceil(resized_height / max_height)
                 num_cols = math.ceil(resized_width / max_width)
-                col_length = self.image_seq_len + 2
-                row_length = col_length * num_cols + 1
                 num_patches = num_rows * num_cols + 1
-                num_image_tokens = base_image_length + (row_length * num_rows)
-        else:
-            num_image_tokens = base_image_length
 
-        return num_image_tokens, num_patches
+        return num_patches
 
 
 __all__ = ["Idefics3ImageProcessor"]

@@ -204,12 +204,9 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
             tensor_type=return_tensors,
         )
 
-    def get_num_of_video_tokens(self, num_frames: int, height: int, width: int, videos_kwargs=None):
+    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
         """
-        A utility that returns number of image embeddings and number of patches for a given image size. The
-        number of embeddings are calculated is equal to the number of image placeholder tokens
-        needed for the input. Note, that placeholder tokens include BOI/EOI and other special tokens
-        used to denote each image row or column.
+        A utility that returns number of video patches a given video size.
 
         Args:
             num_frames (`int`):
@@ -235,8 +232,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         grid_t = num_frames // temporal_patch_size
-        video_tokens = (grid_t * grid_h * grid_w) // merge_size**2
-        return video_tokens
+        return grid_t * grid_h * grid_w
 
 
 __all__ = ["Qwen2VLVideoProcessor"]
