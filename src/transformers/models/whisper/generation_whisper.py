@@ -1404,7 +1404,7 @@ class WhisperGenerationMixin(GenerationMixin):
         language = getattr(generation_config, "language", None)
         init_tokens = [generation_config.decoder_start_token_id]
 
-        # TL;DR we silently ignore `forced_decoder_ids` (old flag) when `task` or `language` (new flags).
+        # TL;DR we silently ignore `forced_decoder_ids` (old flag) when `task` or `language` (new flags) are set.
         # `forced_decoder_ids` is an old generation config attribute that is now deprecated in favor of `task` and
         # `language` (see https://github.com/huggingface/transformers/pull/28687). Nevertheless, keep in mind that
         # the original checkpoints all contain this attribute, and thus we should maintain backwards compatibility.
