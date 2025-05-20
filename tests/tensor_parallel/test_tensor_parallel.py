@@ -30,7 +30,7 @@ from transformers.testing_utils import (
 
 
 if is_torch_available():
-    import torch  # noqa: F401
+    import torch
 
 
 class TestTensorParallelUtils(TestCasePlus):
