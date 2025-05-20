@@ -729,22 +729,23 @@ class ParallelInterface(MutableMapping):
 
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
     # a new instance is created (in order to locally override a given function)
-    _global_mapping = {
-        "colwise": ColwiseParallel(),
-        "rowwise": RowwiseParallel(),
-        "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
-        "rowwise_rep": RowwiseParallel(input_layouts=Replicate()),
-        "local_colwise": ColwiseParallel(use_dtensor=False),
-        "local_rowwise": RowwiseParallel(use_dtensor=False),
-        "local": IsolatedParallel(),
-        "gather": GatherParallel(),
-        "local_packed_rowwise": PackedRowwiseParallel(use_dtensor=False),
-        "sequence_parallel": SequenceParallel(),
-        "replicate": ReplicateParallel(),
-    }
 
     def __init__(self):
         self._local_mapping = {}
+
+        ParallelInterface._global_mapping = {
+            "colwise": ColwiseParallel(),
+            "rowwise": RowwiseParallel(),
+            "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
+            "rowwise_rep": RowwiseParallel(input_layouts=Replicate()),
+            "local_colwise": ColwiseParallel(use_dtensor=False),
+            "local_rowwise": RowwiseParallel(use_dtensor=False),
+            "local": IsolatedParallel(),
+            "gather": GatherParallel(),
+            "local_packed_rowwise": PackedRowwiseParallel(use_dtensor=False),
+            "sequence_parallel": SequenceParallel(),
+            "replicate": ReplicateParallel(),
+        }
 
     def __getitem__(self, key):
         # First check if instance has a local override
@@ -775,7 +776,11 @@ class ParallelInterface(MutableMapping):
 
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
-ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
+
+if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+    ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
+else:
+    ALL_PARALLEL_STYLES = None
 
 
 def convert_local_tensor_to_dtensor(
