@@ -1095,7 +1095,8 @@ class ContinuousBatchingManager:
 
     @traced(span_name="generation_loop")
     def _inner_generation_loop(self, batch_processor: ContinuousBatchProcessor, is_first: bool = False):
-        torch.cuda.synchronize()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         batch_processor.prepare_next_batch()
         if torch.cuda.is_available() and self.use_cuda_graph:
             if is_first:
