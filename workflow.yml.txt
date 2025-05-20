@@ -1,0 +1,8 @@
+jobs:
+  example-job:
+    runs-on: windows-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+      - name: Run a command
+        run: echo "Hello from the Windows runner!"
