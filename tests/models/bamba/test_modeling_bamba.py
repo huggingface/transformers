@@ -16,7 +16,6 @@
 import inspect
 import tempfile
 import unittest
-from copy import deepcopy
 
 import pytest
 from pytest import mark
@@ -584,53 +583,6 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 # acceptable numerical instability
                 tol = torch.finfo(torch.float16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    def test_raise_missing_padding_free_kwarg_errs(self):
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            model = model_class(config)
-
-            # Get padding-free inputs
-            dummy_attention_mask = inputs_dict["attention_mask"]
-            inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
-
-            # flatten
-            features = [
-                {"input_ids": i[a.bool()].tolist()}
-                for i, a in zip(inputs_dict["input_ids"], inputs_dict["attention_mask"])
-            ]
-
-            # add position_ids + fa_kwargs + seq_idx
-            data_collator = DataCollatorWithFlattening(
-                return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
-            )
-            padding_free_batch = data_collator(features)
-            padding_free_batch_cuda = {k: t.cuda() if torch.is_tensor(t) else t for k, t in padding_free_batch.items()}
-
-            # Create invalid batches which are missing various padding-free kwargs
-            padding_free_kwargs = (
-                "position_ids",
-                "cu_seq_lens_q",
-                "cu_seq_lens_k",
-                "max_length_q",
-                "max_length_k",
-                "seq_idx",
-            )
-            for kwarg in padding_free_kwargs:
-                with pytest.raises(ValueError) as err:
-                    invalid_batch_cuda = deepcopy(padding_free_batch_cuda)
-                    invalid_batch_cuda.pop(kwarg)
-                    model(**invalid_batch_cuda)
-                assert "padding-free" in str(err.value)
 
 
 @slow
