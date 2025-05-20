@@ -162,33 +162,18 @@ class PatchTSTAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        attention_interface: Callable = eager_attn_forward
-        attention_type = self.config._attn_implementation
-        if self.config._attn_implementation != "eager":
-            if (output_attentions or layer_head_mask is not None) and self.config._attn_implementation in [
-                "sdpa",
-                "flash_attention_2",
-                "flex_attention",
-            ]:
-                logger.warning_once(
-                    f"Falling back to eager attention because `{attention_type}` does not support"
-                    f" `output_attentions=True` or `head_mask`."
-                )
-            elif self.training and self.dropout > 0 and self.config._attn_implementation == "flex_attention":
-                logger.warning_once(
-                    f"Falling back to eager attention because `dropout` is not supported in `{attention_type}`."
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
+        attn_output, attn_weights = ALL_ATTENTION_FUNCTIONS(
+            attention_type=self.config._attn_implementation,
+            eager_attention=eager_attn_forward,
+            module=self,
+            query=query_states,
+            key=key_states,
+            value=value_states,
+            attention_mask=attention_mask,
+            training=self.training,
+            dropout=self.dropout,
             scaling=self.scaling,
+            output_attentions=output_attentions,
             layer_head_mask=layer_head_mask,
             **kwargs,
         )

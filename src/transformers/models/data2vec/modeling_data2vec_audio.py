@@ -21,7 +21,7 @@
 
 import math
 import warnings
-from typing import Callable, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -43,15 +43,12 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, is_peft_available, is_torch_flex_attn_available, logging
+from ...utils import auto_docstring, is_peft_available, is_torch_flex_attn_available
 from .configuration_data2vec_audio import Data2VecAudioConfig
 
 
 if is_torch_flex_attn_available():
     from ...integrations.flex_attention import make_flex_block_causal_mask
-
-
-logger = logging.get_logger(__name__)
 
 
 class Data2VecAudioConvLayer(nn.Module):
@@ -310,33 +307,18 @@ class Data2VecAudioAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        attention_interface: Callable = eager_attn_forward
-        attention_type = self.config._attn_implementation
-        if self.config._attn_implementation != "eager":
-            if (output_attentions or layer_head_mask is not None) and self.config._attn_implementation in [
-                "sdpa",
-                "flash_attention_2",
-                "flex_attention",
-            ]:
-                logger.warning_once(
-                    f"Falling back to eager attention because `{attention_type}` does not support"
-                    f" `output_attentions=True` or `head_mask`."
-                )
-            elif self.training and self.dropout > 0 and self.config._attn_implementation == "flex_attention":
-                logger.warning_once(
-                    f"Falling back to eager attention because `dropout` is not supported in `{attention_type}`."
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
+        attn_output, attn_weights = ALL_ATTENTION_FUNCTIONS(
+            attention_type=self.config._attn_implementation,
+            eager_attention=eager_attn_forward,
+            module=self,
+            query=query_states,
+            key=key_states,
+            value=value_states,
+            attention_mask=attention_mask,
+            training=self.training,
+            dropout=self.dropout,
             scaling=self.scaling,
+            output_attentions=output_attentions,
             layer_head_mask=layer_head_mask,
             **kwargs,
         )

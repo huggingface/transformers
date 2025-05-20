@@ -164,6 +164,11 @@ if is_safetensors_available():
 if is_kernels_available():
     from kernels import get_kernel
 
+
+if is_torch_flex_attn_available():
+    from .integrations.flex_attention import BlockMask
+
+
 logger = logging.get_logger(__name__)
 
 
@@ -6133,6 +6138,60 @@ class AttentionInterface(MutableMapping):
 
     def __init__(self):
         self._local_mapping = {}
+
+    def __call__(
+        self,
+        attention_type: str,
+        eager_attention: Callable,
+        module: nn.Module,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],
+        training: bool = False,
+        dropout: Optional[float] = 0.0,
+        scaling: Optional[float] = None,
+        output_attentions: bool = False,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        **kwargs,
+    ):
+        attention_interface: Callable = eager_attention
+        if attention_type != "eager":
+            if (output_attentions or layer_head_mask is not None) and attention_type in [
+                "sdpa",
+                "flash_attention_2",
+                "flex_attention",
+            ]:
+                logger.warning_once(
+                    f"Falling back to eager attention because `{attention_type}` does not support"
+                    f" `output_attentions=True` or `head_mask`."
+                )
+            elif training and dropout > 0 and attention_type == "flex_attention":
+                logger.warning_once(
+                    f"Falling back to eager attention because `dropout` is not supported in `{attention_type}`."
+                )
+            else:
+                attention_interface = self[attention_type]
+
+        if scaling is None and attention_type == "eager":
+            logger.warning_once(
+                "You are using a model's `eager` attention module but are not passing its appropriate attention scaling."
+                " We default to `head_dim**-0.5`. If this is unexpected, please report this to the Transformers GitHub"
+                " repo: https://github.com/huggingface/transformers/issues/new"
+            )
+            scaling = query.size(-1) ** -0.5
+
+        return attention_interface(
+            module,
+            query,
+            key,
+            value,
+            attention_mask,
+            dropout=0.0 if not training else dropout,
+            scaling=scaling,
+            layer_head_mask=layer_head_mask,
+            **kwargs,
+        )
 
     def __getitem__(self, key):
         # First check if instance has a local override
