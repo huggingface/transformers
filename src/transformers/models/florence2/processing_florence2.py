@@ -190,17 +190,17 @@ class Florence2Processor(ProcessorMixin):
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
-        do_resize: bool = False,
-        do_normalize: bool = False,
+        do_resize: Optional[bool] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional[ChannelDimension] = "channels_first",
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         resample: Optional["PILImageResampling"] = None,
-        do_convert_rgb: bool = False,
-        do_thumbnail: bool = False,
-        do_align_long_axis: bool = False,
-        do_rescale: bool = False,
+        do_convert_rgb: Optional[bool] = None,
+        do_thumbnail: Optional[bool] = None,
+        do_align_long_axis: Optional[bool] = None,
+        do_rescale: Optional[bool] = None,
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -325,7 +325,9 @@ class Florence2Processor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
-    def post_process_generation(self, text, sequence, transition_beam_score, task, image_size):
+    def post_process_generation(
+        self, text=None, sequence=None, transition_beam_score=None, task=None, image_size=None
+    ):
         """
         Post-process the output of the model to each of the task outputs.
 

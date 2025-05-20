@@ -363,38 +363,76 @@ class Florence2VisionChannelBlock(nn.Module):
         return x, size
 
 
+def window_partition(x: torch.Tensor, window_size: int):
+    B, H, W, C = x.shape
+    x = x.view(B, H // window_size, window_size, W // window_size, window_size, C)
+    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
+    return windows
+
+
+def window_reverse(windows: torch.Tensor, batch_size: int, window_size: int, H: int, W: int):
+    B = batch_size
+    # this will cause onnx conversion failed for dynamic axis, because treated as constant
+    # int(windows.shape[0] / (H * W / window_size / window_size))
+    x = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
+    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
+    return x
+
+
 class Florence2VisionWindowAttention(nn.Module):
-    def __init__(self, dim: int, num_heads: int, window_size: int, qkv_bias: bool = True, fused_attn: bool = True):
+    def __init__(self, dim: int, num_heads: int, window_size: int, qkv_bias: bool = True):
         super().__init__()
         self.dim = dim
         self.window_size = window_size
         self.num_heads = num_heads
         head_dim = dim // num_heads
         self.scale = head_dim**-0.5
-        self.fused_attn = fused_attn
 
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.proj = nn.Linear(dim, dim)
 
         self.softmax = nn.Softmax(dim=-1)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, size):
+        H, W = size
+        B, L, C = x.shape
+        assert L == H * W, "input feature has wrong size"
+
+        x = x.view(B, H, W, C)
+
+        pad_l = pad_t = 0
+        pad_r = (self.window_size - W % self.window_size) % self.window_size
+        pad_b = (self.window_size - H % self.window_size) % self.window_size
+        x = F.pad(x, (0, 0, pad_l, pad_r, pad_t, pad_b))
+        _, Hp, Wp, _ = x.shape
+
+        x = window_partition(x, self.window_size)
+        x = x.view(-1, self.window_size * self.window_size, C)
+
+        # W-MSA/SW-MSA
+        # attn_windows = self.attn(x_windows)
+
         B_, N, C = x.shape
-
         qkv = self.qkv(x).reshape(B_, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv.unbind(0)
+        q, k, v = qkv[0], qkv[1], qkv[2]
 
-        if self.fused_attn:
-            x = F.scaled_dot_product_attention(q, k, v)
-        else:
-            q = q * self.scale
-            attn = q @ k.transpose(-2, -1)
-            attn = self.softmax(attn)
-            x = attn @ v
+        q = q * self.scale
+        attn = q @ k.transpose(-2, -1)
+        attn = self.softmax(attn)
 
-        x = x.transpose(1, 2).reshape(B_, N, C)
+        x = (attn @ v).transpose(1, 2).reshape(B_, N, C)
         x = self.proj(x)
-        return x
+
+        # merge windows
+        x = x.view(-1, self.window_size, self.window_size, C)
+        x = window_reverse(x, B, self.window_size, Hp, Wp)
+
+        if pad_r > 0 or pad_b > 0:
+            x = x[:, :H, :W, :].contiguous()
+
+        x = x.view(B, H * W, C)
+
+        return x, size
 
 
 class Florence2VisionSpatialBlock(nn.Module):
@@ -2587,7 +2625,7 @@ class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
         return x
 
 
-class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
+class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixin):
     def __init__(self, config: Florence2Config):
         super().__init__(config)
         self.vision_tower = Florence2Vision.from_config(config=config.vision_config)

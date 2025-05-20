@@ -96,7 +96,6 @@ class Florence2VisionText2TextModelTester:
             "patch_stride": [4],
             "patch_padding": [1],
             "patch_prenorm": [False],
-            "enable_checkpoint": False,
             "dim_embed": [8],
             "num_heads": [1],
             "num_groups": [1],
