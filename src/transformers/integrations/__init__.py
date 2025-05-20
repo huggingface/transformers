@@ -142,7 +142,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["tensor_parallel"] = [
         "shard_and_distribute_module",
-        "ALL_PARALLEL_STYLES",
+        "SUPPORTED_TP_STYLES",
         "translate_to_torch_parallel_style",
     ]
 try:
@@ -271,7 +271,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .tensor_parallel import (
-            ALL_PARALLEL_STYLES,
+            SUPPORTED_TP_STYLES,
             shard_and_distribute_module,
             translate_to_torch_parallel_style,
         )
