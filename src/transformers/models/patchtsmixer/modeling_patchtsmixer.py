@@ -29,7 +29,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_patchtsmixer import PatchTSMixerConfig
 
 
@@ -279,7 +278,6 @@ class PatchTSMixerAttention(nn.Module):
         bias: bool = True,
         is_causal: bool = False,
         config: Optional[PatchTSMixerConfig] = None,
-        layer_idx: Optional[int] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -296,13 +294,6 @@ class PatchTSMixerAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
         self.is_causal = is_causal
-        self.layer_idx = layer_idx
-        if layer_idx is None and self.is_decoder:
-            logger.warning_once(
-                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
-                "will lead to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -364,8 +355,15 @@ class PatchTSMixerAttention(nn.Module):
             key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
             value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
 
-        key_states = self.k_proj(hidden_states).view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
 
         attention_interface: Callable = eager_attn_forward
         attention_type = self.config._attn_implementation
