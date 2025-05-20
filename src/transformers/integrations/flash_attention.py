@@ -23,6 +23,9 @@ def flash_attention_forward(
     # This is before the transpose
     seq_len = query.shape[2]
 
+    if attention_mask is not None and attention_mask.ndim == 2:
+        attention_mask = attention_mask[:, : key.shape[-2]]
+
     # FA2 uses non-transposed inputs
     query = query.transpose(1, 2)
     key = key.transpose(1, 2)

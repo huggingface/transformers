@@ -233,8 +233,8 @@ def eager_attn_forward(
     **kwargs,
 ):
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
+    if attention_mask is not None and attention_mask.ndim == 4:
+        attn_weights = attn_weights + attention_mask[:, :, :, : key.shape[-2]]
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
