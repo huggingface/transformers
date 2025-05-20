@@ -63,8 +63,8 @@ from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.tensor_parallel import (
     ALL_PARALLEL_STYLES,
-    initialize_tensor_parallelism,
     _get_parameter_tp_plan,
+    initialize_tensor_parallelism,
     repack_weights,
     replace_state_dict_local_with_dtensor,
     shard_and_distribute_module,

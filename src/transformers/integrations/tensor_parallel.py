@@ -64,18 +64,16 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
                 backend = "ccl"
 
             torch.distributed.init_process_group(backend=backend, rank=rank, world_size=world_size)
-
-            if device_type in device_setters:
-                current_device = getattr(torch, device_type)
-                if device_type != "cpu":
-                    current_device.set_device(local_rank)
+            current_device = getattr(torch, device_type)
+            if device_type != "cpu":
+                current_device.set_device(local_rank)
 
         except Exception as e:
             raise EnvironmentError(
                 "We tried to initialize torch.distributed for you, but it failed. Make "
                 "sure you init torch distributed in your script to use `tp_plan='auto'`."
             ) from e
-    index = current_device.current_device() if device_type is not "cpu" else None
+    index = current_device.current_device() if device_type != "cpu" else None
     tp_device = torch.device(device_type, index)
 
     # Silence output for non-primary ranks
