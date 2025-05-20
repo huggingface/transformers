@@ -6,18 +6,18 @@ logger = logging.get_logger(__name__)
 
 class Dots1Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Dots1Model`]. It is used to instantiate an `dots.llm1`
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the dots.llm1.base [rednote-hilab/dots.llm1.base]
-    (https://huggingface.co/rednote-hilab/dots.llm1.base).
+    This is the configuration class to store the configuration of a [`Dots1Model`]. It is used to instantiate a
+    `dots.llm1` model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of
+    [rednote-hilab/dots.llm1.base](https://huggingface.co/rednote-hilab/dots.llm1.base).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 102400):
-            Vocabulary size of the Deep model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Dots1Model`]
+            Vocabulary size of the model. Defines the number of different tokens that can be represented by the
+            `input_ids` passed when calling [`Dots1Model`].
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -28,91 +28,84 @@ class Dots1Config(PretrainedConfig):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
-        n_shared_experts (`int`, *optional*, defaults to None):
-            Number of shared experts, None means dense model.
-        n_routed_experts (`int`, *optional*, defaults to None):
-            Number of routed experts, None means dense model.
-        num_experts_per_tok (`int`, *optional*, defaults to None):
-            Number of selected experts, None means dense model.
+        n_shared_experts (`int`, *optional*, default=None):
+            Number of shared experts. None means dense model.
+        n_routed_experts (`int`, *optional*, default=None):
+            Number of routed experts. None means dense model.
+        num_experts_per_tok (`int`, *optional*, default=None):
+            Number of selected experts. None means dense model.
         moe_layer_freq (`int`, *optional*, defaults to 1):
             The frequency of the MoE layer: one expert layer for every `moe_layer_freq - 1` dense layers.
         first_k_dense_replace (`int`, *optional*, defaults to 0):
-            Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
-                                                            \--k dense layers--/
+            Number of dense layers at the beginning of the model before the first MoE layer.
         norm_topk_prob (`bool`, *optional*, defaults to False):
             Whether to normalize the weights of the routed experts.
         scoring_func (`str`, *optional*, defaults to 'softmax'):
-            Method of computing expert weights.
+            Method for computing expert weights.
         aux_loss_alpha (`float`, *optional*, defaults to 0.001):
             Auxiliary loss weight coefficient.
-        seq_aux = (`bool`, *optional*, defaults to True):
-            Whether to compute the auxiliary loss for each individual sample.
+        seq_aux (`bool`, *optional*, defaults to True):
+            Whether to compute auxiliary loss for each individual sample.
         num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
-            `num_attention_heads`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
+            Number of key/value heads for Grouped Query Attention. If `num_key_value_heads=num_attention_heads`, Multi
+            Head Attention (MHA) is used. If `num_key_value_heads=1`, Multi Query Attention (MQA) is used. Otherwise,
+            Grouped Query Attention (GQA) is used. If not specified, defaults to `num_attention_heads`.
+        hidden_act (`str` or `function`, *optional*, defaults to "silu"):
+            The non-linear activation function (function or string).
         max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with.
+            Maximum sequence length the model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
+            Standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
+            Epsilon used by the RMS normalization layers.
+        use_cache (`bool`, *optional*, defaults to True):
+            Whether or not the model should return the last key/values attentions. Only relevant if `config.is_decoder=True`.
         pad_token_id (`int`, *optional*):
             Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 1):
+        bos_token_id (`int`, *optional*, defaults to None):
             Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 2):
+        eos_token_id (`int`, *optional*, defaults to 151643):
             End of stream token id.
         pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
-            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
-            issue](https://github.com/pytorch/pytorch/issues/76232).
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
+            Experimental: tensor parallelism rank used during pretraining. This is necessary for exact reproducibility
+            of pretraining results.
+        tie_word_embeddings (`bool`, *optional*, defaults to False):
+            Whether to tie the input and output word embeddings.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
-            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
-            `max_position_embeddings` to the expected new maximum.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        rope_scaling (`dict`, *optional*):
+            Dictionary for scaling RoPE embeddings. Supports `{"type": strategy name, "factor": scaling factor}`.
+        attention_bias (`bool`, *optional*, defaults to False):
+            Whether to use a bias in the self-attention projections.
         n_group (`int`, *optional*, defaults to 1):
             Number of groups for routed experts.
         topk_group (`int`, *optional*, defaults to 1):
-            Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
+            Number of selected groups for each token (selected experts only within `topk_group` groups).
+        use_sliding_window (`bool`, *optional*, defaults to False):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
+            Size of the sliding window for attention. If not specified, defaults to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-    ```python
-    >>> from transformers import Dots1Model, Dots1Config
+            Dropout ratio for the attention probabilities.
+        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
+            Scaling factor for routed experts.
 
-    >>> # Initializing a dots1 style configuration
-    >>> configuration = Dots1Config()
+    Examples:
+        ```python
+        >>> from transformers import Dots1Model, Dots1Config
 
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
+        >>> # Initializing a Dots1 style configuration
+        >>> configuration = Dots1Config()
+
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
+        ```
     """
 
     model_type = "dots1"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    base_model_tp_plan = {  # TODO: only replicate attention layers when > first_k_dense_replace
+    base_model_tp_plan = {  #  # TODO: only replicate attention layers when > first_k_dense_replace
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
@@ -130,6 +123,7 @@ class Dots1Config(PretrainedConfig):
         "layers.*.mlp.down_proj": "local_rowwise",
         "layers.*.mlp": "gather",  # This is the only moment where results are gathered
     }
+
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -170,8 +164,6 @@ class Dots1Config(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        qk_layernorm=False,
-        moe_gating_fp32=False,
         routed_scaling_factor=1.0,
         use_sliding_window=False,
         sliding_window=4096,
@@ -193,7 +185,6 @@ class Dots1Config(PretrainedConfig):
         self.scoring_func = scoring_func
         self.aux_loss_alpha = aux_loss_alpha
         self.seq_aux = seq_aux
-        # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
         self.n_group = n_group
@@ -208,8 +199,6 @@ class Dots1Config(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.qk_layernorm = qk_layernorm
-        self.moe_gating_fp32 = moe_gating_fp32
         self.routed_scaling_factor = routed_scaling_factor
         self.use_sliding_window = use_sliding_window
         self.sliding_window = sliding_window  # we check `use_sliding_window` in the modeling code
