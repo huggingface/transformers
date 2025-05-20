@@ -506,7 +506,12 @@ class AttentionMaskInterface(GeneralInterface):
 
 
 # Global AttentionMaskInterface shared by all models which do not need to overwrite any of the existing ones
-ALL_MASK_CREATION_FUNCTIONS: AttentionMaskInterface = AttentionMaskInterface()
+ALL_MASK_CREATION_FUNCTIONS = {
+    "sdpa": sdpa_mask,
+    "eager": eager_mask,
+    "flash_attention_2": flash_attention_mask,
+    "flex_attention": flex_attention_mask,
+}
 
 
 def _preprocess_mask_arguments(
