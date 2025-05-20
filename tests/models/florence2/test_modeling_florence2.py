@@ -51,6 +51,7 @@ class Florence2VisionText2TextModelTester:
     def __init__(
         self,
         parent,
+        batch_size=13,
         seq_length=13,
         encoder_seq_length=15,
         text_config={
@@ -120,7 +121,7 @@ class Florence2VisionText2TextModelTester:
         self.vocab_size = text_config["vocab_size"]
         self.is_training = is_training
 
-        self.batch_size = 3
+        self.batch_size = batch_size
         self.num_channels = 3
         self.image_size = 8
         self.seq_length = seq_length
@@ -258,6 +259,18 @@ class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    # @unittest.skip(
+    #     reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    # )
+    # def test_contrastive_generate_low_memory(self):
+    #     pass
+
+    @unittest.skip(
+        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
         pass
 
 

@@ -645,7 +645,7 @@ class Florence2Vision(PreTrainedModel):
             )
 
         num_stages = len(embed_dims)
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths) * 2)]
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths) * 2, device="cpu")]
 
         depth_offset = 0
         convs = []

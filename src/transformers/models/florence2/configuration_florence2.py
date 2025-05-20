@@ -91,8 +91,8 @@ class Florence2VisionConfig(PretrainedConfig):
         depths=(1, 1, 9, 1),
         window_size=12,
         projection_dim=1024,
-        visual_temporal_embedding=None,
-        image_pos_embed=None,
+        visual_temporal_embedding={"type": "COSINE", "max_temporal_embeddings": 100},
+        image_pos_embed={"type": "learned_abs_2d", "max_pos_embeddings": 50},
         image_feature_source=("spatial_avg_pool", "temporal_avg_pool"),
         **kwargs,
     ):
@@ -313,9 +313,9 @@ class Florence2Config(PretrainedConfig):
     ):
         self.vocab_size = vocab_size
         self.projection_dim = projection_dim
-        if vision_config is not None:
-            vision_config = PretrainedConfig(**vision_config)
         self.vision_config = vision_config
+        if vision_config is not None:
+            self.vision_config = Florence2VisionConfig(**vision_config)
 
         self.text_config = text_config
         if text_config is not None:
