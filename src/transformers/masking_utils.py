@@ -908,6 +908,7 @@ def create_masks_for_generate(
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     output_attentions: bool = False,
+    **kwargs,
 ):
     """
     This function mimics how we create the masks in the `modeling_xxx.py` files, and is used in `generate` in order

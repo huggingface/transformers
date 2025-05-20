@@ -32,12 +32,10 @@ from ..cache_utils import (
     Cache,
     DynamicCache,
     EncoderDecoderCache,
-    HybridCache,
     HybridChunkedCache,
     OffloadedCache,
     OffloadedHybridCache,
     QuantizedCacheConfig,
-    StaticCache,
 )
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import (
@@ -657,8 +655,10 @@ class GenerationMixin:
             # If it's not defined, it means the model uses the new general mask API
             if causal_mask_creation_function is None:  # can't be found
                 output_attentions = kwargs.get("output_attentions", False)
-                attention_mask = create_masks_for_generate(
-                    base_model.config,
+                token_type_ids = getattr(model_input, "token_type_ids", None)
+                causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
+                attention_mask = causal_mask_creation_function(
+                    self.config,
                     torch.empty(
                         (batch_size, sequence_length), dtype=self.dtype
                     ),  # we only need batch size, seq_length and dtype here - we don't care about the values
@@ -666,6 +666,7 @@ class GenerationMixin:
                     cache_position,
                     past_key_values,
                     output_attentions,
+                    token_type_ids,
                 )
             else:
                 attention_mask = causal_mask_creation_function(
@@ -3551,8 +3552,8 @@ class GenerationMixin:
         if compile_forward:
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
             # If we use FA2 and a static cache, we cannot compile with fullgraph
-            if self.config._attn_implementation == "flash_attention_2" and isinstance(
-                model_kwargs.get("past_key_values"), (StaticCache, HybridCache, HybridChunkedCache)
+            if self.config._attn_implementation == "flash_attention_2" and getattr(
+                model_kwargs.get("past_key_values"), "is_compileable", False
             ):
                 if generation_config.compile_config is None:
                     generation_config.compile_config = CompileConfig(fullgraph=False)

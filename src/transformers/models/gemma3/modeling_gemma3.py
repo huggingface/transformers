@@ -30,6 +30,7 @@ import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -789,6 +790,22 @@ class Gemma3MultiModalProjector(nn.Module):
         return projected_vision_outputs.type_as(vision_outputs)
 
 
+def token_type_ids_mask_function(token_type_ids: Optional[torch.Tensor]) -> Optional[Callable]:
+    """
+    This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
+    not start and end indices.
+    """
+    # Do not return an additional mask in this case
+    if token_type_ids is None:
+        return None
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        # If it's 1, we need to unmask it
+        return token_type_ids[batch_idx, kv_idx] == 1
+
+    return inner_mask
+
+
 @auto_docstring(
     custom_intro="""
     The Base Gemma3 model which consists of a vision backbone and a language model withou language modeling head.,
@@ -814,45 +831,6 @@ class Gemma3Model(Gemma3PreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def _update_causal_mask(self, causal_mask, token_type_ids, attention_mask):
-        sequence_length = causal_mask.shape[2]
-
-        if token_type_ids is not None and sequence_length != 1:
-            # Apply bidirectional mask on images if token type ids are provided
-            token_type_mask = token_type_ids.unsqueeze(1) == token_type_ids.unsqueeze(2)
-            token_type_mask[token_type_ids == 0] = False  # if text token do not change anything
-
-            # Find where a new image block starts: 1 if image and previous not image
-            # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
-            is_image = token_type_ids == 1
-            new_image_start = is_image & ~nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
-            image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
-            image_group_ids = torch.where(is_image, image_group_ids, torch.full_like(token_type_ids, -1))
-
-            same_image_mask = image_group_ids.unsqueeze(1) == image_group_ids.unsqueeze(2)
-            same_image_mask[image_group_ids == -1] = False  # remove non-image
-            image_mask = (token_type_mask & same_image_mask).unsqueeze(1).to(causal_mask.device, dtype=torch.bool)
-
-            causal_mask = causal_mask.clone()
-            causal_mask[:, :, :, :sequence_length] = causal_mask[:, :, :, :sequence_length].masked_fill(
-                token_type_mask, 1 if causal_mask.dtype == torch.bool else 0.0
-            )
-
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-
-                # Then apply padding mask (will mask pad tokens)
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, 0 if causal_mask.dtype == torch.bool else causal_mask.min()
-                )
-
-        return causal_mask
 
     def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
@@ -972,15 +950,15 @@ class Gemma3Model(Gemma3PreTrainedModel):
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "output_attentions": output_attentions,
-                "allow_is_causal_skip": not (token_type_ids is not None and inputs_embeds.shape[1] != 1),
             }
+            if token_type_ids is not None and inputs_embeds.shape[1] != 1:
+                # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
+                mask_kwargs["or_mask_function"] = token_type_ids_mask_function(token_type_ids)
+
             # Create the masks
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
-            }
-            causal_mask_mapping = {
-                k: self._update_causal_mask(v, token_type_ids, attention_mask) for k, v in causal_mask_mapping.items()
             }
 
         outputs = self.language_model(
@@ -1212,6 +1190,38 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs
+
+    @staticmethod
+    def create_masks_for_generate(
+        config: PretrainedConfig,
+        input_embeds: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+        cache_position: torch.Tensor,
+        past_key_values: Optional[Cache],
+        output_attentions: bool = False,
+        token_type_ids: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> dict:
+        # Prepare mask arguments
+        mask_kwargs = {
+            "config": config.get_text_config(),
+            "input_embeds": input_embeds,
+            "attention_mask": attention_mask,
+            "cache_position": cache_position,
+            "past_key_values": past_key_values,
+            "output_attentions": output_attentions,
+        }
+        # Add the token type ids mask for generate as well
+        if token_type_ids is not None and input_embeds.shape[1] != 1:
+            # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
+            mask_kwargs["or_mask_function"] = token_type_ids_mask_function(token_type_ids)
+
+        # Create the masks
+        causal_mask_mapping = {
+            "full_attention": create_causal_mask(**mask_kwargs),
+            "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+        }
+        return causal_mask_mapping
 
 
 __all__ = [
