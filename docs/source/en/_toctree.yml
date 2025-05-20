@@ -21,6 +21,8 @@
       title: Adding a new model to Transformers
     - local: modular_transformers
       title: Modular Transformers
+    - local: auto_docstring
+      title: Document your models
     - local: task_summary
       title: What 🤗 Transformers can do
     - local: tasks_explained
@@ -37,6 +39,8 @@
       title: Tokenizers
     - local: image_processors
       title: Image processors
+    - local: video_processors
+      title: Video processors
     - local: backbones
       title: Backbones
     - local: feature_extractors
@@ -360,7 +364,9 @@
       title: Feature Extractor
     - local: main_classes/image_processor
       title: Image Processor
-    title: Main classes
+    - local: main_classes/video_processor
+      title: Video Processor
+    title: Main Classes
   - sections:
     - sections:
       - local: model_doc/albert
@@ -495,6 +501,8 @@
         title: Granite
       - local: model_doc/granitemoe
         title: GraniteMoe
+      - local: model_doc/granitemoehybrid
+        title: GraniteMoeHybrid
       - local: model_doc/granitemoeshared
         title: GraniteMoeShared
       - local: model_doc/helium
@@ -823,6 +831,8 @@
         title: Bark
       - local: model_doc/clap
         title: CLAP
+      - local: model_doc/csm
+        title: CSM
       - local: model_doc/dac
         title: dac
       - local: model_doc/encodec
