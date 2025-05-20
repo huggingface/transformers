@@ -1066,6 +1066,9 @@ class M2M100Decoder(M2M100PreTrainedModel):
                 for more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
+                cache in the correct position and to infer the complete sequence length.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1146,7 +1149,6 @@ class M2M100Decoder(M2M100PreTrainedModel):
         positions = positions.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + positions
-
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
@@ -1188,6 +1190,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
                         None,
                         output_attentions,
                         use_cache,
+                        cache_position,
                     )
                 else:
                     layer_outputs = decoder_layer(
@@ -1202,6 +1205,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
                         past_key_value=past_key_values,
                         output_attentions=output_attentions,
                         use_cache=use_cache,
+                        cache_position=cache_position,
                     )
 
                 hidden_states = layer_outputs[0]

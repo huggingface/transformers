@@ -1325,7 +1325,7 @@ class AriaModel(LlavaModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: torch.FloatTensor = None,
+        pixel_mask: Optional[torch.FloatTensor] = None,
         vision_feature_layer: int = -1,
     ):
         """
@@ -1336,13 +1336,16 @@ class AriaModel(LlavaModel):
                The tensors corresponding to the input images.
             pixel_mask (`torch.FloatTensor]`, *optional*):
                 The tensors corresponding to the input image mask.
-            vision_feature_layer (`Union[int, List[int]]`):
+            vision_feature_layer (`Union[int, List[int]]`, *optional*):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
                 vision features.
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
+        vision_feature_layer = (
+            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+        )
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
         image_outputs = self.vision_tower(
             pixel_values, patch_attention_mask=patch_attention_mask, output_hidden_states=True

@@ -82,7 +82,7 @@ class M2M100ModelTester:
         attention_probs_dropout_prob=0.1,
         encoder_layerdrop=0.0,
         decoder_layerdrop=0.0,
-        max_position_embeddings=20,
+        max_position_embeddings=50,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,

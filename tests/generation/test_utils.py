@@ -2144,6 +2144,7 @@ class GenerationTesterMixin:
             compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
 
             generation_kwargs = {
+                "use_cache": True,
                 "do_sample": False,
                 "max_new_tokens": 5,
                 "return_dict_in_generate": True,
