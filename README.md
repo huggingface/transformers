@@ -1,5 +1,5 @@
 [![Deploy static content to Pages](https://github.com/nodoubtz/transformers/actions/workflows/static.yml/badge.svg)](https://github.com/nodoubtz/transformers/actions/workflows/static.yml)
-codespace-legendary-space-dollop-q4q7w9j666wfv6x
+codespace-legendary-space-dollop
 [![Secret Leaks](https://github.com/nodoubtz/transformers/actions/workflows/trufflehog.yml/badge.svg)](https://github.com/nodoubtz/transformers/actions/workflows/trufflehog.yml)
 
 
