@@ -711,6 +711,8 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         # Overwritten -- uses `cache_params` as opposed to `past_key_values`
 
         if use_cache:
+            if cache_params is None:
+                cache_params = MambaCache(self.config, input_ids.size(0), device=self.device, dtype=self.dtype)
             # `cache_position` should have been initialized in `generate`
             if cache_position is None:
                 raise ValueError(
