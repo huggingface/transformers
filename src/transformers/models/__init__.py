@@ -316,6 +316,7 @@ if TYPE_CHECKING:
     from .wavlm import *
     from .whisper import *
     from .x_clip import *
+    from .xcodec2 import *
     from .xglm import *
     from .xlm import *
     from .xlm_roberta import *
