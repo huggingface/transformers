@@ -37,6 +37,7 @@ from ..utils.import_utils import _torch_version, is_torchdynamo_compiling
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask, flex_attention
+    from torch.nn.attention.flex_attention import create_block_mask as create_block_causal_mask_flex
 
 
 class WrappedFlexAttention:
