@@ -2826,7 +2826,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
                     image_features, inputs_embeds
                 )
 
-        if inputs_embeds is not None:
+        if attention_mask is not None:
             attention_mask = attention_mask.to(inputs_embeds.dtype)
         outputs = self.language_model(
             attention_mask=attention_mask,
