@@ -25,7 +25,11 @@ from torch import nn
 import torch.nn.functional as F
 
 from transformers.generation.utils import GenerationMixin
-from ..llava.modeling_llava import LLaVaModel, LLaVaForConditionalGeneration
+from ..llava.modeling_llava import (
+    LlavaModel,
+    LlavaPreTrainedModel,
+    LlavaCausalLMOutputWithPast as PerceptionLMCausalLMOutputWithPast,
+)
 from transformers.configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -39,7 +43,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
+    auto_docstring,
 )
 from timm.models.eva import (
     vit_pe_core_large_patch14_336,
@@ -100,47 +104,6 @@ class PerceptionEncoder(nn.Module):
         pass
 
 
-@dataclass
-# Copied from transformers.models.llava.modeling_llava.LlavaCausalLMOutputWithPast with Llava->PerceptionLM
-class PerceptionLMCausalLMOutputWithPast(ModelOutput):
-    """
-    Base class for PerceptionLM causal language model (or autoregressive) outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
-
-
 class AdaptiveAvgPooling(nn.Module):
     def __init__(self, pooling_ratio=2):
         super(AdaptiveAvgPooling, self).__init__()
@@ -164,18 +127,20 @@ class PerceptionLMMultiModalProjector(nn.Module):
         super().__init__()
         input_size = config.vision_config.width
         output_size = config.text_config.hidden_size
-        self.projector = nn.Sequential(
-            nn.Linear(
-                in_features=input_size,
-                out_features=output_size,
-                bias=True,
-            ),
-            nn.GELU(),
-            nn.Linear(
-                in_features=output_size,
-                out_features=output_size,
-                bias=True,
-            ),
+        self.projector = nn.ModuleList(
+            [
+                nn.Linear(
+                    in_features=input_size,
+                    out_features=output_size,
+                    bias=True,
+                ),
+                nn.GELU(),
+                nn.Linear(
+                    in_features=output_size,
+                    out_features=output_size,
+                    bias=True,
+                ),
+            ]
         )
         self.pooling = (
             AdaptiveAvgPooling(config.projector_pooling_ratio)
@@ -183,142 +148,20 @@ class PerceptionLMMultiModalProjector(nn.Module):
             else nn.Identity()
         )
 
-    def forward(self, x):
-        x = x.permute(1, 0, 2)  # NLD -> LND
-        x = self.projector(x)
-        x = x.permute(1, 0, 2)  # LND -> NLD
-        x = self.pooling(x)
-        return x
+    def forward(self, features):
+        features = features.permute(1, 0, 2)  # NLD -> LND
+        for layer in self.projector:
+            features = layer(features)
+        features = features.permute(1, 0, 2)  # LND -> NLD
+        features = self.pooling(features)
+        return features
 
 
-PERCEPTION_LM_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`PerceptionLMConfig`] or [`PerceptionLMVisionConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    PERCEPTION_LM_START_DOCSTRING,
-)
-class PerceptionLMPreTrainedModel(PreTrainedModel):
-    config_class = PerceptionLMConfig
+class PerceptionLMPreTrainedModel(LlavaPreTrainedModel):
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["PerceptionLMVisionAttention"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
 
-    def _init_weights(self, module):
-        std = getattr(
-            self.config,
-            "initializer_range",
-            self.config.get_text_config().initializer_range,
-        )
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
-
-PERCEPTION_LM_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-            The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`PerceptionLMProcessor`] uses
-            [`CLIPImageProcessor`] for processing images).
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
-
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        vision_feature_layer (`Union[int, List[int]], *optional*, defaults to -2`):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
-
-
-@add_start_docstrings(
-    """The PERCEPTION_LM model which consists of a vision backbone and a language model.""",
-    PERCEPTION_LM_START_DOCSTRING,
-)
-class PerceptionLMModel(LLaVaModel):
+@auto_docstring
+class PerceptionLMModel(LlavaModel):
     def __init__(self, config: PerceptionLMConfig):
         super().__init__(config)
         del self.vision_tower
@@ -326,23 +169,8 @@ class PerceptionLMModel(LLaVaModel):
         self.multi_modal_projector = PerceptionLMMultiModalProjector(config)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.language_model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
 
     def get_image_features(
         self,
@@ -358,16 +186,10 @@ class PerceptionLMModel(LLaVaModel):
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_tiles, num_patches, embed_dim)`).
         """
-        print("pixel_values shape: ", pixel_values.shape)
-        image_outputs = self.vision_tower(pixel_values[0])
-        print("image_outputs shape: ", image_outputs.shape)
+        image_outputs = self.vision_tower(pixel_values.flatten(0, 1))
         image_features = self.multi_modal_projector(image_outputs)
         return image_features
 
-    @add_start_docstrings_to_model_forward(PERCEPTION_LM_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=PerceptionLMCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
-    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -484,10 +306,7 @@ class PerceptionLMModel(LLaVaModel):
         return outputs, image_features
 
 
-@add_start_docstrings(
-    """The PERCEPTION_LM model which consists of a vision backbone and a language model.""",
-    PERCEPTION_LM_START_DOCSTRING,
-)
+@auto_docstring
 class PerceptionLMForConditionalGeneration(
     PerceptionLMPreTrainedModel, GenerationMixin
 ):
@@ -531,10 +350,6 @@ class PerceptionLMForConditionalGeneration(
             model_inputs["pixel_values_videos"] = pixel_values_videos
         return model_inputs
 
-    @add_start_docstrings_to_model_forward(PERCEPTION_LM_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=PerceptionLMCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
-    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

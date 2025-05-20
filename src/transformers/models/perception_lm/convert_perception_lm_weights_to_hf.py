@@ -405,7 +405,7 @@ def write_model(
 
         # Avoid saving this as part of the config.
         del model.config._name_or_path
-        model.config.torch_dtype = torch.float16
+        model.config.torch_dtype = torch.bfloat16
 
         print("Saving in the Transformers format.")
         if push_to_hub:
