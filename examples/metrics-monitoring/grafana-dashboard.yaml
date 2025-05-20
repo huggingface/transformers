@@ -1,7 +1,7 @@
 apiVersion: 1
 
 providers:
-  - name: 'KV Cache Dashboards'
+  - name: 'Transformers Dashboards'
     orgId: 1
     folder: 'Transformers'
     type: file

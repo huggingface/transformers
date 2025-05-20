@@ -197,10 +197,14 @@ class ContinuousBatchProcessorMetrics:
 
         self.meter = metrics.get_meter("transformers.generation.continuous_batch_processor")
 
+        # Define appropriate buckets for TTFT (typically ranges from ~50ms to several seconds)
+        ttft_buckets = [10, 25, 50, 75, 100, 150, 200, 300, 500, 750, 1000, 2000, 5000, 10000]
+
         self.ttft_histogram = self.meter.create_histogram(
             name="ttft_milliseconds",
             description="Time to first token in milliseconds",
             unit="ms",
+            explicit_bucket_boundaries_advisory=ttft_buckets,
         )
 
         self.active_requests_gauge = self.meter.create_gauge(
@@ -215,10 +219,14 @@ class ContinuousBatchProcessorMetrics:
             unit="requests",
         )
 
+        # Define appropriate buckets for request latency (similar to TTFT but with higher upper bounds)
+        latency_buckets = [50, 100, 250, 500, 1000, 2000, 5000, 10000, 20000, 30000, 60000]
+
         self.request_latency_histogram = self.meter.create_histogram(
             name="request_latency_milliseconds",
             description="End-to-end latency for completed requests in milliseconds",
             unit="ms",
+            explicit_bucket_boundaries_advisory=latency_buckets,
         )
 
         self.decode_prefill_ratio_gauge = self.meter.create_gauge(
@@ -239,10 +247,14 @@ class ContinuousBatchProcessorMetrics:
             unit="tokens",
         )
 
+        # Define appropriate buckets for batch fill percentage (0-100%)
+        batch_fill_buckets = [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 98, 100]
+
         self.batch_fill_percentage_histogram = self.meter.create_histogram(
             name="batch_fill_percentage",
             description="Percentage of max_batch_tokens utilized in each batch",
             unit="percent",
+            explicit_bucket_boundaries_advisory=batch_fill_buckets,
         )
 
         self.kv_cache_free_memory_gauge = self.meter.create_gauge(
@@ -385,9 +397,7 @@ class ContinuousBatchProcessorMetrics:
         try:
             self.active_requests_gauge.set(active_requests)
             self.waiting_requests_gauge.set(waiting_requests)
-            logger.debug(
-                f"Queue metrics: {active_requests} active requests, {waiting_requests} waiting requests"
-            )
+            logger.debug(f"Queue metrics: {active_requests} active requests, {waiting_requests} waiting requests")
         except Exception as e:
             logger.warning(f"Failed to record queue metrics: {e}")
 
@@ -406,7 +416,8 @@ class ContinuousBatchProcessorMetrics:
 
         try:
             self.request_latency_histogram.record(latency_ms)
-            
+
             logger.debug(f"Recorded request completion for {request_id}: {latency_ms:.2f}ms")
         except Exception as e:
             logger.warning(f"Failed to record request completion metric: {e}")
+
