@@ -3024,6 +3024,11 @@ if is_torch_available():
         "cpu": 0,
         "default": 0,
     }
+    BACKEND_RESET_PEAK_MEMORY_STATS = {
+        "cuda": torch.cuda.reset_peak_memory_stats,
+        "cpu": None,
+        "default": None,
+    }
     BACKEND_MEMORY_ALLOCATED = {
         "cuda": torch.cuda.memory_allocated,
         "cpu": 0,
@@ -3044,6 +3049,7 @@ else:
     BACKEND_EMPTY_CACHE = {"default": None}
     BACKEND_DEVICE_COUNT = {"default": lambda: 0}
     BACKEND_RESET_MAX_MEMORY_ALLOCATED = {"default": None}
+    BACKEND_RESET_PEAK_MEMORY_STATS = {"default": None}
     BACKEND_MAX_MEMORY_ALLOCATED = {"default": 0}
     BACKEND_MEMORY_ALLOCATED = {"default": 0}
     BACKEND_SYNCHRONIZE = {"default": None}
@@ -3072,6 +3078,7 @@ if is_torch_xpu_available():
     BACKEND_MANUAL_SEED["xpu"] = torch.xpu.manual_seed
     BACKEND_DEVICE_COUNT["xpu"] = torch.xpu.device_count
     BACKEND_RESET_MAX_MEMORY_ALLOCATED["xpu"] = torch.xpu.reset_peak_memory_stats
+    BACKEND_RESET_PEAK_MEMORY_STATS["xpu"] = torch.xpu.reset_peak_memory_stats
     BACKEND_MAX_MEMORY_ALLOCATED["xpu"] = torch.xpu.max_memory_allocated
     BACKEND_MEMORY_ALLOCATED["xpu"] = torch.xpu.memory_allocated
     BACKEND_SYNCHRONIZE["xpu"] = torch.xpu.synchronize
@@ -3098,6 +3105,10 @@ def backend_device_count(device: str):
 
 def backend_reset_max_memory_allocated(device: str):
     return _device_agnostic_dispatch(device, BACKEND_RESET_MAX_MEMORY_ALLOCATED)
+
+
+def backend_reset_peak_memory_stats(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_RESET_PEAK_MEMORY_STATS)
 
 
 def backend_max_memory_allocated(device: str):
