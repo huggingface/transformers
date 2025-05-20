@@ -98,6 +98,12 @@ class CausalLMModelTester:
         shared_expert_gate=True,
         num_experts_per_tok=2,
         num_experts=8,
+        mamba_n_groups=1,
+        mamba_n_heads=16,
+        mamba_d_state=16,
+        mamba_d_conv=4,
+        mamba_expand=2,
+        mamba_chunk_size=16,
     ):
         self._verify_model_attributes()
         self.parent = parent
@@ -134,6 +140,12 @@ class CausalLMModelTester:
         self.shared_expert_gate = shared_expert_gate
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
+        self.mamba_n_groups = mamba_n_groups
+        self.mamba_n_heads = mamba_n_heads
+        self.mamba_d_state = mamba_d_state
+        self.mamba_d_conv = mamba_d_conv
+        self.mamba_expand = mamba_expand
+        self.mamba_chunk_size = mamba_chunk_size
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
