@@ -362,8 +362,8 @@ def _replace_with_bitnet_linear(
                             bias=module.bias is not None,
                             device=module.weight.device,
                             dtype=module.weight.dtype,
-                            use_rms_norm=quantization_config.use_rms_norm,
-                            rms_norm_eps=quantization_config.rms_norm_eps,
+                            use_rms_norm=quantization_config.use_rms_norm if quantization_config else False,
+                            rms_norm_eps=quantization_config.rms_norm_eps if quantization_config else 1e-6,
                         )
                         model._modules[name].requires_grad_(False)
                     has_been_replaced = True
