@@ -43,6 +43,7 @@ from .image_processing_rt_detr import get_size_with_aspect_ratio
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F_t
 
 
 if is_torchvision_v2_available():
@@ -236,13 +237,15 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 f" {size.keys()}."
             )
 
-        image = F.resize(
-            image,
+        image = F_t.interpolate(
+            image.unsqueeze(0),
             size=new_size,
-            interpolation=interpolation,
+            mode="bilinear",
+            antialias=False,
+            align_corners=False,
             **kwargs,
         )
-        return image
+        return image.squeeze(0)
 
     def resize_annotation(
         self,
@@ -558,8 +561,8 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             scores = torch.nn.functional.sigmoid(out_logits)
             scores, index = torch.topk(scores.flatten(1), num_top_queries, axis=-1)
             labels = index % num_classes
-            index = index // num_classes
-            boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
+            index = index.float() // num_classes
+            boxes = boxes.gather(dim=1, index=index.to(torch.int64).unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
         else:
             scores = torch.nn.functional.softmax(out_logits)[:, :, :-1]
             scores, labels = scores.max(dim=-1)
@@ -569,14 +572,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 boxes = torch.gather(boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1]))
 
         results = []
-        for score, label, box in zip(scores, labels, boxes):
-            results.append(
-                {
-                    "scores": score[score > threshold],
-                    "labels": label[score > threshold],
-                    "boxes": box[score > threshold],
-                }
-            )
+        # return scores, labels, boxes
+        mask = scores > threshold
+        results = {"scores": scores[mask], "labels": labels[mask], "boxes": boxes[mask]}
 
         return results
 

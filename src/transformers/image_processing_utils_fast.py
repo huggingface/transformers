@@ -40,6 +40,7 @@ from .image_utils import (
     validate_preprocess_arguments,
 )
 from .processing_utils import Unpack
+from .pytorch_utils import compile_compatible_method_lru_cache
 from .utils import (
     TensorType,
     auto_docstring,
@@ -324,7 +325,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         return F.normalize(image, mean, std)
 
-    @lru_cache(maxsize=10)
+    @compile_compatible_method_lru_cache(maxsize=10)
     def _fuse_mean_std_and_rescale_factor(
         self,
         do_normalize: Optional[bool] = None,
@@ -569,7 +570,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
         return self.preprocess(images, *args, **kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(
+        self, images: ImageInput, *args, intermediate_return=True, **kwargs: Unpack[DefaultFastImageProcessorKwargs]
+    ) -> BatchFeature:
         # args are not validated, but their order in the `preprocess` and `_preprocess` signatures must be the same
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_kwargs_names)
         # Set default kwargs from self. This ensures that if a kwarg is not provided
@@ -605,6 +608,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
         # Pop kwargs that are not needed in _preprocess
         kwargs.pop("default_to_square")
         kwargs.pop("data_format")
+
+        if intermediate_return:
+            return images, kwargs
 
         return self._preprocess(images, *args, **kwargs)
 
