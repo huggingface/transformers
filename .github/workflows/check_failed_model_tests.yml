@@ -39,6 +39,17 @@ jobs:
           name: ci_results_run_models_gpu
           path: /transformers/ci_results_run_models_gpu
 
+      - name: Check file
+        working-directory: /transformers
+        run: |
+          if [ -f ci_results_run_models_gpu/new_model_failures.json ]; then
+            echo "`ci_results_run_models_gpu/new_model_failures.json` exists, continue ..."
+            echo "process=true" >> $GITHUB_ENV
+          else
+            echo "`ci_results_run_models_gpu/new_model_failures.json` doesn't exist, abort."
+            echo "process=false" >> $GITHUB_ENV
+          fi
+
       - uses: actions/download-artifact@v4
         with:
           pattern: setup_values*
@@ -109,6 +120,7 @@ jobs:
       - name: Process report
         shell: bash
         working-directory: /transformers
+        if: ${{ env.process == 'true' }}
         env:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
@@ -118,6 +130,7 @@ jobs:
       - name: Process report
         shell: bash
         working-directory: /transformers
+        if: ${{ env.process == 'true' }}
         env:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
