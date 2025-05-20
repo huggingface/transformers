@@ -408,6 +408,10 @@ class PretrainedConfig(PushToHubMixin):
             repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
+        # This attribute is important to know on load, but should not be serialized on save.
+        if "transformers_weights" in self:
+            delattr(self, "transformers_weights")
+
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
         if self._auto_class is not None:
@@ -833,6 +837,7 @@ class PretrainedConfig(PushToHubMixin):
                 if "model_type" in value:
                     # Needs to be set even if it's not in the diff
                     diff["model_type"] = value["model_type"]
+
                 serializable_config_dict[key] = diff
             elif (
                 key not in default_config_dict
@@ -1003,6 +1008,8 @@ class PretrainedConfig(PushToHubMixin):
             del d["_commit_hash"]
         if "_attn_implementation_internal" in d:
             del d["_attn_implementation_internal"]
+        if "_attn_implementation_autoset" in d:
+            del d["_attn_implementation_autoset"]
         # Do not serialize `base_model_tp_plan` for now
         if "base_model_tp_plan" in d:
             del d["base_model_tp_plan"]
