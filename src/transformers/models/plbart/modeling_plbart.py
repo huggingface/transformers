@@ -1018,7 +1018,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds = self.embed_tokens(input)
 
         # initialize `past_key_values`
         return_legacy_cache = False
@@ -1072,7 +1072,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
         positions = self.embed_positions(input, past_key_values_length, position_ids=cache_position)
         positions = positions.to(inputs_embeds.device)
 
-        hidden_states = inputs_embeds + position_ids
+        hidden_states = inputs_embeds + positions
         hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1105,7 +1105,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    causal_mask,
+                    attention_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     head_mask[idx] if head_mask is not None else None,
@@ -1118,7 +1118,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=causal_mask,
+                    attention_mask=attention_mask,
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),

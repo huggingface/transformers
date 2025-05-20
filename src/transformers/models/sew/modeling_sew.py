@@ -36,7 +36,6 @@ from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassif
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_sew import SEWConfig
 
 

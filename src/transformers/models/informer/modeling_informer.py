@@ -1530,7 +1530,6 @@ class InformerModel(InformerPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    # Ignore copy
     @auto_docstring
     def forward(
         self,
@@ -1824,7 +1823,6 @@ class InformerForPrediction(InformerPreTrainedModel):
             sliced_params = [p[:, -trailing_n:] for p in params]
         return self.distribution_output.distribution(sliced_params, loc=loc, scale=scale)
 
-    # Ignore copy
     @auto_docstring
     def forward(
         self,
