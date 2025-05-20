@@ -755,11 +755,9 @@ def _load_state_dict_into_meta_model(
     This function takes care of correctly casting dtypes, devices, and sharding tensors in case of tensor parallelism.
     """
     tensor_device = "cpu"
-    device_type = "cpu"
     if device_map is not None and device_map.get("", None) is not None:
         if device_map[""] not in ("cpu", torch.device("cpu")):
             tensor_device = device_map[""].index if isinstance(device_map[""], torch.device) else device_map[""]
-            device_type = device_map[""].type if isinstance(device_map[""], torch.device) else "cpu"
     if device_map is not None:
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
@@ -776,13 +774,7 @@ def _load_state_dict_into_meta_model(
     for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:
             continue
-        
-        # using kernels
-        from kernels import kernelize, Device
-        module, param_type = get_module_from_name(model, param_name)
-        if hasattr(module, "kernel_layer_name"):
-            # print(f"tensor_device: {tensor_device}")
-            kernelize(module, device=Device(type=device_type))
+
         # we need to use serialized_param_name as file pointer is untouched
         if is_meta_state_dict:
             # This is the name of the parameter as it appears on disk file
@@ -4289,6 +4281,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         tp_size = kwargs.pop("tp_size", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+        use_kernels = kwargs.pop("use_kernels", False)
 
         key_mapping = kwargs.pop("key_mapping", None)
         # Load models with hardcoded key mapping on class for VLMs only, to keep BC and standardize model
@@ -4695,7 +4688,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Prepare the full device map
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_regex)
-
+                    
+        # check if using kernels
+        if use_kernels:
+            from kernels import kernelize, Device
+            if torch.cuda.is_available():
+                kernelize(model, device=Device(type="cuda"))
+            # only cuda supported for now
+            else:
+                kernelize(model, device=Device(type="cpu"))
+        
         # Finalize model weight initialization
         if from_tf:
             model, loading_info = cls._load_from_tf(model, config, checkpoint_files)
