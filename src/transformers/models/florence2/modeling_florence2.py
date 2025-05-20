@@ -547,26 +547,27 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
 
 
 class Florence2Vision(PreTrainedModel):
-    """DaViT: Dual-Attention Transformer
+    """The Florence2Vision is a DaViT model
 
     Args:
-        in_chans (int): Number of input image channels. Default: 3.
-        num_classes (int): Number of classes for classification head. Default: 1000.
-        patch_size (tuple(int)): Patch size of convolution in different stages. Default: (7, 2, 2, 2).
-        patch_stride (tuple(int)): Patch stride of convolution in different stages. Default: (4, 2, 2, 2).
-        patch_padding (tuple(int)): Patch padding of convolution in different stages. Default: (3, 0, 0, 0).
-        patch_prenorm (tuple(bool)): If True, perform norm before convlution layer. Default: (True, False, False, False).
-        embed_dims (tuple(int)): Patch embedding dimension in different stages. Default: (64, 128, 192, 256).
-        num_heads (tuple(int)): Number of spatial attention heads in different stages. Default: (4, 8, 12, 16).
-        num_groups (tuple(int)): Number of channel groups in different stages. Default: (4, 8, 12, 16).
-        window_size (int): Window size. Default: 7.
-        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim. Default: 4.
-        qkv_bias (bool): If True, add a learnable bias to query, key, value. Default: True.
-        drop_path_rate (float): Stochastic depth rate. Default: 0.1.
-        norm_layer (nn.Module): Normalization layer. Default: nn.LayerNorm.
-        enable_checkpoint (bool): If True, enable checkpointing. Default: False.
-        conv_at_attn (bool): If True, performe depthwise convolution before attention layer. Default: True.
-        conv_at_ffn (bool): If True, performe depthwise convolution before ffn layer. Default: True.
+        in_chans (int, *optional*, defaults to 3): Number of input image channels.
+        num_classes (int, *optional*, defaults to 1000): Number of classes for classification head.
+        depths (tuple(int), *optional*, defaults to `(1, 1, 3, 1)`): Number of blocks in each stage.
+        patch_size (tuple(int), *optional*, defaults to `(7, 2, 2, 2)`): Patch size of convolution in different stages.
+        patch_stride (tuple(int), *optional*, defaults to `(4, 2, 2, 2)`): Patch stride of convolution in different stages.
+        patch_padding (tuple(int), *optional*, defaults to `(3, 0, 0, 0)`): Patch padding of convolution in different stages.
+        patch_prenorm (tuple(bool), *optional*, defaults to `(False, False, False, False)`): If True, perform norm before convlution layer.
+        embed_dims (tuple(int), *optional*, defaults to `(64, 128, 192, 256)`): Patch embedding dimension in different stages.
+        num_heads (tuple(int), *optional*, defaults to `(3, 6, 12, 24)`): Number of spatial attention heads in different stages.
+        num_groups (tuple(int), *optional*, defaults to `(3, 6, 12, 24)`): Number of channel groups in different stages.
+        window_size (int, *optional*, defaults to 7): Window size.
+        mlp_ratio (float, *optional*, defaults to 4.0): Ratio of mlp hidden dim to embedding dim.
+        qkv_bias (bool, *optional*, defaults to `True`): If True, add a learnable bias to query, key, value.
+        drop_path_rate (float, *optional*, defaults to 0.1): Stochastic depth rate.
+        norm_layer (nn.Module, *optional*, defaults to `LayerNorm`): Normalization layer.
+        conv_at_attn (bool, *optional*, defaults to `True`): If True, performe depthwise convolution before attention layer.
+        conv_at_ffn (bool, *optional*, defaults to `True`): If True, performe depthwise convolution before ffn layer.
+        config (`Optional[Florence2VisionConfig]`, *optional*): Config class
     """
 
     def __init__(
