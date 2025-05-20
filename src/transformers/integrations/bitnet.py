@@ -355,7 +355,7 @@ def _replace_with_bitnet_linear(
                         )
                         if quantization_config.quantization_mode == "offline":
                             model._modules[name].requires_grad_(False)
-                    else :
+                    else:
                         model._modules[name] = BitLinear(
                             in_features=in_features,
                             out_features=out_features,
