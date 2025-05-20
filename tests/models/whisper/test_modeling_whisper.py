@@ -543,10 +543,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip
-    def test_generate_with_head_masking(self):
-        pass
-
     @parameterized.expand([("offloaded",)])
     @pytest.mark.generate
     @unittest.skip(reason="Whisper doesn't work with offloaded cache implementation yet")
@@ -855,7 +851,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
-    @unittest.skip
+    @unittest.skip(reason="Whisper encoder-decoder requires the features directly and can not work on ids only.")
     def test_generate_without_input_ids(self):
         pass
 
@@ -3642,27 +3638,10 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
             config=config, input_ids=inputs_dict["input_ids"]
         )
 
-    @unittest.skip(reason="Tested implicitly through the encoder-decoder tests")
-    def test_custom_4d_attention_mask(self):
-        pass
-
-    @unittest.skip(reason="Generate needs input ids")
-    def test_generate_without_input_ids(self):
-        # generate only works with input ids for whisper
-        pass
-
     @unittest.skip(reason="Decoder can't keep attention grads")
     def test_retain_grad_hidden_states_attentions(self):
         return
 
-    @unittest.skip(
-        "Duplicated test with WhisperModelTest + the FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
-    )
-    def test_flash_attn_2_inference(self):
-        pass
-
-    @unittest.skip(
-        "Duplicated test with WhisperModelTest + the FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
-    )
-    def test_flash_attn_2_inference_padding_right(self):
-        pass
+    @unittest.skip(reason="Decoder cannot keep gradients")
+    def test_flex_attention_with_grads():
+        return
