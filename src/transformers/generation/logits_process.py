@@ -1960,6 +1960,12 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
             else getattr(generate_config, "_detect_timestamp_from_logprob", True)
         )
         self.begin_index = begin_index
+        if begin_index is None:
+            raise ValueError(
+                "`begin_index` must be provided to `WhisperTimeStampLogitsProcessor`. The previous default was "
+                "`len(generate_config.forced_decoder_ids)`, but `forced_decoder_ids` is now deprecated in favor of "
+                "`task` and `language`."
+            )
 
         self.max_initial_timestamp_index = getattr(generate_config, "max_initial_timestamp_index", None)
         # TODO(Patrick): Make sure that official models have max_initial_timestamp_index set to 50
