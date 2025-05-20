@@ -1,6 +1,7 @@
 import argparse
 import json
 from get_previous_daily_ci import get_workflow_run_reports
+from pathlib import Path
 
 def safe_json_loads(s):
     try:
@@ -47,13 +48,17 @@ if __name__ == "__main__":
     parser.add_argument("--token", default=None, type=str, help="A token that has actions:read permission.")
     args = parser.parse_args()
 
+    output_dir = Path(args.output_dir) / args.workflow_a
+    output_dir.mkdir(exist_ok=True)
     a_reports = get_workflow_run_reports(
-        workflow_run_id=args.workflow_a, artifact_names=args.artifacts, output_dir=args.output_dir, token=args.token
+        workflow_run_id=args.workflow_a, artifact_names=args.artifacts, output_dir=output_dir, token=args.token
     )
     a_unique_failures = get_unique_failures_from_reports(reports=a_reports)
 
+    output_dir = Path(args.output_dir) / args.workflow_b
+    output_dir.mkdir(exist_ok=True)
     b_reports = get_workflow_run_reports(
-        workflow_run_id=args.workflow_b, artifact_names=args.artifacts, output_dir=args.output_dir, token=args.token
+        workflow_run_id=args.workflow_b, artifact_names=args.artifacts, output_dir=output_dir, token=args.token
     )
     b_unique_failures = get_unique_failures_from_reports(reports=b_reports)
 
