@@ -40,7 +40,7 @@ tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
 simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
 
 start_time_simple = time.time()
-model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs", fullgraph=True)
+# model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs", fullgraph=True)
 batch_outputs = model.generate_batch(
     inputs=simple_batch_inputs,
     generation_config=generation_config,
