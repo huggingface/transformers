@@ -52,7 +52,6 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
 
     # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
     device_type = torch._C._get_accelerator().type
-    device_setters = {"cuda": torch.cuda, "xpu": torch.xpu, "hpu": torch.hpu, "cpu": None}
     if not torch.distributed.is_initialized():
         try:
             rank = int(os.environ["RANK"])
@@ -67,14 +66,16 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
             torch.distributed.init_process_group(backend=backend, rank=rank, world_size=world_size)
 
             if device_type in device_setters:
-                device_setters[device_type].set_device(local_rank)
+                current_device = getattr(torch, device_type)
+                if device_type != "cpu":
+                    current_device.set_device(local_rank)
 
         except Exception as e:
             raise EnvironmentError(
                 "We tried to initialize torch.distributed for you, but it failed. Make "
                 "sure you init torch distributed in your script to use `tp_plan='auto'`."
             ) from e
-    index = device_setters[device_type].current_device() if device_setters is not None else None
+    index = current_device.current_device() if device_type is not "cpu" else None
     tp_device = torch.device(device_type, index)
 
     # Silence output for non-primary ranks
