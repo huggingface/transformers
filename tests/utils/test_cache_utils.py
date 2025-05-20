@@ -648,7 +648,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         attention_mask = inputs.attention_mask
         input_ids = inputs.input_ids
 
-        past_key_values = DynamicCache(num_layers=model.config.num_hidden_layers)
+        past_key_values = DynamicCache(config=model.config)
         ep = torch.export.export(
             model,
             (),

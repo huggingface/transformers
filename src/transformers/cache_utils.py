@@ -359,15 +359,17 @@ class DynamicCache(Cache):
         ```
     """
 
-    def __init__(self, _distributed_cache_data: Optional[Iterable] = None, num_layers: Optional[int] = None) -> None:
+    def __init__(
+        self, _distributed_cache_data: Optional[Iterable] = None, config: Optional[PretrainedConfig] = None
+    ) -> None:
         super().__init__()
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
-        if num_layers is None:
+        if config is None:
             self.key_cache: List[torch.Tensor] = []
             self.value_cache: List[torch.Tensor] = []
         else:
-            self.key_cache = [torch.tensor([]) for _ in range(num_layers)]
-            self.value_cache = [torch.tensor([]) for _ in range(num_layers)]
+            self.key_cache = [torch.tensor([]) for _ in range(config.num_hidden_layers)]
+            self.value_cache = [torch.tensor([]) for _ in range(config.num_hidden_layers)]
 
         # `_distributed_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36121
         # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
