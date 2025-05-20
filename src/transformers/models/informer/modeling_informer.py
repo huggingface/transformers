@@ -21,7 +21,10 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import (
+    _prepare_4d_attention_mask,
+    _prepare_4d_causal_attention_mask,
+)
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -251,13 +254,16 @@ class InformerSinusoidalPositionalEmbedding(nn.Embedding):
         self.weight = nn.Parameter(out, requires_grad=False)
 
     @torch.no_grad()
-    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0) -> torch.Tensor:
+    def forward(
+        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        bsz, seq_len = input_ids_shape[:2]
-        positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-        )
-        return super().forward(positions)
+        if position_ids is None:
+            bsz, seq_len = input_ids_shape[:2]
+            position_ids = torch.arange(
+                past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+            )
+        return super().forward(position_ids)
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesValueEmbedding with TimeSeries->Info
@@ -270,7 +276,7 @@ class InformerValueEmbedding(nn.Module):
         return self.value_projection(x)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Informer
+# Copied from transformers.models.hubert.modeling_hubert.HubertAttention with Hubert->Informer
 class InformerAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1045,7 +1051,6 @@ class InformerEncoder(InformerPreTrainedModel):
         )
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerDecoder with TimeSeriesTransformer->Informer,TimeSeriesTransformerConfig->InformerConfig,time-series-transformer->informer,Transformer->Informer,TimeSeries->Informer
 class InformerDecoder(InformerPreTrainedModel):
     """
     Informer decoder consisting of *config.decoder_layers* layers. Each layer is a
@@ -1403,6 +1408,7 @@ class InformerModel(InformerPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
+    # Ignore copy
     @auto_docstring
     def forward(
         self,
@@ -1654,6 +1660,7 @@ class InformerForPrediction(InformerPreTrainedModel):
             sliced_params = [p[:, -trailing_n:] for p in params]
         return self.distribution_output.distribution(sliced_params, loc=loc, scale=scale)
 
+    # Ignore copy
     @auto_docstring
     def forward(
         self,

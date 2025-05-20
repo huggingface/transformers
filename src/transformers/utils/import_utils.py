@@ -1077,6 +1077,19 @@ def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
         return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
 
 
+@lru_cache()
+def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool = False):
+    if not _is_package_available("huggingface_hub"):
+        return False
+
+    if accept_dev:
+        return version.parse(
+            version.parse(importlib.metadata.version("huggingface_hub")).base_version
+        ) >= version.parse(library_version)
+    else:
+        return version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse(library_version)
+
+
 def is_torchdistx_available():
     return _torchdistx_available
 
@@ -1209,6 +1222,9 @@ def is_keras_nlp_available():
 
 def is_in_notebook():
     try:
+        # Check if we are running inside Marimo
+        if "marimo" in sys.modules:
+            return True
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
         get_ipython = sys.modules["IPython"].get_ipython
         if "IPKernelApp" not in get_ipython().config:
