@@ -73,6 +73,7 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    backend_empty_cache,
     get_device_properties,
     hub_retry,
     is_flaky,
@@ -735,6 +736,7 @@ class ModelTesterMixin:
             model = model_class(config)
             model.to(torch_device)
             model.eval()
+            print(model_class)
             with torch.no_grad():
                 first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
                 second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
@@ -2651,7 +2653,7 @@ class ModelTesterMixin:
         config = self.model_tester.get_large_model_config()
 
         for model_class in self.all_parallelizable_model_classes:
-            torch.cuda.empty_cache()
+            backend_empty_cache(torch_device)
 
             # 1. single gpu memory load + unload + memory measurements
             # Retrieve initial memory usage (can easily be ~0.6-1.5GB if cuda-kernels have been preloaded by previous tests)
@@ -2667,7 +2669,7 @@ class ModelTesterMixin:
 
             del model
             gc.collect()
-            torch.cuda.empty_cache()
+            backend_empty_cache(torch_device)
 
             # 2. MP test
             # it's essential to re-calibrate the usage before the next stage
@@ -2691,7 +2693,7 @@ class ModelTesterMixin:
 
             del model
             gc.collect()
-            torch.cuda.empty_cache()
+            backend_empty_cache(torch_device)
 
     @require_torch_gpu
     @require_torch_multi_gpu
@@ -4130,6 +4132,9 @@ class ModelTesterMixin:
             if "position_ids" not in inspect.signature(model.forward).parameters:
                 self.skipTest("Model does not support position_ids")
 
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                continue  # this model doesn't accept position ids as input
+
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
@@ -4268,7 +4273,16 @@ class ModelTesterMixin:
             dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
             dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
 
-            _ = fa2_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
+            if config.is_encoder_decoder:
+                _ = fa2_model(
+                    input_ids=dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    decoder_input_ids=dummy_input.clone(),
+                    decoder_attention_mask=dummy_attention_mask.clone(),
+                )
+            else:
+                _ = fa2_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
+
             with tempfile.TemporaryDirectory() as tmpdirname:
                 fa2_model.save_pretrained(tmpdirname)
                 model_from_pretrained = model_class.from_pretrained(tmpdirname)
@@ -4309,6 +4323,45 @@ class ModelTesterMixin:
 
         return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
 
+    def test_sliding_window_mask(self):
+        """Tests that we can control the sliding window attention behavior of a model."""
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        if not self.has_attentions:
+            self.skipTest(reason="Model does not support output_attentions")
+
+        if not (hasattr(config, "sliding_window") and hasattr(config, "use_sliding_window")):
+            self.skipTest(reason="Model does not support sliding window mask")
+
+        seq_len = self.model_tester.seq_length
+        batch_size = self.model_tester.batch_size
+        sliding_window = 3  # set to arbitrary small number
+
+        sliding_mask = torch.zeros((seq_len, seq_len), dtype=torch.bool)
+        for i in range(seq_len):
+            start = max(0, i - sliding_window + 1)
+            sliding_mask[i, start : i + 1] = True
+        sliding_mask = sliding_mask.to(torch_device)
+
+        config.sliding_window = sliding_window
+        inputs["attention_mask"] = torch.ones(batch_size, seq_len).to(torch.int64).to(torch_device)
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+
+            # Set sliding window to `True` and check that all tokens beyond window size are masked
+            model.config.use_sliding_window = True
+            attentions = model(**inputs, output_attentions=True).attentions
+            for layer_attention in attentions:
+                self.assertTrue((layer_attention[:, :, ~sliding_mask] == 0).all().item())
+
+            # Set sliding window to `False` while keeping `sliding_window=3`
+            # Check that all tokens beyond window size are not masked
+            model.config.use_sliding_window = False
+            attentions_not_sliding = model(**inputs, output_attentions=True).attentions
+            for layer_attention in attentions_not_sliding:
+                self.assertFalse((layer_attention[:, :, ~sliding_mask] == 0).all().item())
+
     def test_custom_4d_attention_mask(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -4327,8 +4380,10 @@ class ModelTesterMixin:
             set_config_for_less_flaky_test(config)
             if getattr(config, "sliding_window", 0) is not None and getattr(config, "sliding_window", 0) > 0:
                 self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
-            model = model_class(config).to(device=torch_device, dtype=torch.float32)
+            model = model_class(config).to(device=torch_device, dtype=torch.float32).eval()
             set_model_for_less_flaky_test(model)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                continue  # model doesn't accept position ids and probably has special way to model positions
 
             if "position_ids" not in inspect.signature(model.forward).parameters:
                 continue  # this model doesn't accept position ids as input

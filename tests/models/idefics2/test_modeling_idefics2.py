@@ -35,7 +35,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -583,7 +583,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_integration_test(self):
         model = Idefics2ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/idefics2-8b-base",
