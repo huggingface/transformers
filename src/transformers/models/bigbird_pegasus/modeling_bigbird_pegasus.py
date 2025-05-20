@@ -1620,7 +1620,11 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
         _unsupported_features: bool = False,
         dropout: float = 0.0,
     ):
-        if self.config._attn_implementation == "flex_attention" and not _unsupported_features and (dropout == 0 or not self.training):
+        if (
+            self.config._attn_implementation == "flex_attention"
+            and not _unsupported_features
+            and (dropout == 0 or not self.training)
+        ):
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
             # Other attention flavors support in-built causal (when `mask is None`)
@@ -1787,7 +1791,6 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
                 )
 
         return encoder_attention_mask
-
 
 
 class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
@@ -2118,7 +2121,9 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
             config.max_position_embeddings,
             config.d_model,
         )
-        self.layers = nn.ModuleList([BigBirdPegasusDecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])
+        self.layers = nn.ModuleList(
+            [BigBirdPegasusDecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)]
+        )
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False

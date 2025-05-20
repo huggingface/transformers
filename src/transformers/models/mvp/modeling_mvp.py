@@ -60,14 +60,14 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     return shifted_input_ids
 
 
-# Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->MVP
-class MVPLearnedPositionalEmbedding(nn.Embedding):
+# Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->Mvp
+class MvpLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int):
-        # MVP is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # Mvp is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)

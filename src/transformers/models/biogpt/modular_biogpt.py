@@ -206,7 +206,11 @@ class BioGptPreTrainedModel(PreTrainedModel):
         _unsupported_features: bool = False,
         dropout: float = 0.0,
     ):
-        if self.config._attn_implementation == "flex_attention" and not _unsupported_features and (dropout == 0 or not self.training):
+        if (
+            self.config._attn_implementation == "flex_attention"
+            and not _unsupported_features
+            and (dropout == 0 or not self.training)
+        ):
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
             # Other attention flavors support in-built causal (when `mask is None`)
