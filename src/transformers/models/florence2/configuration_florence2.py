@@ -309,6 +309,7 @@ class Florence2Config(PretrainedConfig):
         text_config=None,
         vocab_size=51289,
         projection_dim=1024,
+        is_encoder_decoder=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -321,7 +322,10 @@ class Florence2Config(PretrainedConfig):
         if text_config is not None:
             self.text_config = Florence2LanguageConfig(**text_config)
 
-        super().__init__(is_encoder_decoder=True, **kwargs)
+        super().__init__(
+            is_encoder_decoder=is_encoder_decoder,
+            **kwargs,
+        )
 
 
 __all__ = ["Florence2Config"]
