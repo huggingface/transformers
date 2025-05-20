@@ -1962,9 +1962,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         self.begin_index = begin_index
         if begin_index is None:
             raise ValueError(
-                "`begin_index` must be provided to `WhisperTimeStampLogitsProcessor`. The previous default was "
-                "`len(generate_config.forced_decoder_ids)`, but `forced_decoder_ids` is now deprecated in favor of "
-                "`task` and `language`."
+                "`forced_decoder_ids` is deprecated in favor of `task` and `language` and, as such, `begin_index` "
+                "must be provided to `WhisperTimeStampLogitsProcessor`. The previous default value of `begin_index` "
+                "was `len(generate_config.forced_decoder_ids)`"
             )
 
         self.max_initial_timestamp_index = getattr(generate_config, "max_initial_timestamp_index", None)
