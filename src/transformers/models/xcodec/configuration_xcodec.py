@@ -33,7 +33,7 @@ class XcodecConfig(PretrainedConfig):
     This is the configuration class to store the configuration of an [`XcodecModel`]. It is used to instantiate a
     Xcodec model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
-    [  ](https://huggingface.co/ ) architecture.
+    [Manel/X-Codec](https://huggingface.co/Manel/X-Codec) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
