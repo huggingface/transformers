@@ -82,7 +82,7 @@ class Mistral3PatchMerger(nn.Module):
 class Mistral3MultiModalProjector(nn.Module):
     def __init__(self, config: Mistral3Config):
         super().__init__()
-        self.norm = Mistral3RMSNorm(config.vision_config.hidden_size)
+        self.norm = Mistral3RMSNorm(config.vision_config.hidden_size, eps=config.text_config.rms_norm_eps)
         self.patch_merger = Mistral3PatchMerger(config)
         # We have hidden_size * the number of vision feature layers
         num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)

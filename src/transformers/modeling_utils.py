@@ -62,7 +62,11 @@ from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.tensor_parallel import (
-    SUPPORTED_TP_STYLES,
+    ALL_PARALLEL_STYLES,
+    _get_parameter_tp_plan,
+    initialize_tensor_parallelism,
+    repack_weights,
+    replace_state_dict_local_with_dtensor,
     shard_and_distribute_module,
     verify_tp_plan,
 )
@@ -123,6 +127,7 @@ from .utils import (
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     ENV_VARS_TRUE_VALUES,
+    is_huggingface_hub_greater_or_equal,
     is_sagemaker_mp_enabled,
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
@@ -167,6 +172,9 @@ _init_weights = True
 _is_quantized = False
 _is_ds_init_called = False
 _torch_distributed_available = torch.distributed.is_available()
+
+if _torch_distributed_available and is_torch_greater_or_equal("2.5"):
+    from torch.distributed.tensor import DTensor
 
 
 def is_fsdp_enabled():
@@ -790,7 +798,7 @@ def _load_state_dict_into_meta_model(
                 param_name,
                 casting_dtype,
                 to_contiguous,
-                int(os.environ["RANK"]),  # the rank
+                device_mesh.get_local_rank(),
                 device_mesh,
             )
         else:
@@ -881,6 +889,7 @@ def _get_resolved_checkpoint_files(
     user_agent: dict,
     revision: str,
     commit_hash: Optional[str],
+    transformers_explicit_filename: Optional[str] = None,
 ) -> Tuple[Optional[List[str]], Optional[Dict]]:
     """Get all the checkpoint filenames based on `pretrained_model_name_or_path`, and optional metadata if the
     checkpoints are sharded.
@@ -892,7 +901,11 @@ def _get_resolved_checkpoint_files(
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if is_local:
-            if from_tf and os.path.isfile(
+            if transformers_explicit_filename is not None:
+                # If the filename is explicitly defined, load this by default.
+                archive_file = os.path.join(pretrained_model_name_or_path, subfolder, transformers_explicit_filename)
+                is_sharded = transformers_explicit_filename.endswith(".safetensors.index.json")
+            elif from_tf and os.path.isfile(
                 os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
             ):
                 # Load from a TF 1.0 checkpoint in priority if from_tf
@@ -980,7 +993,10 @@ def _get_resolved_checkpoint_files(
             resolved_archive_file = download_url(pretrained_model_name_or_path)
         else:
             # set correct filename
-            if from_tf:
+            if transformers_explicit_filename is not None:
+                filename = transformers_explicit_filename
+                is_sharded = transformers_explicit_filename.endswith(".safetensors.index.json")
+            elif from_tf:
                 filename = TF2_WEIGHTS_NAME
             elif from_flax:
                 filename = FLAX_WEIGHTS_NAME
@@ -1949,9 +1965,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         if self._tp_plan is not None and is_torch_greater_or_equal("2.3"):
             for _, v in self._tp_plan.items():
-                if v not in SUPPORTED_TP_STYLES:
+                if v not in ALL_PARALLEL_STYLES:
                     raise ValueError(
-                        f"Unsupported tensor parallel style {v}. Supported styles are {SUPPORTED_TP_STYLES}"
+                        f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}"
                     )
 
     def dequantize(self):
@@ -3405,6 +3421,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if safe_serialization and not is_safetensors_available():
             raise ImportError("`safe_serialization` requires the `safetensors library: `pip install safetensors`.")
 
+        # we need to check against tp_size, not tp_plan, as tp_plan is substituted to the class one
+        if self._tp_size is not None and not is_huggingface_hub_greater_or_equal("0.31.4"):
+            raise ImportError(
+                "Saving a model with tensor parallelism requires `huggingface_hub` version 0.31.4 or higher."
+            )
+
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
@@ -3532,15 +3554,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Rename state_dict keys before saving to file. Do nothing unless overridden in a particular model.
         # (initially introduced with TimmWrapperModel to remove prefix and make checkpoints compatible with timm)
         state_dict = self._fix_state_dict_keys_on_save(state_dict)
+        # If model was sharded, we cannot properly determine sizes of tensors that `local_*` strategy was used,
+        # therefore we replace them with DTensors that are equivalently sharded
+        if self._tp_size is not None:
+            state_dict = replace_state_dict_local_with_dtensor(state_dict, self._tp_plan, self._device_mesh)
 
         if safe_serialization:
+            # TODO: fix safe_serialization for tied weights
             # Safetensors does not allow tensor aliasing.
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
             for name, tensor in state_dict.items():
                 # Sometimes in the state_dict we have non-tensor objects.
                 # e.g. in bitsandbytes we have some `str` objects in the state_dict
-                if isinstance(tensor, torch.Tensor):
+                if isinstance(tensor, torch.Tensor) or isinstance(tensor, DTensor):
                     ptrs[id_tensor_storage(tensor)].append(name)
                 else:
                     # In the non-tensor case, fall back to the pointer of the object itself
@@ -3650,7 +3677,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         for shard_file, tensors in filename_to_tensors:
             shard = {}
             for tensor in tensors:
-                shard[tensor] = state_dict[tensor].contiguous()
+                if isinstance(state_dict[tensor], DTensor):
+                    full_tensor = state_dict[tensor].full_tensor()
+                    # to get the correctly ordered tensor we need to repack if packed
+                    if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
+                        full_tensor = repack_weights(full_tensor, -1, self._tp_size, 2)
+                    shard[tensor] = full_tensor.contiguous()  # only do contiguous after it's permuted correctly
+                else:
+                    shard[tensor] = state_dict[tensor].contiguous()
                 # delete reference, see https://github.com/huggingface/transformers/pull/34890
                 del state_dict[tensor]
 
@@ -4008,6 +4042,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 `torchrun [args] script.py`. This will be much faster than using a `device_map`, but has limitations.
             tp_size (`str`, *optional*):
                 A torch tensor parallel degree. If not provided would default to world size.
+            device_mesh (`torch.distributed.DeviceMesh`, *optional*):
+                A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_state_dict (`bool`, *optional*):
@@ -4105,6 +4141,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
+        device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
 
         # Load models with hardcoded key mapping on class for VLMs only,  to keep BC and standardize model
@@ -4140,59 +4177,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
         # `device_map` pointing to the correct device
-        device_mesh = None
         if tp_plan is not None:
-            if not is_torch_greater_or_equal("2.5"):
-                raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
-
-            # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
-            device_type = torch._C._get_accelerator().type
-
-            if not torch.distributed.is_initialized():
-                try:
-                    rank = int(os.environ["RANK"])
-                    world_size = int(os.environ["WORLD_SIZE"])
-                    if device_type == "cuda":
-                        torch.distributed.init_process_group(
-                            "nccl", rank=rank, world_size=world_size, init_method="env://"
-                        )
-                        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
-                    elif device_type == "cpu":
-                        cpu_backend = "ccl" if int(os.environ.get("CCL_WORKER_COUNT", 0)) else "gloo"
-                        torch.distributed.init_process_group(cpu_backend, rank=rank, world_size=world_size)
-                    elif device_type == "xpu":
-                        torch.distributed.init_process_group("ccl", rank=rank, world_size=world_size)
-                        torch.xpu.set_device(int(os.environ["LOCAL_RANK"]))
-                    elif device_type == "hpu":
-                        torch.distributed.init_process_group("hccl", rank=rank, world_size=world_size)
-                        torch.hpu.set_device(int(os.environ["LOCAL_RANK"]))
-
-                except Exception as e:
-                    raise EnvironmentError(
-                        "We tried to initialize torch.distributed for you, but it failed, make"
-                        "sure you init torch distributed in your script to use `tp_plan='auto'`"
-                    ) from e
-
-            # Get device with index assuming equal number of devices per host
-            if device_type == "xpu":
-                index = torch.xpu.current_device()
-            elif device_type == "hpu":
-                index = torch.hpu.current_device()
+            if device_mesh is None and tp_plan is not None:
+                tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
             else:
-                index = None if device_type == "cpu" else torch.cuda.current_device()
-            tp_device = torch.device(device_type, index)
-
-            if index is not None and index > 0:
-                import sys
-
-                sys.stdout = open(os.devnull, "w")
-                sys.stderr = open(os.devnull, "w")
-            # This is the easiest way to dispatch to the current process device
-            device_map = tp_device
-
-            # Assuming sharding the model onto the world when tp_size not provided
-            tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
-            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
+                # TODO: make device_mesh support multiple dimensions
+                if device_mesh.ndim == 1:
+                    raise ValueError("device_mesh must be 1 dimensional and will be used for TP")
+                device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
 
         if use_auth_token is not None:
             warnings.warn(
@@ -4362,6 +4354,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
             model_kwargs = kwargs
 
+        transformers_explicit_filename = getattr(config, "transformers_weights", None)
+
+        if transformers_explicit_filename is not None:
+            if not transformers_explicit_filename.endswith(
+                ".safetensors"
+            ) and not transformers_explicit_filename.endswith(".safetensors.index.json"):
+                raise ValueError(
+                    "The transformers file in the config seems to be incorrect: it is neither a safetensors file "
+                    "(*.safetensors) nor a safetensors index file (*.safetensors.index.json): "
+                    f"{transformers_explicit_filename}"
+                )
+
         pre_quantized = hasattr(config, "quantization_config")
         if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
             pre_quantized = False
@@ -4430,6 +4434,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             user_agent=user_agent,
             revision=revision,
             commit_hash=commit_hash,
+            transformers_explicit_filename=transformers_explicit_filename,
         )
 
         is_sharded = sharded_metadata is not None
@@ -4585,6 +4590,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # record tp degree the model sharded to
         model._tp_size = tp_size
+        model._device_mesh = device_mesh
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -5096,7 +5102,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         name,
                         casting_dtype,
                         to_contiguous,
-                        os.environ["RANK"],
+                        device_mesh.get_local_rank(),
                         device_mesh,
                     )
 
