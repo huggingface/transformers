@@ -474,5 +474,4 @@ class XcodecIntegrationTest(unittest.TestCase):
             arr = inputs["input_values"][0].cpu().numpy()
             arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
             rmse = compute_rmse(arr, arr_enc_dec)
-            #self.assertTrue(rmse < exp_rmse)
             self.assertTrue(np.abs(rmse - exp_rmse) < 1e-5)
