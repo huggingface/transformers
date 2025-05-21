@@ -568,9 +568,8 @@ class JambaModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_simple_generate(self):
-        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4.
         #
-        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
         # considering differences in hardware processing and potential deviations in generated text.
         # fmt: off
         EXPECTED_TEXTS = Expectations(
@@ -611,9 +610,8 @@ class JambaModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_simple_batched_generate_with_padding(self):
-        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4.
         #
-        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
         # considering differences in hardware processing and potential deviations in generated text.
         # fmt: off
         EXPECTED_TEXTS = Expectations(
