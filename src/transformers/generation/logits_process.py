@@ -2043,6 +2043,10 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         self.inputs = {**self.model.prepare_inputs_for_generation(**inputs), **inputs}
         self.inputs["input_features"] = self.inputs.pop("inputs")
 
+        # Whisper encoder-decoder does not accept the input_ids as input
+        if "input_ids" not in inspect.signature(self.model.forward).parameters:
+            self.inputs.pop("input_ids", None)
+
     @property
     def no_speech_prob(self):
         return self._no_speech_prob
@@ -2057,10 +2061,6 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         if input_ids.shape[1] == self.begin_index:
             if self.start_of_trans_offset > 1:
                 with torch.no_grad():
-                    #TODO: might need to be done earlier, quick solution
-                    import inspect
-                    if "input_ids" not in inspect.signature(self.model.forward).parameters:
-                        self.inputs.pop("input_ids", None)
                     logits = self.model(**self.inputs).logits
 
                 no_speech_index = self.begin_index - self.start_of_trans_offset
