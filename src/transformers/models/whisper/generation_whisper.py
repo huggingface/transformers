@@ -231,13 +231,13 @@ class WhisperGenerationMixin(GenerationMixin):
             tensor containing the timestamps in seconds for each predicted token
         """
         # Create a list with `decoder_layers` elements, each a tensor of shape
-        # (batch size, attention_heads, output length, input length).
+        # (batch size * num_beams, attention_heads, output length, input length).
         cross_attentions = []
         for i in range(self.config.decoder_layers):
             cross_attentions.append(torch.cat([x[i] for x in generate_outputs.cross_attentions], dim=2))
 
         # Select specific cross-attention layers and heads. This is a tensor
-        # of shape (batch size, num selected, output length, input length).
+        # of shape (batch size * num_beams, num selected, output length, input length).
         weights = torch.stack([cross_attentions[l][:, h] for l, h in alignment_heads])
         weights = weights.permute([1, 0, 2, 3])
 
@@ -248,7 +248,10 @@ class WhisperGenerationMixin(GenerationMixin):
             # beam search may end up returning a sequence that finished a few steps earlier while decoding.
             # In that case, the `cross_attentions` weights are too long and we have to make sure that they have
             # the right `output_length`
-            weight_length = (generate_outputs.beam_indices != -1).sum(-1).max()  # real sequence length
+
+            # get the real sequence length of the longest sequence, crop the beam_indices to the real length
+            weight_length = (generate_outputs.beam_indices != -1).sum(-1).max()
+            beam_indices = generate_outputs.beam_indices[:, :weight_length]
 
             # The first forward pass (prefill) may have processed more than one token and, therefore, contain
             # cross-attention weights for several tokens.
@@ -257,25 +260,18 @@ class WhisperGenerationMixin(GenerationMixin):
                 # `-1`: `beam_indices` can be used as-is to gather the weights when `num_input_ids` is 1
                 weight_length += num_input_ids - 1
                 beam_indices_first_step_unrolled = (
-                    torch.ones(
-                        generate_outputs.beam_indices.shape[0],
-                        num_input_ids - 1,
-                        device=generate_outputs.beam_indices.device,
-                        dtype=torch.long,
-                    )
-                    * (generate_outputs.beam_indices[:, 0:1])
+                    torch.ones(beam_indices.shape[0], num_input_ids - 1, device=beam_indices.device, dtype=torch.long)
+                    * (beam_indices[:, 0:1])
                 )
-                unrolled_beam_indices = torch.cat(
-                    [beam_indices_first_step_unrolled, generate_outputs.beam_indices], dim=-1
-                )
+                unrolled_beam_indices = torch.cat([beam_indices_first_step_unrolled, beam_indices], dim=-1)
             else:
-                unrolled_beam_indices = generate_outputs.beam_indices
+                unrolled_beam_indices = beam_indices
 
             # If beam index is still -1, it means that the associated token id is EOS
             # We need to replace the index with 0 since index_select gives an error if any of the indexes is -1.
             unrolled_beam_indices = unrolled_beam_indices.masked_fill(unrolled_beam_indices == -1, 0)
 
-            # Select the cross attention from the right beam for each output sequences, up to the real sequence
+            # Select the cross attention from the right beam for each output sequence, up to the real sequence
             # length (`weight_length`)
             weights = torch.stack(
                 [
