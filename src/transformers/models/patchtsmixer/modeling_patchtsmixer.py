@@ -1343,18 +1343,12 @@ class PatchTSMixerForPreTrainingOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
-    r"""
+@auto_docstring(
+    custom_intro="""
     `PatchTSMixer` for mask pretraining.
-
-    Args:
-        config (`PatchTSMixerConfig`):
-            Configuration.
-
-    Returns:
-        `None`.
     """
-
+)
+class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
         self.model = PatchTSMixerModel(config, mask_input=True)
@@ -1484,6 +1478,7 @@ class SamplePatchTSMixerPredictionOutput(ModelOutput):
     sequences: Optional[torch.FloatTensor] = None
 
 
+@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for time series model's predictions outputs that contains the sampled values from the chosen
@@ -1491,13 +1486,9 @@ class SamplePatchTSMixerPredictionOutput(ModelOutput):
     """
 )
 class SamplePatchTSMixerRegressionOutput(ModelOutput):
-    """
-    Base class for time series model's predictions outputs that contains the sampled values from the chosen
-    distribution.
-
-    Args:
-        sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, num_targets)`
-                Sampled values from the chosen distribution.
+    r"""
+    sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length, number_channels)`):
+        Sampled values from the chosen distribution.
     """
 
     sequences: Optional[torch.FloatTensor] = None
@@ -1948,18 +1939,12 @@ class InjectScalerStatistics4D(nn.Module):
         return inputs
 
 
-class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
-    r"""
+@auto_docstring(
+    custom_intro="""
     `PatchTSMixer` for regression application.
-
-    Args:
-        config (`PatchTSMixerConfig`):
-            Configuration.
-
-    Returns:
-        `None`.
     """
-
+)
+class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
 
