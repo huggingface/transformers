@@ -13,7 +13,6 @@ import torch.utils.checkpoint
 from torch import int32, nn, sin, sinc
 from torch.amp import autocast
 from torch.nn import Module, Parameter
-from torch.nn.utils.parametrize import weight_norm
 
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
