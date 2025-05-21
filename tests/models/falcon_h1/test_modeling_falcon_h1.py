@@ -480,7 +480,6 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 class FalconH1ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_falcon_h1_hard(self):
-
         """
         An integration test for Falcon-H1.
         """
