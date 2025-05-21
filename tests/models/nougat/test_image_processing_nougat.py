@@ -16,6 +16,7 @@
 import unittest
 
 import numpy as np
+import requests
 from huggingface_hub import hf_hub_download
 
 from transformers.image_utils import SizeDict
@@ -290,3 +291,24 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertEqual(
                     tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
                 )
+
+    def test_slow_fast_equivalence(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        dummy_image = Image.open(
+            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+        )
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
+        # increase the tolerance in the for taking into account difference in implementation in interpolation between PIL and PyTorch
+        torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=0.15, rtol=1e-3)
+        self.assertLessEqual(
+            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 5e-3
+        )

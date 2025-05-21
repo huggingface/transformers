@@ -18,7 +18,6 @@ from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
@@ -38,7 +37,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -56,26 +55,25 @@ if is_torchvision_available():
 
 
 class NougatFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    Args:
+    do_crop_margin (`bool`, *optional*, defaults to `True`):
+            Whether to crop the image margins.
+    do_thumbnail (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image using thumbnail method.
+    do_align_long_axis (`bool`, *optional*, defaults to `False`):
+            Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
+    do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the images to the largest image size in the batch.
+    """
+
     do_crop_margin: Optional[bool]
     do_thumbnail: Optional[bool]
     do_align_long_axis: Optional[bool]
     do_pad: Optional[bool]
 
 
-@add_start_docstrings(
-    "Constructs a fast Nougat image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        do_crop_margin (`bool`, *optional*, defaults to `True`):
-            Whether to crop the image margins.
-        do_thumbnail (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image using thumbnail method.
-        do_align_long_axis (`bool`, *optional*, defaults to `False`):
-            Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the images to the largest image size in the batch.
-    """,
-)
+@auto_docstring
 class NougatImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -93,20 +91,7 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[NougatFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        "Constructs a fast Nougat image processor.",
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-        """
-            do_crop_margin (`bool`, *optional*, defaults to `True`):
-                Whether to crop the image margins.
-            do_thumbnail (`bool`, *optional*, defaults to `True`):
-                Whether to resize the image using thumbnail method.
-            do_align_long_axis (`bool`, *optional*, defaults to `False`):
-                Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
-            do_pad (`bool`, *optional*, defaults to `True`):
-                Whether to pad the images to the largest image size in the batch.
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[NougatFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
