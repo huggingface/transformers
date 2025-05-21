@@ -305,7 +305,7 @@ def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = N
         "regnet-y-320": ImageNetPreTrainedConfig(
             depths=[2, 5, 12, 1], hidden_sizes=[232, 696, 1392, 3712], groups_width=232
         ),
-        # models created by SEER -> https://arxiv.org/abs/2202.08360
+        # models created by SEER -> https://huggingface.co/papers/2202.08360
         "regnet-y-320-seer": RegNetConfig(depths=[2, 5, 12, 1], hidden_sizes=[232, 696, 1392, 3712], groups_width=232),
         "regnet-y-640-seer": RegNetConfig(depths=[2, 5, 12, 1], hidden_sizes=[328, 984, 1968, 4920], groups_width=328),
         "regnet-y-1280-seer": RegNetConfig(

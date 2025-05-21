@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-ConvNeXt V2 モデルは、Sanghyun Woo、Shobhik Debnath、Ronghang Hu、Xinlei Chen、Zhuang Liu, In So Kweon, Saining Xie. によって [ConvNeXt V2: Co-designing and Scaling ConvNets with Masked Autoencoders](https://arxiv.org/abs/2301.00808) で提案されました。
+ConvNeXt V2 モデルは、Sanghyun Woo、Shobhik Debnath、Ronghang Hu、Xinlei Chen、Zhuang Liu, In So Kweon, Saining Xie. によって [ConvNeXt V2: Co-designing and Scaling ConvNets with Masked Autoencoders](https://huggingface.co/papers/2301.00808) で提案されました。
 ConvNeXt V2 は、Vision Transformers の設計からインスピレーションを得た純粋な畳み込みモデル (ConvNet) であり、[ConvNeXT](convnext) の後継です。
 
 論文の要約は次のとおりです。
@@ -28,7 +28,7 @@ ConvNeXt V2 は、Vision Transformers の設計からインスピレーション
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/convnextv2_architecture.png"
 alt="描画" width="600"/>
 
-<small> ConvNeXt V2 アーキテクチャ。 <a href="https://arxiv.org/abs/2301.00808">元の論文</a>から抜粋。</small>
+<small> ConvNeXt V2 アーキテクチャ。 <a href="https://huggingface.co/papers/2301.00808">元の論文</a>から抜粋。</small>
 
 このモデルは [adirik](https://huggingface.co/adirik) によって提供されました。元のコードは [こちら](https://github.com/facebookresearch/ConvNeXt-V2) にあります。
 

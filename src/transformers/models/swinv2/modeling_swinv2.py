@@ -1088,7 +1088,7 @@ class Swinv2Model(Swinv2PreTrainedModel):
 @auto_docstring(
     custom_intro="""
         Swinv2 Model with a decoder on top for masked image modeling, as proposed in
-    [SimMIM](https://arxiv.org/abs/2111.09886).
+    [SimMIM](https://huggingface.co/papers/2111.09886).
 
         <Tip>
 

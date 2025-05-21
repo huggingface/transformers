@@ -34,7 +34,7 @@ logger = logging.get_logger(__name__)
 
 class AwqQuantizer(HfQuantizer):
     """
-    4-bit quantization for Activation-aware Weight Quantization(AWQ) (https://arxiv.org/abs/2306.00978)
+    4-bit quantization for Activation-aware Weight Quantization(AWQ) (https://huggingface.co/papers/2306.00978)
     """
 
     # AWQ requires data calibration - we support only inference

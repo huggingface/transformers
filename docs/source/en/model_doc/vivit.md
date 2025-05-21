@@ -20,7 +20,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The Vivit model was proposed in [ViViT: A Video Vision Transformer](https://arxiv.org/abs/2103.15691) by Anurag Arnab, Mostafa Dehghani, Georg Heigold, Chen Sun, Mario Lučić, Cordelia Schmid.
+The Vivit model was proposed in [ViViT: A Video Vision Transformer](https://huggingface.co/papers/2103.15691) by Anurag Arnab, Mostafa Dehghani, Georg Heigold, Chen Sun, Mario Lučić, Cordelia Schmid.
 The paper proposes one of the first successful pure-transformer based set of models for video understanding.
 
 The abstract from the paper is the following:

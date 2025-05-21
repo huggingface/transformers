@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview 
 
-DePlot は、Fangyu Liu、Julian Martin Aisenschlos、Francesco Piccinno、Syrine Krichene、Chenxi Pang, Kenton Lee, Mandar Joshi, Wenhu Chen, Nigel Collier, Yasemin Altun. の論文 [DePlot: One-shot visual language reasoning by plot-to-table translation](https://arxiv.org/abs/2212.10505) で提案されました。パン・
+DePlot は、Fangyu Liu、Julian Martin Aisenschlos、Francesco Piccinno、Syrine Krichene、Chenxi Pang, Kenton Lee, Mandar Joshi, Wenhu Chen, Nigel Collier, Yasemin Altun. の論文 [DePlot: One-shot visual language reasoning by plot-to-table translation](https://huggingface.co/papers/2212.10505) で提案されました。パン・
 
 論文の要約には次のように記載されています。
 

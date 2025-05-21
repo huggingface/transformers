@@ -23,7 +23,7 @@
 # - David Grangier
 # - Kyra Yee
 #
-# Paper: Facebook FAIR's WMT19 News Translation Task Submission https://arxiv.org/abs/1907.06616
+# Paper: Facebook FAIR's WMT19 News Translation Task Submission https://huggingface.co/papers/1907.06616
 #
 """PyTorch Fairseq model, ported from https://github.com/pytorch/fairseq/tree/master/examples/wmt19"""
 
@@ -425,7 +425,7 @@ class FSMTEncoder(nn.Module):
                 x = x.transpose(0, 1)  # T x B x C -> B x T x C
                 encoder_states += (x,)
                 x = x.transpose(0, 1)  # B x T x C -> T x B x C
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 attn = None
@@ -666,7 +666,7 @@ class FSMTDecoder(nn.Module):
                     f" {head_mask.size()[0]}."
                 )
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 x = x.transpose(0, 1)
                 all_hidden_states += (x,)

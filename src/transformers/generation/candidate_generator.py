@@ -678,7 +678,7 @@ class AssistantToTargetTranslator:
     Translates token ids and logits between assistant and target model vocabularies. This class is used to handle
     vocabulary mismatches when using different tokenizers for the assistant and target models in speculative decoding,
     as introduced in the paper "Lossless Speculative Decoding Algorithms for Heterogeneous Vocabularies"
-    (https://www.arxiv.org/abs/2502.05202).
+    (https://huggingface.co/papers/2502.05202).
     It maintains mappings between the two vocabularies and handles token/logit conversion.
 
     Args:

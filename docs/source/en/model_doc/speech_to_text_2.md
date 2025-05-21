@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The Speech2Text2 model is used together with [Wav2Vec2](wav2vec2) for Speech Translation models proposed in
-[Large-Scale Self- and Semi-Supervised Learning for Speech Translation](https://arxiv.org/abs/2104.06678) by
+[Large-Scale Self- and Semi-Supervised Learning for Speech Translation](https://huggingface.co/papers/2104.06678) by
 Changhan Wang, Anne Wu, Juan Pino, Alexei Baevski, Michael Auli, Alexis Conneau.
 
 Speech2Text2 is a *decoder-only* transformer model that can be used with any speech *encoder-only*, such as

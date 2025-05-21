@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # DeepSpeed Integration
 
-[DeepSpeed](https://github.com/deepspeedai/DeepSpeed) は、[ZeRO 論文](https://arxiv.org/abs/1910.02054) で説明されているすべてを実装します。現在、次のものを完全にサポートしています。
+[DeepSpeed](https://github.com/deepspeedai/DeepSpeed) は、[ZeRO 論文](https://huggingface.co/papers/1910.02054) で説明されているすべてを実装します。現在、次のものを完全にサポートしています。
 
 1. オプティマイザーの状態分割 (ZeRO ステージ 1)
 2. 勾配分割 (ZeRO ステージ 2)
@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 5. 一連の高速 CUDA 拡張ベースのオプティマイザー
 6. CPU および NVMe への ZeRO オフロード
 
-ZeRO-Offload には独自の専用ペーパーがあります: [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://arxiv.org/abs/2101.06840)。 NVMe サポートについては、論文 [ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning](https://arxiv.org/abs/2104.07857)。
+ZeRO-Offload には独自の専用ペーパーがあります: [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://huggingface.co/papers/2101.06840)。 NVMe サポートについては、論文 [ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning](https://huggingface.co/papers/2104.07857)。
 
 DeepSpeed ZeRO-2 は、その機能が推論には役に立たないため、主にトレーニングのみに使用されます。
 
@@ -2246,9 +2246,9 @@ RUN_SLOW=1 pytest tests/deepspeed
 
 論文:
 
-- [ZeRO: 兆パラメータ モデルのトレーニングに向けたメモリの最適化](https://arxiv.org/abs/1910.02054)
-- [ZeRO-Offload: 10 億規模のモデル トレーニングの民主化](https://arxiv.org/abs/2101.06840)
-- [ZeRO-Infinity: 極限スケールの深層学習のための GPU メモリの壁を打ち破る](https://arxiv.org/abs/2104.07857)
+- [ZeRO: 兆パラメータ モデルのトレーニングに向けたメモリの最適化](https://huggingface.co/papers/1910.02054)
+- [ZeRO-Offload: 10 億規模のモデル トレーニングの民主化](https://huggingface.co/papers/2101.06840)
+- [ZeRO-Infinity: 極限スケールの深層学習のための GPU メモリの壁を打ち破る](https://huggingface.co/papers/2104.07857)
 
 最後に、HuggingFace [`Trainer`] は DeepSpeed のみを統合していることを覚えておいてください。
 DeepSpeed の使用に関して問題や質問がある場合は、[DeepSpeed GitHub](https://github.com/deepspeedai/DeepSpeed/issues) に問題を提出してください。

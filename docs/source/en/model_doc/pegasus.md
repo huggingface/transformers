@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Pegasus model was proposed in [PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization](https://arxiv.org/pdf/1912.08777.pdf) by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu on Dec 18, 2019.
+The Pegasus model was proposed in [PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization](https://huggingface.co/papers/1912.08777) by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu on Dec 18, 2019.
 
 According to the abstract,
 
@@ -56,7 +56,7 @@ All the [checkpoints](https://huggingface.co/models?search=pegasus) are fine-tun
 - FP16 is not supported (help/ideas on this appreciated!).
 - Summarizing xsum in fp32 takes about 400ms/sample, with default parameters on a v100 GPU.
 - Full replication results and correctly pre-processed data can be found in this [Issue](https://github.com/huggingface/transformers/issues/6844#issue-689259666).
-- [Distilled checkpoints](https://huggingface.co/models?search=distill-pegasus) are described in this [paper](https://arxiv.org/abs/2010.13002).
+- [Distilled checkpoints](https://huggingface.co/models?search=distill-pegasus) are described in this [paper](https://huggingface.co/papers/2010.13002).
 
 ## Implementation Notes
 

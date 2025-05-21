@@ -105,7 +105,7 @@ class DacVectorQuantize(nn.Module):
     Implementation of VQ similar to Karpathy's repo (https://github.com/karpathy/deep-vector-quantization)
 
     Additionally uses following tricks from improved VQGAN
-    (https://arxiv.org/pdf/2110.04627.pdf):
+    (https://huggingface.co/papers/2110.04627):
         1. Factorized codes: Perform nearest neighbor lookup in low-dimensional space
             for improved codebook usage
         2. l2-normalized codes: Converts euclidean distance to cosine similarity which
@@ -264,7 +264,7 @@ class DacDecoderBlock(nn.Module):
 
 class DacResidualVectorQuantize(nn.Module):
     """
-    ResidualVectorQuantize block - Introduced in SoundStream: An end2end neural audio codec (https://arxiv.org/abs/2107.03312)
+    ResidualVectorQuantize block - Introduced in SoundStream: An end2end neural audio codec (https://huggingface.co/papers/2107.03312)
     """
 
     def __init__(self, config: DacConfig):

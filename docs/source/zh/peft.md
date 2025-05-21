@@ -44,7 +44,7 @@ Transformers原生支持一些PEFT方法，这意味着你可以加载本地存�
 
 - [Low Rank Adapters](https://huggingface.co/docs/peft/conceptual_guides/lora)
 - [IA3](https://huggingface.co/docs/peft/conceptual_guides/ia3)
-- [AdaLoRA](https://arxiv.org/abs/2303.10512)
+- [AdaLoRA](https://huggingface.co/papers/2303.10512)
 
 如果你想使用其他PEFT方法，例如提示学习或提示微调，或者关于通用的 🤗 PEFT库，请参阅[文档](https://huggingface.co/docs/peft/index)。
 

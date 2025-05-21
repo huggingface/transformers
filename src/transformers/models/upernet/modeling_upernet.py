@@ -120,7 +120,7 @@ class UperNetPyramidPoolingModule(nn.Module):
 class UperNetHead(nn.Module):
     """
     Unified Perceptual Parsing for Scene Understanding. This head is the implementation of
-    [UPerNet](https://arxiv.org/abs/1807.10221).
+    [UPerNet](https://huggingface.co/papers/1807.10221).
     """
 
     def __init__(self, config, in_channels):
@@ -204,7 +204,7 @@ class UperNetHead(nn.Module):
 class UperNetFCNHead(nn.Module):
     """
     Fully Convolution Networks for Semantic Segmentation. This head is the implementation of
-    [FCNNet](https://arxiv.org/abs/1411.4038>).
+    [FCNNet](https://huggingface.co/papers/1411.4038>).
 
     Args:
         config:

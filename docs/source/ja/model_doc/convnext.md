@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-ConvNeXT モデルは、[A ConvNet for the 2020s](https://arxiv.org/abs/2201.03545) で Zhuang Liu、Hanzi Mao、Chao-Yuan Wu、Christoph Feichtenhofer、Trevor Darrell、Saining Xie によって提案されました。
+ConvNeXT モデルは、[A ConvNet for the 2020s](https://huggingface.co/papers/2201.03545) で Zhuang Liu、Hanzi Mao、Chao-Yuan Wu、Christoph Feichtenhofer、Trevor Darrell、Saining Xie によって提案されました。
 ConvNeXT は、ビジョン トランスフォーマーの設計からインスピレーションを得た純粋な畳み込みモデル (ConvNet) であり、ビジョン トランスフォーマーよりも優れたパフォーマンスを発揮すると主張しています。
 
 論文の要約は次のとおりです。
@@ -35,7 +35,7 @@ ConvNextと呼ばれます。 ConvNeXts は完全に標準の ConvNet モジュ�
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/convnext_architecture.jpg"
 alt="描画" width="600"/>
 
-<small> ConvNeXT アーキテクチャ。 <a href="https://arxiv.org/abs/2201.03545">元の論文</a>から抜粋。</small>
+<small> ConvNeXT アーキテクチャ。 <a href="https://huggingface.co/papers/2201.03545">元の論文</a>から抜粋。</small>
 
 このモデルは、[nielsr](https://huggingface.co/nielsr) によって提供されました。 TensorFlow バージョンのモデルは [ariG23498](https://github.com/ariG23498) によって提供されました。
 [gante](https://github.com/gante)、および [sayakpaul](https://github.com/sayakpaul) (同等の貢献)。元のコードは [こちら](https://github.com/facebookresearch/ConvNeXt) にあります。

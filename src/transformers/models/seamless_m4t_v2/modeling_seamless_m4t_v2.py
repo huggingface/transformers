@@ -66,7 +66,7 @@ SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS = r"""
         be used by default.
 
         If you want to change padding behavior, you should read [`modeling_bart._prepare_decoder_attention_mask`]
-        and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+        and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
         information on the default strategy.
     inputs_embeds (`torch.FloatTensor` of shape`(batch_size, sequence_length, hidden_size)`, *optional*):
         Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
@@ -335,7 +335,8 @@ class SeamlessM4Tv2ConformerFeedForward(nn.Module):
 
 class SeamlessM4Tv2ConformerConvolutionModule(nn.Module):
     """Convolution block used in the conformer block. Uses a causal depthwise convolution similar to that
-    described in Section 2.1 of `https://doi.org/10.48550/arxiv.1609.03499"""
+    described in Section 2.1 of https://huggingface.co/papers/1609.03499
+    """
 
     def __init__(self, config):
         super().__init__()
@@ -489,7 +490,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
 
 
 class SeamlessM4Tv2ConformerEncoderLayer(nn.Module):
-    """Conformer block based on https://arxiv.org/abs/2005.08100."""
+    """Conformer block based on https://huggingface.co/papers/2005.08100."""
 
     # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoderLayer.__init__ with Wav2Vec2->SeamlessM4Tv2, attention_dropout->speech_encoder_dropout, torch.nn->nn
     def __init__(self, config):
@@ -636,7 +637,7 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = (
@@ -1749,7 +1750,7 @@ class SeamlessM4Tv2Encoder(SeamlessM4Tv2PreTrainedModel):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
             if self.training:
                 dropout_probability = torch.rand([])
@@ -1925,7 +1926,7 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
         next_decoder_cache = () if use_cache else None
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -2128,7 +2129,7 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
         all_self_attns = () if output_attentions else None
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -2949,7 +2950,7 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
                 `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
                 on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
                 for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
-                Retrieval](https://arxiv.org/abs/2010.00904).
+                Retrieval](https://huggingface.co/papers/2010.00904).
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed to avoid deadlocking with
                 `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
@@ -3231,7 +3232,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
                 `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
                 on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
                 for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
-                Retrieval](https://arxiv.org/abs/2010.00904).
+                Retrieval](https://huggingface.co/papers/2010.00904).
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed to avoid deadlocking with
                 `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).

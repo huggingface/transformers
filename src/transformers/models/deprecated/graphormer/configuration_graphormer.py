@@ -78,7 +78,7 @@ class GraphormerConfig(PretrainedConfig):
         activation_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the activation of the linear transformer layer.
         layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         bias (`bool`, *optional*, defaults to `True`):
             Uses bias in the attention module - unsupported at the moment.
