@@ -37,15 +37,15 @@ from ...cache_utils import (
     DynamicCache,  # we need __iter__ and __len__ of pkv
 )
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
@@ -76,6 +76,7 @@ class FalconHybridMambaAttentionDynamicCache(DynamicCache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
+
     This cache has two sets of lists of tensors: `key_cache` and `value_cache` for attention cache and `conv_states`
     and `ssm_states` for mamba cache. Each of these lists has `num_layers` tensors. The expected shape for each tensor
     For attention layers, `key_cache` and `value_cache` have a shape of `(batch_size, num_heads, seq_len, head_dim)`,
@@ -141,6 +142,7 @@ class FalconHybridMambaAttentionDynamicCache(DynamicCache):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
+
         Parameters:
             key_states (`torch.Tensor`):
                 The new key states to cache.
@@ -150,6 +152,7 @@ class FalconHybridMambaAttentionDynamicCache(DynamicCache):
                 The index of the layer to cache the states for.
             cache_kwargs (`Dict[str, Any]`, `optional`):
                 Additional arguments for the cache subclass. No additional arguments are used in `DynamicCache`.
+
         Return:
             A tuple containing the updated key and value states.
         """
@@ -268,6 +271,7 @@ def rotate_half(x):
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
+
     Args:
         q (`torch.Tensor`): The query tensor.
         k (`torch.Tensor`): The key tensor.
@@ -450,6 +454,7 @@ class FalconH1RMSNormGated(torch.nn.Module):
 def pad_tensor_by_size(input_tensor: torch.Tensor, pad_size: int):
     """
     Padding x tensor with `pad_size` on the seq_len dim (dim=1)
+
     Assumes that we only have tensors of either size 4 or 3
     """
     pad_shape = (0, 0, 0, 0, 0, pad_size, 0, 0) if len(input_tensor.shape) == 4 else (0, 0, 0, pad_size, 0, 0)
@@ -461,6 +466,7 @@ def reshape_into_chunks(input_tensor, pad_size, chunk_size):
     """
     Padding input_tensor with `pad_size` on the seq_len dim (dim=1) and
     simultaneously splitting it into chunk sequences.
+
     Assumes that we only have tensors of either size 4 or 3
     """
     # [bsz, seq_len, ...] -> [bsz, seq_len multiple of chunk_size, ...]
@@ -589,7 +595,7 @@ class FalconH1Mixer(nn.Module):
 
         if not is_fast_path_available:
             logger.warning_once(
-                "The fast path is not available because one of `(selective_state_update, causal_conv1d_fn, causal_conv1d_update)`"
+                "The fast path is not available because on of `(selective_state_update, causal_conv1d_fn, causal_conv1d_update)`"
                 " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
@@ -1037,6 +1043,7 @@ class FalconH1MLP(nn.Module):
         return y
 
 
+@use_kernel_forward_from_hub("RMSNorm")
 class FalconH1RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -1057,7 +1064,7 @@ class FalconH1RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class FalconH1DecoderLayer(nn.Module):
+class FalconH1DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: FalconH1Config, layer_idx: int):
         super().__init__()
         self.feed_forward = FalconH1MLP(config)
@@ -1154,25 +1161,7 @@ class FalconH1DecoderLayer(nn.Module):
         return outputs
 
 
-FALCONH1_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-    Parameters:
-        config ([`FalconH1Config`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare FalconH1Model outputting raw hidden-states without any specific head on top.",
-    FALCONH1_START_DOCSTRING,
-)
+@auto_docstring
 class FalconH1PreTrainedModel(PreTrainedModel):
     config_class = FalconH1Config
     base_model_prefix = "model"
@@ -1196,76 +1185,49 @@ class FalconH1PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-FALCONH1_INPUTS_DOCSTRING = r"""
+def compute_mup_vector(config):
+    """
+    Computes the MuP vector based on model configuration.
+
+    FalconH1 applies different MuP multiplier for each dimension of the hidden states.
+    The MuP vector is partitioned into chunks, and each chunk is multiplied with its
+    corresponding projected dimension.
+
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            [What are attention masks?](../glossary#attention-mask)
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
-            `past_key_values`).
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-            [What are position IDs?](../glossary#position-ids)
-        past_key_values (`FalconHybridMambaAttentionDynamicCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            A FalconHybridMambaAttentionDynamicCache object containing pre-computed hidden-states (keys and values in the
-            self-attention blocks and convolution and ssm states in the mamba blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-            Key and value cache tensors have shape `(batch_size, num_heads, seq_len, head_dim)`.
-            Convolution and ssm states tensors have shape `(batch_size, d_inner, d_conv)` and
-            `(batch_size, d_inner, d_state)` respectively.
-            See the `FalconHybridMambaAttentionDynamicCache` class for more details.
-            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        output_router_logits (`bool`, *optional*):
-            Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
-            should not be returned during inference.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
+        config: FalconH1Config object
+
+    Returns:
+        torch.Tensor: The computed MuP vector
+    """
+    # We'll need some values from the config to compute the vector dimensions
+    intermediate_size = (
+        config.mamba_d_ssm if config.mamba_d_ssm is not None else int(config.mamba_expand * config.hidden_size)
+    )
+    groups_time_state_size = config.mamba_n_groups * config.mamba_d_state
+    num_heads = config.mamba_n_heads
+    zxbcdt_multipliers = config.ssm_multipliers
+
+    vector_shape = 2 * intermediate_size + 2 * groups_time_state_size + num_heads
+    mup_vector = torch.ones(1, 1, vector_shape)
+
+    # Apply multipliers to different sections of the vector
+    mup_vector[:, :, :intermediate_size] *= zxbcdt_multipliers[0]
+    mup_vector[:, :, intermediate_size : 2 * intermediate_size] *= zxbcdt_multipliers[1]
+    mup_vector[:, :, 2 * intermediate_size : 2 * intermediate_size + groups_time_state_size] *= zxbcdt_multipliers[2]
+    mup_vector[
+        :, :, 2 * intermediate_size + groups_time_state_size : 2 * intermediate_size + 2 * groups_time_state_size
+    ] *= zxbcdt_multipliers[3]
+    mup_vector[:, :, 2 * intermediate_size + 2 * groups_time_state_size :] *= zxbcdt_multipliers[4]
+
+    return mup_vector
 
 
-@add_start_docstrings(
-    "The bare FalconH1 Model outputting raw hidden-states without any specific head on top.",
-    FALCONH1_START_DOCSTRING,
-)
+@auto_docstring
 # Adapted from transformers.models.jamba.modeling_jamba.JambaModel
 class FalconH1Model(FalconH1PreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`FalconH1DecoderLayer`]
+
     Args:
         config: FalconH1Config
     """
@@ -1289,49 +1251,13 @@ class FalconH1Model(FalconH1PreTrainedModel):
         self.lm_head_multiplier = config.lm_head_multiplier
 
         self.gradient_checkpointing = False
-        self._init_mup_vector()
+        # Compute the MuP vector once and register it for all layers
+        mup_vector = compute_mup_vector(config)
+        for layer in self.layers:
+            layer.mamba.register_buffer("mup_vector", mup_vector, persistent=False)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def _init_mup_vector(self):
-        """
-        FalconH1 applies different MuP mulitplier for each dimension of the hidden states.
-        The MuP vector is partitioned into chunks, and each chunk is multiplied with its corresponding projected dimension
-        """
-        mup_vector = None
-
-        for layer in self.layers:
-            mamba_layer = layer.mamba
-            vector_shape = (
-                2 * mamba_layer.intermediate_size + 2 * mamba_layer.groups_time_state_size + mamba_layer.num_heads
-            )
-
-            if mup_vector is None:
-                mup_vector = torch.ones(1, 1, vector_shape)
-
-                mup_vector[:, :, : mamba_layer.intermediate_size] *= mamba_layer.zxbcdt_multipliers[0]
-                mup_vector[:, :, mamba_layer.intermediate_size : 2 * mamba_layer.intermediate_size] *= (
-                    mamba_layer.zxbcdt_multipliers[1]
-                )
-                mup_vector[
-                    :,
-                    :,
-                    2 * mamba_layer.intermediate_size : 2 * mamba_layer.intermediate_size
-                    + mamba_layer.groups_time_state_size,
-                ] *= mamba_layer.zxbcdt_multipliers[2]
-                mup_vector[
-                    :,
-                    :,
-                    2 * mamba_layer.intermediate_size + mamba_layer.groups_time_state_size : 2
-                    * mamba_layer.intermediate_size
-                    + 2 * mamba_layer.groups_time_state_size,
-                ] *= mamba_layer.zxbcdt_multipliers[3]
-                mup_vector[:, :, 2 * mamba_layer.intermediate_size + 2 * mamba_layer.groups_time_state_size :] *= (
-                    mamba_layer.zxbcdt_multipliers[4]
-                )
-
-            mamba_layer.register_buffer("mup_vector", mup_vector, persistent=False)
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -1339,7 +1265,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(FALCONH1_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1401,31 +1327,17 @@ class FalconH1Model(FalconH1PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    mamba_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    mamba_attention_mask=mamba_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                mamba_attention_mask=mamba_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -1454,125 +1366,6 @@ class FalconH1Model(FalconH1PreTrainedModel):
             attentions=all_self_attns,
         )
 
-    def _update_causal_mask(
-        self,
-        attention_mask: torch.Tensor,
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_key_values: FalconHybridMambaAttentionDynamicCache,
-        output_attentions: bool,
-    ):
-        if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
-                return attention_mask
-            return None
-
-        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
-        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
-        # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-
-        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not output_attentions:
-            if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
-                is_training=self.training,
-            ):
-                return None
-
-        dtype, device = input_tensor.dtype, input_tensor.device
-        sequence_length = input_tensor.shape[1]
-        target_length = (
-            attention_mask.shape[-1]
-            if isinstance(attention_mask, torch.Tensor)
-            else past_seen_tokens + sequence_length + 1
-        )
-
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
-            attention_mask,
-            sequence_length=sequence_length,
-            target_length=target_length,
-            dtype=dtype,
-            device=device,
-            cache_position=cache_position,
-            batch_size=input_tensor.shape[0],
-        )
-
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
-            and not output_attentions
-        ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-
-        return causal_mask
-
-    @staticmethod
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        device: torch.device,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        **kwargs,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
-                `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache,
-                to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to plcae the 4D attention mask on.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-        """
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
-            )
-            if sequence_length != 1:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-                padding_attention_mask = (attention_mask[:, None, None, :] == attention_mask[:, None, :, None])[
-                    :, :, -sequence_length:, :
-                ].to(dtype)
-                padding_mask = causal_mask[:, :, :, :mask_length] + padding_attention_mask
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-
-        return causal_mask
-
     def _update_mamba_mask(self, attention_mask, cache_position):
         """
         No need for zeroing states when
@@ -1585,6 +1378,24 @@ class FalconH1Model(FalconH1PreTrainedModel):
         return mamba_mask
 
 
+@auto_docstring(
+    custom_intro="""
+    Falcon H1 model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    The bare FalconH1 Model outputting raw hidden-states without any specific head on top.
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`FalconH1Config`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+)
 class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -1618,7 +1429,7 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
         return self.model
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(FALCONH1_INPUTS_DOCSTRING)
+    @auto_docstring
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1642,20 +1453,27 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
             logits_to_keep (`int` or `torch.Tensor`, *optional*):
                 If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
                 If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
                 This is useful when using packed tensor format (single dimension for batch and sequence length).
+
         Returns:
+
         Example:
+
         ```python
         >>> from transformers import AutoTokenizer, FalconH1ForCausalLM
+
         >>> model = FalconH1ForCausalLM.from_pretrained("...")
         >>> tokenizer = AutoTokenizer.from_pretrained("...")
+
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
+
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
