@@ -28,6 +28,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    get_device_properties,
     require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
@@ -605,9 +606,8 @@ class BambaModelIntegrationTest(unittest.TestCase):
         cls.tokenizer.pad_token_id = cls.model.config.pad_token_id
         cls.tokenizer.padding_side = "left"
 
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+        # 8 is for A100 / A10 and 7 for T4
+        cls.cuda_compute_capability_major_version = get_device_properties()[1] if get_device_properties()[0] == "cuda" else None
 
     def test_simple_generate(self):
         expectations = Expectations(

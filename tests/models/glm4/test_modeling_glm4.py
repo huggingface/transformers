@@ -20,6 +20,7 @@ import pytest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, Glm4Config, is_torch_available
 from transformers.testing_utils import (
+    get_device_properties,
     require_flash_attn,
     require_torch,
     require_torch_large_gpu,
@@ -92,9 +93,8 @@ class Glm4IntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+        # 8 is for A100 / A10 and 7 for T4
+        cls.cuda_compute_capability_major_version = get_device_properties()[1] if get_device_properties()[0] == "cuda" else None
 
     def test_model_9b_fp16(self):
         EXPECTED_TEXTS = [

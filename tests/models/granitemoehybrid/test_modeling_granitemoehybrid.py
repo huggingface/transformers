@@ -24,6 +24,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    get_device_properties,
     require_torch,
     require_torch_gpu,
     slow,
@@ -111,9 +112,8 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+        # 8 is for A100 / A10 and 7 for T4
+        cls.cuda_compute_capability_major_version = get_device_properties()[1] if get_device_properties()[0] == "cuda" else None
 
     @slow
     def test_model_logits(self):

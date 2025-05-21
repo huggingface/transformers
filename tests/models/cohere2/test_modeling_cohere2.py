@@ -23,6 +23,7 @@ from pytest import mark
 from transformers import AutoModelForCausalLM, AutoTokenizer, Cohere2Config, is_torch_available, pipeline
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
+    get_device_properties,
     require_flash_attn,
     require_read_token,
     require_torch,
@@ -139,9 +140,8 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+        # 8 is for A100 / A10 and 7 for T4
+        cls.cuda_compute_capability_major_version = get_device_properties()[1] if get_device_properties()[0] == "cuda" else None
 
     def test_model_bf16(self):
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"

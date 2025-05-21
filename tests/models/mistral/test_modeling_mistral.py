@@ -23,6 +23,7 @@ from transformers import AutoTokenizer, MistralConfig, is_torch_available, set_s
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
+    get_device_properties,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -308,9 +309,8 @@ class MistralIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+        # 8 is for A100 / A10 and 7 for T4
+        cls.cuda_compute_capability_major_version = get_device_properties()[1] if get_device_properties()[0] == "cuda" else None
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
