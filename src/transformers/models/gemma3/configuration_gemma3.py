@@ -21,7 +21,7 @@
 # limitations under the License.
 from typing import Any, Dict, Optional, Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import LayerType, PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 from ..siglip import SiglipVisionConfig
@@ -234,9 +234,11 @@ class Gemma3TextConfig(PretrainedConfig):
             # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
             sliding_window_pattern = getattr(self, "sliding_window_pattern", 6)
             self.layer_types = [
-                "sliding_attention" if bool((i + 1) % sliding_window_pattern) else "full_attention"
+                LayerType.SLIDING_ATTENTION if bool((i + 1) % sliding_window_pattern) else LayerType.FULL_ATTENTION
                 for i in range(self.num_hidden_layers)
             ]
+        else:
+            self.layer_types = [LayerType(layer_type) for layer_type in self.layer_types]
 
 
 class Gemma3Config(PretrainedConfig):

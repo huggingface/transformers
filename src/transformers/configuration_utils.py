@@ -27,6 +27,7 @@ from .dynamic_module_utils import custom_object_save
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .utils import (
     CONFIG_NAME,
+    ExplicitEnum,
     PushToHubMixin,
     add_model_info_to_auto_map,
     add_model_info_to_custom_pipelines,
@@ -1209,3 +1210,13 @@ if PretrainedConfig.push_to_hub.__doc__ is not None:
     PretrainedConfig.push_to_hub.__doc__ = PretrainedConfig.push_to_hub.__doc__.format(
         object="config", object_class="AutoConfig", object_files="configuration file"
     )
+
+
+class LayerType(ExplicitEnum):
+    """
+    All the possible layer types.
+    """
+
+    FULL_ATTENTION = "full_attention"
+    SLIDING_ATTENTION = "sliding_attention"
+    CHUNKED_ATTENTION = "chunked_attention"

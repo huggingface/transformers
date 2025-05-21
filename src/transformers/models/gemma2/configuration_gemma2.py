@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import LayerType, PretrainedConfig
 
 
 class Gemma2Config(PretrainedConfig):
@@ -174,8 +174,11 @@ class Gemma2Config(PretrainedConfig):
 
         if self.layer_types is None:
             self.layer_types = [
-                "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
+                LayerType.SLIDING_ATTENTION if bool((i + 1) % 2) else LayerType.FULL_ATTENTION
+                for i in range(self.num_hidden_layers)
             ]
+        else:
+            self.layer_types = [LayerType(layer_type) for layer_type in self.layer_types]
 
 
 __all__ = ["Gemma2Config"]

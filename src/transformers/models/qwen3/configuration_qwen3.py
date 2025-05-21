@@ -14,7 +14,7 @@
 # limitations under the License.
 """Qwen3 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import LayerType, PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -209,11 +209,13 @@ class Qwen3Config(PretrainedConfig):
         self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
-                "sliding_attention"
+                LayerType.SLIDING_ATTENTION
                 if self.sliding_window is not None and i >= self.max_window_layers
-                else "full_attention"
+                else LayerType.FULL_ATTENTION
                 for i in range(self.num_hidden_layers)
             ]
+        else:
+            self.layer_types = [LayerType(layer_type) for layer_type in self.layer_types]
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,

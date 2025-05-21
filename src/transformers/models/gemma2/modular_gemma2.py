@@ -22,7 +22,7 @@ import torch.utils.checkpoint
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import LayerType, PretrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -198,8 +198,11 @@ class Gemma2Config(PretrainedConfig):
 
         if self.layer_types is None:
             self.layer_types = [
-                "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
+                LayerType.SLIDING_ATTENTION if bool((i + 1) % 2) else LayerType.FULL_ATTENTION
+                for i in range(self.num_hidden_layers)
             ]
+        else:
+            self.layer_types = [LayerType(layer_type) for layer_type in self.layer_types]
 
 
 class Gemma2RMSNorm(GemmaRMSNorm):
