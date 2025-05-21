@@ -4517,8 +4517,8 @@ class ModelTesterMixin:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config._attn_implementation = "flex_attention"
             # Flex Attention can not use dropout
-            if hasattr(config, "attention_droput"):
-                config.attention_droput = 0
+            if hasattr(config, "attention_dropout"):
+                config.attention_dropout = 0
             if hasattr(config, "attention_probs_dropout_prob"):
                 config.attention_probs_dropout_prob = 0
 
@@ -4526,15 +4526,13 @@ class ModelTesterMixin:
             self.assertTrue(model.config._attn_implementation == "flex_attention")
 
             # Elaborate workaround for encoder-decoder models as some do not specify their main input
-            if "input_ids" in inspect.signature(model.forward).parameters:
-                dummy_input = {"input_ids": inputs_dict[model_class.main_input_name].to(torch_device)}
-                if "decoder_input_ids" in inspect.signature(model.forward).parameters:
-                    dummy_input["decoder_input_ids"] = dummy_input["input_ids"].clone()
-            else:
-                dummy_input = {model_class.main_input_name: inputs_dict[model_class.main_input_name].to(torch_device)}
+            dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
+            if config.is_encoder_decoder:
+                dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"]
+                dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"]
 
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
-            _ = model(**dummy_input)
+            _ = model(**dummy_inputs)
 
     def test_generation_tester_mixin_inheritance(self):
         """
