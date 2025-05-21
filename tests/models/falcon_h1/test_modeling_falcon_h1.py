@@ -481,5 +481,45 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 @require_torch
 @require_torch_gpu
 class FalconH1ModelIntegrationTest(unittest.TestCase):
-    # TODO: add integration tests for all model sizes
-    pass
+    @slow
+    @require_read_token
+    def test_llama_3_1_hard(self):
+        """
+        An integration test for Falcon-H1.
+        """
+            EXPECTED_TEXT = (
+                    "Tell me about the french revolution.\n"
+                    "The French Revolution (1789–1799) was a period of radical social and political upheaval in France that "
+                    "fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:\n\n"
+                    "### **Causes**\n"
+                    "1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), extravagant spending by the monarchy, and inefficient taxation.\n"
+                    "2. **Social Inequality**: The rigid class system (the Ancien Régime) divided society into the privileged nobility and clergy (First Estate) and the common people (Third Estate), who bore the brunt of taxation and had few rights.\n"
+                    "3. **Enlightenment Ideas**: Philosophers like Rousseau, Voltaire, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.\n"
+                    "4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to the Third Estate's assertion of its rights and the eventual formation of the National Assembly.\n\n"
+                    "### **Key Events**\n"
+                    "1. **Opening of the Revolution (1789)**:\n"
+                    "- **Storming of the Bastille**: Symbolic of the fall of royal tyranny.\n"
+                    "- **Declaration of the Rights of Man and of the Citizen**: Proclaimed universal rights to liberty, property, and security.\n"
+                    "- **Creation of the National Assembly**: The Third Estate declared itself the representative body of France.\n\n"
+                    "2. **Radical Phase (1792–1794)**:\n"
+                    "- **Reign of Terror**: Led by Maximilien Robespierre, the Committee of Public Safety enforced radical egalitarianism through the guillotine, executing thousands of perceived enemies of the revolution (monarchists, clergy, aristocrats, and counter-revolutionaries).\n"
+                    "- **Execution of Louis XVI**: The king was guillotined in June 1793, symbolizing the end of the monarchy.\n"
+        )
+
+
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+
+        model_id = "tiiuae/Falcon-H1-1.5B-Deep-Instruct"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
+        device = "cuda"
+        messages = [{"role": "user", "content": "Tell me about the french revolution."}]
+        input_text=tokenizer.apply_chat_template(messages, tokenize=False)
+        inputs = tokenizer.encode(input_text, return_tensors="pt").to(device)
+
+        with torch.no_grad():
+            outputs = model.generate(inputs, max_new_tokens=512, do_sample=False)
+
+        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        print(generated_text)
+        self.assertEqual(generated_text, EXPECTED_TEXT)
