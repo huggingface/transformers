@@ -41,7 +41,7 @@ if is_torch_available():
         FalconH1Model,
     )
     from transformers.models.falcon_h1.modeling_falcon_h1 import (
-        FalconFalconFalconHybridMambaAttentionDynamicCache,
+        FalconHybridMambaAttentionDynamicCache,
     )
 
 
