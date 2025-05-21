@@ -222,19 +222,27 @@ def eager_attn_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    scaling: float,
+    scaling: Optional[float] = None,
     dropout: float = 0.0,
-    layer_head_mask: Optional[torch.Tensor] = None,
+    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ):
+    if scaling is None:
+        logger.warning_once(
+            "You are using a model's `eager` attention module but are not passing its appropriate attention scaling."
+            " We default to `head_dim**-0.5`. If this is unexpected, please report this to the Transformers GitHub"
+            " repo: https://github.com/huggingface/transformers/issues/new"
+        )
+        scaling = query.size(-1) ** -0.5
+
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if attention_mask is not None and attention_mask.ndim == 4:
-        attn_weights = attn_weights + attention_mask[:, :, :, : key.shape[-2]]
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
-    if layer_head_mask is not None:
-        attn_weights = attn_weights * layer_head_mask.view(1, -1, 1, 1)
+    if head_mask is not None:
+        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
 
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
@@ -304,11 +312,17 @@ class WhisperAttention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, _ = hidden_states.size()
+
+        # determine input shapes
+        bsz, tgt_len = hidden_states.shape[:-1]
+        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
+
+        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
+        kv_input_shape = (bsz, src_len, -1, self.head_dim)
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
-        query_states = query_states.view(bsz, tgt_len, self.num_heads, self.head_dim)
+        query_states = query_states.view(*q_input_shape)
         query_states = query_states.transpose(1, 2).contiguous()
 
         if past_key_value is not None:
@@ -327,8 +341,8 @@ class WhisperAttention(nn.Module):
             key_states = past_key_value.key_cache[self.layer_idx]
             value_states = past_key_value.value_cache[self.layer_idx]
         else:
-            key_states = self.k_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
-            value_states = self.v_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
+            key_states = self.k_proj(current_states).view(*kv_input_shape)
+            value_states = self.v_proj(current_states).view(*kv_input_shape)
             key_states = key_states.transpose(1, 2).contiguous()
             value_states = value_states.transpose(1, 2).contiguous()
             if past_key_value is not None:
