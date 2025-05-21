@@ -421,7 +421,7 @@ def sdpa_mask_older_torch(
 
 
 # We use the version with newer torch whenever possible, as it is more general and can handle arbitrary mask functions
-# (instead of mask functions only using q and kv indices)
+# (especially mask_function indexing a tensor, such as the padding mask function)
 sdpa_mask = sdpa_mask_recent_torch if is_torch_flex_attn_available() else sdpa_mask_older_torch
 
 
