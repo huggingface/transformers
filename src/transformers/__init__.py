@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.52.0.dev0"
+__version__ = "4.53.0.dev0"
 
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -261,7 +261,7 @@ _import_structure = {
         "AqlmConfig",
         "AutoRoundConfig",
         "AwqConfig",
-        "BitNetConfig",
+        "BitNetQuantConfig",
         "BitsAndBytesConfig",
         "CompressedTensorsConfig",
         "EetqConfig",
@@ -276,6 +276,7 @@ _import_structure = {
         "TorchAoConfig",
         "VptqConfig",
     ],
+    "video_utils": [],
 }
 
 # tokenizers-backed objects
@@ -334,6 +335,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
+    _import_structure["video_processing_utils"] = ["BaseVideoProcessor"]
 
 # PyTorch-backed objects
 try:
@@ -757,7 +759,7 @@ if TYPE_CHECKING:
         AqlmConfig,
         AutoRoundConfig,
         AwqConfig,
-        BitNetConfig,
+        BitNetQuantConfig,
         BitsAndBytesConfig,
         CompressedTensorsConfig,
         EetqConfig,
@@ -809,6 +811,7 @@ if TYPE_CHECKING:
         from .utils.dummy_torchvision_objects import *
     else:
         from .image_processing_utils_fast import BaseImageProcessorFast
+        from .video_processing_utils import BaseVideoProcessor
 
     try:
         if not (is_torchvision_available() and is_timm_available()):
