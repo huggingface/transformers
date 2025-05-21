@@ -1176,14 +1176,20 @@ class FalconH1PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        for name, param in module.named_parameters(recurse=True):
+            if not param.requires_grad:
+                continue
+
+            if "layernorm" in name.lower() and "weight" in name:
+                # LayerNorm weights usually initialized to 1
+                param.data.fill_(1.0)
+            elif "bias" in name:
+                param.data.zero_()
+            else:
+                try:
+                    param.data.normal_(mean=0.0, std=std)
+                except Exception as e:
+                    print(f"Skipping init for {name} due to error: {e}")
 
 
 def compute_mup_vector(config):
@@ -1569,6 +1575,7 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
         logits_to_keep (`int` or `torch.Tensor`, *optional*):
             If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
             `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that

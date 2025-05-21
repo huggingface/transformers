@@ -958,15 +958,20 @@ class FalconH1PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        for name, param in module.named_parameters(recurse=True):
+            if not param.requires_grad:
+                continue
 
+            if "layernorm" in name.lower() and "weight" in name:
+                # LayerNorm weights usually initialized to 1
+                param.data.fill_(1.0)
+            elif "bias" in name:
+                param.data.zero_()
+            else:
+                try:
+                    param.data.normal_(mean=0.0, std=std)
+                except Exception as e:
+                    print(f"Skipping init for {name} due to error: {e}")
 
 def compute_mup_vector(config):
     """
