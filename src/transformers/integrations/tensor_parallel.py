@@ -723,19 +723,23 @@ class SequenceParallel(TensorParallelLayer):
 class ParallelInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
     # a new instance is created (in order to locally override a given entry)
-    _global_mapping = {
-        "colwise": ColwiseParallel(),
-        "rowwise": RowwiseParallel(),
-        "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
-        "rowwise_rep": RowwiseParallel(input_layouts=Replicate()),
-        "local_colwise": ColwiseParallel(use_dtensor=False),
-        "local_rowwise": RowwiseParallel(use_dtensor=False),
-        "local": IsolatedParallel(),
-        "gather": GatherParallel(),
-        "local_packed_rowwise": PackedRowwiseParallel(use_dtensor=False),
-        "sequence_parallel": SequenceParallel(),
-        "replicate": ReplicateParallel(),
-    } if is_torch_greater_or_equal("2.5") and _torch_distributed_available else {}
+    _global_mapping = (
+        {
+            "colwise": ColwiseParallel(),
+            "rowwise": RowwiseParallel(),
+            "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
+            "rowwise_rep": RowwiseParallel(input_layouts=Replicate()),
+            "local_colwise": ColwiseParallel(use_dtensor=False),
+            "local_rowwise": RowwiseParallel(use_dtensor=False),
+            "local": IsolatedParallel(),
+            "gather": GatherParallel(),
+            "local_packed_rowwise": PackedRowwiseParallel(use_dtensor=False),
+            "sequence_parallel": SequenceParallel(),
+            "replicate": ReplicateParallel(),
+        }
+        if is_torch_greater_or_equal("2.5") and _torch_distributed_available
+        else {}
+    )
 
 
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
