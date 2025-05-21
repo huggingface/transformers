@@ -1,3 +1,4 @@
+Main
 nodoubtz-patch-1
 # Transformers
 
@@ -97,6 +98,9 @@ Special thanks to the contributors who have made this project possible. For a de
 - **Custom Extensions:** Add new transformer blocks or integrate with your ML pipelines.
 =======
 codespace-legendary-space-dollop-q4q7w9j666wfv6x
+=======
+[![Deploy static content to Pages](https://github.com/nodoubtz/transformers/actions/workflows/static.yml/badge.svg?branch=Main)](https://github.com/nodoubtz/transformers/actions/workflows/static.yml)
+codespace-legendary-space-dolmain
 [![Secret Leaks](https://github.com/nodoubtz/transformers/actions/workflows/trufflehog.yml/badge.svg)](https://github.com/nodoubtz/transformers/actions/workflows/trufflehog.yml)
 main
 
