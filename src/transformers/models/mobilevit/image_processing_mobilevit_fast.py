@@ -39,16 +39,6 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = None
     do_flip_channel_order = True
 
-    def flip_channel_order(self, image):
-        # Check if we have 3 or more channels
-        if image.shape[0] >= 3:
-            # Flip only the first 3 channels (RGB → BGR)
-            flipped = image.clone()
-            flipped[0:3] = image[[2, 1, 0], ...]
-            return flipped
-        # For grayscale or other formats, return as is
-        return image
-
     def _preprocess(
         self,
         images,
