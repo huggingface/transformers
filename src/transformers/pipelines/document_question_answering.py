@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import re
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
 import numpy as np
 
@@ -209,13 +209,28 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
 
         return preprocess_params, forward_params, postprocess_params
 
+    @overload
     def __call__(
         self,
         image: Union["Image.Image", str],
+        question: str,
+        word_boxes: Optional[Tuple[str, List[float]]] = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]: ...
+
+    @overload
+    def __call__(self, image: Dict[str, Any], **kwargs: Any) -> List[Dict[str, Any]]: ...
+
+    @overload
+    def __call__(self, image: List[Dict[str, Any]], **kwargs: Any) -> List[List[Dict[str, Any]]]: ...
+
+    def __call__(
+        self,
+        image: Union["Image.Image", str, List[Dict[str, Any]]],
         question: Optional[str] = None,
         word_boxes: Optional[Tuple[str, List[float]]] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """
         Answer the question(s) given as inputs by using the document(s). A document is defined as an image and an
         optional list of (word, box) tuples which represent the text in the document. If the `word_boxes` are not
