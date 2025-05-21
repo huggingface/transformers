@@ -1282,7 +1282,6 @@ class FalconH1Model(FalconH1PreTrainedModel):
         return causal_mask
 
 
-
 class FalconH1ForCausalLM(LlamaForCausalLM):
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @auto_docstring
