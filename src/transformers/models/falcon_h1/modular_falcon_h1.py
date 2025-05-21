@@ -961,7 +961,6 @@ class FalconH1PreTrainedModel(PreTrainedModel):
         for name, param in module.named_parameters(recurse=True):
             if not param.requires_grad:
                 continue
-
             if "layernorm" in name.lower() and "weight" in name:
                 # LayerNorm weights usually initialized to 1
                 param.data.fill_(1.0)
@@ -972,6 +971,7 @@ class FalconH1PreTrainedModel(PreTrainedModel):
                     param.data.normal_(mean=0.0, std=std)
                 except Exception as e:
                     print(f"Skipping init for {name} due to error: {e}")
+
 
 def compute_mup_vector(config):
     """
