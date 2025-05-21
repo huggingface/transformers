@@ -919,7 +919,7 @@ class TrainingArguments:
     )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
-    log_level: Optional[str] = field(
+    log_level: str = field(
         default="passive",
         metadata={
             "help": (
@@ -930,7 +930,7 @@ class TrainingArguments:
             "choices": trainer_log_levels.keys(),
         },
     )
-    log_level_replica: Optional[str] = field(
+    log_level_replica: str = field(
         default="warning",
         metadata={
             "help": "Logger log level to use on replica nodes. Same choices and defaults as ``log_level``",
