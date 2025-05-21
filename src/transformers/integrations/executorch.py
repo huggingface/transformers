@@ -18,7 +18,7 @@ import torch
 from ..cache_utils import DynamicCache, HybridCache, StaticCache
 from ..generation.configuration_utils import GenerationConfig
 from ..masking_utils import (
-    ALL_MASK_CREATION_FUNCTIONS,
+    ALL_MASK_ATTENTION_FUNCTIONS,
     _ignore_causal_mask_sdpa,
     _is_torch_greater_or_equal_than_2_5,
     prepare_padding_mask,
@@ -102,7 +102,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
                 Flag to instruct `torch.export` to use `torchdynamo`.
         """
         # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
-        ALL_MASK_CREATION_FUNCTIONS["sdpa_without_vmap"] = sdpa_mask_without_vmap
+        ALL_MASK_ATTENTION_FUNCTIONS["sdpa_without_vmap"] = sdpa_mask_without_vmap
         ALL_ATTENTION_FUNCTIONS["sdpa_without_vmap"] = ALL_ATTENTION_FUNCTIONS["sdpa"]
         self.model.model.config._attn_implementation = "sdpa_without_vmap"
 
@@ -480,7 +480,7 @@ def convert_and_export_with_cache(
     import torch.export._trace
 
     # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
-    ALL_MASK_CREATION_FUNCTIONS["sdpa_without_vmap"] = sdpa_mask_without_vmap
+    ALL_MASK_ATTENTION_FUNCTIONS["sdpa_without_vmap"] = sdpa_mask_without_vmap
     ALL_ATTENTION_FUNCTIONS["sdpa_without_vmap"] = ALL_ATTENTION_FUNCTIONS["sdpa"]
     model.config._attn_implementation = "sdpa_without_vmap"
 
@@ -719,7 +719,7 @@ def export_with_dynamic_cache(
         raise ImportError("torch >= 2.3 is required.")
 
     # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
-    ALL_MASK_CREATION_FUNCTIONS["sdpa_without_vmap"] = sdpa_mask_without_vmap
+    ALL_MASK_ATTENTION_FUNCTIONS["sdpa_without_vmap"] = sdpa_mask_without_vmap
     ALL_ATTENTION_FUNCTIONS["sdpa_without_vmap"] = ALL_ATTENTION_FUNCTIONS["sdpa"]
     model.config._attn_implementation = "sdpa_without_vmap"
 
