@@ -1158,7 +1158,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
         if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
             mamba_mask = None
         return mamba_mask
-    
+
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
