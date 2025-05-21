@@ -315,10 +315,7 @@ class WhisperAttention(nn.Module):
 
         # determine input shapes
         bsz, tgt_len = hidden_states.shape[:-1]
-        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
-
         q_input_shape = (bsz, tgt_len, -1, self.head_dim)
-        kv_input_shape = (bsz, src_len, -1, self.head_dim)
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -341,8 +338,8 @@ class WhisperAttention(nn.Module):
             key_states = past_key_value.key_cache[self.layer_idx]
             value_states = past_key_value.value_cache[self.layer_idx]
         else:
-            key_states = self.k_proj(current_states).view(*kv_input_shape)
-            value_states = self.v_proj(current_states).view(*kv_input_shape)
+            key_states = self.k_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
+            value_states = self.v_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
             key_states = key_states.transpose(1, 2).contiguous()
             value_states = value_states.transpose(1, 2).contiguous()
             if past_key_value is not None:
