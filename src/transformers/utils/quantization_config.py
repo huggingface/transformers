@@ -1716,7 +1716,7 @@ class TorchAoConfig(QuantizationConfigMixin):
                 if torch.xpu.is_available():
                     if version.parse(importlib.metadata.version("torchao")) >= version.parse(
                         "0.11.0"
-                    ) and version.parse(importlib.metadata.version("torch")) >= version.parse("2.8.0"):
+                    ) and version.parse(importlib.metadata.version("torch")) > version.parse("2.7.9"):
                         from torchao.dtypes import Int4XPULayout
                         from torchao.quantization.quant_primitives import ZeroPointDomain
 
