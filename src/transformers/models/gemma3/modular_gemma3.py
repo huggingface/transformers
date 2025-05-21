@@ -843,7 +843,9 @@ class Gemma3Model(PaliGemmaModel):
             }
             if token_type_ids is not None and inputs_embeds.shape[1] != 1:
                 # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
-                mask_kwargs["or_mask_function"] = token_type_ids_mask_function(token_type_ids)
+                mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
+                    token_type_ids.to(cache_position.device)
+                )
 
             # Create the masks
             causal_mask_mapping = {
@@ -1063,7 +1065,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         # Add the token type ids mask for generate as well
         if token_type_ids is not None and input_embeds.shape[1] != 1:
             # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
-            mask_kwargs["or_mask_function"] = token_type_ids_mask_function(token_type_ids)
+            mask_kwargs["or_mask_function"] = token_type_ids_mask_function(token_type_ids.to(cache_position.device))
 
         # Create the masks
         causal_mask_mapping = {
