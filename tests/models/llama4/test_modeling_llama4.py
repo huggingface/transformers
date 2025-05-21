@@ -46,7 +46,9 @@ class Llama4IntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # 8 is for A100 / A10 and 7 for T4
-        cls.cuda_compute_capability_major_version = get_device_properties()[1] if get_device_properties()[0] == "cuda" else None
+        cls.cuda_compute_capability_major_version = (
+            get_device_properties()[1] if get_device_properties()[0] == "cuda" else None
+        )
         cls.model = Llama4ForConditionalGeneration.from_pretrained(
             "meta-llama/Llama-4-Scout-17B-16E",
             device_map="auto",

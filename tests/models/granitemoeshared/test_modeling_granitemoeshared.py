@@ -315,7 +315,9 @@ class GraniteMoeSharedIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # 8 is for A100 / A10 and 7 for T4
-        cls.cuda_compute_capability_major_version = get_device_properties()[1] if get_device_properties()[0] == "cuda" else None
+        cls.cuda_compute_capability_major_version = (
+            get_device_properties()[1] if get_device_properties()[0] == "cuda" else None
+        )
 
     @slow
     @require_read_token

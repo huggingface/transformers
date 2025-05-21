@@ -591,7 +591,9 @@ class Bnb4BitTestTraining(Base4bitTest):
         model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_4bit=True)
 
         if torch_device in ["cuda", "xpu"]:
-            self.assertEqual(set(model.hf_device_map.values()), {backend_torch_accelerator_module(torch_device).current_device()})
+            self.assertEqual(
+                set(model.hf_device_map.values()), {backend_torch_accelerator_module(torch_device).current_device()}
+            )
         else:
             self.assertTrue(all(param.device.type == "cpu" for param in model.parameters()))
 

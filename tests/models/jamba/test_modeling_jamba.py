@@ -564,7 +564,9 @@ class JambaModelIntegrationTest(unittest.TestCase):
         cls.model = JambaForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
         # 8 is for A100 / A10 and 7 for T4
-        cls.cuda_compute_capability_major_version = get_device_properties()[1] if get_device_properties()[0] == "cuda" else None
+        cls.cuda_compute_capability_major_version = (
+            get_device_properties()[1] if get_device_properties()[0] == "cuda" else None
+        )
 
     @slow
     def test_simple_generate(self):
