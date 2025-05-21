@@ -406,9 +406,8 @@ def sdpa_mask_older_torch(
 
     # This creates the 4D mask easily. Note that we do not include vmap over the batch_idx dimension as well,
     # as vmap cannot handle slicing a tensor from scalar tensor (it internally calls `.item()` which vmap does not allow
-    # However, in more recent version of Pytorch, a trick was introduced to handle it, so the code below could be
-    # replaced by a simpler call to `torch.nn.attention.flex_attention.create_mask` in the future (it would just mean
-    # adding the padding_mask_function, and adding the correct offsets before calling the function)
+    # However, in more recent version of Pytorch, a trick was introduced to handle it - which is the reason we have
+    # `sdpa_mask_recent_torch`, as it allows more general `mask_function`
     causal_mask = _vmap_for_bhqkv(mask_function, bh_indices=False)(None, None, cache_position, kv_arange)
     causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
     if padding_mask is not None:
