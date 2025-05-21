@@ -32,6 +32,7 @@ from transformers import WhisperConfig
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
+    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -1704,6 +1705,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
 
+    @require_read_token
     @slow
     def test_large_batched_generation_multilingual(self):
         torch_device = "cpu"
