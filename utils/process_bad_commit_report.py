@@ -12,12 +12,12 @@ This is used by `.github/workflows/check_failed_model_tests.yml` to produce a sl
 ```
 """
 
-import datetime
 import json
 import os
 from collections import Counter
 from copy import deepcopy
 
+from get_previous_daily_ci import get_last_daily_ci_run
 from huggingface_hub import HfApi
 
 
@@ -76,16 +76,32 @@ if __name__ == "__main__":
         new_data_full[author] = {k: v for k, v in _data.items() if len(v) > 0}
 
     # Upload to Hub and get the url
+    # if it is not a scheduled run, upload the reports to a subfolder under `report_repo_folder`
+    report_repo_subfolder = ""
+    if os.getenv("GITHUB_EVENT_NAME") != "schedule":
+        report_repo_subfolder = f"{os.getenv('GITHUB_RUN_NUMBER')}-{os.getenv('GITHUB_RUN_ID')}"
+        report_repo_subfolder = f"runs/{report_repo_subfolder}"
+
+    workflow_run = get_last_daily_ci_run(
+        token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_run_id=os.getenv("GITHUB_RUN_ID")
+    )
+    workflow_run_created_time = workflow_run["created_at"]
+
+    report_repo_folder = workflow_run_created_time.split("T")[0]
+
+    if report_repo_subfolder:
+        report_repo_folder = f"{report_repo_folder}/{report_repo_subfolder}"
+
     with open("new_model_failures_with_bad_commit_grouped_by_authors.json", "w") as fp:
         json.dump(new_data_full, fp, ensure_ascii=False, indent=4)
     commit_info = api.upload_file(
         path_or_fileobj="new_model_failures_with_bad_commit_grouped_by_authors.json",
-        path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_run_models_gpu/new_model_failures_with_bad_commit_grouped_by_authors.json",
+        path_in_repo=f"{report_repo_folder}/ci_results_run_models_gpu/new_model_failures_with_bad_commit_grouped_by_authors.json",
         repo_id="hf-internal-testing/transformers_daily_ci",
         repo_type="dataset",
         token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
     )
-    url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_run_models_gpu/new_model_failures_with_bad_commit_grouped_by_authors.json"
+    url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{report_repo_folder}/ci_results_run_models_gpu/new_model_failures_with_bad_commit_grouped_by_authors.json"
 
     # Add `GH_` prefix as keyword mention
     output = {}

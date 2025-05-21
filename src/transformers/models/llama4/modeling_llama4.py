@@ -144,7 +144,7 @@ class Llama4TextMoe(nn.Module):
 
     def forward(self, hidden_states):
         batch, seq_len, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, self.hidden_dim)
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = self.router(hidden_states)
         tokens_per_expert = batch * seq_len
 
