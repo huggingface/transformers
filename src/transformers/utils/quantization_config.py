@@ -1718,8 +1718,10 @@ class TorchAoConfig(QuantizationConfigMixin):
                         "0.11.0"
                     ) and version.parse(importlib.metadata.version("torch")) >= version.parse("2.8.0"):
                         from torchao.dtypes import Int4XPULayout
+                        from torchao.quantization.quant_primitives import ZeroPointDomain
 
                         quant_type_kwargs["layout"] = Int4XPULayout()
+                        quant_type_kwargs["zero_point_domain"] = ZeroPointDomain.INT
                     else:
                         raise ValueError(
                             "TorchAoConfig requires torchao >= 0.11.0 and torch >= 2.8.0 for XPU support. Please upgrade the version or use run on CPU with the cpu version pytorch."
