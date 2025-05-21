@@ -4351,18 +4351,14 @@ class ModelTesterMixin:
         config.sliding_window = sliding_window
         inputs["attention_mask"] = torch.ones(batch_size, seq_len).to(torch.int64).to(torch_device)
         for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-
             # Set sliding window to `True` and check that all tokens beyond window size are masked
-            model.config.use_sliding_window = True
-            # In this case we need to reassign the model has it may cache the config attrs
+            config.use_sliding_window = True
+            config_dict = config.to_diff_dict()
             if hasattr(config, "layer_types"):
-                config_dict = model.config.to_diff_dict()
                 del config_dict["layer_types"]
-                new_config = model.config.__class__(**config_dict)
-                model = model_class(new_config).to(torch_device)
-                model.eval()
+            new_config = config.__class__(**config_dict)
+            model = model_class(new_config).to(torch_device)
+            model.eval()
             layer_types = getattr(model.config, "layer_types", ["sliding_attention"] * config.num_hidden_layers)
             attentions = model(**inputs, output_attentions=True).attentions
             for layer_attention, layer_type in zip(attentions, layer_types):
@@ -4373,14 +4369,13 @@ class ModelTesterMixin:
 
             # Set sliding window to `False` while keeping `sliding_window=3`
             # Check that all tokens beyond window size are not masked
-            model.config.use_sliding_window = False
-            # In this case we need to reassign the model has it may cache the config attrs
+            config.use_sliding_window = False
+            config_dict = config.to_diff_dict()
             if hasattr(config, "layer_types"):
-                config_dict = model.config.to_diff_dict()
                 del config_dict["layer_types"]
-                new_config = model.config.__class__(**config_dict)
-                model = model_class(new_config).to(torch_device)
-                model.eval()
+            new_config = config.__class__(**config_dict)
+            model = model_class(new_config).to(torch_device)
+            model.eval()
             attentions_not_sliding = model(**inputs, output_attentions=True).attentions
             for layer_attention in attentions_not_sliding:
                 self.assertFalse((layer_attention[:, :, ~sliding_mask] == 0).all().item())
