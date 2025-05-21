@@ -1172,25 +1172,10 @@ class ModelTesterMixin:
                         traced_model = torch.jit.trace(model, example_inputs, check_trace=False)
                     else:
                         main_input = inputs[main_input_name]
-
-                        if model.config._attn_implementation == "sdpa":
-                            trace_input = {main_input_name: main_input}
-
-                            if "attention_mask" in inputs:
-                                trace_input["attention_mask"] = inputs["attention_mask"]
-                            else:
-                                self.skipTest(reason="testing SDPA without attention_mask is not supported")
-
-                            outputs = model(main_input, attention_mask=inputs["attention_mask"])
-                            if any(isinstance(x, Cache) for x in outputs):
-                                continue
-                            # example_kwarg_inputs was introduced in torch==2.0, but it is fine here since SDPA has a requirement on torch>=2.1.
-                            traced_model = torch.jit.trace(model, example_kwarg_inputs=trace_input)
-                        else:
-                            outputs = model(main_input)
-                            if any(isinstance(x, Cache) for x in outputs):
-                                continue
-                            traced_model = torch.jit.trace(model, (main_input,))
+                        outputs = model(main_input)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
+                        traced_model = torch.jit.trace(model, (main_input,))
                 except RuntimeError:
                     self.fail("Couldn't trace module.")
 
