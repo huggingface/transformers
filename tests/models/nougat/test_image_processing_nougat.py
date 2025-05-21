@@ -307,8 +307,8 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-        # increase the tolerance in the for taking into account difference in implementation in interpolation between PIL and PyTorch
-        torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=0.15, rtol=1e-3)
+        # Note: Adding a larget than usual tolerance because the slow processor uses reducing_gap=2.0 during resizing.
+        torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=2e-1)
         self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 5e-3
+            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 2e-2
         )
