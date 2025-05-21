@@ -1179,7 +1179,6 @@ class FalconH1PreTrainedModel(PreTrainedModel):
         for name, param in module.named_parameters(recurse=True):
             if not param.requires_grad:
                 continue
-
             if "layernorm" in name.lower() and "weight" in name:
                 # LayerNorm weights usually initialized to 1
                 param.data.fill_(1.0)
