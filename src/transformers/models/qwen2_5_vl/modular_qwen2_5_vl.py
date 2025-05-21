@@ -689,7 +689,10 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                 attention_mask_2d = attention_mask_2d / torch.finfo(attention_mask_2d.dtype).min
                 attention_mask_2d = (1.0 - attention_mask_2d).int()
 
-            # calculate RoPE index once per generation in the pre-fill stage only
+            # Calculate RoPE index once per generation in the pre-fill stage only.
+            # When compiling, we can't check tensor values thus we check only input length
+            # It is safe to assume that `length!=1` means we're in pre-fill because compiled
+            # models currently cannot do asssisted decoding
             prefill_compiled_stage = is_torchdynamo_compiling() and (
                 (input_ids is not None and input_ids.shape[1] != 1)
                 or (inputs_embeds is not None and inputs_embeds.shape[1] != 1)
