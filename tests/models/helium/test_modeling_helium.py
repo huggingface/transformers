@@ -17,7 +17,6 @@ import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, HeliumConfig, is_torch_available
 from transformers.testing_utils import (
-    get_device_properties,
     require_read_token,
     require_torch,
     slow,

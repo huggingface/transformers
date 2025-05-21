@@ -19,7 +19,6 @@ import pytest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GlmConfig, is_torch_available
 from transformers.testing_utils import (
-    get_device_properties,
     is_flaky,
     require_flash_attn,
     require_torch,

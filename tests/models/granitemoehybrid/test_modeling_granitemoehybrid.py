@@ -24,7 +24,6 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
-    get_device_properties,
     require_torch,
     require_torch_gpu,
     slow,
@@ -106,7 +105,6 @@ class GraniteMoeHybridModelTest(BambaModelTest, GenerationTesterMixin, unittest.
 @unittest.skip(reason="GraniteMoeHybrid models are not yet released")
 @require_torch_gpu
 class GraniteMoeHybridIntegrationTest(unittest.TestCase):
-
     @slow
     def test_model_logits(self):
         input_ids = [31390, 631, 4162, 30, 322, 25342, 432, 1875, 43826, 10066, 688, 225]

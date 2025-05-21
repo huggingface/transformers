@@ -22,6 +22,7 @@ from packaging import version
 from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     get_device_properties,
     is_flaky,

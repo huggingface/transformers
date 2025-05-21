@@ -23,7 +23,6 @@ from pytest import mark
 from transformers import AutoModelForCausalLM, AutoTokenizer, Cohere2Config, is_torch_available, pipeline
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
-    get_device_properties,
     require_flash_attn,
     require_read_token,
     require_torch,

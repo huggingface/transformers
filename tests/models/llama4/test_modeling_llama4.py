@@ -17,7 +17,6 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
-    get_device_properties,
     require_read_token,
     require_torch_large_gpu,
     slow,

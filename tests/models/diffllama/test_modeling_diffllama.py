@@ -25,7 +25,6 @@ from transformers import AutoTokenizer, DiffLlamaConfig, StaticCache, is_torch_a
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
-    get_device_properties,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -566,7 +565,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
 @require_torch_accelerator
 class DiffLlamaIntegrationTest(unittest.TestCase):
-
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
         cleanup(torch_device, gc_collect=False)

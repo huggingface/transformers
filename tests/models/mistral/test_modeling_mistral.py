@@ -341,9 +341,7 @@ class MistralIntegrationTest(unittest.TestCase):
         # fmt: on
         expected_slice = EXPECTED_SLICES.get_expectation()
 
-        torch.testing.assert_close(
-            out[0, 0, :30], expected_slice, atol=1e-4, rtol=1e-4
-        )
+        torch.testing.assert_close(out[0, 0, :30], expected_slice, atol=1e-4, rtol=1e-4)
 
     @slow
     @require_bitsandbytes

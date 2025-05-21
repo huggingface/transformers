@@ -366,7 +366,8 @@ class MixtralIntegrationTest(unittest.TestCase):
                 ("cuda", 7): torch.Tensor([[0.1640, 0.1621, 0.6093], [-0.8906, -0.1640, -0.6093], [0.1562, 0.1250, 0.7226]]).to(torch_device),
                 ("cuda", 8): torch.Tensor([[0.1631, 0.1621, 0.6094], [-0.8906, -0.1621, -0.6094], [0.1572, 0.1270, 0.7227]]).to(torch_device),
                 ("rocm", 9): torch.Tensor([[0.1641, 0.1621, 0.6094], [-0.8906, -0.1631, -0.6094], [0.1572, 0.1260, 0.7227]]).to(torch_device),
-        }
+            }
+        )
         # fmt: on
         expected_logit = EXPECTED_LOGITS.get_expectation()
 
@@ -375,12 +376,8 @@ class MixtralIntegrationTest(unittest.TestCase):
 
         logits = logits.float()
 
-        torch.testing.assert_close(
-            logits[0, :3, :3], expected_logit, atol=1e-3, rtol=1e-3
-        )
-        torch.testing.assert_close(
-            logits[1, :3, :3], expected_logit, atol=1e-3, rtol=1e-3
-        )
+        torch.testing.assert_close(logits[0, :3, :3], expected_logit, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[1, :3, :3], expected_logit, atol=1e-3, rtol=1e-3)
 
     @slow
     @require_torch_accelerator
@@ -431,9 +428,7 @@ class MixtralIntegrationTest(unittest.TestCase):
             logits = model(dummy_input, attention_mask=attention_mask).logits
         logits = logits.float()
 
-        torch.testing.assert_close(
-            logits[0, :3, :3], expected_left, atol=1e-3, rtol=1e-3
-        )
+        torch.testing.assert_close(logits[0, :3, :3], expected_left, atol=1e-3, rtol=1e-3)
         torch.testing.assert_close(
             logits[0, -3:, -3:],
             expected_left_unpadded,

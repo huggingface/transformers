@@ -22,7 +22,6 @@ import pytest
 from transformers import NemotronConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    get_device_properties,
     is_flaky,
     require_flash_attn,
     require_read_token,
@@ -139,7 +138,6 @@ class NemotronModelTest(GemmaModelTest):
 
 @require_torch_accelerator
 class NemotronIntegrationTest(unittest.TestCase):
-
     @slow
     @require_read_token
     def test_nemotron_8b_generation_sdpa(self):

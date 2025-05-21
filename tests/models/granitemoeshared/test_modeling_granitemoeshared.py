@@ -20,7 +20,6 @@ from parameterized import parameterized
 from transformers import AutoTokenizer, GraniteMoeSharedConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     Expectations,
-    get_device_properties,
     require_read_token,
     require_torch,
     require_torch_accelerator,
@@ -308,7 +307,6 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
 @require_torch_accelerator
 class GraniteMoeSharedIntegrationTest(unittest.TestCase):
-
     @slow
     @require_read_token
     def test_model_3b_logits(self):

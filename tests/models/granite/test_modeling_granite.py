@@ -20,7 +20,6 @@ from parameterized import parameterized
 from transformers import GraniteConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     Expectations,
-    get_device_properties,
     require_read_token,
     require_torch,
     require_torch_accelerator,
@@ -306,7 +305,6 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 @require_torch_accelerator
 class GraniteIntegrationTest(unittest.TestCase):
-
     @slow
     @require_read_token
     def test_model_3b_logits_bf16(self):
