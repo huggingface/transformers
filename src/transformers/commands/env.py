@@ -30,9 +30,9 @@ from ..utils import (
     is_safetensors_available,
     is_tf_available,
     is_torch_available,
-    is_torch_xpu_available,
     is_torch_hpu_available,
     is_torch_npu_available,
+    is_torch_xpu_available,
 )
 from . import BaseTransformersCLICommand
 
