@@ -262,7 +262,7 @@ class SemanticDecoder(nn.Module):
 class XcodecEuclideanCodebook(nn.Module):
     """Codebook with Euclidean distance."""
 
-    def __init__(self, config: XcodecConfig):
+    def __init__(self, config):
         super().__init__()
         embed = torch.zeros(config.codebook_size, config.codebook_dim)
         self.codebook_size = config.codebook_size
@@ -285,6 +285,11 @@ class XcodecEuclideanCodebook(nn.Module):
         embed_ind = self.quantize(hidden_states)
         embed_ind = embed_ind.view(*shape[:-1])
         return embed_ind
+
+    def decode(self, embed_ind):
+        quantized = F.embedding(embed_ind, self.embed)
+        return quantized
+
 
 class XcodecVectorQuantization(nn.Module):
     """
@@ -312,6 +317,7 @@ class XcodecResidualVectorQuantization(nn.Module):
     """
     Residual vector quantization implementation. Follows Algorithm 1 in https://arxiv.org/pdf/2107.03312.pdf
     """
+
     def __init__(self, config: XcodecConfig):
         super().__init__()
         self.quantizers = nn.ModuleList([XcodecVectorQuantization(config) for _ in range(config.num_quantizers)])
