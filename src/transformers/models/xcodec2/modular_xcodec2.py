@@ -13,7 +13,7 @@ import torch.utils.checkpoint
 from torch import int32, nn, sin, sinc
 from torch.amp import autocast
 from torch.nn import Module, Parameter
-from torch.nn.utils import weight_norm
+from torch.nn.utils.parametrize import weight_norm
 
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
@@ -152,6 +152,9 @@ class XCodec2DecoderLayer(LlamaDecoderLayer):
 
 
 def WNConv1d(*args, **kwargs):
+    weight_norm = nn.utils.weight_norm
+    if hasattr(nn.utils.parametrizations, "weight_norm"):
+        weight_norm = nn.utils.parametrizations.weight_norm
     return weight_norm(nn.Conv1d(*args, **kwargs))
 
 
@@ -440,10 +443,13 @@ class CodecEncoder_Transformer(nn.Module):
 
     def apply_weight_norm(self):
         """Apply weight normalization module from all of the layers."""
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
 
         def _apply_weight_norm(m):
             if isinstance(m, nn.Conv1d):
-                torch.nn.utils.weight_norm(m)
+                weight_norm(m)
 
         self.apply(_apply_weight_norm)
 
@@ -1260,6 +1266,9 @@ class CodecDecoderVocos(nn.Module):
 
     def apply_weight_norm(self):
         """Apply weight normalization module from all of the layers."""
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
 
         def _apply_weight_norm(m):
             if isinstance(m, nn.Conv1d) or isinstance(m, nn.ConvTranspose1d):
@@ -1365,6 +1374,9 @@ class XCodec2Model(PreTrainedModel):
         self.fc_post_a = nn.Linear(2048, 1024)
         feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
         self.feature_extractor = feature_extractor
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(self, input_waveform, sample_rate=16000):
         """
