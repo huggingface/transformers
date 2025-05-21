@@ -61,6 +61,22 @@ def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> Li
         return [single_size] * blocks
 
 
+def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str]) -> Optional[str]:
+    """
+    Get the TP style for a parameter from the TP plan.
+
+    The TP plan is a dictionary that maps parameter names to TP styles.
+    The parameter name can be a generic name with wildcards (e.g. "*.weight") or a specific name (e.g. "layer_1.weight").
+    """
+    generic_param_name = re.sub(r"\d+", "*", parameter_name)
+    if generic_param_name in tp_plan:
+        return tp_plan[generic_param_name]
+    elif "." in generic_param_name and generic_param_name.rsplit(".", 1)[0] in tp_plan:
+        return tp_plan[generic_param_name.rsplit(".", 1)[0]]
+    else:
+        return None
+
+
 str_to_torch_dtype = {
     "BOOL": torch.bool,
     "U8": torch.uint8,
@@ -136,6 +152,71 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
     else:
         raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
     return tensor.to(str_to_torch_dtype[slice_dtype])
+
+
+def repack_weights(
+    packed_parameter: torch.Tensor,
+    sharded_dim: int,  # The dimension index in the global tensor that was sharded
+    world_size: int,
+    num_blocks: int = 2,
+) -> torch.Tensor:
+    """
+    Reorders a tensor that was reconstructed from sharded packed weights into its canonical packed format.
+
+    For example, if a weight was packed (e.g., gate_proj and up_proj) and then sharded,
+    DTensor.full_tensor() might produce an interleaved layout like [G0, U0, G1, U1, ...]
+    along the sharded dimension. This function reorders it to [G0, G1, ..., U0, U1, ...].
+    This is an inverse operation to get_packed_weights.
+
+    Args:
+        reconstructed_tensor: The tensor reconstructed from DTensor (e.g., via .full_tensor().contiguous()).
+        sharded_dim: The dimension index in the reconstructed_tensor that was originally sharded.
+        world_size: The tensor parallel world size.
+        num_packed_projs: The number of projections that were packed together (e.g., 2 for gate_up_proj).
+
+    Returns:
+        The reordered tensor in canonical packed format.
+    """
+
+    if num_blocks != 2:
+        raise ValueError(
+            "Num blocks different from 2 is not supported yet. This is most likely a bug in your implementation as we only pack gate and up projections together."
+        )
+
+    actual_sharded_dim = sharded_dim if sharded_dim >= 0 else sharded_dim + packed_parameter.ndim
+    total_size_on_sharded_dim = packed_parameter.shape[actual_sharded_dim]
+    original_block_size_on_dim = total_size_on_sharded_dim // num_blocks
+    shard_chunk_size = original_block_size_on_dim // world_size
+
+    prefix_shape = packed_parameter.shape[:actual_sharded_dim]
+    suffix_shape = packed_parameter.shape[actual_sharded_dim + 1 :]
+
+    tensor_view = packed_parameter.view(
+        *prefix_shape,
+        world_size,
+        num_blocks,
+        shard_chunk_size,
+        *suffix_shape,
+    )
+
+    # Permute to bring num_packed_projs first, then world_size, then shard_chunk_size
+    # This groups all chunks of G together, then all chunks of U together.
+    # Target order of these middle dimensions: (num_packed_projs, world_size, shard_chunk_size)
+    # Current order of view's middle dimensions: (world_size, num_packed_projs, shard_chunk_size)
+    # Absolute indices of the dimensions to be permuted (world_size, num_packed_projs)
+    axis_ws_abs = len(prefix_shape)
+    axis_npp_abs = len(prefix_shape) + 1
+
+    permute_order = list(range(tensor_view.ndim))
+    permute_order[axis_ws_abs], permute_order[axis_npp_abs] = permute_order[axis_npp_abs], permute_order[axis_ws_abs]
+
+    tensor_permuted = tensor_view.permute(*permute_order)
+
+    # Reshape back to the original tensor's ndim, with the sharded dimension now correctly ordered as [G_all, U_all].
+    # The final shape should be the same as reconstructed_tensor.
+    final_ordered_tensor = tensor_permuted.reshape_as(packed_parameter)
+
+    return final_ordered_tensor
 
 
 def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
@@ -578,6 +659,49 @@ def translate_to_torch_parallel_style(style: str):
         raise ValueError(f"Unsupported parallel style value: {style}")
 
 
+def convert_local_tensor_to_dtensor(
+    parameter: torch.Tensor, parameter_name: str, device_mesh, tp_plan: dict[str, str]
+) -> DTensor:
+    """
+    Converts a local variant of weights to a DTensor with corresponding placements. Shouldn't be done ever except of before saving the model.
+    """
+    _, param_type = parameter_name.rsplit(".", 1) if "." in parameter_name else parameter_name
+    tp_style = _get_parameter_tp_plan(parameter_name, tp_plan)
+    if not tp_style:
+        return parameter
+
+    if tp_style not in ["local_packed_rowwise", "local_rowwise", "local_colwise"]:
+        return parameter
+    # TODO: this logic should be wrapped in a function, this is copied from corresponding tp classes.
+    if tp_style == "local_packed_rowwise":
+        placements = [Shard(-1)]
+    elif tp_style == "local_rowwise":
+        if param_type == "bias":
+            placements = [Replicate()]
+        else:
+            placements = [Shard(-1)]
+    elif tp_style == "local_colwise":
+        if param_type == "bias":
+            placements = [Shard(-1)]
+        else:
+            placements = [Shard(-2)]
+    return DTensor.from_local(parameter, device_mesh, placements, run_check=False)
+
+
+def replace_state_dict_local_with_dtensor(
+    state_dict: dict[str, torch.Tensor],
+    tp_plan: dict[str, str],
+    device_mesh,
+) -> dict[str, torch.Tensor]:
+    """
+    Replaces all tensors that were sharded with `local_*` strategy with DTensor to make determining their proper size possible.
+    """
+    for key, value in state_dict.items():
+        if isinstance(value, torch.Tensor) and not isinstance(value, DTensor):
+            state_dict[key] = convert_local_tensor_to_dtensor(value, key, device_mesh, tp_plan)
+    return state_dict
+
+
 def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, current_module_plan, device_mesh):
     """
     Add hooks to the module holding the layer. Meaning:
@@ -632,13 +756,9 @@ def shard_and_distribute_module(
     param_name, param_type = parameter_name.rsplit(".", 1) if "." in parameter_name else parameter_name
     tp_plan = model._tp_plan
     module_to_tp = model.get_submodule(param_name)
-    current_module_plan = None
     rank = int(rank)
-    generic_param_name = re.sub(r"\d+", "*", parameter_name)
-    if generic_param_name in tp_plan:
-        current_module_plan = tp_plan[generic_param_name]
-    elif "." in generic_param_name and generic_param_name.rsplit(".", 1)[0] in tp_plan:
-        current_module_plan = tp_plan[generic_param_name.rsplit(".", 1)[0]]
+
+    current_module_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
 
     # Add hooks to the module if not done yet
     # add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
