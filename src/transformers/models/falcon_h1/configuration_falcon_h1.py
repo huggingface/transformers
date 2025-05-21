@@ -73,7 +73,7 @@ class FalconH1Config(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the "end-of-sequence" token.
-        max_position_embeddings (`int`, *optional*, defaults to 262144):
+        max_position_embeddings (`int`, *optional*, defaults to 8192):
             Max cached sequence length for the model
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
