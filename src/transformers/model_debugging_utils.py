@@ -22,6 +22,7 @@ from io import StringIO
 from typing import Optional
 
 from safetensors.torch import save_file
+
 from transformers.utils.import_utils import requires
 
 from .utils import is_torch_available
@@ -66,7 +67,9 @@ def _dtensor_repr(x):
     return "DTensor(non-rank0)"
 
 
-def _serialize_tensor_like_io(value, debug_path: Optional[str] = None, use_repr: bool = True, path_to_value: Optional[str] = None):
+def _serialize_tensor_like_io(
+    value, debug_path: Optional[str] = None, use_repr: bool = True, path_to_value: Optional[str] = None
+):
     """
     Converts Tensors and DTensors to a JSON-serializable dictionary representation.
 
@@ -151,9 +154,7 @@ def _serialize_io(value, debug_path: Optional[str] = None, use_repr: bool = True
         )
 
     if isinstance(value, torch.Tensor):
-        return _serialize_tensor_like_io(
-            value, debug_path=debug_path, use_repr=use_repr, path_to_value=path_to_value
-        )
+        return _serialize_tensor_like_io(value, debug_path=debug_path, use_repr=use_repr, path_to_value=path_to_value)
 
     return _sanitize_repr_for_diff(repr(value))
 
@@ -400,7 +401,7 @@ def model_addition_debugger_context(
     model,
     debug_path: Optional[str] = None,
     do_prune_layers: Optional[bool] = True,
-    use_repr: bool = True,
+    use_repr: Optional[bool] = True,
 ):
     """
     # Model addition debugger - context manager for model adders
