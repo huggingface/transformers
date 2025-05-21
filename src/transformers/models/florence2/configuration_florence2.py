@@ -301,7 +301,10 @@ class Florence2Config(PretrainedConfig):
     ```"""
 
     model_type = "florence2"
-    is_composition = False
+    sub_configs = {
+        "text_config": Florence2LanguageConfig,
+        "vision_config": Florence2VisionConfig,
+    }
 
     def __init__(
         self,
@@ -313,18 +316,17 @@ class Florence2Config(PretrainedConfig):
     ):
         self.vocab_size = vocab_size
         self.projection_dim = projection_dim
-        self.vision_config = vision_config
 
-        self._attn_implementation = "eager"
-        if "_attn_implementation" in kwargs:
-            self._attn_implementation = kwargs["_attn_implementation"]
+        if vision_config is None:
+            vision_config = {}
+            logger.info("vision_config is None. initializing the Blip2VisionConfig with default values.")
 
-        if vision_config is not None:
-            self.vision_config = Florence2VisionConfig(**vision_config)
+        if text_config is None:
+            text_config = {}
+            logger.info("text_config is None. Initializing the text config with default values (`OPTConfig`).")
 
-        self.text_config = text_config
-        if text_config is not None:
-            self.text_config = Florence2LanguageConfig(**text_config, _attn_implementation=self._attn_implementation)
+        self.vision_config = Florence2VisionConfig(**vision_config)
+        self.text_config = Florence2LanguageConfig(**text_config)
 
         super().__init__(**kwargs)
 
