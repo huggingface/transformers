@@ -1431,16 +1431,21 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 @require_torch
 @require_torchaudio
 class WhisperModelIntegrationTests(unittest.TestCase):
+    _dataset = None
+
     @classmethod
-    def setUpClass(cls):
-        # Loads 5 samples from the test dataset
-        num_samples = 5
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
-        cls.speech_samples = [x["array"] for x in speech_samples]
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls._dataset is None:
+            cls._dataset = datasets.load_dataset(
+                "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+            )
 
     def _load_datasamples(self, num_samples):
-        return self.speech_samples[:num_samples]
+        self._load_dataset()
+        ds = self._dataset
+        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        return [x["array"] for x in speech_samples]
 
     @slow
     def test_tiny_logits_librispeech(self):
