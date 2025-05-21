@@ -3567,7 +3567,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             for name, tensor in state_dict.items():
                 # Sometimes in the state_dict we have non-tensor objects.
                 # e.g. in bitsandbytes we have some `str` objects in the state_dict
-                if isinstance(tensor, torch.Tensor) or isinstance(tensor, DTensor):
+                if isinstance(tensor, torch.Tensor):
                     ptrs[id_tensor_storage(tensor)].append(name)
                 else:
                     # In the non-tensor case, fall back to the pointer of the object itself
@@ -4177,13 +4177,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
         # `device_map` pointing to the correct device
-        if device_mesh is None:
-            tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
-        else:
-            # TODO: make device_mesh support multiple dimensions
-            if device_mesh.ndim == 1:
-                raise ValueError("device_mesh must be 1 dimensional and will be used for TP")
-            device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
+        if tp_plan is not None:
+            if device_mesh is None and tp_plan is not None:
+                tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
+            else:
+                # TODO: make device_mesh support multiple dimensions
+                if device_mesh.ndim == 1:
+                    raise ValueError("device_mesh must be 1 dimensional and will be used for TP")
+                device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
 
         if use_auth_token is not None:
             warnings.warn(

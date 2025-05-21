@@ -419,8 +419,9 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: Optional[Union[int, List[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
+        vision_feature_layer: Union[int, List[int]],
+        vision_feature_select_strategy: str,
+        batch_num_images: Optional[torch.LongTensor] = None,
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -430,34 +431,34 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
                The tensors corresponding to the input images.
             image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
                 Actual image size of each images (H, W).
-            vision_feature_layer (`Union[int, List[int]]`, *optional*):
+            vision_feature_layer (`Union[int, List[int]]`):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
                 vision features.
-            vision_feature_select_strategy (`str`, *optional*):
+            vision_feature_select_strategy (`str`):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
+            batch_num_images (`torch.LongTensor`, *optional*):
+                Number of images in each sample.
         Returns:
             image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_patches, image_length, embed_dim)`).
         """
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
-        )
-
         # ! infer image_num_patches from image_sizes
+        if batch_num_images is None:
+            # treat this as a single-image case for backward compatibility
+            need_patching = [True] * len(image_sizes)
+        else:
+            need_patching = [n == 1 for n in batch_num_images for _ in range(n)]
         image_num_patches = [
             image_size_to_num_patches(
                 image_size=imsize,
                 grid_pinpoints=self.config.image_grid_pinpoints,
                 patch_size=self.config.vision_config.image_size,
             )
-            for imsize in image_sizes
+            if should_patch
+            else 1
+            for imsize, should_patch in zip(image_sizes, need_patching)
         ]
         if pixel_values.dim() == 5:
             # stacked if input is (batch_size, num_patches, num_channels, height, width)
@@ -500,6 +501,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         vision_feature_layer: Optional[Union[int, List[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         vision_aspect_ratio: Optional[str] = None,
+        batch_num_images: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -520,6 +522,8 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
             If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
+        batch_num_images (`torch.LongTensor`, *optional*):
+            Number of images in each sample.
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -558,6 +562,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
+                batch_num_images=batch_num_images,
             )
             image_features, feature_lens = self.pack_image_features(
                 image_features,
@@ -749,6 +754,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         vision_feature_layer: Optional[Union[int, List[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         vision_aspect_ratio: Optional[str] = None,
+        batch_num_images: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -771,6 +777,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
+        batch_num_images (`torch.LongTensor`, *optional*):
+            Number of images in each sample.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -832,6 +840,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             vision_aspect_ratio=vision_aspect_ratio,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
+            batch_num_images=batch_num_images,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
