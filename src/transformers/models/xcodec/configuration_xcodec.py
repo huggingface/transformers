@@ -15,14 +15,14 @@
 """Xcodec model configuration"""
 
 import math
+from typing import List, Union
 
 import numpy as np
-from typing import Union, Dict, List, Optional
+
+from transformers import DacConfig, HubertConfig
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-
-from transformers import DacConfig, HubertConfig 
 
 
 logger = logging.get_logger(__name__)
@@ -50,7 +50,7 @@ class XcodecConfig(PretrainedConfig):
         kernel_size (`int`, *optional*, defaults to 3):
             Kernel size for the initial semantic convolution.
         encoder_channels (`int`, *optional*, defaults to 768):
-            Number of hidden channels in each semantic encoder block.    
+            Number of hidden channels in each semantic encoder block.
         channel_ratios (`List[float]`, *optional*, defaults to [1.0, 1.0]):
             Expansion factors for the number of output channels in each semantic block.
         strides (`List[int]`, *optional*, defaults to [1, 1]):
@@ -100,10 +100,10 @@ class XcodecConfig(PretrainedConfig):
     model_type = "xcodec"
 
     sub_configs = {
-        "acoustic_model_config": DacConfig, 
+        "acoustic_model_config": DacConfig,
         "semantic_model_config": HubertConfig,
     }
-    is_composition = True 
+    is_composition = True
 
     def __init__(
         self,
@@ -129,18 +129,17 @@ class XcodecConfig(PretrainedConfig):
         acoustic_model_config: Union[dict, DacConfig] = None,
         semantic_model_config: Union[dict, HubertConfig] = None,
         **kwargs,
-        ):  
-
+    ):
         super().__init__(**kwargs)
-    
+
         if acoustic_model_config is None:
             self.acoustic_model_config = DacConfig(
-                encoder_hidden_size = 64,
-                downsampling_ratios = [8, 5, 4, 2],
-                decoder_hidden_size = 1024,
-                upsampling_ratios  = [8, 5, 4, 2],
-                hidden_size = 256,
-                )
+                encoder_hidden_size=64,
+                downsampling_ratios=[8, 5, 4, 2],
+                decoder_hidden_size=1024,
+                upsampling_ratios=[8, 5, 4, 2],
+                hidden_size=256,
+            )
         elif isinstance(acoustic_model_config, dict):
             self.acoustic_model_config = DacConfig(**acoustic_model_config)
         elif isinstance(acoustic_model_config, DacConfig):
@@ -173,7 +172,6 @@ class XcodecConfig(PretrainedConfig):
         self.intermediate_dim = intermediate_dim
         self.output_dim = output_dim
 
-
     @classmethod
     def from_sub_models_config(cls, acoustic_model_config: DacConfig, semantic_model_config: HubertConfig, **kwargs):
         """
@@ -183,15 +181,19 @@ class XcodecConfig(PretrainedConfig):
             [`XcodecConfig`]: The instantiated configuration.
         """
         return cls(
-            acoustic_model_config=acoustic_model_config.to_dict() if hasattr(acoustic_model_config, "to_dict") else acoustic_model_config,
-            semantic_model_config=semantic_model_config.to_dict() if hasattr(semantic_model_config, "to_dict") else semantic_model_config,
+            acoustic_model_config=acoustic_model_config.to_dict()
+            if hasattr(acoustic_model_config, "to_dict")
+            else acoustic_model_config,
+            semantic_model_config=semantic_model_config.to_dict()
+            if hasattr(semantic_model_config, "to_dict")
+            else semantic_model_config,
             **kwargs,
         )
 
     @property
     def frame_rate(self) -> int:
         return math.ceil(self.sample_rate / np.prod(self.acoustic_model_config.upsampling_ratios))
-        
+
     @property
     def bits_per_codebook(self) -> int:
         return int(math.log2(self.codebook_size))

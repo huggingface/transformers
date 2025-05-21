@@ -14,14 +14,13 @@
 # limitations under the License.
 import argparse
 import re
-
-import torch
 from typing import Dict
 
+import torch
 
 from transformers import (
-    XcodecConfig,
     EncodecFeatureExtractor,
+    XcodecConfig,
     XcodecModel,
     logging,
 )
@@ -29,7 +28,6 @@ from transformers import (
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
-
 
 
 MAPPING_ACOUSTIC_ENCODER = {
@@ -57,7 +55,7 @@ MAPPING_ACOUSTIC_DECODER = {
 }
 
 MAPPING_SEMANTIC_ENCODER = {
-    "conv.conv.":  "conv.",
+    "conv.conv.": "conv.",
     "conv1.conv.": "conv1.",
     "conv2.conv.": "conv2.",
 }
@@ -76,9 +74,9 @@ MAPPING_QUANTIZER = {
 
 def _rewrite_weight_norm(key: str) -> str:
     if key.endswith("weight_g"):
-        return key[:-len("weight_g")] + "parametrizations.weight.original0"
+        return key[: -len("weight_g")] + "parametrizations.weight.original0"
     if key.endswith("weight_v"):
-        return key[:-len("weight_v")] + "parametrizations.weight.original1"
+        return key[: -len("weight_v")] + "parametrizations.weight.original1"
     return key
 
 
@@ -86,9 +84,8 @@ def convert_old_keys_to_new_keys(original_state_dict: Dict[str, torch.Tensor]) -
     converted_checkpoint: Dict[str, torch.Tensor] = {}
 
     for old_key, value in original_state_dict.items():
-
         if old_key.startswith("encoder."):
-            layer_key = old_key[len("encoder."):]
+            layer_key = old_key[len("encoder.") :]
             for pattern, path_parts in MAPPING_ACOUSTIC_ENCODER.items():
                 pattern_match = re.match(pattern, layer_key)
                 if pattern_match is None:
@@ -96,7 +93,7 @@ def convert_old_keys_to_new_keys(original_state_dict: Dict[str, torch.Tensor]) -
 
                 digit_strings = [g for g in pattern_match.groups() if g is not None]
                 digit_indices = [int(ds) for ds in digit_strings]
-                remainder = layer_key[pattern_match.end():]
+                remainder = layer_key[pattern_match.end() :]
 
                 if len(path_parts) == 1:
                     mapped_subkey = f"{path_parts[0]}{remainder}"
@@ -106,9 +103,7 @@ def convert_old_keys_to_new_keys(original_state_dict: Dict[str, torch.Tensor]) -
                 else:
                     encoder_layer, unit_idx = digit_indices
                     mapped_subkey = (
-                        f"{path_parts[0]}.{encoder_layer-1}."
-                        f"{path_parts[1]}{unit_idx+1}."
-                        f"{path_parts[2]}{remainder}"
+                        f"{path_parts[0]}.{encoder_layer - 1}.{path_parts[1]}{unit_idx + 1}.{path_parts[2]}{remainder}"
                     )
 
                 new_key = f"acoustic_encoder.{_rewrite_weight_norm(mapped_subkey)}"
@@ -116,7 +111,7 @@ def convert_old_keys_to_new_keys(original_state_dict: Dict[str, torch.Tensor]) -
                 break
 
         elif old_key.startswith("decoder_2."):
-            layer_key = old_key[len("decoder_2."):]
+            layer_key = old_key[len("decoder_2.") :]
 
             for pattern, path_parts in MAPPING_ACOUSTIC_DECODER.items():
                 pattern_match = re.match(pattern, layer_key)
@@ -124,7 +119,7 @@ def convert_old_keys_to_new_keys(original_state_dict: Dict[str, torch.Tensor]) -
                     continue
                 digit_strings = [g for g in pattern_match.groups() if g is not None]
                 digit_indices = [int(ds) for ds in digit_strings]
-                remainder = layer_key[pattern_match.end():]
+                remainder = layer_key[pattern_match.end() :]
 
                 if len(path_parts) == 1:
                     mapped_subkey = f"{path_parts[0]}{remainder}"
@@ -134,21 +129,20 @@ def convert_old_keys_to_new_keys(original_state_dict: Dict[str, torch.Tensor]) -
                 else:
                     decoder_layer, unit_idx = digit_indices
                     mapped_subkey = (
-                        f"{path_parts[0]}.{decoder_layer-1}."
-                        f"{path_parts[1]}{unit_idx-1}."
-                        f"{path_parts[2]}{remainder}")
+                        f"{path_parts[0]}.{decoder_layer - 1}.{path_parts[1]}{unit_idx - 1}.{path_parts[2]}{remainder}"
+                    )
                 new_key = f"acoustic_decoder.{_rewrite_weight_norm(mapped_subkey)}"
                 converted_checkpoint[new_key] = value
                 break
 
         elif old_key.startswith("encoder_semantic."):
-            semantic_key = old_key[len("encoder_semantic."):]
+            semantic_key = old_key[len("encoder_semantic.") :]
             for old, new in MAPPING_SEMANTIC_ENCODER.items():
                 semantic_key = semantic_key.replace(old, new)
             converted_checkpoint[f"encoder_semantic.{semantic_key}"] = value
 
         elif old_key.startswith("decoder_semantic."):
-            semantic_key = old_key[len("decoder_semantic."):]
+            semantic_key = old_key[len("decoder_semantic.") :]
             for old, new in MAPPING_SEMANTIC_DECODER.items():
                 semantic_key = semantic_key.replace(old, new)
             converted_checkpoint[f"decoder_semantic.{semantic_key}"] = value
@@ -157,13 +151,13 @@ def convert_old_keys_to_new_keys(original_state_dict: Dict[str, torch.Tensor]) -
             converted_checkpoint[old_key] = value
 
         elif old_key.startswith("fc_prior."):
-            converted_checkpoint[f"fc.{old_key[len('fc_prior.'):]}"] = value
+            converted_checkpoint[f"fc.{old_key[len('fc_prior.') :]}"] = value
 
         elif old_key.startswith("fc_post1."):
-            converted_checkpoint[f"fc1.{old_key[len('fc_post1.'):]}"] = value
+            converted_checkpoint[f"fc1.{old_key[len('fc_post1.') :]}"] = value
 
         elif old_key.startswith("fc_post2."):
-            converted_checkpoint[f"fc2.{old_key[len('fc_post2.'):]}"] = value
+            converted_checkpoint[f"fc2.{old_key[len('fc_post2.') :]}"] = value
 
         elif old_key.startswith("quantizer.vq.layers"):
             new_key = old_key
@@ -174,25 +168,24 @@ def convert_old_keys_to_new_keys(original_state_dict: Dict[str, torch.Tensor]) -
     return converted_checkpoint
 
 
-
 @torch.no_grad()
-def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None, push_to_hub=None): 
+def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None, push_to_hub=None):
     if config_path is not None:
         config = XcodecConfig.from_pretrained(config_path)
     else:
         config = XcodecConfig()
 
     model = XcodecModel(config)
-  
-    logger.info(f"Loading original checkpoint ...")
-    
-    state_dict = torch.load(checkpoint_path) 
+
+    logger.info("Loading original checkpoint ...")
+
+    state_dict = torch.load(checkpoint_path)
 
     # the original checkpoint has weight norm applied
     model.apply_weight_norm()
 
-    logger.info(f"Converting model ...")
-    
+    logger.info("Converting model ...")
+
     new_state_dict = convert_old_keys_to_new_keys(state_dict)
 
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
