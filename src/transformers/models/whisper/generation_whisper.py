@@ -244,17 +244,27 @@ class WhisperGenerationMixin(GenerationMixin):
         weight_length = None
 
         if "beam_indices" in generate_outputs:
-            # If beam search has been used, the output sequences may have been generated for more timesteps than their sequence_lengths
-            # since the beam search strategy chooses the most probable sequences at the end of the search.
-            # In that case, the cross_attentions weights are too long and we have to make sure that they have the right output_length
+            # If beam search has been used, the output sequences may have been generated for more timesteps than their
+            # `sequence_lengths` since the beam search strategy chooses the most probable sequences at the end of the
+            # search. In that case, the `cross_attentions` weights are too long and we have to make sure that they have
+            # the right `output_length`
             weight_length = (generate_outputs.beam_indices != -1).sum(-1).max()
-            weight_length = weight_length if num_input_ids is None else weight_length + num_input_ids
 
-            # beam search takes `decoder_input_ids` into account in the `beam_indices` length
-            # but forgot to shift the beam_indices by the number of `decoder_input_ids`
-            beam_indices = torch.zeros_like(generate_outputs.beam_indices[:, :weight_length])
-            # we actually shift the beam indices here
-            beam_indices[:, num_input_ids:] = generate_outputs.beam_indices[:, : weight_length - num_input_ids]
+            # The first forward pass (prefill) may have processed more than one token and, therefore, contain
+            # cross-attention weights for several tokens.
+            # Let's unfold the first `beam_indices` accordingly.
+            if num_input_ids is not None:
+                # -1 because the original length would be correct if `num_input_ids` is 1
+                weight_length += (num_input_ids - 1)
+                prepend_beam_indices = torch.ones(
+                    generate_outputs.beam_indices.shape[0],
+                    num_input_ids - 1,
+                    device=generate_outputs.beam_indices.device,
+                    dtype=torch.long,
+                ) * (generate_outputs.beam_indices[:, 0])
+                beam_indices = torch.cat([prepend_beam_indices, generate_outputs.beam_indices], dim=-1)
+            else:
+                beam_indices = generate_outputs.beam_indices
 
             weights = weights[:, :, :weight_length]
 
