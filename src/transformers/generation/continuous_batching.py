@@ -495,6 +495,8 @@ class ContinuousBatchProcessor:
         self.output_ids = torch.full((1, T), -1, **tensor_metadata)
 
     @traced
+    @torch.no_grad()
+    @torch.compile()
     def reset_static_tensors(self):
         """Reset static tensors for the next batch."""
         self.input_ids.zero_()
@@ -1040,6 +1042,7 @@ class ContinuousBatchingManager:
         return self.model(**batch_data).logits
 
     @traced(span_name="logit_processing")
+    @torch.compile()
     def _process_logit(self, batch_data, logits):
         return self.logit_processor(batch_data["input_ids"], logits)
 
