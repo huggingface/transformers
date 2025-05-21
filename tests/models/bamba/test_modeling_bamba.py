@@ -572,10 +572,10 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
                 )
                 batch = data_collator(features)
-                batch_cuda = {k: t.cuda() if torch.is_tensor(t) else t for k, t in batch.items()}
+                batch_accelerator = {k: t.to(torch_device) if torch.is_tensor(t) else t for k, t in batch.items()}
 
                 res_padded = model(**inputs_dict)
-                res_padfree = model(**batch_cuda)
+                res_padfree = model(**batch_accelerator)
 
                 logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
                 logits_padfree = res_padfree.logits[0]
@@ -594,7 +594,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
     tokenizer = None
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
+    device_properties = None
 
     @classmethod
     def setUpClass(cls):
@@ -606,10 +606,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         cls.tokenizer.pad_token_id = cls.model.config.pad_token_id
         cls.tokenizer.padding_side = "left"
 
-        # 8 is for A100 / A10 and 7 for T4
-        cls.cuda_compute_capability_major_version = (
-            get_device_properties()[1] if get_device_properties()[0] == "cuda" else None
-        )
+        cls.device_properties = get_device_properties()
 
     def test_simple_generate(self):
         expectations = Expectations(
@@ -640,7 +637,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentence, expected)
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.cuda_compute_capability_major_version == 8:
+        if self.device_properties == ("cuda", 8):
             with torch.no_grad():
                 logits = self.model(input_ids=input_ids, logits_to_keep=40).logits
 
@@ -693,7 +690,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentences[1], EXPECTED_TEXT[1])
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.cuda_compute_capability_major_version == 8:
+        if self.device_properties == ("cuda", 8):
             with torch.no_grad():
                 logits = self.model(input_ids=inputs["input_ids"]).logits
 

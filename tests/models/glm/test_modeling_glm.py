@@ -311,16 +311,6 @@ class GlmIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
     model_id = "THUDM/glm-4-9b"
     revision = "refs/pr/15"
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        # 8 is for A100 / A10 and 7 for T4
-        cls.cuda_compute_capability_major_version = (
-            get_device_properties()[1] if get_device_properties()[0] == "cuda" else None
-        )
 
     def test_model_9b_fp16(self):
         EXPECTED_TEXTS = [

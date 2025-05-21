@@ -19,6 +19,7 @@ import pytest
 
 from transformers import MixtralConfig, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     get_device_properties,
     require_flash_attn,
     require_torch,
@@ -340,14 +341,11 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 class MixtralIntegrationTest(unittest.TestCase):
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
+    device_properties = None
 
     @classmethod
     def setUpClass(cls):
-        # 8 is for A100 / A10 and 7 for T4
-        cls.cuda_compute_capability_major_version = (
-            get_device_properties()[1] if get_device_properties()[0] == "cuda" else None
-        )
+        cls.device_properties = get_device_properties()
 
     @slow
     @require_torch_accelerator
@@ -360,31 +358,28 @@ class MixtralIntegrationTest(unittest.TestCase):
         )
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         # these logits have been obtained with the original megablocks implementation.
-        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
-        #
-        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4
         # considering differences in hardware processing and potential deviations in output.
-        EXPECTED_LOGITS = {
-            7: torch.Tensor([[0.1640, 0.1621, 0.6093], [-0.8906, -0.1640, -0.6093], [0.1562, 0.1250, 0.7226]]).to(
-                torch_device
-            ),
-            8: torch.Tensor([[0.1631, 0.1621, 0.6094], [-0.8906, -0.1621, -0.6094], [0.1572, 0.1270, 0.7227]]).to(
-                torch_device
-            ),
-            9: torch.Tensor([[0.1641, 0.1621, 0.6094], [-0.8906, -0.1631, -0.6094], [0.1572, 0.1260, 0.7227]]).to(
-                torch_device
-            ),
+        # fmt: off
+        EXPECTED_LOGITS = Expectations(
+            {
+                ("cuda", 7): torch.Tensor([[0.1640, 0.1621, 0.6093], [-0.8906, -0.1640, -0.6093], [0.1562, 0.1250, 0.7226]]).to(torch_device),
+                ("cuda", 8): torch.Tensor([[0.1631, 0.1621, 0.6094], [-0.8906, -0.1621, -0.6094], [0.1572, 0.1270, 0.7227]]).to(torch_device),
+                ("rocm", 9): torch.Tensor([[0.1641, 0.1621, 0.6094], [-0.8906, -0.1631, -0.6094], [0.1572, 0.1260, 0.7227]]).to(torch_device),
         }
+        # fmt: on
+        expected_logit = EXPECTED_LOGITS.get_expectation()
+
         with torch.no_grad():
             logits = model(dummy_input).logits
 
         logits = logits.float()
 
         torch.testing.assert_close(
-            logits[0, :3, :3], EXPECTED_LOGITS[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
+            logits[0, :3, :3], expected_logit, atol=1e-3, rtol=1e-3
         )
         torch.testing.assert_close(
-            logits[1, :3, :3], EXPECTED_LOGITS[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
+            logits[1, :3, :3], expected_logit, atol=1e-3, rtol=1e-3
         )
 
     @slow
@@ -400,62 +395,54 @@ class MixtralIntegrationTest(unittest.TestCase):
 
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         #
-        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4.
         #
-        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
         # considering differences in hardware processing and potential deviations in generated text.
-        EXPECTED_LOGITS_LEFT = {
-            7: torch.Tensor(
-                [[0.1904, 0.0500, 0.7187], [0.1933, 0.0515, 0.7187], [0.2001, 0.0559, 0.7148]],
-            ).to(torch_device),
-            8: torch.Tensor([[0.1914, 0.0508, 0.7188], [0.1953, 0.0510, 0.7227], [0.1973, 0.0562, 0.7148]]).to(
-                torch_device
-            ),
-            9: torch.Tensor([[0.1904, 0.0513, 0.7227], [0.1943, 0.0518, 0.7227], [0.1982, 0.0557, 0.7148]]).to(
-                torch_device
-            ),
-        }
+        # fmt: off
+        EXPECTED_LOGITS_LEFT = Expectations(
+            {
+                ("cuda", 7): torch.Tensor([[0.1904, 0.0500, 0.7187], [0.1933, 0.0515, 0.7187], [0.2001, 0.0559, 0.7148]],).to(torch_device),
+                ("cuda", 8): torch.Tensor([[0.1914, 0.0508, 0.7188], [0.1953, 0.0510, 0.7227], [0.1973, 0.0562, 0.7148]]).to(torch_device),
+                ("rocm", 9): torch.Tensor([[0.1904, 0.0513, 0.7227], [0.1943, 0.0518, 0.7227], [0.1982, 0.0557, 0.7148]]).to(torch_device),
+            }
+        )
+        expected_left = EXPECTED_LOGITS_LEFT.get_expectation()
 
-        EXPECTED_LOGITS_LEFT_UNPADDED = {
-            7: torch.Tensor(
-                [[0.2236, 0.5195, -0.3828], [0.8203, -0.2275, 0.6054], [0.2656, -0.7070, 0.2460]],
-            ).to(torch_device),
-            8: torch.Tensor([[0.2217, 0.5195, -0.3828], [0.8203, -0.2295, 0.6055], [0.2676, -0.7109, 0.2461]]).to(
-                torch_device
-            ),
-            9: torch.Tensor([[0.2236, 0.5195, -0.3828], [0.8203, -0.2285, 0.6055], [0.2637, -0.7109, 0.2451]]).to(
-                torch_device
-            ),
-        }
+        EXPECTED_LOGITS_LEFT_UNPADDED = Expectations(
+            {
+                ("cuda", 7): torch.Tensor([[0.2236, 0.5195, -0.3828], [0.8203, -0.2275, 0.6054], [0.2656, -0.7070, 0.2460]],).to(torch_device),
+                ("cuda", 8): torch.Tensor([[0.2217, 0.5195, -0.3828], [0.8203, -0.2295, 0.6055], [0.2676, -0.7109, 0.2461]]).to(torch_device),
+                ("rocm", 9): torch.Tensor([[0.2236, 0.5195, -0.3828], [0.8203, -0.2285, 0.6055], [0.2637, -0.7109, 0.2451]]).to(torch_device),
+            }
+        )
+        expected_left_unpadded = EXPECTED_LOGITS_LEFT_UNPADDED.get_expectation()
 
-        EXPECTED_LOGITS_RIGHT_UNPADDED = {
-            7: torch.Tensor([[0.2167, 0.1269, -0.1640], [-0.3496, 0.2988, -1.0312], [0.0688, 0.7929, 0.8007]]).to(
-                torch_device
-            ),
-            8: torch.Tensor([[0.2178, 0.1260, -0.1621], [-0.3496, 0.2988, -1.0312], [0.0693, 0.7930, 0.8008]]).to(
-                torch_device
-            ),
-            9: torch.Tensor([[0.2197, 0.1250, -0.1611], [-0.3516, 0.3008, -1.0312], [0.0684, 0.7930, 0.8008]]).to(
-                torch_device
-            ),
-        }
+        EXPECTED_LOGITS_RIGHT_UNPADDED = Expectations(
+            {
+                ("cuda", 7): torch.Tensor([[0.2167, 0.1269, -0.1640], [-0.3496, 0.2988, -1.0312], [0.0688, 0.7929, 0.8007]]).to(torch_device),
+                ("cuda", 8): torch.Tensor([[0.2178, 0.1260, -0.1621], [-0.3496, 0.2988, -1.0312], [0.0693, 0.7930, 0.8008]]).to(torch_device),
+                ("rocm", 9): torch.Tensor([[0.2197, 0.1250, -0.1611], [-0.3516, 0.3008, -1.0312], [0.0684, 0.7930, 0.8008]]).to(torch_device),
+            }
+        )
+        expected_right_unpadded = EXPECTED_LOGITS_RIGHT_UNPADDED.get_expectation()
+        # fmt: on
 
         with torch.no_grad():
             logits = model(dummy_input, attention_mask=attention_mask).logits
         logits = logits.float()
 
         torch.testing.assert_close(
-            logits[0, :3, :3], EXPECTED_LOGITS_LEFT[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
+            logits[0, :3, :3], expected_left, atol=1e-3, rtol=1e-3
         )
         torch.testing.assert_close(
             logits[0, -3:, -3:],
-            EXPECTED_LOGITS_LEFT_UNPADDED[self.cuda_compute_capability_major_version],
+            expected_left_unpadded,
             atol=1e-3,
             rtol=1e-3,
         )
         torch.testing.assert_close(
             logits[1, -3:, -3:],
-            EXPECTED_LOGITS_RIGHT_UNPADDED[self.cuda_compute_capability_major_version],
+            expected_right_unpadded,
             atol=1e-3,
             rtol=1e-3,
         )
