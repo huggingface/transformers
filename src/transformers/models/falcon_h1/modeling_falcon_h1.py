@@ -1383,7 +1383,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
         attention_mask: torch.Tensor,
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
-        past_key_values: HybridMambaAttentionDynamicCache,
+        past_key_values: FalconHybridMambaAttentionDynamicCache,
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
