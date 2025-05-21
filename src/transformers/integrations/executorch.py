@@ -11,8 +11,8 @@
 # specific language governing permissions and limitations under the License.
 
 import logging
-from typing import Callable, Optional
 from contextlib import contextmanager
+from typing import Callable, Optional
 
 import torch
 
@@ -459,12 +459,13 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
 @contextmanager
 def patch_mask_interface():
     """
-    Context manager to locally use a simple dict instead of `AttentionMaskInterface`, as otherwise export will fail 
+    Context manager to locally use a simple dict instead of `AttentionMaskInterface`, as otherwise export will fail
     with `strict=True` due to dynamo skip rules, i.e. `torch._dynamo.exc.Unsupported: 'inline in skipfiles:
     Mapping.__contains__ | __contains__, skipped according trace_rules.lookup SKIP_DIRS'`.
     Note that this seem to be an issue only for python<3.11.
     """
     import transformers
+
     original = transformers.masking_utils.ALL_MASK_ATTENTION_FUNCTIONS
     transformers.masking_utils.ALL_MASK_ATTENTION_FUNCTIONS = ALL_MASK_ATTENTION_FUNCTIONS._global_mapping
     try:
