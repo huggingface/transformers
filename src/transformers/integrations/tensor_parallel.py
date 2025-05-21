@@ -13,11 +13,15 @@
 # limitations under the License.
 from __future__ import annotations
 
+import operator
+import os
 import re
-from functools import lru_cache, partial
-from typing import List, Optional, Tuple, Union
+from collections.abc import MutableMapping
+from functools import partial, reduce
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
+import torch.distributed as dist
 from torch import nn
 
 from ..utils import is_torch_greater_or_equal, logging
@@ -33,6 +37,56 @@ _torch_distributed_available = torch.distributed.is_available()
 
 if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
     from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
+
+
+def initialize_tensor_parallelism(tp_plan, tp_size=None):
+    r"""
+    Sets up the device mesh and initilized the backend for tensor parallelism.
+    This function is called when the model is loaded and the TP plan is set to 'auto'.
+    """
+    if tp_plan is None:
+        return None, None, None
+
+    if not is_torch_greater_or_equal("2.5"):
+        raise EnvironmentError("Tensor parallel is only supported for `torch>=2.5`.")
+
+    # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
+    device_type = torch._C._get_accelerator().type
+    if not torch.distributed.is_initialized():
+        try:
+            rank = int(os.environ["RANK"])
+            local_rank = int(os.environ["LOCAL_RANK"])
+            world_size = int(os.environ["WORLD_SIZE"])
+
+            backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "ccl", "hpu": "hccl"}
+            backend = backend_map.get(device_type)
+            if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", 0)):
+                backend = "ccl"
+
+            torch.distributed.init_process_group(backend=backend, rank=rank, world_size=world_size)
+            current_device = getattr(torch, device_type)
+            if device_type != "cpu":
+                current_device.set_device(local_rank)
+
+        except Exception as e:
+            raise EnvironmentError(
+                "We tried to initialize torch.distributed for you, but it failed. Make "
+                "sure you init torch distributed in your script to use `tp_plan='auto'`."
+            ) from e
+    index = current_device.current_device() if device_type != "cpu" else None
+    tp_device = torch.device(device_type, index)
+
+    # Silence output for non-primary ranks
+    if index is not None and index > 0:
+        import sys
+
+        sys.stdout = open(os.devnull, "w")
+        sys.stderr = open(os.devnull, "w")
+
+    device_map = tp_device
+    tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
+    device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
+    return tp_device, device_map, device_mesh
 
 
 def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> List[int]:
@@ -220,18 +274,38 @@ def repack_weights(
 
 
 def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
-    if dim == 0:
-        size_ = empty_param.shape[0]
-        param = param[rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()), ...]
-    elif dim == 1 or dim == -2:
-        size_ = empty_param.shape[-2]
-        param = param[..., rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size()), :]
-    elif dim == 2 or dim == -1:
-        size_ = empty_param.shape[-1]
-        param = param[..., rank * (size_ // device_mesh.size()) : (rank + 1) * (size_ // device_mesh.size())]
-    else:
-        raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
-    return param
+    """
+    Generalized tensor sharding across a multi-dimensional device mesh.
+
+    Args:
+        param (torch.Tensor): The tensor to shard.
+        empty_param (torch.Tensor): A tensor used for shape reference.
+        device_mesh (torch.Tensor): Shape [d_0, ..., d_n] representing the mesh.
+        rank (int): Global rank of the current process/device.
+        dim (int): Dimension along which to shard the tensor.
+    """
+    param_dim = empty_param.dim()
+    if dim < 0:
+        dim = param_dim + dim
+    if dim >= param_dim:
+        raise ValueError(f"dim {dim} is out of bounds for tensor of dimension {param_dim}")
+
+    # Flatten the mesh to get the total number of devices
+    mesh_shape = device_mesh.shape
+    world_size = reduce(operator.mul, mesh_shape)
+
+    if rank >= world_size:
+        raise ValueError(f"Rank {rank} is out of bounds for mesh size {world_size}")
+
+    shard_size = empty_param.shape[dim] // world_size
+    start = rank * shard_size
+    end = start + shard_size
+
+    # Construct slicing index dynamically
+    slice_indices = [slice(None)] * param_dim
+    slice_indices[dim] = slice(start, end)
+
+    return param[tuple(slice_indices)]
 
 
 def distribute_module(
@@ -337,6 +411,41 @@ class IsolatedParallel(TensorParallelLayer):
             partial(self._prepare_input_fn, None, None),
             partial(self._prepare_output_fn, None, None),
         )
+
+
+class ReplicateParallel(TensorParallelLayer):
+    """
+    This class is used to replicate computation in a TP layer (used in SP regions when we don't use sequence parallelism for example)
+    """
+
+    def __init__(self, *, use_dtensor=True, use_local_output=True):
+        super().__init__()
+        self.input_layouts = (Replicate(),)
+        self.output_layouts = (Replicate(),)
+        self.desired_input_layouts = (Replicate(),)
+        self.use_local_output = use_local_output
+        self.use_dtensor = use_dtensor
+
+    @staticmethod
+    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        # TODO: figure out dynamo support for instance method and switch this to instance method
+        # annotate module input placements/sharding with input_layouts
+        input_tensor = inputs[0]
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
+
+        return input_tensor
+
+    @staticmethod
+    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        return outputs.to_local() if use_local_output else outputs
+
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        param = param[...].to(param_casting_dtype)
+        if to_contiguous:
+            param = param.contiguous()
+        param = DTensor.from_local(param, device_mesh, [Replicate()], run_check=False)
+        return param
 
 
 class ColwiseParallel(TensorParallelLayer):
@@ -611,52 +720,62 @@ class SequenceParallel(TensorParallelLayer):
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
 
-SUPPORTED_TP_STYLES = {
-    "colwise",
-    "rowwise",
-    "colwise_rep",
-    "rowwise_rep",
-    "local_colwise",
-    "local_rowwise",
-    "local",
-    "gather",
-    "local_packed_rowwise",
-    "sequence_parallel",
-}
-
-
-@lru_cache
-def translate_to_torch_parallel_style(style: str):
+class ParallelInterface(MutableMapping):
     """
-    In model configurations, we use a neutral type (string) to specify parallel
-    styles, here we translate them into torch.distributed tensor-parallel
-    types.
+    Dict-like object keeping track of allowed attention functions. You can easily add a new attention function
+    with a call to `register()`. If a model needs to locally overwrite an existing attention function, say `sdpa`,
+    it needs to declare a new instance of this class inside the `modeling_<model>.py`, and declare it on that instance.
     """
-    if not isinstance(style, str):
-        raise ValueError(f"Unsupported parallel style type {type(style)}, expected str")
 
-    if style == "colwise":
-        return ColwiseParallel()
-    elif style == "rowwise":
-        return RowwiseParallel()
-    elif style == "colwise_rep":
-        return ColwiseParallel(output_layouts=Replicate())
-    elif style == "rowwise_rep":
-        return RowwiseParallel(input_layouts=Replicate())
-    elif style == "local_colwise":
-        return ColwiseParallel(use_dtensor=False)
-    elif style == "local_rowwise":
-        return RowwiseParallel(use_dtensor=False)
-    elif style == "local":
-        return IsolatedParallel()
-    elif style == "gather":
-        return GatherParallel()
-    elif style == "local_packed_rowwise":
-        return PackedRowwiseParallel(use_dtensor=False)
-    elif style == "sequence_parallel":
-        return SequenceParallel()
-    else:
-        raise ValueError(f"Unsupported parallel style value: {style}")
+    # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
+    # a new instance is created (in order to locally override a given function)
+    _global_mapping = {
+        "colwise": ColwiseParallel(),
+        "rowwise": RowwiseParallel(),
+        "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
+        "rowwise_rep": RowwiseParallel(input_layouts=Replicate()),
+        "local_colwise": ColwiseParallel(use_dtensor=False),
+        "local_rowwise": RowwiseParallel(use_dtensor=False),
+        "local": IsolatedParallel(),
+        "gather": GatherParallel(),
+        "local_packed_rowwise": PackedRowwiseParallel(use_dtensor=False),
+        "sequence_parallel": SequenceParallel(),
+        "replicate": ReplicateParallel(),
+    }
+
+    def __init__(self):
+        self._local_mapping = {}
+
+    def __getitem__(self, key):
+        # First check if instance has a local override
+        if key in self._local_mapping:
+            return self._local_mapping[key]
+        return self._global_mapping[key]
+
+    def __setitem__(self, key, value):
+        # Allow local update of the default functions without impacting other instances
+        self._local_mapping.update({key: value})
+
+    def __delitem__(self, key):
+        del self._local_mapping[key]
+
+    def __iter__(self):
+        # Ensure we use all keys, with the overwritten ones on top
+        return iter({**self._global_mapping, **self._local_mapping})
+
+    def __len__(self):
+        return len(self._global_mapping.keys() | self._local_mapping.keys())
+
+    @classmethod
+    def register(cls, key: str, value: Callable):
+        cls._global_mapping.update({key: value})
+
+    def valid_keys(self) -> List[str]:
+        return list(self.keys())
+
+
+# Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
+ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
 def convert_local_tensor_to_dtensor(
@@ -722,13 +841,15 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
 
     # 1. We add hooks to the layer being loaded:
     if current_module_plan is not None:
-        tp_layer = translate_to_torch_parallel_style(current_module_plan)
+        tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
         try:
             tp_layer.prepare_module_tp(module, device_mesh)
         except NotImplementedError as e:
             print(
                 f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP plan: {e}"
             )
+        module._hf_tp_plan = current_module_plan
+        module.__repr__ = lambda: f"{module.__repr__()}\nTP Plan: {current_module_plan}"
 
     # 2. We add hooks to the parent module if needed
     if "." in layer_name:
@@ -736,9 +857,11 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
         generic_name = re.sub(r"\d+", "*", parent_layer_name)
         # The module itself needs hooks
         if module_plan := tp_plan.get(generic_name, False):
-            tp_layer = translate_to_torch_parallel_style(module_plan)
+            tp_layer = ALL_PARALLEL_STYLES[module_plan]
             module_to_tp_ = model.get_submodule(parent_layer_name)
             tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
+            module_to_tp_._hf_tp_plan = current_module_plan
+            module_to_tp_.__repr__ = lambda: f"{module_to_tp_.__repr__()}\nTP Plan: {current_module_plan}"
 
 
 def shard_and_distribute_module(
@@ -760,28 +883,29 @@ def shard_and_distribute_module(
 
     current_module_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
 
+    if current_module_plan is None:
+        current_module_plan = "replicate"
+        if dist.get_rank() == 0:
+            logger.info(f"Tensor parallel plan for {param_name} not found, using default 'replicate' plan.")
+    else:
+        if dist.get_rank() == 0:
+            logger.info(f"Tensor parallel plan for {param_name}: {current_module_plan}")
+
     # Add hooks to the module if not done yet
     # add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
     if not getattr(module_to_tp, "_is_hooked", False):
         add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
         module_to_tp._is_hooked = True
 
-    if current_module_plan is not None:
-        try:
-            tp_layer = translate_to_torch_parallel_style(current_module_plan)
-            param = tp_layer.partition_tensor(
-                param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
-            )
-        except NotImplementedError as e:
-            print(
-                f"Trying to prepare {parameter_name}, but it's not supported. Corresponding module: {module_to_tp} Fix it's TP plan, current layer: {tp_layer} : {e}"
-            )
-    else:
-        # TODO log no plan modules in set
-        # print("No plan for", parameter_name,end ="\n")
-        param = param[...].to(param_casting_dtype)
-        if is_contiguous:
-            param = param.contiguous()
+    try:
+        tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
+        param = tp_layer.partition_tensor(
+            param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
+        )
+    except NotImplementedError as e:
+        print(
+            f"Trying to prepare {parameter_name}, but it's not supported. Corresponding module: {module_to_tp} Fix it's TP plan, current layer: {tp_layer} : {e}"
+        )
 
     # SUPER IMPORTANT we have to use setattr
     # otherwise loading is crazy slow
