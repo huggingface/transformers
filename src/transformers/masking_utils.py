@@ -176,7 +176,7 @@ def prepare_padding_mask(
     return local_padding_mask
 
 
-def sdpa_mask_new(
+def sdpa_mask_recent_torch(
     batch_size: int,
     cache_position: torch.Tensor,
     kv_length: int,
@@ -185,54 +185,12 @@ def sdpa_mask_new(
     attention_mask: Optional[torch.Tensor] = None,
     local_size: Optional[int] = None,
     allow_is_causal_skip: bool = True,
-    **kwargs,
-) -> Optional[torch.Tensor]:
-    q_length = cache_position.shape[0]
-    # Potentially pad the 2D mask, and slice it correctly
-    padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset, _slice=False)
-
-    # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
-    if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, kv_offset, local_size):
-        return None
-
-    # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
-    # but without data-dependent slicing (i.e. torch.compile friendly)
-    kv_arange = torch.arange(kv_length, device=cache_position.device)
-    kv_arange += kv_offset
-
-    # Potentially add the padding 2D mask
-    if padding_mask is not None:
-        mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
-
-    batch_arange = torch.arange(batch_size, device=cache_position.device)
-    head_arange = torch.arange(1, device=cache_position.device)
-    # This creates the 4D mask easily. Note that we need this context manager as vmap cannot handle slicing a tensor from
-    # scalar tensor (it internally calls `.item()` which vmap does not allow, but this context works around it
-    # We don't need to add an offset to the mask_function either, as we vmap directly the correct indices for k and kv indices
-    with TransformGetItemToIndex():
-        causal_mask = _vmap_for_bhqkv(mask_function)(batch_arange, head_arange, cache_position, kv_arange)
-
-    return causal_mask
-
-
-def sdpa_mask_old(
-    batch_size: int,
-    cache_position: torch.Tensor,
-    kv_length: int,
-    kv_offset: int = 0,
-    mask_function: Callable = causal_mask_function,
-    attention_mask: Optional[torch.Tensor] = None,
-    local_size: Optional[int] = None,
-    allow_is_causal_skip: bool = True,
-    allow_torch_fix: bool = True,
     **kwargs,
 ) -> Optional[torch.Tensor]:
     """
     Create a 4D boolean mask of shape `(batch_size, 1, query_length, kv_length)` where a value of True indicates that
     the element should take part in the attention computation, and False that it should not.
-    For older torch versions, if `allow_torch_fix=True` (the default), rows corresponding to query tokens that do not attend
-    to any other tokens (due to padding) will be fully attended to instead, in order to avoid `nan` propagation (this does
-    not change the final result).
+    This function can only be used with torch>=2.5, as the context manager is otherwise not available.
 
     Args:
         batch_size (`int`):
@@ -324,6 +282,76 @@ def sdpa_mask_old(
     """
     q_length = cache_position.shape[0]
     # Potentially pad the 2D mask, and slice it correctly
+    padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset, _slice=False)
+
+    # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
+    if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, kv_offset, local_size):
+        return None
+
+    # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
+    # but without data-dependent slicing (i.e. torch.compile friendly)
+    kv_arange = torch.arange(kv_length, device=cache_position.device)
+    kv_arange += kv_offset
+
+    # Potentially add the padding 2D mask
+    if padding_mask is not None:
+        mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
+
+    batch_arange = torch.arange(batch_size, device=cache_position.device)
+    head_arange = torch.arange(1, device=cache_position.device)
+    # This creates the 4D mask easily. Note that we need this context manager as vmap cannot handle slicing a tensor from
+    # scalar tensor (it internally calls `.item()` which vmap does not allow, but this context works around it
+    # We don't need to add an offset to the mask_function either, as we vmap directly the correct indices for k and kv indices
+    with TransformGetItemToIndex():
+        causal_mask = _vmap_for_bhqkv(mask_function)(batch_arange, head_arange, cache_position, kv_arange)
+
+    return causal_mask
+
+
+def sdpa_mask_older_torch(
+    batch_size: int,
+    cache_position: torch.Tensor,
+    kv_length: int,
+    kv_offset: int = 0,
+    mask_function: Callable = causal_mask_function,
+    attention_mask: Optional[torch.Tensor] = None,
+    local_size: Optional[int] = None,
+    allow_is_causal_skip: bool = True,
+    allow_torch_fix: bool = True,
+    **kwargs,
+) -> Optional[torch.Tensor]:
+    """
+    Create a 4D boolean mask of shape `(batch_size, 1, query_length, kv_length)` where a value of True indicates that
+    the element should take part in the attention computation, and False that it should not.
+    If `allow_torch_fix=True` (the default), rows corresponding to query tokens that do not attend
+    to any other tokens (due to padding) will be fully attended to instead, in order to avoid `nan` propagation (this does
+    not change the final result).
+
+    Args:
+        batch_size (`int`):
+            The batch size of the input sequence.
+        cache_position (`torch.Tensor`):
+            A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
+        kv_length (`int`):
+            The size that the key and value states will have during the attention computation.
+        kv_offset (`int`, optional):
+            An optional offset to indicate at which first position the key and values states will refer to.
+        mask_function (`Callable`):
+            The mask factory function describing the mask pattern.
+        attention_mask (`torch.Tensor`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
+        local_size (`int`, optional):
+            The size of the local attention, if we do not use full attention. This is used only if `allow_is_causal_skip=True`
+            to try to skip mask creation if possible.
+        allow_is_causal_skip (`bool`, optional):
+            Whether to allow to return `None` for the mask under conditions where we can use the `is_causal` argument in
+            `torch.sdpa` instead. Default to `True`.
+        allow_torch_fix (`bool`, optional):
+            Whether to update the mask in case a query is not attending to any tokens, to solve a bug in torch's older
+            versions. We need an arg to skip it when using eager. By default `True`.
+    """
+    q_length = cache_position.shape[0]
+    # Potentially pad the 2D mask, and slice it correctly
     padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
 
     # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
@@ -352,7 +380,9 @@ def sdpa_mask_old(
     return causal_mask
 
 
-sdpa_mask = sdpa_mask_new if is_torch_flex_attn_available() else sdpa_mask_old
+# We use the version with newer torch whenever possible, as it is more general and can handle arbitrary mask functions
+# (instead of mask functions only using q and kv indices)
+sdpa_mask = sdpa_mask_recent_torch if is_torch_flex_attn_available() else sdpa_mask_older_torch
 
 
 def eager_mask(
@@ -506,7 +536,7 @@ class AttentionMaskInterface(GeneralInterface):
 
 
 # Global AttentionMaskInterface shared by all models which do not need to overwrite any of the existing ones
-ALL_MASK_CREATION_FUNCTIONS = {
+ALL_MASK_ATTENTION_FUNCTIONS = {
     "sdpa": sdpa_mask,
     "eager": eager_mask,
     "flash_attention_2": flash_attention_mask,
@@ -558,7 +588,7 @@ def _preprocess_mask_arguments(
         return True, attention_mask, None, None
 
     # For TGI/vLLM backends, or other custom attention without equivalent mask creation: we don't need a mask!
-    if config._attn_implementation not in ALL_MASK_CREATION_FUNCTIONS:
+    if config._attn_implementation not in ALL_MASK_ATTENTION_FUNCTIONS:
         return True, None, None, None
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
@@ -585,10 +615,10 @@ def _get_mask_interface(config: PretrainedConfig, output_attentions: bool = Fals
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
     """
-    mask_interface = ALL_MASK_CREATION_FUNCTIONS[config._attn_implementation]
+    mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
     # Sdpa fallbacks to eager in the Attention modules if `output_attentions=True`
     if config._attn_implementation == "sdpa" and output_attentions:
-        mask_interface = ALL_MASK_CREATION_FUNCTIONS["eager"]
+        mask_interface = ALL_MASK_ATTENTION_FUNCTIONS["eager"]
     return mask_interface
 
 
