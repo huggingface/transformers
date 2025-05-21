@@ -77,10 +77,6 @@ class FalconH1Config(PretrainedConfig):
             Max cached sequence length for the model
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        attn_layer_indices (`list`, *optional*):
-            Specifies the layer indices that will have full attention. Must contain values at most num_hidden_layers.
-        mlp_expansion_factor (`int`, *optional*, defaults to 8):
-            The expansion factor for the MLP layers. This is used to scale the output of the MLP layers.
         mamba_d_ssm (`int`, *optional*, defaults to 1024):
             The dimension of the SSM state space latents.
         mamba_n_heads (`int`, *optional*, defaults to 128):
@@ -101,8 +97,6 @@ class FalconH1Config(PretrainedConfig):
             Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
         mamba_proj_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
-        mamba_use_mlp (`<bool>`, *optional*, defaults to `True`):
-            Whether to use MLP layers for Mamba block
         mamba_norm_before_gate (`bool`, *optional*, defaults to `True`):
             Whether to use RMSNorm before the gate in the Mamba block
         mamba_rms_norm (`bool`, *optional*, defaults to `False`):
@@ -156,8 +150,6 @@ class FalconH1Config(PretrainedConfig):
         eos_token_id=2,
         max_position_embeddings=8192,
         attention_dropout=0.0,
-        attn_layer_indices=None,
-        mlp_expansion_factor=8,
         mamba_d_ssm=1024,
         mamba_n_heads=128,
         mamba_d_head="auto",
@@ -168,7 +160,6 @@ class FalconH1Config(PretrainedConfig):
         mamba_chunk_size=256,
         mamba_conv_bias=True,
         mamba_proj_bias=False,
-        mamba_use_mlp=True,
         mamba_norm_before_gate=True,
         mamba_rms_norm=False,
         projectors_bias=False,
@@ -207,11 +198,9 @@ class FalconH1Config(PretrainedConfig):
         self.use_cache = use_cache
         self.num_logits_to_keep = num_logits_to_keep
 
-        self.attn_layer_indices = attn_layer_indices
         self.rope_theta = rope_theta
         self.rope_scaling = None
         self.rope_scaling = rope_scaling
-        self.mlp_expansion_factor = mlp_expansion_factor
         self.projectors_bias = projectors_bias
         mamba_intermediate = mamba_expand * hidden_size if mamba_d_ssm is None else mamba_d_ssm
 
@@ -235,7 +224,7 @@ class FalconH1Config(PretrainedConfig):
         self.mamba_chunk_size = mamba_chunk_size
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
-        self.mamba_use_mlp = mamba_use_mlp
+
         self.mamba_norm_before_gate = mamba_norm_before_gate
         self.mamba_rms_norm = mamba_rms_norm
 
