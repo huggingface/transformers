@@ -1681,6 +1681,10 @@ class EncoderDecoderCache(Cache):
         self.self_attention_cache.batch_select_indices(indices)
         self.cross_attention_cache.batch_select_indices(indices)
 
+    def get_max_cache_shape(self) -> Optional[int]:
+        """Returns the maximum sequence length (i.e. max capacity) of the cache object"""
+        return self.self_attention_cache.get_max_cache_shape()
+
 
 class HybridCache(Cache):
     """
