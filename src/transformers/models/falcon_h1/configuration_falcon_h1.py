@@ -79,8 +79,10 @@ class FalconH1Config(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         attn_layer_indices (`list`, *optional*):
             Specifies the layer indices that will have full attention. Must contain values at most num_hidden_layers.
-        mlp_expansion_factor (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
-        mamba_d_ssm (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
+        mlp_expansion_factor (`int`, *optional*, defaults to 8):
+            The expansion factor for the MLP layers. This is used to scale the output of the MLP layers.
+        mamba_d_ssm (`int`, *optional*, defaults to 1024):
+            The dimension of the SSM state space latents.
         mamba_n_heads (`int`, *optional*, defaults to 128):
             The number of mamba heads used in the v2 implementation.
         mamba_d_head (`int`, *optional*, defaults to `"auto"`):
