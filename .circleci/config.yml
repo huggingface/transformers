@@ -122,7 +122,7 @@ jobs:
 
             - run:
                 name: "Retrieve Artifact Paths"
-                env:
+                environment:
                     CIRCLE_TOKEN: ${{ secrets.CI_ARTIFACT_TOKEN }}
                 command: |
                     project_slug="gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
