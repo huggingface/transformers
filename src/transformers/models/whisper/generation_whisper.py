@@ -255,13 +255,16 @@ class WhisperGenerationMixin(GenerationMixin):
             # Let's unfold the first `beam_indices` accordingly.
             if num_input_ids is not None:
                 # -1 because the original length would be correct if `num_input_ids` is 1
-                weight_length += (num_input_ids - 1)
-                prepend_beam_indices = torch.ones(
-                    generate_outputs.beam_indices.shape[0],
-                    num_input_ids - 1,
-                    device=generate_outputs.beam_indices.device,
-                    dtype=torch.long,
-                ) * (generate_outputs.beam_indices[:, 0])
+                weight_length += num_input_ids - 1
+                prepend_beam_indices = (
+                    torch.ones(
+                        generate_outputs.beam_indices.shape[0],
+                        num_input_ids - 1,
+                        device=generate_outputs.beam_indices.device,
+                        dtype=torch.long,
+                    )
+                    * (generate_outputs.beam_indices[:, 0:1])
+                )
                 beam_indices = torch.cat([prepend_beam_indices, generate_outputs.beam_indices], dim=-1)
             else:
                 beam_indices = generate_outputs.beam_indices
