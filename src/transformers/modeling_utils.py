@@ -3567,7 +3567,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             for name, tensor in state_dict.items():
                 # Sometimes in the state_dict we have non-tensor objects.
                 # e.g. in bitsandbytes we have some `str` objects in the state_dict
-                if isinstance(tensor, torch.Tensor) or isinstance(tensor, DTensor):
+                if isinstance(tensor, torch.Tensor):
                     ptrs[id_tensor_storage(tensor)].append(name)
                 else:
                     # In the non-tensor case, fall back to the pointer of the object itself
