@@ -99,21 +99,37 @@ class FalconH1Config(PretrainedConfig):
             Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
         mamba_proj_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
-        mamba_use_mlp (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        mamba_norm_before_gate (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        mamba_rms_norm (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        projectors_bias (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        rope_theta (`<fill_type>`, *optional*, defaults to 100000.0): <fill_docstring>
-        rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
-        lm_head_multiplier (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
-        embedding_multiplier (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
-        mlp_multipliers (`<fill_type>`, *optional*): <fill_docstring>
-        key_multiplier (`<fill_type>`, *optional*): <fill_docstring>
-        attention_out_multiplier (`<fill_type>`, *optional*): <fill_docstring>
-        attention_in_multiplier (`<fill_type>`, *optional*): <fill_docstring>
-        ssm_multipliers (`<fill_type>`, *optional*): <fill_docstring>
-        ssm_in_multiplier (`<fill_type>`, *optional*): <fill_docstring>
-        ssm_out_multiplier (`<fill_type>`, *optional*): <fill_docstring>
+        mamba_use_mlp (`<bool>`, *optional*, defaults to `True`):
+            Whether to use MLP layers for Mamba block
+        mamba_norm_before_gate (`bool`, *optional*, defaults to `True`):
+            Whether to use RMSNorm before the gate in the Mamba block
+        mamba_rms_norm (`bool`, *optional*, defaults to `False`):
+            Whether to use RMSNorm instead of LayerNorm in the Mamba block
+        projectors_bias (`bool`, *optional*, defaults to `False`):
+            Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the attention block
+        rope_theta (`float`, *optional*, defaults to 100000.0):
+            The theta value used for the RoPE embeddings.
+        rope_scaling (`float`, *optional*):
+            The scaling value used for the RoPE embeddings. If `None`, no scaling is applied.
+        lm_head_multiplier (`float`, *optional*, defaults to 1.0):
+            The multiplier for the LM head. This is used to scale the output of the LM head.
+        embedding_multiplier (`float`, *optional*, defaults to 1.0):
+            The multiplier for the embedding layer. This is used to scale the output of the embedding layer.
+        mlp_multipliers (`List[float]`, *optional*):
+            The multipliers for the MLP layers. This is used to scale the output of the MLP layers. The first value is
+            the multiplier of gate layer, the second value is the multiplier of the down_proj layer.
+        key_multiplier (`float`, *optional*):
+            The multiplier for the key layer. This is used to scale the output of the key layer.
+        attention_out_multiplier (`float`, *optional*):
+            The multiplier for the attention output layer. This is used to scale the output of the attention output
+        attention_in_multiplier (`float`, *optional*):
+            The multiplier for the attention input layer. This is used to scale the output of the attention input layer.
+        ssm_multipliers (`List[float]`, *optional*):
+            The multipliers for the SSM layers. This is used to scale the output of the SSM layers.
+        ssm_in_multiplier (`float`, *optional*):
+            The multiplier for the SSM input layer. This is used to scale the output of the SSM input layer.
+        ssm_out_multiplier (`float`, *optional*):
+            The multiplier for the SSM output layer. This is used to scale the output of the SSM output layer.
     """
 
     model_type = "falcon_h1"
