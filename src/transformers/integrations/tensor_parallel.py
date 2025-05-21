@@ -776,9 +776,12 @@ class SequenceParallel(TensorParallelLayer):
 
 class ParallelInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
-    # a new instance is created (in order to locally override a given entry)
-    _global_mapping = (
-        {
+    # a new instance is created (in order to locally override a given function)
+
+    def __init__(self):
+        self._local_mapping = {}
+
+        ParallelInterface._global_mapping = {
             "colwise": ColwiseParallel(),
             "rowwise": RowwiseParallel(),
             "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
@@ -791,11 +794,39 @@ class ParallelInterface(GeneralInterface):
             "sequence_parallel": SequenceParallel(),
             "replicate": ReplicateParallel(),
         }
-        if is_torch_greater_or_equal("2.5") and _torch_distributed_available
-        else {}
-    )
+
+    def __init__(self):
+        self._local_mapping = {}
+
+    def __getitem__(self, key):
+        # First check if instance has a local override
+        if key in self._local_mapping:
+            return self._local_mapping[key]
+        return self._global_mapping[key]
+
+    def __setitem__(self, key, value):
+        # Allow local update of the default functions without impacting other instances
+        self._local_mapping.update({key: value})
+
+    def __delitem__(self, key):
+        del self._local_mapping[key]
+
+    def __iter__(self):
+        # Ensure we use all keys, with the overwritten ones on top
+        return iter({**self._global_mapping, **self._local_mapping})
+
+    def __len__(self):
+        return len(self._global_mapping.keys() | self._local_mapping.keys())
+
+    @classmethod
+    def register(cls, key: str, value: Callable):
+        cls._global_mapping.update({key: value})
+
+    def valid_keys(self) -> List[str]:
+        return list(self.keys())
 
 
+# Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
